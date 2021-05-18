@@ -1,17 +1,18 @@
 import numpy as np
 import h5py
 
-from h5flow.core import H5FlowGenerator, H5FlowStage
+from h5flow.core import H5FlowGenerator
 
-from event_builder import *
+from raw_event_builder import *
 
 class RawEventGenerator(H5FlowGenerator):
     default_buffer_size = 38400
     default_nhit_cut = 100
     default_sync_noise_cut = 100000
     default_sync_noise_cut_enabled = True
-    default_event_builder_class = 'SymmetricWindowEventBuilder'
+    default_event_builder_class = 'SymmetricWindowRawEventBuilder'
     default_event_builder_config = dict()
+    default_packets_dset_name = 'charge/packets'
 
     raw_event_dtype = np.dtype([
         ('evid', 'u4'),
@@ -37,9 +38,8 @@ class RawEventGenerator(H5FlowGenerator):
         self.packets = self.input_fh['packets']
 
         # set up new data objects
-        self.name = self.dset_name.split('/')[0]
         self.packets_dtype = self.packets.dtype
-        self.packets_dset_name = f'{self.name}/packets'
+        self.packets_dset_name = params.get('packets_dset_name', self.default_packets_dset_name)
         self.raw_event_dset_name = self.dset_name
 
         # set up loop variables
@@ -62,6 +62,11 @@ class RawEventGenerator(H5FlowGenerator):
     def init(self):
         super(RawEventGenerator,self).init()
 
+        if self.data_manager.dset_exists(self.raw_event_dset_name):
+            raise RuntimeError(f'{self.raw_event_dset_name} already exists, refusing to append!')
+        if self.data_manager.dset_exists(self.packets_dset_name):
+            raise RuntimeError(f'{self.packets_dset_name} already exists, refusing to append!')
+
         # initialize data objects
         self.data_manager.create_dset(self.raw_event_dset_name, dtype=self.raw_event_dtype)
         self.data_manager.create_dset(self.packets_dset_name, dtype=self.packets_dtype)
@@ -79,6 +84,9 @@ class RawEventGenerator(H5FlowGenerator):
             input_filename=self.input_filename,
             **self.event_builder.get_config()
             )
+
+    def finish(self):
+        self.input_fh.close()
 
     def next(self):
         if self.iteration >= len(self.slices):
@@ -134,15 +142,16 @@ class RawEventGenerator(H5FlowGenerator):
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
         # write packets to file
-        packets_array = np.concatenate(events, axis=0) if len(events) else np.empty((0,))
+        packets_array = np.concatenate(events, axis=0) if len(events) else np.empty((0,), dtype=self.packets_dtype)
         packets_slice = self.data_manager.reserve_data(self.packets_dset_name, len(packets_array))
         packets_idcs = np.arange(packets_slice.start, packets_slice.stop)
         self.data_manager.write_data(self.packets_dset_name, packets_slice, packets_array)
 
         # set up references
         #   just event -> packet refs for now
+        event_lengths = [len(ev) for ev in events]
         self.data_manager.reserve_ref(self.raw_event_dset_name, self.packets_dset_name, raw_event_slice)
-        ref = [packets_idcs[i:i+len(ev)] for i,ev in enumerate(events)]
+        ref = [packets_idcs[sum(event_lengths[:i]):sum(event_lengths[:i+1])] for i in range(len(events))]
         self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, raw_event_slice, ref)
 
         return raw_event_slice

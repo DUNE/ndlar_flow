@@ -1,12 +1,9 @@
 import numpy as np
 
 
-class EventBuilder(object):
+class RawEventBuilder(object):
     '''
-        Base class for event builder algorithms
-
-        Initial config is provided by the `--event_builder_config {}` argument
-        passed to the `to_evd_file.py` script
+        Base class for raw event builder algorithms
 
     '''
     version = '0.0.0'
@@ -34,7 +31,7 @@ class EventBuilder(object):
         raise NotImplementedError('Event building for this class has not been implemented!')
 
 
-class TimeDeltaEventBuilder(EventBuilder):
+class TimeDeltaRawEventBuilder(RawEventBuilder):
     '''
         Original "gap-based" event building
 
@@ -55,7 +52,7 @@ class TimeDeltaEventBuilder(EventBuilder):
     default_max_event_dt = 1820 * 3
 
     def __init__(self, **params):
-        super(TimeDeltaEventBuilder, self).__init__(**params)
+        super(TimeDeltaRawEventBuilder, self).__init__(**params)
         self.event_dt = params.get('event_dt', self.default_event_dt)
         self.max_event_dt = params.get('max_event_dt', self.default_max_event_dt)
 
@@ -127,7 +124,7 @@ class TimeDeltaEventBuilder(EventBuilder):
         return tuple(v for vs in rv for v in vs)
 
 
-class SymmetricWindowEventBuilder(EventBuilder):
+class SymmetricWindowRawEventBuilder(RawEventBuilder):
     '''
         A sliding-window based event builder.
 
@@ -148,7 +145,7 @@ class SymmetricWindowEventBuilder(EventBuilder):
     default_threshold = 10
 
     def __init__(self, **params):
-        super(SymmetricWindowEventBuilder, self).__init__(**params)
+        super(SymmetricWindowRawEventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
         self.threshold = params.get('threshold', self.default_threshold)
 
