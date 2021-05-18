@@ -34,11 +34,11 @@ class ExternalTriggerFinder(H5FlowStage):
     class_version = '0.0.0'
 
     ext_trigs_dtype = np.dtype([
-        ('trig_id', 'u8'),
-        ('ts', 'f8'),
-        ('ts_raw', 'i8'),
-        ('type', 'i2'),
-        ('iogroup', 'u1')
+        ('trig_id', 'u8'), # unique identifier
+        ('ts', 'f8'), # corrected PPS timestamp [ticks]
+        ('ts_raw', 'i8'), # PPS timestamp [ticks]
+        ('type', 'i2'), # trigger type (from PACMAN)
+        ('iogroup', 'u1') # PACMAN identifier
         ])
     larpix_trigger_channels_dtype = np.dtype([('key',h5py.string_dtype(encoding='utf-8')), ('val',h5py.vlen_dtype('u1'))])
 

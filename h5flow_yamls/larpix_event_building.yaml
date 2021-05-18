@@ -2,7 +2,7 @@
 
 flow:
   source: raw_event_generator
-  stages: [timestamp_corrector, ext_trig_finder, hit_builder] #, event_builder]
+  stages: [timestamp_corrector, ext_trig_finder, hit_builder, event_builder]
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files
   classname: RawEventGenerator
@@ -47,6 +47,7 @@ hit_builder: # converts larpix data packets and raw events to hits
   classname: HitBuilder
   requires:
     - 'charge/packets'
+    - 'charge/packets_corr_ts'
   params:
     hits_dset_name: 'charge/hits'
     packets_dset_name: 'charge/packets'
@@ -55,13 +56,14 @@ hit_builder: # converts larpix data packets and raw events to hits
     pedestal_file: ''
     configuration_file: ''
 
-# event_builder: # combines hits and external triggers into events
-#   classname: EventBuilder
-#   requires:
-#     - 'charge/hits'
-#     - 'charge/ext_trigs'
-#   params:
-#     hits_dset_name: 'charge/hits'
-#     ext_trigs_dset_name: 'charge/ext_trigs'
+event_builder: # combines hits and external triggers into events
+  classname: EventBuilder
+  requires:
+    - 'charge/hits'
+    - 'charge/ext_trigs'
+  params:
+    events_dset_name: 'charge/events'
+    hits_dset_name: 'charge/hits'
+    ext_trigs_dset_name: 'charge/ext_trigs'
 
 

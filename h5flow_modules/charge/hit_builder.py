@@ -11,7 +11,8 @@ class HitBuilder(H5FlowStage):
         ('hid', 'i8'), # unique identifier
         ('px', 'f8'), # pixel x location [mm]
         ('py', 'f8'), # pixel y location [mm]
-        ('ts', 'f8'), # PPS timestamp [ticks]
+        ('ts', 'f8'), # PPS timestamp (corrected for clock frequency) [ticks]
+        ('ts_raw', 'u8'), # PPS timestamp [ticks]
         ('q', 'f8'), # hit charge [mV]
         ('iogroup', 'i8'), ('iochannel', 'i8'), ('chipid', 'i8'), ('channelid', 'i8'), # unique channel identifiers
         ('geom', 'i8') # unused
@@ -69,6 +70,7 @@ class HitBuilder(H5FlowStage):
         hits_arr = np.zeros((n,), dtype=self.hits_dtype)
         hits_arr['hid'] = hits_slice.start + np.arange(n)
         hits_arr['ts'] = ts_arr
+        hits_arr['ts_raw'] = packets_arr['timestamp']
         hits_arr['iogroup'] = packets_arr['io_group']
         hits_arr['iochannel'] = packets_arr['io_channel']
         hits_arr['chipid'] = packets_arr['chip_id']
