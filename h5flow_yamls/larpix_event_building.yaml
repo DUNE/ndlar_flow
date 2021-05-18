@@ -1,0 +1,18 @@
+# Generates the low-level event built data for charge data (i.e. grouped packets)
+
+flow:
+  source: charge_event_generator
+  stages: [] # doesn't run any analysis stages, just generates the dataset
+
+charge_event_generator: # groups time-sorted data packets from larpix datalog files
+  classname: RawEventGenerator
+  dset_name: 'charge/raw_events'
+  params:
+    buffer_size: 38400
+    nhit_cut: 100
+    sync_noise_cut: 100000
+    sync_noise_cut_enabled: True
+    event_builder_class: 'SymmetricWindowEventBuilder'
+    event_builder_config:
+      window: 910
+      threshold: 10
