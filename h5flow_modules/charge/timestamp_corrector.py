@@ -5,11 +5,40 @@ import logging
 from h5flow.core import H5FlowStage
 
 class TimestampCorrector(H5FlowStage):
+    '''
+        Corrects larpix clock timestamps due to slightly different PACMAN clock
+        frequencies - creates a new dataset with 1:1 relationship to packets.
+
+        The applied correction factor is given by::
+
+            ts_corrected = ts_original / (1. + correction_factor)
+
+        Parameters:
+         - ``ts_dset_name`` : ``str``, required, output dataset path
+         - ``packets_dset_name`` : ``str``, required, input dataset path for packets
+         - ``correction`` : ``dict``, optional, ``iogroup : correction_factor`` pairs
+
+        The ``packets_dset_name`` is required in the data cache.
+
+        Example config::
+
+            timestamp_corrector:
+                classname: TimestampCorrector
+                requires:
+                    - 'charge/packets'
+                params:
+                    ts_dset_name: 'charge/packets_corr_ts'
+                    packets_dset_name: 'charge/packets'
+                    correction:
+                        1: 3.56e-6
+                        2: 0.93e-6
+
+    '''
     class_version = '0.0.0'
 
     default_correction = lambda : 0.
 
-    ts_dtype = 'f8' #
+    ts_dtype = 'f8' # PPS timestamp after correcting for timestamp drift [ticks]
     correction_dtype = np.dtype([('iogroup','u1'),('slope','f8')])
 
     def __init__(self, **params):

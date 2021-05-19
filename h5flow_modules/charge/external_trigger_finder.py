@@ -6,32 +6,45 @@ from h5flow.core import H5FlowStage
 
 class ExternalTriggerFinder(H5FlowStage):
     '''
-    A class to extract external triggers from packet arrays
+        Extracts external triggers from raw packets
 
-    This class has three parameters: `pacman_trigger_enabled`, `pacman_trigger_word_filter`, `larpix_trigger_channels`
+        Parameters:
+         - ``ext_trigs_dset_name`` : ``str``, required, path to output dataset
+         - ``packets_dset_name`` : ``str``, required, path to input dataset containing packets
+         - ``ts_dset_name`` : ``str``, required, path to input dataset containing corrected packet timestamps
+         - ``larpix_trigger_channels`` : ``dict`` of ``<chip key> : [<channels>]`` pairs, optional
+         - ``pacman_trigger_enabled`` : ``bool``, optional, true to extract pacman-level external triggers
+         - ``pacman_trigger_word_filter`` : ``int``, optional, bitmask for pacman trigger word (3 == trigger bits 0 and 1 indicate external trigger)
 
-    The parameter `pacman_trigger_enabled` configures the `ExternalTriggerFinder` to
-    extract packets of `packet_type == 7` as external triggers
+        Both ``packets_dset_name`` and ``ts_dset_name`` are required in the data
+        cache.
 
-    The parameter `larpix_trigger_channels` configures the `ExternalTriggerFinder` to
-    extract triggers on particular larpix channels as external triggers. To specify,
-    this parameter should be a dict of `<chip-key>: [<channel id>]` pairs. A special
-    chip key of `'All'` can be used in the event that all triggers on a particular
-    channel of any chip key should be extracted as external triggers.
+        The parameter `pacman_trigger_enabled` configures the `ExternalTriggerFinder` to
+        extract packets of `packet_type == 7` as external triggers
 
-    You can access and set the parameters at initialization::
+        The parameter `larpix_trigger_channels` configures the `ExternalTriggerFinder` to
+        extract triggers on particular larpix channels as external triggers. To specify,
+        this parameter should be a dict of `<chip-key>: [<channel id>]` pairs. A special
+        chip key of `'All'` can be used in the event that all triggers on a particular
+        channel of any chip key should be extracted as external triggers.
 
-        etf = ExternalTriggerFinder(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
+        You can access and set the parameters at initialization::
 
-    or via the getter/setters::
+            etf = ExternalTriggerFinder(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
 
-        etf.get_parameters() # dict(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
-        etf.get_parameters('pacman_trigger_enabled') # dict(pacman_trigger_enabled=True)
+        or via the getter/setters::
 
-        etf.set_parameters(pacman_trigger_enabled=True, larpix_trigger_channels={'1-1-1':[0]})
+            etf.get_parameters() # dict(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
+            etf.get_parameters('pacman_trigger_enabled') # dict(pacman_trigger_enabled=True)
+
+            etf.set_parameters(pacman_trigger_enabled=True, larpix_trigger_channels={'1-1-1':[0]})
 
     '''
     class_version = '0.0.0'
+
+    default_pacman_trigger_enabled = True
+    default_pacman_trigger_word_filter = 2
+    default_larpix_trigger_channels = None
 
     ext_trigs_dtype = np.dtype([
         ('trig_id', 'u8'), # unique identifier
@@ -42,14 +55,14 @@ class ExternalTriggerFinder(H5FlowStage):
         ])
     larpix_trigger_channels_dtype = np.dtype([('key',h5py.string_dtype(encoding='utf-8')), ('val',h5py.vlen_dtype('u1'))])
 
-    def __init__(self, pacman_trigger_enabled=True, pacman_trigger_word_filter=2, larpix_trigger_channels=None, **params):
+    def __init__(self,**params):
         super(ExternalTriggerFinder, self).__init__(**params)
 
         if larpix_trigger_channels is None:
             larpix_trigger_channels = dict()
-        self._larpix_trigger_channels = larpix_trigger_channels
-        self._pacman_trigger_enabled = pacman_trigger_enabled
-        self._pacman_trigger_word_filter = pacman_trigger_word_filter
+        self._larpix_trigger_channels = params.get('larpix_trigger_channels', default_larpix_trigger_channels)
+        self._pacman_trigger_enabled = params.get('pacman_trigger_enabled', default_pacman_trigger_enabled)
+        self._pacman_trigger_word_filter = params.get('pacman_trigger_word_filter', default_pacman_trigger_word_filter)
         self.ext_trigs_dset_name = params.get('ext_trigs_dset_name')
         self.packets_dset_name = params.get('packets_dset_name')
         self.ts_dset_name = params.get('ts_dset_name')

@@ -1,12 +1,3 @@
-# event_builder: # combines hits and external triggers into events
-#   classname: EventBuilder
-#   requires:
-#     - 'charge/hits'
-#     - 'charge/ext_trigs'
-#   params:
-#     hits_dset_name: 'charge/hits'
-#     ext_trigs_dset_name: 'charge/ext_trigs'
-
 import numpy as np
 from collections import defaultdict
 import logging
@@ -14,6 +5,31 @@ import logging
 from h5flow.core import H5FlowStage
 
 class EventBuilder(H5FlowStage):
+    '''
+        High-level event builder - converts raw_events with external trigger and
+        hit associations into a high level event
+
+        Parameters:
+         - ``events_dset_name`` : ``str``, required, output dataset path
+         - ``hits_dset_name`` : ``str``, required, input dataset path for hits
+         - ``ext_trigs_dset_name`` : ``str``, required, input dataset path for external triggers
+
+        Both the ``hits_dset_name`` and ``ext_trigs_dset_name`` are required in
+        the data cache.
+
+        Example config::
+
+            event_builder:
+                classname: EventBuilder
+                requires:
+                    - 'charge/hits'
+                    - 'charge/ext_trigs'
+                params:
+                    events_dset_name: 'charge/events'
+                    hits_dset_name: 'charge/hits'
+                    ext_trigs_dset_name: 'charge/ext_trigs'
+
+    '''
     class_version = '0.0.0'
 
     events_dtype = np.dtype([

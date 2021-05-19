@@ -6,6 +6,39 @@ from h5flow.core import H5FlowGenerator
 from raw_event_builder import *
 
 class RawEventGenerator(H5FlowGenerator):
+    '''
+        Low-level event builder - generates packet groups according to the
+        specified algorithm from a larpix packet datalog file
+
+        Parameters:
+         - ``packets_dset_name`` : ``str``, required, output dataset path for packet groups
+         - ``buffer_size`` : ``int``, optional, number of packets to load at a time
+         - ``nhit_cut`` : ``int``, optional, minimum number of packets in an event
+         - ``sync_noise_cut_enabled`` : ``bool``, optional, remove hits occuring soon after a SYNC event
+         - ``sync_noise_cut`` : ``int``, optional, if ``sync_noise_cut_enabled`` removes all events that have a timestamp less than this value
+         - ``event_builder_class`` : ``str``, optional, event builder algorithm to use (see ``raw_event_builder.py``)
+         - ``event_builder_config`` : ``dict``, optional, modify parameters of the event builder algorithm (see ``raw_event_builder.py``)
+
+        The ``dset_name`` points to a lightweight array used to organize
+        low-level event references.
+
+        Example config::
+
+            raw_event_generator:
+                classname: RawEventGenerator
+                dset_name: 'charge/raw_events'
+                params:
+                    packets_dset_name: 'charge/packets'
+                    buffer_size: 38400
+                    nhit_cut: 100
+                    sync_noise_cut: 100000
+                    sync_noise_cut_enabled: True
+                    event_builder_class: 'SymmetricWindowRawEventBuilder'
+                    event_builder_config:
+                        window: 910
+                        threshold: 10
+
+    '''
     default_buffer_size = 38400
     default_nhit_cut = 100
     default_sync_noise_cut = 100000
@@ -15,8 +48,8 @@ class RawEventGenerator(H5FlowGenerator):
     default_packets_dset_name = 'charge/packets'
 
     raw_event_dtype = np.dtype([
-        ('evid', 'u4'),
-        ('unix_ts', 'u8')
+        ('evid', 'u4'), # unique event identifier
+        ('unix_ts', 'u8') # unix timestamp of event [s since epoch]
         ])
 
     def __init__(self, **params):

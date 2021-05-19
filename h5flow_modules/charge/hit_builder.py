@@ -5,6 +5,37 @@ import logging
 from h5flow.core import H5FlowStage
 
 class HitBuilder(H5FlowStage):
+    '''
+        Converts larpix data packets into hits - this assigns geometric properties
+        and performs the conversion from ADC -> mV above pedestal
+
+        Parameters:
+         - ``hits_dset_name`` : ``str``, required, output dataset path
+         - ``packets_dset_name`` : ``str``, required, input dataset path for packets
+         - ``ts_dset_name`` : ``str``, required, input dataset path for clock-corrected packet timestamps
+         - ``geometry_file`` : ``str``, optional, path to a pixel geometry yaml file
+         - ``pedestal_file`` : ``str``, optional, path to a pedestal json file
+         - ``configuration_file`` : ``str``, optional, path to a vref/vcm config json file
+
+        Both the ``packets_dset_name`` and ``ts_dset_name`` are required in
+        the data cache.
+
+        Example config::
+
+            hit_builder:
+                classname: HitBuilder
+                requires:
+                    - 'charge/packets'
+                    - 'charge/packets_corr_ts'
+                params:
+                    hits_dset_name: 'charge/hits'
+                    packets_dset_name: 'charge/packets'
+                    ts_dset_name: 'charge/packets_corr_ts'
+                    geometry_file: 'multi_tile_layout-2.1.16.yaml'
+                    pedestal_file: 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
+                    configuration_file: 'evd_config_21-03-31_12-36-13.json'
+
+    '''
     class_version = '0.0.0'
 
     hits_dtype = np.dtype([
