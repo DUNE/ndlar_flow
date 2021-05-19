@@ -67,7 +67,7 @@ class RawEventGenerator(H5FlowGenerator):
         self.event_builder = globals()[self.event_builder_class](**self.event_builder_config)
 
         # set up input file
-        self.input_fh = h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm) # open in parallel
+        self.input_fh = h5py.File(self.input_filename, 'r')
         self.packets = self.input_fh['packets']
 
         # set up new data objects
