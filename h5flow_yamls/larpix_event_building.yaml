@@ -5,7 +5,7 @@ flow:
   stages: [timestamp_corrector, ext_trig_finder, hit_builder, event_builder]
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files
-  classname: RawEventGenerator
+  classname: RawEventGenerator # charge/raw_event_generator.py
   dset_name: 'charge/raw_events'
   params:
     packets_dset_name: 'charge/packets'
@@ -19,7 +19,7 @@ raw_event_generator: # groups time-sorted data packets from larpix datalog files
       threshold: 10
 
 timestamp_corrector: # corrects for different pacman frequencies
-  classname: TimestampCorrector
+  classname: TimestampCorrector # charge/timestamp_corrector.py
   requires:
     - 'charge/packets'
   params:
@@ -30,7 +30,7 @@ timestamp_corrector: # corrects for different pacman frequencies
       2: 0.93e-6
 
 ext_trig_finder: # converts pacman trigger packets to ext_trigs
-  classname: ExternalTriggerFinder
+  classname: ExternalTriggerFinder # charge/external_trigger_finder.py
   requires:
     - 'charge/packets'
     - 'charge/packets_corr_ts'
@@ -43,7 +43,7 @@ ext_trig_finder: # converts pacman trigger packets to ext_trigs
     larpix_trigger_channels: { All: [6] }
 
 hit_builder: # converts larpix data packets and raw events to hits
-  classname: HitBuilder
+  classname: HitBuilder # charge/hit_builder.py
   requires:
     - 'charge/packets'
     - 'charge/packets_corr_ts'
@@ -56,7 +56,7 @@ hit_builder: # converts larpix data packets and raw events to hits
     configuration_file: 'evd_config_21-03-31_12-36-13.json'
 
 event_builder: # combines hits and external triggers into events
-  classname: EventBuilder
+  classname: EventBuilder # charge/event_builder.py
   requires:
     - 'charge/hits'
     - 'charge/ext_trigs'
