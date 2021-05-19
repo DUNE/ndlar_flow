@@ -1,6 +1,8 @@
 import numpy as np
 from collections import defaultdict
 import logging
+import yaml
+import json
 
 from h5flow.core import H5FlowStage
 
@@ -65,7 +67,7 @@ class HitBuilder(H5FlowStage):
 
     def init(self, source_name):
         # save all config info
-        self.data_manager.set_attrs(self.ts_dset_name,
+        self.data_manager.set_attrs(self.hits_dset_name,
             classname=self.classname,
             class_version=self.class_version,
             source_dset=source_name,

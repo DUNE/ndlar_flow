@@ -44,7 +44,7 @@ class ExternalTriggerFinder(H5FlowStage):
 
     default_pacman_trigger_enabled = True
     default_pacman_trigger_word_filter = 2
-    default_larpix_trigger_channels = None
+    default_larpix_trigger_channels = dict()
 
     ext_trigs_dtype = np.dtype([
         ('trig_id', 'u8'), # unique identifier
@@ -58,11 +58,9 @@ class ExternalTriggerFinder(H5FlowStage):
     def __init__(self,**params):
         super(ExternalTriggerFinder, self).__init__(**params)
 
-        if larpix_trigger_channels is None:
-            larpix_trigger_channels = dict()
-        self._larpix_trigger_channels = params.get('larpix_trigger_channels', default_larpix_trigger_channels)
-        self._pacman_trigger_enabled = params.get('pacman_trigger_enabled', default_pacman_trigger_enabled)
-        self._pacman_trigger_word_filter = params.get('pacman_trigger_word_filter', default_pacman_trigger_word_filter)
+        self._larpix_trigger_channels = params.get('larpix_trigger_channels', self.default_larpix_trigger_channels)
+        self._pacman_trigger_enabled = params.get('pacman_trigger_enabled', self.default_pacman_trigger_enabled)
+        self._pacman_trigger_word_filter = params.get('pacman_trigger_word_filter', self.default_pacman_trigger_word_filter)
         self.ext_trigs_dset_name = params.get('ext_trigs_dset_name')
         self.packets_dset_name = params.get('packets_dset_name')
         self.ts_dset_name = params.get('ts_dset_name')
