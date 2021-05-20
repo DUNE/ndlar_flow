@@ -1,0 +1,16 @@
+# Generates the low-level event built data for light data (i.e. grouped raw waveforms)
+
+flow:
+  source: light_event_generator
+  stages: [] # just generate events, no analysis stages
+
+light_event_generator:
+  classname: LightEventGenerator
+  dset_name: 'light/events'
+  params:
+    busy_channel: 0
+    n_adcs: 2
+    n_channels: 64
+    n_samples: 256
+    chunk_size: 128
+

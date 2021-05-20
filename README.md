@@ -9,3 +9,12 @@ To run charge event builder::
 This generates the ``charge/raw_events``, ``charge/packets``,
 ``charge/packets_corr_ts``, ``charge/ext_trigs``, ``charge/hits``,
 and ``charge/events`` datasets.
+
+
+## light event builder
+
+To run light event builder::
+
+    mpiexec h5flow -c h5flow_yamls/light_event_building.yaml -i <input file> -o <output file>
+
+This generates
