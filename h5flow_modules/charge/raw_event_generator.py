@@ -67,7 +67,7 @@ class RawEventGenerator(H5FlowGenerator):
         self.event_builder = globals()[self.event_builder_class](**self.event_builder_config)
 
         # set up input file
-        self.input_fh = h5py.File(self.input_filename, 'r')
+        self.input_fh = h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm)
         self.packets = self.input_fh['packets']
 
         # set up new data objects
@@ -145,6 +145,12 @@ class RawEventGenerator(H5FlowGenerator):
         packet_buffer['timestamp'] = packet_buffer['timestamp'].astype(int) % (2**31) # ignore 32nd bit from pacman triggers
         self.last_unix_ts = unix_ts[-1]
 
+        if self.sync_noise_cut_enabled:
+            # remove all packets that occur before the cut
+            sync_noise_mask = packet_buffer['timestamp'] > self.sync_noise_cut
+            packet_buffer = packet_buffer[sync_noise_mask]
+            unix_ts = unix_ts[sync_noise_mask]
+
         # run event builder
         events, event_unix_ts = self.event_builder.build_events(packet_buffer, unix_ts)
 
@@ -154,17 +160,6 @@ class RawEventGenerator(H5FlowGenerator):
             events, event_unix_ts = zip(*filtered)
         else:
             events, event_unix_ts = list(),list()
-
-        # apply sync filter
-        if self.sync_noise_cut_enabled:
-            filtered = list(filter(
-                lambda x: np.min(x[0]['timestamp']) > self.sync_noise_cut,
-                zip(events, event_unix_ts)
-                ))
-            if len(filtered):
-                events, event_unix_ts = zip(*filtered)
-            else:
-                events, event_unix_ts = list(),list()
 
         # write event to file
         raw_event_array = np.empty((len(events),), dtype=self.raw_event_dtype)

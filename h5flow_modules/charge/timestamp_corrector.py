@@ -74,14 +74,15 @@ class TimestampCorrector(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         # manipulate data from cache
         packets_data = cache[self.packets_dset_name]
-        packets_arr = np.concatenate(packets_data, axis=0)
+        packets_arr = np.concatenate(packets_data, axis=0) if len(packets_data) else np.empty((0,))
 
         # apply timestamp correction
         ts_corr_data = np.empty((len(packets_arr),), dtype=self.ts_dtype)
-        unique_io_groups = np.unique(packets_arr['io_group'])
-        for io_group in unique_io_groups:
-            mask = packets_arr['io_group'] == io_group
-            ts_corr_data[mask] = packets_arr[mask]['timestamp'] / (1. + self.correction[io_group])
+        if len(packets_arr):
+            unique_io_groups = np.unique(packets_arr['io_group'])
+            for io_group in unique_io_groups:
+                mask = packets_arr['io_group'] == io_group
+                ts_corr_data[mask] = packets_arr[mask]['timestamp'] / (1. + self.correction[io_group])
 
         # save corrected timestamps
         ts_slice = self.data_manager.reserve_data(self.ts_dset_name, len(ts_corr_data))

@@ -87,48 +87,52 @@ class HitBuilder(H5FlowStage):
         ts_data = cache[self.ts_dset_name]
 
         # get event boundaries
-        masks = [packets['packet_type'] == 0 for packets in packets_data]
-        lengths = [np.count_nonzero(mask) for mask in masks]
-        n = int(np.sum(lengths))
-        packets_arr = np.concatenate(packets_data, axis=0)
-        ts_arr = np.concatenate(ts_data, axis=0)
-        mask = np.concatenate(masks, axis=0)
-        packets_arr = packets_arr[mask]
-        ts_arr = ts_arr[mask]
+        if len(packets_data):
+            masks = [packets['packet_type'] == 0 for packets in packets_data]
+            lengths = [np.count_nonzero(mask) for mask in masks]
+            n = int(np.sum(lengths))
+            packets_arr = np.concatenate(packets_data, axis=0)
+            ts_arr = np.concatenate(ts_data, axis=0)
+            mask = np.concatenate(masks, axis=0)
+            packets_arr = packets_arr[mask]
+            ts_arr = ts_arr[mask]
+        else:
+            n = 0
 
         # reserve new data
         hits_slice = self.data_manager.reserve_data(self.hits_dset_name, n)
 
         # convert to hits array
         hits_arr = np.zeros((n,), dtype=self.hits_dtype)
-        hits_arr['hid'] = hits_slice.start + np.arange(n)
-        hits_arr['ts'] = ts_arr
-        hits_arr['ts_raw'] = packets_arr['timestamp']
-        hits_arr['iogroup'] = packets_arr['io_group']
-        hits_arr['iochannel'] = packets_arr['io_channel']
-        hits_arr['chipid'] = packets_arr['chip_id']
-        hits_arr['channelid'] = packets_arr['channel_id']
-        hit_uniqueid = (((packets_arr['io_group'].astype(int))*256
-                         + packets_arr['io_channel'].astype(int))*256
-                        + packets_arr['chip_id'].astype(int))*64 \
-            + packets_arr['channel_id'].astype(int)
-        hit_uniqueid_str = hit_uniqueid.astype(str)
-        if self.is_multi_tile:
-            xy = np.array([self.geometry[(io_group, io_channel, chip_id, channel_id)]
-                           for io_group, io_channel, chip_id, channel_id in zip(packets_arr['io_group'], packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id'])])
-        else:
-            xy = np.array([self.geometry[(
-                1, 1, (unique_id//64) % 256, unique_id % 64)] for unique_id in hit_uniqueid])
+        if n:
+            hits_arr['hid'] = hits_slice.start + np.arange(n)
+            hits_arr['ts'] = ts_arr
+            hits_arr['ts_raw'] = packets_arr['timestamp']
+            hits_arr['iogroup'] = packets_arr['io_group']
+            hits_arr['iochannel'] = packets_arr['io_channel']
+            hits_arr['chipid'] = packets_arr['chip_id']
+            hits_arr['channelid'] = packets_arr['channel_id']
+            hit_uniqueid = (((packets_arr['io_group'].astype(int))*256
+                             + packets_arr['io_channel'].astype(int))*256
+                            + packets_arr['chip_id'].astype(int))*64 \
+                + packets_arr['channel_id'].astype(int)
+            hit_uniqueid_str = hit_uniqueid.astype(str)
+            if self.is_multi_tile:
+                xy = np.array([self.geometry[(io_group, io_channel, chip_id, channel_id)]
+                               for io_group, io_channel, chip_id, channel_id in zip(packets_arr['io_group'], packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id'])])
+            else:
+                xy = np.array([self.geometry[(
+                    1, 1, (unique_id//64) % 256, unique_id % 64)] for unique_id in hit_uniqueid])
 
-        vref = np.array(
-            [self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
-        vcm = np.array([self.configuration[unique_id]['vcm_mv']
-                       for unique_id in hit_uniqueid_str])
-        ped = np.array([self.pedestal[unique_id]['pedestal_mv']
-                       for unique_id in hit_uniqueid_str])
-        hits_arr['px'] = xy[:, 0]
-        hits_arr['py'] = xy[:, 1]
-        hits_arr['q'] = self.charge_from_dataword(packets_arr['dataword'], vref, vcm, ped)
+            vref = np.array(
+                [self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
+            vcm = np.array([self.configuration[unique_id]['vcm_mv']
+                           for unique_id in hit_uniqueid_str])
+            ped = np.array([self.pedestal[unique_id]['pedestal_mv']
+                           for unique_id in hit_uniqueid_str])
+            hits_arr['px'] = xy[:, 0]
+            hits_arr['py'] = xy[:, 1]
+            hits_arr['q'] = self.charge_from_dataword(packets_arr['dataword'], vref, vcm, ped)
 
         # write
         self.data_manager.write_data(self.hits_dset_name, hits_slice, hits_arr)
