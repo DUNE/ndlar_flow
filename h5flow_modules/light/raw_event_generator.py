@@ -134,7 +134,7 @@ class LightEventGenerator(H5FlowGenerator):
                 subloop_flag = True
 
         self.entry = self.comm.bcast(self.entry, root=0)
-        logging.debug(f'entry {self.entry}/{self.end_position} buffers {[(key,len(val)) for key,val in self.data_buffer.items()]}')
+        logging.debug(f'entry {self.entry}/{self.end_position} ({round(self.entry/self.end_position, 3)}) buffers {[(key,len(val)) for key,val in self.data_buffer.items()]}')
 
         # distribute events to processes
         nevents = len(self.event_buffer)
