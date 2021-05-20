@@ -133,8 +133,6 @@ class ExternalTriggerFinder(H5FlowStage):
         :returns: a list of a list of dicts (one list for each event), each dict describes a single external trigger with the following keys: `ts`-trigger timestamp, `type`-trigger type, `mask`-mask for which packets within the event are included in the trigger
 
         '''
-        if metadata is None:
-            metadata = dict()
         event_trigs = list()
         for i,event in enumerate(events):
             event_trigs.append(list())
@@ -143,10 +141,11 @@ class ExternalTriggerFinder(H5FlowStage):
                 # first check for any pacman trigger packets
                 trigger_mask = event['packet_type'] == 7
                 trigger_mask[trigger_mask] = (event['trigger_type'][trigger_mask] & self._pacman_trigger_word_filter).astype(bool)
-                if np.any(trigger_mask) > 0:
-                    for i, trigger in enumerate(event[trigger_mask]):
+                if np.any(trigger_mask):
+                    for j in np.argwhere(trigger_mask).flatten():
+                        trigger = event[j]
                         mask = np.zeros(len(event), dtype=bool)
-                        mask[i] = 1
+                        mask[j] = True
                         event_trigs[-1].append(dict(
                             ts=metadata['ts'][i][mask],
                             ts_raw=trigger['timestamp'],
@@ -180,7 +179,7 @@ class ExternalTriggerFinder(H5FlowStage):
                         np.abs(np.diff(timestamps > 0)))
                     for idx, trigger in zip(split_indices, np.split(event[trigger_mask], split_indices)):
                         mask = np.zeros(len(event), dtype=bool)
-                        mask[trigger_mask][idx:idx+len(trigger)] = 1
+                        mask[trigger_mask][idx:idx+len(trigger)] = True
                         event_trigs[-1].append(dict(
                             ts=np.median(metadata['ts'][i][mask]),
                             ts_raw=np.median(trigger['timestamp']),
