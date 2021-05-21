@@ -77,7 +77,7 @@ class EventBuilder(H5FlowStage):
         events_arr['q'] = [np.sum(hits['q']) for hits in hits_data]
         events_arr['ts_start'] = [np.min(np.r_[hits_data[i]['ts'], ext_trigs_data[i]['ts']]) for i in range(len(raw_event_data))]
         events_arr['ts_end'] = [np.max(np.r_[hits_data[i]['ts'], ext_trigs_data[i]['ts']]) for i in range(len(raw_event_data))]
-        events_arr['nhit'] = [len(ext_trigs) for ext_trigs in ext_trigs_data]
+        events_arr['n_ext_trigs'] = [len(ext_trigs) for ext_trigs in ext_trigs_data]
         self.data_manager.write_data(self.events_dset_name, events_slice, events_arr)
 
         # save references
