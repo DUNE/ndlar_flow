@@ -9,14 +9,40 @@ from h5flow.core import H5FlowGenerator
 
 class LightEventGenerator(H5FlowGenerator):
     '''
+        Light system event builder - converts rwf_XX.root files to event-packed
+        h5flow-readable format
 
+        Parameters:
+         - ``wvfm_dset_name`` : ``str``, required, path to dataset to store raw waveforms
+         - ``n_adcs`` : ``int``, optional, number of ADC serial numbers
+         - ``n_channels`` : ``int``, optional, number of channels per ADC
+         - ``n_samples`` : ``int``, optional, number of samples in waveform
+         - ``chunk_size`` : ``int``, optional, number of events to buffer before initiating loop
+
+        Generates a lightweight "event" dataset along with a dataset containing
+        event-packed light waveforms.
+
+        Example config::
+
+        flow:
+            source: light_event_generator
+            stages: []
+
+        light_event_generator:
+            classname: LightEventGenerator
+            dset_name: 'light/events'
+            params:
+                wvfm_dset_name: 'light/wvfm'
+                n_adcs: 2
+                n_channels: 64
+                n_samples: 256
+                chunk_size: 128
     '''
     default_busy_channel = 0
     default_n_adcs = 2
     default_n_channels = 64
     default_n_samples = 256
     default_chunk_size = 128
-    default_wvfm_dset_name = 'light/wvfm'
 
     buffer_dtype = lambda self : np.dtype([
         ('event', 'i4'), # event number in source ROOT file
@@ -31,9 +57,8 @@ class LightEventGenerator(H5FlowGenerator):
         ('event', 'i4'), # event number in source ROOT file
         ('sn', 'i4', self.n_adcs), # adc serial number
         ('ch', 'u1', (self.n_adcs, self.n_channels)), # channel number
-        ('utime_ms', 'u8', self.n_adcs), # unix time [ms since epoch]
-        ('tai_ns', 'u8', self.n_adcs), # time since PPS [ns]
-        ('alignment', 'i4', self.n_adcs), # busy signal rising edge sample
+        ('utime_ms', 'u8', (self.n_adcs, self.n_channels)), # unix time [ms since epoch]
+        ('tai_ns', 'u8', (self.n_adcs, self.n_channels)), # time since PPS [ns]
         ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels)) # boolean, 1 if channel present in event
         ])
     wvfm_dtype = lambda self : np.dtype([
@@ -44,12 +69,11 @@ class LightEventGenerator(H5FlowGenerator):
         super(LightEventGenerator,self).__init__(**params)
 
         # set up parameters
-        self.busy_channel = params.get('busy_channel', self.default_busy_channel)
         self.n_adcs = params.get('n_adcs', self.default_n_adcs)
         self.n_channels = params.get('n_channels', self.default_n_channels)
         self.n_samples = params.get('n_samples', self.default_n_samples)
         self.chunk_size = params.get('chunk_size', self.default_chunk_size)
-        self.wvfm_dset_name = params.get('wvfm_dset_name', self.default_wvfm_dset_name)
+        self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.event_dset_name = self.dset_name
 
         # fix dataset dtypes
@@ -86,7 +110,6 @@ class LightEventGenerator(H5FlowGenerator):
         self.data_manager.set_attrs(self.event_dset_name,
             classname=self.classname,
             class_version=self.class_version,
-            busy_channel=self.busy_channel,
             n_adcs=self.n_adcs,
             n_channels=self.n_channels,
             n_samples=self.n_samples,
