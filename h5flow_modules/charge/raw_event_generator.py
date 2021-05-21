@@ -1,5 +1,6 @@
 import numpy as np
 import h5py
+import logging
 
 from h5flow.core import H5FlowGenerator
 
@@ -155,22 +156,24 @@ class RawEventGenerator(H5FlowGenerator):
         events, event_unix_ts = self.event_builder.build_events(packet_buffer, unix_ts)
 
         # apply nhit cut
-        filtered = list(filter(lambda x: len(x[0]) > self.nhit_cut, zip(events, event_unix_ts)))
-        if len(filtered):
-            events, event_unix_ts = zip(*filtered)
+        nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
+        if len(nhit_filtered):
+            events, event_unix_ts = zip(*nhit_filtered)
         else:
             events, event_unix_ts = list(),list()
+        nevents = len(events)
 
         # write event to file
-        raw_event_array = np.empty((len(events),), dtype=self.raw_event_dtype)
-        raw_event_slice = self.data_manager.reserve_data(self.raw_event_dset_name, len(events))
+        raw_event_array = np.empty((nevents,), dtype=self.raw_event_dtype)
+        raw_event_slice = self.data_manager.reserve_data(self.raw_event_dset_name, nevents)
         raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop)
-        raw_event_array['unix_ts'] = [p[0]['timestamp'] for p in event_unix_ts]
-        raw_event_array['evid'] = raw_event_idcs
+        if nevents:
+            raw_event_array['unix_ts'] = [p[0]['timestamp'] for p in event_unix_ts]
+            raw_event_array['evid'] = raw_event_idcs
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
         # write packets to file
-        packets_array = np.concatenate(events, axis=0) if len(events) else np.empty((0,), dtype=self.packets_dtype)
+        packets_array = np.concatenate(events, axis=0) if nevents else np.empty((0,), dtype=self.packets_dtype)
         packets_slice = self.data_manager.reserve_data(self.packets_dset_name, len(packets_array))
         packets_idcs = np.arange(packets_slice.start, packets_slice.stop)
         self.data_manager.write_data(self.packets_dset_name, packets_slice, packets_array)
@@ -179,7 +182,7 @@ class RawEventGenerator(H5FlowGenerator):
         #   just event -> packet refs for now
         event_lengths = [len(ev) for ev in events]
         self.data_manager.reserve_ref(self.raw_event_dset_name, self.packets_dset_name, raw_event_slice)
-        ref = [packets_idcs[sum(event_lengths[:i]):sum(event_lengths[:i+1])] for i in range(len(events))]
+        ref = [packets_idcs[sum(event_lengths[:i]):sum(event_lengths[:i+1])] for i in range(nevents)]
         self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, raw_event_slice, ref)
 
         return raw_event_slice
