@@ -95,6 +95,7 @@ class ExternalTriggerFinder(H5FlowStage):
 
         # find/join external triggers
         trigs = self.fit(packets_data, dict(ts=ts_data))
+        lengths = [len(t) for t in trigs]
 
         # write external triggers datasets
         trigs_array = np.concatenate(trigs, axis=0) if len(trigs) else np.empty((0,), dtype=self.ext_trigs_dtype)
@@ -106,7 +107,7 @@ class ExternalTriggerFinder(H5FlowStage):
         # write references
         #   just raw event -> trigs refs for now
         self.data_manager.reserve_ref(source_name, self.ext_trigs_dset_name, source_slice)
-        ref = [trigs_idcs[i:i+len(trig)] for i,trig in enumerate(trigs)]
+        ref = [trigs_idcs[sum(lengths[:i]):sum(lengths[:i+1])] for i in range(len(trigs))]
         self.data_manager.write_ref(source_name, self.ext_trigs_dset_name, source_slice, ref)
 
     def get_parameters(self, *args):
