@@ -15,4 +15,6 @@ light_event_generator:
     n_channels: 64
     n_samples: 256
     chunk_size: 128
+    utime_ms_window: 1000
+    tai_ns_window: 1000
 

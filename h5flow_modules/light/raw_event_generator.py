@@ -37,12 +37,16 @@ class LightEventGenerator(H5FlowGenerator):
                 n_channels: 64
                 n_samples: 256
                 chunk_size: 128
+                utime_ms_window: 1000
+                tai_ns_window: 1000
     '''
     default_busy_channel = 0
     default_n_adcs = 2
     default_n_channels = 64
     default_n_samples = 256
     default_chunk_size = 128
+    default_utime_ms_window = 1000
+    default_tai_ns_window = 1000
 
     buffer_dtype = lambda self : np.dtype([
         ('event', 'i4'), # event number in source ROOT file
@@ -73,6 +77,8 @@ class LightEventGenerator(H5FlowGenerator):
         self.n_channels = params.get('n_channels', self.default_n_channels)
         self.n_samples = params.get('n_samples', self.default_n_samples)
         self.chunk_size = params.get('chunk_size', self.default_chunk_size)
+        self.utime_ms_window = params.get('utime_ms_window', self.default_utime_ms_window)
+        self.tai_ns_window = params.get('tai_ns_window', self.default_tai_ns_window)
         self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.event_dset_name = self.dset_name
 
@@ -114,6 +120,8 @@ class LightEventGenerator(H5FlowGenerator):
             n_channels=self.n_channels,
             n_samples=self.n_samples,
             chunk_size=self.chunk_size,
+            utime_ms_window=self.utime_ms_window,
+            tai_ns_window=self.tai_ns_window,
             wvfm_dset_name=self.wvfm_dset_name,
             start_position=self.start_position,
             end_position=self.end_position,
@@ -132,7 +140,8 @@ class LightEventGenerator(H5FlowGenerator):
             subloop_flag = True
             while (len(self.event_buffer) < self.chunk_size * self.size) and \
                 ((self.entry < self.end_position) or (all([len(buf) for buf in self.data_buffer.values()]))):
-                # read until we've collected a large enough sample of events, stop once all data buffers are empty, and we've reached the end position
+                # read until we've collected a large enough sample of events
+                # stop when all data buffers are empty or we've reached the end position
                 while (self.entry < self.end_position) and subloop_flag:
                     # get next entry
                     self.rwf.GetEntry(self.entry)
@@ -147,6 +156,7 @@ class LightEventGenerator(H5FlowGenerator):
                 # combine data into event array
                 new_event = self.store_event(self.curr_event)
                 if new_event != self.curr_event:
+                    logging.debug(f'~~~ NEW EVENT ~~~ (ch {np.sum(self.event["wvfm_valid"])})')
                     self.event_buffer.append((self.event.copy(), self.wvfms.copy()))
 
                     self.event = np.zeros((1,), dtype=self.event_dtype)
@@ -157,7 +167,7 @@ class LightEventGenerator(H5FlowGenerator):
                 subloop_flag = True
 
         self.entry = self.comm.bcast(self.entry, root=0)
-        logging.debug(f'entry {self.entry}/{self.end_position} ({round(self.entry/self.end_position, 3)}) buffers {[(key,len(val)) for key,val in self.data_buffer.items()]}')
+        logging.debug(f'entry {self.entry-self.start_position}/{self.end_position-self.start_position} ({round(self.entry-self.start_position/(self.end_position-self.start_position), 3)}) buffers {[(key,len(val)) for key,val in self.data_buffer.items()]}')
 
         # distribute events to processes
         nevents = len(self.event_buffer)
@@ -180,7 +190,7 @@ class LightEventGenerator(H5FlowGenerator):
         self.data_manager.write_data(self.wvfm_dset_name, event_slice, wvfm_arr)
 
         # set up references
-        #   just event -> wvfm refs for now
+        #   just event -> wvfm 1:1 refs for now
         self.data_manager.reserve_ref(self.event_dset_name, self.wvfm_dset_name, event_slice)
         ref = event_arr['event_id']
         self.data_manager.write_ref(self.event_dset_name, self.wvfm_dset_name, event_slice, ref)
@@ -212,7 +222,7 @@ class LightEventGenerator(H5FlowGenerator):
 
     def store_event(self, event_number):
         '''
-            Pull from event buffers and assemble into event (fills base array and wvfm array)
+            Pull from event buffers and assemble into event (fills event and wvfm arrays)
 
             :returns: ``event_number`` : event_number will be incremented when full event has been assembled
         '''
@@ -222,13 +232,16 @@ class LightEventGenerator(H5FlowGenerator):
             utime_ms = np.array([self.data_buffer[key][0][0]['utime_ms'] for key in sn]).astype(int)
             tai_ns = np.array([self.data_buffer[key][0][0]['tai_ns'] for key in sn]).astype(int)
 
-            valid_mask = np.any(self.event['wvfm_valid'], axis=-1)
+            valid_mask = self.event['wvfm_valid'].astype(bool)
             if np.any(valid_mask):
                 # existing data in event, check if new data matches
-                event_ms = self.event['utime_ms'][valid_mask].astype(int)
-                event_ns = self.event['tai_ns'][valid_mask].astype(int)
+                event_ms = ma.array(self.event['utime_ms'], mask=~valid_mask).mean()
+                event_ns = ma.array(self.event['tai_ns'], mask=~valid_mask).mean()
+                # logging.debug(f'ms: {event_ms}, ns: {event_ns}')
+                # logging.debug(f'ms (new): {utime_ms}')
+                # logging.debug(f'ns (new): {tai_ns}')
                 match_idcs = np.argwhere(
-                    (np.abs(utime_ms-event_ms) <= 1000) & (np.abs(tai_ns-event_ns) <= 1000)
+                    (np.abs(utime_ms-event_ms) <= self.utime_ms_window) & (np.abs(tai_ns-event_ns) <= self.tai_ns_window)
                     ).flatten()
 
                 if len(match_idcs):
@@ -239,8 +252,8 @@ class LightEventGenerator(H5FlowGenerator):
                         sn_hash = self._sn_hash(sn[j])
                         ch_hash = self._ch_hash(data['ch'])
 
-                        if self.event['wvfm_valid'][0, sn_hash, ch_hash]:
-                            # already placed into event, continue
+                        if valid_mask[0, sn_hash, ch_hash]:
+                            # already placed into event, skip
                             continue
                         i = j
                         break
@@ -255,14 +268,14 @@ class LightEventGenerator(H5FlowGenerator):
                 idcs = np.argsort(tai_ns)
 
                 if len(idcs) > 1:
-                    # check for potential PPS rollover
                     if np.any(np.diff(tai_ns[idcs].astype(int)) > 1e8) and np.any(np.abs(np.diff(utime_ms[idcs].astype(int))) < 500):
+                        # check for potential PPS rollover, => use reversed ordering
                         i = idcs[-1]
-                    # check for significant time offset (use utime ordering)
                     if np.any(np.abs(np.diff(utime_ms[idcs].astype(int))) > 500):
+                        # check for significant time offset, => use utime ordering
                         i = np.argsort(utime_ms)[0]
-                    # default to tai ns ordering
                     else:
+                        # default is earlier tai ns ordering
                         i = idcs[0]
                 else:
                     i = idcs[0]
@@ -275,8 +288,8 @@ class LightEventGenerator(H5FlowGenerator):
             self.event['event'] = event_number
             self.event['sn'][0, sn_hash] = data['sn']
             self.event['ch'][0, sn_hash, ch_hash] = data['ch']
-            self.event['utime_ms'][0, sn_hash] = data['utime_ms']
-            self.event['tai_ns'][0, sn_hash] = data['tai_ns']
+            self.event['utime_ms'][0, sn_hash, ch_hash] = data['utime_ms']
+            self.event['tai_ns'][0, sn_hash, ch_hash] = data['tai_ns']
             self.event['wvfm_valid'][0, sn_hash, ch_hash] = True
 
             # fill waveform array
