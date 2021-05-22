@@ -16,7 +16,7 @@ class TimestampCorrector(H5FlowStage):
         Parameters:
          - ``ts_dset_name`` : ``str``, required, output dataset path
          - ``packets_dset_name`` : ``str``, required, input dataset path for packets
-         - ``correction`` : ``dict``, optional, ``iogroup : correction_factor`` pairs
+         - ``correction`` : ``dict``, optional, ``iogroup : [<constant offset>, <slope>]`` pairs
 
         The ``packets_dset_name`` is required in the data cache.
 
@@ -30,8 +30,8 @@ class TimestampCorrector(H5FlowStage):
                     ts_dset_name: 'charge/packets_corr_ts'
                     packets_dset_name: 'charge/packets'
                     correction:
-                        1: 3.56e-6
-                        2: 0.93e-6
+                        1: [-9.5, 3.56e-6]
+                        2: [-9.5, 0.93e-6]
 
     '''
     class_version = '0.0.0'
@@ -82,7 +82,7 @@ class TimestampCorrector(H5FlowStage):
             unique_io_groups = np.unique(packets_arr['io_group'])
             for io_group in unique_io_groups:
                 mask = packets_arr['io_group'] == io_group
-                ts_corr_data[mask] = packets_arr[mask]['timestamp'] / (1. + self.correction[io_group])
+                ts_corr_data[mask] = (packets_arr[mask]['timestamp'] - self.correction[io_group][0]) / (1. + self.correction[io_group][1])
 
         # save corrected timestamps
         ts_slice = self.data_manager.reserve_data(self.ts_dset_name, len(ts_corr_data))
