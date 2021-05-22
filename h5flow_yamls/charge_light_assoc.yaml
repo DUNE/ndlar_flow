@@ -1,0 +1,15 @@
+# Generates associations between charge events and light events
+
+flow:
+  source: 'charge/events'
+  stages: [charge_light_associator]
+
+charge_light_associator:
+  classname: Charge2LightAssociation
+  requires:
+    - 'charge/ext_trigs'
+  params:
+    light_event_dset_name: 'light/events'
+    ext_trigs_dset_name: 'charge/ext_trigs'
+    unix_ts_window: 1
+    default_ts_window: 1000
