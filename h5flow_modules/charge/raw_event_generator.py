@@ -81,7 +81,7 @@ class RawEventGenerator(H5FlowGenerator):
             self.start_position = 0
         if self.end_position is None or self.end_position > len(self.packets):
             self.end_position = len(self.packets)
-        self.slices = [slice(st, st + self.buffer_size) for st in range(self.start_position, self.end_position, self.size * self.buffer_size)]
+        self.slices = [slice(st, st + self.buffer_size) for st in range(self.start_position + self.rank * self.buffer_size, self.end_position, self.size * self.buffer_size)]
         self.iteration = 0
 
         if self.rank == 0:
