@@ -156,7 +156,7 @@ class LightEventGenerator(H5FlowGenerator):
                 # combine data into event array
                 new_event = self.store_event(self.curr_event)
                 if new_event != self.curr_event:
-                    logging.debug(f'~~~ NEW EVENT ~~~ (ch {np.sum(self.event["wvfm_valid"])})')
+                    # logging.debug(f'~~~ NEW EVENT ~~~ (ch {np.sum(self.event["wvfm_valid"])})')
                     self.event_buffer.append((self.event.copy(), self.wvfms.copy()))
 
                     self.event = np.zeros((1,), dtype=self.event_dtype)
@@ -235,11 +235,8 @@ class LightEventGenerator(H5FlowGenerator):
             valid_mask = self.event['wvfm_valid'].astype(bool)
             if np.any(valid_mask):
                 # existing data in event, check if new data matches
-                event_ms = ma.array(self.event['utime_ms'], mask=~valid_mask).mean()
-                event_ns = ma.array(self.event['tai_ns'], mask=~valid_mask).mean()
-                # logging.debug(f'ms: {event_ms}, ns: {event_ns}')
-                # logging.debug(f'ms (new): {utime_ms}')
-                # logging.debug(f'ns (new): {tai_ns}')
+                event_ms = ma.array(self.event['utime_ms'].flatten(), mask=~valid_mask.flatten()).mean()
+                event_ns = ma.array(self.event['tai_ns'].flatten(), mask=~valid_mask.flatten()).mean()
                 match_idcs = np.argwhere(
                     (np.abs(utime_ms-event_ms) <= self.utime_ms_window) & (np.abs(tai_ns-event_ns) <= self.tai_ns_window)
                     ).flatten()
@@ -271,7 +268,7 @@ class LightEventGenerator(H5FlowGenerator):
                     if np.any(np.diff(tai_ns[idcs].astype(int)) > 1e8) and np.any(np.abs(np.diff(utime_ms[idcs].astype(int))) < 500):
                         # check for potential PPS rollover, => use reversed ordering
                         i = idcs[-1]
-                    if np.any(np.abs(np.diff(utime_ms[idcs].astype(int))) > 500):
+                    elif np.any(np.abs(np.diff(utime_ms[idcs].astype(int))) > 500):
                         # check for significant time offset, => use utime ordering
                         i = np.argsort(utime_ms)[0]
                     else:
