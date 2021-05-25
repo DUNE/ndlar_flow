@@ -40,13 +40,13 @@ class LightEventGenerator(H5FlowGenerator):
                 utime_ms_window: 1000
                 tai_ns_window: 1000
     '''
-    default_busy_channel = 0
     default_n_adcs = 2
     default_n_channels = 64
     default_n_samples = 256
     default_chunk_size = 128
     default_utime_ms_window = 1000
     default_tai_ns_window = 1000
+    default_tai_ns_mod = 1000000000
 
     buffer_dtype = lambda self : np.dtype([
         ('event', 'i4'), # event number in source ROOT file
@@ -79,6 +79,7 @@ class LightEventGenerator(H5FlowGenerator):
         self.chunk_size = params.get('chunk_size', self.default_chunk_size)
         self.utime_ms_window = params.get('utime_ms_window', self.default_utime_ms_window)
         self.tai_ns_window = params.get('tai_ns_window', self.default_tai_ns_window)
+        self.tai_ns_mod = int(params.get('tai_ns_mod', self.default_tai_ns_mod))
         self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.event_dset_name = self.dset_name
 
@@ -230,13 +231,13 @@ class LightEventGenerator(H5FlowGenerator):
             # check if data in buffers match (either the current event or each other)
             sn = [key for key in self.data_buffer.keys()]
             utime_ms = np.array([self.data_buffer[key][0][0]['utime_ms'] for key in sn]).astype(int)
-            tai_ns = np.array([self.data_buffer[key][0][0]['tai_ns'] for key in sn]).astype(int)
+            tai_ns = np.array([self.data_buffer[key][0][0]['tai_ns'] for key in sn]).astype(int) % self.tai_ns_mod
 
             valid_mask = self.event['wvfm_valid'].astype(bool)
             if np.any(valid_mask):
                 # existing data in event, check if new data matches
                 event_ms = ma.array(self.event['utime_ms'].flatten(), mask=~valid_mask.flatten()).mean()
-                event_ns = ma.array(self.event['tai_ns'].flatten(), mask=~valid_mask.flatten()).mean()
+                event_ns = ma.array(self.event['tai_ns'].flatten(), mask=~valid_mask.flatten()).mean() % self.tai_ns_mod
                 match_idcs = np.argwhere(
                     (np.abs(utime_ms-event_ms) <= self.utime_ms_window) & (np.abs(tai_ns-event_ns) <= self.tai_ns_window)
                     ).flatten()
@@ -286,7 +287,7 @@ class LightEventGenerator(H5FlowGenerator):
             self.event['sn'][0, sn_hash] = data['sn']
             self.event['ch'][0, sn_hash, ch_hash] = data['ch']
             self.event['utime_ms'][0, sn_hash, ch_hash] = data['utime_ms']
-            self.event['tai_ns'][0, sn_hash, ch_hash] = data['tai_ns']
+            self.event['tai_ns'][0, sn_hash, ch_hash] = data['tai_ns'] % self.tai_ns_mod
             self.event['wvfm_valid'][0, sn_hash, ch_hash] = True
 
             # fill waveform array
