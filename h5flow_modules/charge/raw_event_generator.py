@@ -124,8 +124,9 @@ class RawEventGenerator(H5FlowGenerator):
 
     def next(self):
         if self.iteration >= len(self.slices):
-            return H5FlowGenerator.EMPTY
-        sl = self.slices[self.iteration]
+            sl = H5FlowGenerator.EMPTY
+        else:
+            sl = self.slices[self.iteration]
         self.iteration += 1
 
         block = self.packets[sl]
@@ -136,19 +137,22 @@ class RawEventGenerator(H5FlowGenerator):
         mask = mask | (block['packet_type'] == 6) # sync packets
 
         packet_buffer = np.copy(block[mask])
+        self.pass_last_unix_ts(packet_buffer)
         packet_buffer = np.insert(packet_buffer, [0], self.last_unix_ts)
 
         # find unix timestamp groups
         ts_mask = packet_buffer['packet_type'] == 4
         ts_grps = np.split(packet_buffer, np.argwhere(ts_mask).flatten())
-        unix_ts = np.concatenate([[ts_grp[0]]*len(ts_grp[1:]) for ts_grp in ts_grps if len(ts_grp) > 1], axis=0)
+        unix_ts_grps = [np.full(len(ts_grp[1:]), ts_grp[0], dtype=packet_buffer.dtype) for ts_grp in ts_grps if len(ts_grp) > 1]
+        unix_ts = np.concatenate(unix_ts_grps, axis=0) \
+            if len(unix_ts_grps) else np.empty((0,), dtype=packet_buffer.dtype)
         packet_buffer = packet_buffer[~ts_mask]
         packet_buffer['timestamp'] = packet_buffer['timestamp'].astype(int) % (2**31) # ignore 32nd bit from pacman triggers
-        self.last_unix_ts = unix_ts[-1]
+        self.last_unix_ts = unix_ts[-1] if len(unix_ts) else self.last_unix_ts
 
         if self.sync_noise_cut_enabled:
             # remove all packets that occur before the cut
-            sync_noise_mask = packet_buffer['timestamp'] > self.sync_noise_cut
+            sync_noise_mask = (packet_buffer['timestamp'] > self.sync_noise_cut[0]) & (packet_buffer['timestamp'] < self.sync_noise_cut[1])
             packet_buffer = packet_buffer[sync_noise_mask]
             unix_ts = unix_ts[sync_noise_mask]
 
@@ -164,7 +168,7 @@ class RawEventGenerator(H5FlowGenerator):
         nevents = len(events)
 
         # write event to file
-        raw_event_array = np.empty((nevents,), dtype=self.raw_event_dtype)
+        raw_event_array = np.zeros((nevents,), dtype=self.raw_event_dtype)
         raw_event_slice = self.data_manager.reserve_data(self.raw_event_dset_name, nevents)
         raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop)
         if nevents:
@@ -185,6 +189,17 @@ class RawEventGenerator(H5FlowGenerator):
         ref = [packets_idcs[sum(event_lengths[:i]):sum(event_lengths[:i+1])] for i in range(nevents)]
         self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, raw_event_slice, ref)
 
-        return raw_event_slice
+        return raw_event_slice if sl is not H5FlowGenerator.EMPTY else H5FlowGenerator.EMPTY
 
+    def pass_last_unix_ts(self, packets):
+        # rank 1 get stored from rank N-1
+        if self.rank == self.size-1:
+            self.comm.send(self.last_unix_ts, dest=0)
+        # rank i give max unix timestamp to i+1
+        mask = packets['packet_type'] == 4
+        max_unix_ts = packets[mask][np.argmax(packets[mask]['timestamp'])] if np.any(mask) else self.last_unix_ts
+        self.last_unix_ts = self.comm.recv(source=self.rank-1 if self.rank > 0 else self.size-1)
+        # rank N-1 store max unix timestamp for next iteration
+        if self.rank != self.size-1:
+            self.comm.send(max_unix_ts, dest=self.rank+1)
 
