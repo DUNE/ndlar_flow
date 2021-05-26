@@ -38,7 +38,10 @@ class TimestampCorrector(H5FlowStage):
 
     default_correction = lambda : 0.
 
-    ts_dtype = 'f8' # PPS timestamp after correcting for timestamp drift [ticks]
+    ts_dtype = np.dtype([
+        ('id','u4'), # unique identifier
+        ('ts','f8') # PPS timestamp after correcting for timestamp drift [ticks]
+        ])
     correction_dtype = np.dtype([('iogroup','u1'),('offset','f8'),('slope','f8')])
 
     def __init__(self, **params):
@@ -83,14 +86,16 @@ class TimestampCorrector(H5FlowStage):
             unique_io_groups = np.unique(packets_arr['io_group'])
             for io_group in unique_io_groups:
                 mask = packets_arr['io_group'] == io_group
-                ts_corr_data[mask] = (packets_arr[mask]['timestamp'] - self.correction[io_group][0]) / (1. + self.correction[io_group][1])
+                ts_corr_data[mask]['ts'] = (packets_arr[mask]['timestamp'] - self.correction[io_group][0]) / (1. + self.correction[io_group][1])
 
         # save corrected timestamps
         ts_slice = self.data_manager.reserve_data(self.ts_dset_name, len(ts_corr_data))
+        if len(ts_corr_data):
+            ts_corr_data['id'] = np.arange(ts_slice.start, ts_slice.stop)
         self.data_manager.write_data(self.ts_dset_name, ts_slice, ts_corr_data)
 
         # save references
         event_lengths = [len(p) for p in packets_data]
         self.data_manager.reserve_ref(source_name, self.ts_dset_name, source_slice)
-        ref = [slice(sum(event_lengths[:i])+ts_slice.start, sum(event_lengths[:i+1])+ts_slice.start) for i in range(len(packets_data))]
+        ref = [ts_corr_data['id'][sum(event_lengths[:i]), sum(event_lengths[:i+1])] for i in range(len(packets_data))]
         self.data_manager.write_ref(source_name, self.ts_dset_name, source_slice, ref)

@@ -41,7 +41,7 @@ class HitBuilder(H5FlowStage):
     class_version = '0.0.0'
 
     hits_dtype = np.dtype([
-        ('hid', 'i8'), # unique identifier
+        ('id', 'u4'), # unique identifier
         ('px', 'f8'), # pixel x location [mm]
         ('py', 'f8'), # pixel y location [mm]
         ('ts', 'f8'), # PPS timestamp (corrected for clock frequency) [ticks]
@@ -105,8 +105,8 @@ class HitBuilder(H5FlowStage):
         # convert to hits array
         hits_arr = np.zeros((n,), dtype=self.hits_dtype)
         if n:
-            hits_arr['hid'] = hits_slice.start + np.arange(n)
-            hits_arr['ts'] = ts_arr
+            hits_arr['id'] = hits_slice.start + np.arange(n)
+            hits_arr['ts'] = ts_arr['ts']
             hits_arr['ts_raw'] = packets_arr['timestamp']
             hits_arr['iogroup'] = packets_arr['io_group']
             hits_arr['iochannel'] = packets_arr['io_channel']

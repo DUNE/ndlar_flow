@@ -57,7 +57,7 @@ class LightEventGenerator(H5FlowGenerator):
         ('wvfm', 'i2', self.n_samples) # sample value
         ])
     event_dtype = lambda self : np.dtype([
-        ('event_id', 'u8'), # unique identifier
+        ('id', 'u4'), # unique identifier
         ('event', 'i4'), # event number in source ROOT file
         ('sn', 'i4', self.n_adcs), # adc serial number
         ('ch', 'u1', (self.n_adcs, self.n_channels)), # channel number
@@ -184,7 +184,7 @@ class LightEventGenerator(H5FlowGenerator):
 
         # write event to file
         event_slice = self.data_manager.reserve_data(self.event_dset_name, nevents)
-        event_arr['event_id'] = np.arange(event_slice.start, event_slice.stop)
+        event_arr['id'] = np.arange(event_slice.start, event_slice.stop)
         self.data_manager.write_data(self.event_dset_name, event_slice, event_arr)
 
         self.data_manager.reserve_data(self.wvfm_dset_name, event_slice)
@@ -193,7 +193,7 @@ class LightEventGenerator(H5FlowGenerator):
         # set up references
         #   just event -> wvfm 1:1 refs for now
         self.data_manager.reserve_ref(self.event_dset_name, self.wvfm_dset_name, event_slice)
-        ref = event_arr['event_id']
+        ref = event_arr['id']
         self.data_manager.write_ref(self.event_dset_name, self.wvfm_dset_name, event_slice, ref)
 
         return event_slice

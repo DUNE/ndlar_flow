@@ -33,7 +33,7 @@ class EventBuilder(H5FlowStage):
     class_version = '0.0.0'
 
     events_dtype = np.dtype([
-        ('evid', 'u8'), # unique identifier
+        ('id', 'u4'), # unique identifier
         ('nhit', 'u4'), # number of hits in event
         ('q', 'f8'), # total charge in event [mV]
         ('ts_start', 'f8'), ('ts_end', 'f8'), # minimum and maximum corrected PPS timestamp [ticks]
@@ -71,7 +71,7 @@ class EventBuilder(H5FlowStage):
         # write event
         events_slice = self.data_manager.reserve_data(self.events_dset_name, source_slice)
         events_arr = np.zeros((len(raw_event_data,)), dtype=self.events_dtype)
-        events_arr['evid'] = raw_event_data['evid']
+        events_arr['id'] = raw_event_data['id']
         events_arr['unix_ts'] = raw_event_data['unix_ts']
         events_arr['nhit'] = [len(hits) for hits in hits_data]
         events_arr['q'] = [np.sum(hits['q']) for hits in hits_data]

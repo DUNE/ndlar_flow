@@ -91,7 +91,7 @@ light event ids::
     len(light_events) == len(charge_qsum)
 
 Some datasets have trivial 1:1 relationships and can associated via
-their `'xx_id'` field rather than invoking the full HDF5 region reference
+their `'id'` field rather than invoking the full HDF5 region reference
 mechanics. We will use that to load and integrate the light waveforms for each
 event::
 
@@ -107,14 +107,14 @@ event::
 
     light_integral = np.zeros(len(charge_qsum), dtype='f8')
     for i,ev in enumerate(light_events):
-        wvfms = wvfm_dset[ev['event_id']]['samples'] # load raw waveforms, shape is (N, nadcs, nchannels, nsamples)
+        wvfms = wvfm_dset[ ev['id'] ]['samples'] # load raw waveforms, shape is (N, nadcs, nchannels, nsamples)
         mask = np.broadcast_to(channel_mask & np.expand_dims(ev['wvfm_valid'].astype(bool), -1), wvfms.shape) # mask for valid waveforms in event, reshape to match waveform dimensions
-        wvfms = ma.masked_where(~mask, wvfms, copy=False) # create a masked array of waveforms
+        wvfms = ma.masked_where(~mask, wvfms, copy=False) # create a masked array of waveforms, note that the masked array convention is True == invalid
         light_integral[i] = wvfms.sum() # sums over all light events, ADCs, channels, and samples (ignoring the masked channels)
 
-Dereferencing is a bit slow because of the python loop, but this shouldn't take
-more than a minute or two. One possibility for the future is to implement a
-`cython` helper function that makes use of the `cython` backend of `h5py`, which
+Dereferencing is a bit slow because of the python loop, but this still shouldn't
+take more than a minute or two. One possibility for the future is to implement a
+`cython` helper function that makes use of the `cython` backend of `h5py`. This
 could dramatically speed up the dereferencing process.
 
 We can now plot the correlation between the charge and light systems::

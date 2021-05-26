@@ -47,7 +47,7 @@ class ExternalTriggerFinder(H5FlowStage):
     default_larpix_trigger_channels = dict()
 
     ext_trigs_dtype = np.dtype([
-        ('trig_id', 'u8'), # unique identifier
+        ('id', 'u4'), # unique identifier
         ('ts', 'f8'), # corrected PPS timestamp [ticks]
         ('ts_raw', 'i8'), # PPS timestamp [ticks]
         ('type', 'i2'), # trigger type (from PACMAN)
@@ -94,14 +94,14 @@ class ExternalTriggerFinder(H5FlowStage):
         ts_data = cache[self.ts_dset_name]
 
         # find/join external triggers
-        trigs = self.fit(packets_data, dict(ts=ts_data))
+        trigs = self.fit(packets_data, dict(ts=ts_data['ts']))
         lengths = [len(t) for t in trigs]
 
         # write external triggers datasets
         trigs_array = np.concatenate(trigs, axis=0) if len(trigs) else np.empty((0,), dtype=self.ext_trigs_dtype)
         trigs_slice = self.data_manager.reserve_data(self.ext_trigs_dset_name, len(trigs_array))
         trigs_idcs = np.arange(trigs_slice.start, trigs_slice.stop)
-        trigs_array['trig_id'] = trigs_idcs
+        trigs_array['id'] = trigs_idcs
         self.data_manager.write_data(self.ext_trigs_dset_name, trigs_slice, trigs_array)
 
         # write references

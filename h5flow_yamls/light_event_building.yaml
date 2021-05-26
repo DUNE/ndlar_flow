@@ -3,8 +3,8 @@
 flow:
   source: light_event_generator
   stages: [] # just generate events, no analysis stages
-  drop:
-    - 'light/wvfm'
+  drop: []
+    # - 'light/wvfm'
 
 light_event_generator:
   classname: LightEventGenerator

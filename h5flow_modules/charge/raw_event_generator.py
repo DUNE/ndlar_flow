@@ -49,7 +49,7 @@ class RawEventGenerator(H5FlowGenerator):
     default_packets_dset_name = 'charge/packets'
 
     raw_event_dtype = np.dtype([
-        ('evid', 'u4'), # unique event identifier
+        ('id', 'u4'), # unique event identifier
         ('unix_ts', 'u8') # unix timestamp of event [s since epoch]
         ])
 
@@ -72,7 +72,7 @@ class RawEventGenerator(H5FlowGenerator):
         self.packets = self.input_fh['packets']
 
         # set up new data objects
-        self.packets_dtype = self.packets.dtype
+        self.packets_dtype = np.dtype([('id','u4')] + self.packets.dtype.descr) # add the id field to the packets array
         self.packets_dset_name = params.get('packets_dset_name', self.default_packets_dset_name)
         self.raw_event_dset_name = self.dset_name
 
@@ -173,13 +173,14 @@ class RawEventGenerator(H5FlowGenerator):
         raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop)
         if nevents:
             raw_event_array['unix_ts'] = [p[0]['timestamp'] for p in event_unix_ts]
-            raw_event_array['evid'] = raw_event_idcs
+            raw_event_array['id'] = raw_event_idcs
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
         # write packets to file
         packets_array = np.concatenate(events, axis=0) if nevents else np.empty((0,), dtype=self.packets_dtype)
         packets_slice = self.data_manager.reserve_data(self.packets_dset_name, len(packets_array))
         packets_idcs = np.arange(packets_slice.start, packets_slice.stop)
+        packets_array['id'] = packets_idcs
         self.data_manager.write_data(self.packets_dset_name, packets_slice, packets_array)
 
         # set up references
