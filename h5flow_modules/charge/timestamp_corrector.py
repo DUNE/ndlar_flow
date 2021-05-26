@@ -39,7 +39,7 @@ class TimestampCorrector(H5FlowStage):
     default_correction = lambda : 0.
 
     ts_dtype = 'f8' # PPS timestamp after correcting for timestamp drift [ticks]
-    correction_dtype = np.dtype([('iogroup','u1'),('slope','f8')])
+    correction_dtype = np.dtype([('iogroup','u1'),('offset','f8'),('slope','f8')])
 
     def __init__(self, **params):
         super(TimestampCorrector, self).__init__(**params)
@@ -62,7 +62,8 @@ class TimestampCorrector(H5FlowStage):
         correction_arr = np.empty((len(self.correction.keys()),), dtype=self.correction_dtype)
         for i,(key,val) in enumerate(self.correction.items()):
             correction_arr[i]['iogroup'] = key
-            correction_arr[i]['slope'] = val
+            correction_arr[i]['slope'] = val[1]
+            correction_arr[i]['offset'] = val[0]
         self.data_manager.set_attrs(self.ts_dset_name,
             correction=correction_arr
             )
