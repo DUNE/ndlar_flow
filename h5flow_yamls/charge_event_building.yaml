@@ -11,11 +11,11 @@ raw_event_generator: # groups time-sorted data packets from larpix datalog files
     packets_dset_name: 'charge/packets'
     buffer_size: 38400
     nhit_cut: 100
-    sync_noise_cut: 100000
+    sync_noise_cut: [1000000, 10000000] # 1e6 cut based on Brooke's study
     sync_noise_cut_enabled: True
     event_builder_class: 'SymmetricWindowRawEventBuilder'
     event_builder_config:
-      window: 910
+      window: 1000 # slightly more than 1 drift length at 500V/cm
       threshold: 10
 
 timestamp_corrector: # corrects for different pacman frequencies
@@ -26,8 +26,8 @@ timestamp_corrector: # corrects for different pacman frequencies
     ts_dset_name: 'charge/packets_corr_ts' # new dataset
     packets_dset_name: 'charge/packets' # required datset
     correction:
-      1: [-9.510, 4.0220e-6]
-      2: [-9.232, 1.1944e-6]
+      1: [-9.597, 4.0021e-6]
+      2: [-9.329, 1.1770e-6]
 
 ext_trig_finder: # converts pacman trigger packets to ext_trigs
   classname: ExternalTriggerFinder # charge/external_trigger_finder.py
