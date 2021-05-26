@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.ma as ma
 import logging
 
 from h5flow.core import H5FlowStage
@@ -27,10 +28,11 @@ class Charge2LightAssociation(H5FlowStage):
         # save all config info
         self.events_dset_name = source_name
         self.data_manager.set_attrs(self.events_dset_name,
-            classname=self.classname,
-            class_version=self.class_version,
-            source_dset=source_name,
-            light_event_dset=self.light_event_dset_name
+            charge_to_light_assoc_classname=self.classname,
+            charge_to_light_assoc_class_version=self.class_version,
+            light_event_dset=self.light_event_dset_name,
+            charge_to_light_assoc_unix_ts_window=self.unix_ts_window,
+            charge_to_light_assoc_ts_window=self.ts_window
             )
 
         # then set up new datasets
@@ -39,11 +41,12 @@ class Charge2LightAssociation(H5FlowStage):
 
         # load in light system timestamps (use max to get non-null timestamp entries)
         self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['event_id'][:]
-        self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:]
+        self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
         self.light_unix_ts = self.data_manager.get_dset(self.light_event_dset_name)['utime_ms'][:]
-        self.light_unix_ts = ma.mean(ma.array(self.light_unix_ts, mask=~self.light_event_mask), axis=-1)
+        self.light_unix_ts = ma.array(self.light_unix_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
         self.light_unix_ts = self.light_unix_ts / 1000. # convert ms -> s
         self.light_ts = self.data_manager.get_dset(self.light_event_dset_name)['tai_ns'][:]
+        self.light_ts = ma.array(self.light_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
         self.light_ts = self.light_ts / 100. # convert ns -> 0.1us
 
         self.light_unix_ts_start = self.light_unix_ts.min()

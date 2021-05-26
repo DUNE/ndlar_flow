@@ -12,4 +12,4 @@ charge_light_associator:
     light_event_dset_name: 'light/events'
     ext_trigs_dset_name: 'charge/ext_trigs'
     unix_ts_window: 1
-    default_ts_window: 1000
+    default_ts_window: 10
