@@ -82,10 +82,10 @@ class EventBuilder(H5FlowStage):
 
         # save references
         self.data_manager.reserve_ref(self.events_dset_name, self.hits_dset_name, source_slice)
-        ref = [hits['hid'] if len(hits) else slice(0,0) for hits in hits_data]
+        ref = [hits['id'] if len(hits) else slice(0,0) for hits in hits_data]
         self.data_manager.write_ref(self.events_dset_name, self.hits_dset_name, source_slice, ref)
 
         self.data_manager.reserve_ref(self.events_dset_name, self.ext_trigs_dset_name, source_slice)
-        ref = [trigs['trig_id'] if len(trigs) else slice(0,0) for trigs in ext_trigs_data]
+        ref = [trigs['id'] if len(trigs) else slice(0,0) for trigs in ext_trigs_data]
         self.data_manager.write_ref(self.events_dset_name, self.ext_trigs_dset_name, source_slice, ref)
 
