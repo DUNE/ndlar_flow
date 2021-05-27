@@ -36,7 +36,7 @@ class TimestampCorrector(H5FlowStage):
     '''
     class_version = '0.0.0'
 
-    default_correction = lambda : 0.
+    default_correction = lambda : 0.,0.
 
     ts_dtype = np.dtype([
         ('id','u4'), # unique identifier
@@ -97,5 +97,5 @@ class TimestampCorrector(H5FlowStage):
         # save references
         event_lengths = [len(p) for p in packets_data]
         self.data_manager.reserve_ref(source_name, self.ts_dset_name, source_slice)
-        ref = [ts_corr_data['id'][sum(event_lengths[:i]), sum(event_lengths[:i+1])] for i in range(len(packets_data))]
+        ref = [ts_corr_data['id'][sum(event_lengths[:i]):sum(event_lengths[:i+1])] for i in range(len(packets_data))]
         self.data_manager.write_ref(source_name, self.ts_dset_name, source_slice, ref)
