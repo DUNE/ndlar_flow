@@ -196,6 +196,9 @@ class RawEventGenerator(H5FlowGenerator):
         return raw_event_slice if sl is not H5FlowGenerator.EMPTY else H5FlowGenerator.EMPTY
 
     def pass_last_unix_ts(self, packets):
+        if self.size < 2:
+            return
+
         # rank 1 get stored from rank N-1
         if self.rank == self.size-1:
             self.comm.send(self.last_unix_ts, dest=0)

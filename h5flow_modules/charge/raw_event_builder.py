@@ -41,6 +41,9 @@ class RawEventBuilder(object):
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         size = comm.Get_size()
+
+        if size < 2:
+            return
         # rank 1 get stored from rank N-1
         if rank == size-1:
             # logging.debug('{}: {} -> {}'.format(attrs,rank,0))
@@ -62,6 +65,9 @@ class RawEventBuilder(object):
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         size = comm.Get_size()
+
+        if size < 2:
+            return
         # rank N-1 store value for next iteration
         if rank != size-1:
             # logging.debug('{}: {} -> {}'.format(attrs,rank,rank+1))
