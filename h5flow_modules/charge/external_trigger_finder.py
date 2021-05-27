@@ -94,7 +94,7 @@ class ExternalTriggerFinder(H5FlowStage):
         ts_data = cache[self.ts_dset_name]
 
         # find/join external triggers
-        trigs = self.fit(packets_data, dict(ts=ts_data['ts']))
+        trigs = self.fit(packets_data, dict(ts=ts_data))
         lengths = [len(t) for t in trigs]
 
         # write external triggers datasets
@@ -148,7 +148,7 @@ class ExternalTriggerFinder(H5FlowStage):
                         mask = np.zeros(len(event), dtype=bool)
                         mask[j] = True
                         event_trigs[-1].append(dict(
-                            ts=metadata['ts'][i][mask],
+                            ts=metadata['ts'][i][mask]['ts'],
                             ts_raw=trigger['timestamp'],
                             type=trigger['trigger_type'],
                             iogroup=trigger['io_group'],
@@ -182,7 +182,7 @@ class ExternalTriggerFinder(H5FlowStage):
                         mask = np.zeros(len(event), dtype=bool)
                         mask[trigger_mask][idx:idx+len(trigger)] = True
                         event_trigs[-1].append(dict(
-                            ts=np.median(metadata['ts'][i][mask]),
+                            ts=np.median(metadata['ts'][i][mask]['ts']),
                             ts_raw=np.median(trigger['timestamp']),
                             type=-1,
                             iogroup=np.median(trigger['io_group']),
