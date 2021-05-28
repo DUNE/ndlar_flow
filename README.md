@@ -1,3 +1,16 @@
+# environment
+
+To install proper dependencies, use the provided conda environment file `env.yaml`::
+
+    conda env create -f env.yaml -n <environment name>
+    conda activate <environment>
+
+To update an existing environment::
+
+    conda env update -f env.yaml -n <environment name>
+
+You will also need to install `h5flow` [https://github.com/peter-madigan/h5flow].
+
 # usage
 
 ## charge event builder
