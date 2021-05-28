@@ -118,8 +118,9 @@ class HitBuilder(H5FlowStage):
                 + packets_arr['channel_id'].astype(int)
             hit_uniqueid_str = hit_uniqueid.astype(str)
             if self.is_multi_tile:
-                xy = np.array([self.geometry[(io_group, io_channel, chip_id, channel_id)]
-                               for io_group, io_channel, chip_id, channel_id in zip(packets_arr['io_group'], packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id'])])
+                xy = self.geometry[self.geometry_hash(packets_arr['io_group'], packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id'])]
+                # xy = np.array([self.geometry[(io_group, io_channel, chip_id, channel_id)]
+                #                for io_group, io_channel, chip_id, channel_id in zip(packets_arr['io_group'], packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id'])])
             else:
                 xy = np.array([self.geometry[(
                     1, 1, (unique_id//64) % 256, unique_id % 64)] for unique_id in hit_uniqueid])
@@ -155,8 +156,7 @@ class HitBuilder(H5FlowStage):
         return pixel_pos[0]*tile_orientation[2], pixel_pos[1]*tile_orientation[1]
 
     def load_geometry(self):
-        self.geometry = defaultdict(self._default_pxy)
-        self.tile_geometry = defaultdict(int)
+        # self.geometry = defaultdict(self._default_pxy)
         self.io_group_io_channel_to_tile = defaultdict(int)
         self.is_multi_tile = False
 
@@ -179,9 +179,35 @@ class HitBuilder(H5FlowStage):
                 x_size = max(xs)-min(xs)+pixel_pitch
                 y_size = max(ys)-min(ys)+pixel_pitch
 
+                io_groups = [
+                    geometry_yaml['tile_chip_to_io'][tile][chip]//1000
+                    for tile in geometry_yaml['tile_chip_to_io']
+                    for chip in geometry_yaml['tile_chip_to_io'][tile]
+                    ]
+                io_channels = [
+                    geometry_yaml['tile_chip_to_io'][tile][chip]%1000
+                    for tile in geometry_yaml['tile_chip_to_io']
+                    for chip in geometry_yaml['tile_chip_to_io'][tile]
+                    ]
+                chip_ids = [
+                    chip_channel//1000
+                    for chip_channel in geometry_yaml['chip_channel_to_position']
+                    ]
+                channel_ids = [
+                    chip_channel%1000
+                    for chip_channel in geometry_yaml['chip_channel_to_position']
+                    ]
+                self.geometry_hash, max_hash = self.geometry_hash_factory(
+                    (np.min(io_groups), np.max(io_groups)),
+                    (np.min(io_channels), np.max(io_channels)),
+                    (np.min(chip_ids), np.max(chip_ids)),
+                    (np.min(channel_ids), np.max(channel_ids))
+                    )
+                self.geometry = np.zeros((max_hash+1, 2)) # pixel xy
+                logging.debug(f'max geometry hash value: {max_hash}')
+
                 for tile in geometry_yaml['tile_chip_to_io']:
                     tile_orientation = tile_orientations[tile]
-                    self.tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
                     for chip in geometry_yaml['tile_chip_to_io'][tile]:
                         io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
                         io_group = io_group_io_channel//1000
@@ -210,8 +236,7 @@ class HitBuilder(H5FlowStage):
                         y += tile_positions[tile][1] + \
                             tpc_centers[tile_indeces[tile][1]][1]
 
-                        self.geometry[(io_group, io_channel,
-                                       chip, channel)] = x, y
+                        self.geometry[self.geometry_hash(np.array(io_group), np.array(io_channel), np.array(chip), np.array(channel))] = np.array([[x, y]])
 
             else:
                 import larpixgeometry.layouts
@@ -242,5 +267,29 @@ class HitBuilder(H5FlowStage):
             with open(self.configuration_file, 'r') as infile:
                 for key, value in json.load(infile).items():
                     self.configuration[key] = value
+
+    @staticmethod
+    def geometry_hash_factory(min_max_io_group, min_max_io_channel, min_max_chip_id, min_max_channel_id):
+        '''
+            Generates a hashing function to translate (io_group, io_channel,
+            chip_id, channel_id) into a unique index in an array
+
+            :param min_max_...: ``tuple`` of (min value, max value)
+
+            :returns: ``tuple`` of hashing function, max hash value
+
+        '''
+        len_io_group = np.diff(min_max_io_group)+1
+        len_io_channel = np.diff(min_max_io_channel)+1
+        len_chip_id = np.diff(min_max_chip_id)+1
+        len_channel_id = np.diff(min_max_channel_id)+1
+
+        max_hash = (((min_max_io_group[1]-min_max_io_group[0])*len_io_channel + min_max_io_channel[1]-min_max_io_channel[0])*len_chip_id + min_max_chip_id[1]-min_max_chip_id[0])*len_channel_id + min_max_channel_id[1]-min_max_channel_id[0] + 1
+        def geometry_hash(io_group, io_channel, chip_id, channel_id):
+            val = (((io_group-min_max_io_group[0])*len_io_channel + io_channel-min_max_io_channel[0])*len_chip_id + chip_id-min_max_chip_id[0])*len_channel_id + channel_id-min_max_channel_id[0] + 1
+            val[val < 0] = 0
+            val[val > max_hash] = 0
+            return val
+        return geometry_hash, int(max_hash)
 
 
