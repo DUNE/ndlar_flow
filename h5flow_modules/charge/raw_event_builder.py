@@ -42,6 +42,9 @@ class RawEventBuilder(object):
         rank = comm.Get_rank()
         size = comm.Get_size()
 
+        for attr in attrs:
+            logging.debug(f'get {attr}: {getattr(self,attr).shape}')
+
         if size < 2:
             return
         # rank 1 get stored from rank N-1
@@ -219,15 +222,26 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             return [], []
 
         # sort packets to fix 512 bug
-        packets     = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
-        sorted_idcs = np.argsort(packets, order='timestamp')
+        packets  = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
+
+        # roughly correct for rollovers
+        rollover = np.zeros((len(packets),), dtype='u8')
+        for io_group in np.unique(packets['io_group']):
+            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type']==83)
+            rollover[mask] = packets[mask]['timestamp']
+
+            mask = (packets['io_group'] == io_group)
+            rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
+        ts          = packets['timestamp']+rollover
+
+        sorted_idcs = np.argsort(ts)
         packets     = packets[sorted_idcs]
         unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
 
         # calculate time distance between hits
-        min_ts, max_ts = np.min(packets['timestamp']), np.max(packets['timestamp'])
+        min_ts, max_ts = np.min(ts), np.max(ts)
         bin_edges = np.linspace(min_ts, max_ts, int((max_ts - min_ts + 2)//self.window))
-        hist, bin_edges = np.histogram(packets['timestamp'], bins=bin_edges)
+        hist, bin_edges = np.histogram(ts, bins=bin_edges)
 
         # find high correlation regions
         event_mask = (hist > self.threshold)
@@ -251,7 +265,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             event_start_timestamp = np.r_[min_ts, event_start_timestamp]
         if not len(event_end_timestamp):
             # last packet ends event, keep for next but return no events
-            mask = packets['timestamp'] >= event_start_timestamp[-1]
+            mask = ts >= event_start_timestamp[-1]
             self.event_buffer = packets[mask]
             self.event_buffer_unix_ts = unix_ts[mask]
             self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts')
@@ -284,10 +298,6 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         events = np.split(packets, event_idcs)
         event_unix_ts = np.split(unix_ts, event_idcs)
         is_event = np.r_[False, event_mask[event_idcs]]
-
-        for i,e in enumerate(events):
-            if np.any(e['timestamp'] > 1e7):
-                logging.debug((i,len(events),e[0],e[-1]))
 
         # only return packets from events
         return zip(*[v for i,v in enumerate(zip(events, event_unix_ts)) if is_event[i]])

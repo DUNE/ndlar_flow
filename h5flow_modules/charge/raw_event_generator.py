@@ -106,7 +106,8 @@ class RawEventGenerator(H5FlowGenerator):
 
         # initialize data objects
         self.data_manager.create_dset(self.raw_event_dset_name, dtype=self.raw_event_dtype)
-        self.data_manager.create_dset(self.packets_dset_name, dtype=np.dtype(self.packets_id_dtype.descr+self.packets_dtype.descr))
+        # self.data_manager.create_dset(self.packets_dset_name, dtype=np.dtype(self.packets_id_dtype.descr+self.packets_dtype.descr))
+        self.data_manager.create_dset(self.packets_dset_name, dtype=self.packets_dtype)
         self.data_manager.create_ref(self.raw_event_dset_name, self.packets_dset_name)
         self.data_manager.set_attrs(self.raw_event_dset_name,
             classname=self.classname,
@@ -183,7 +184,7 @@ class RawEventGenerator(H5FlowGenerator):
         packets_array = np.concatenate(events, axis=0) if nevents else np.empty((0,), dtype=self.packets_dtype)
         packets_slice = self.data_manager.reserve_data(self.packets_dset_name, len(packets_array))
         packets_idcs = np.array(np.arange(packets_slice.start, packets_slice.stop), dtype=self.packets_id_dtype)
-        packets_array = rfn.merge_arrays((packets_idcs, packets_array), flatten=True)
+        # packets_array = rfn.merge_arrays((packets_idcs, packets_array))
         self.data_manager.write_data(self.packets_dset_name, packets_slice, packets_array)
 
         # set up references
