@@ -36,8 +36,6 @@ class TimestampCorrector(H5FlowStage):
     '''
     class_version = '0.0.0'
 
-    default_correction = lambda : (0.,0.)
-
     ts_dtype = np.dtype([
         ('id','u4'), # unique identifier
         ('ts','f8') # PPS timestamp after correcting for timestamp drift [ticks]
@@ -50,9 +48,13 @@ class TimestampCorrector(H5FlowStage):
         self.ts_dset_name = params.get('ts_dset_name')
         self.packets_dset_name = params.get('packets_dset_name')
 
-        self.correction = defaultdict(self.default_correction)
+        self.correction = defaultdict(self._default_correction)
         for key,val in params.get('correction', dict()).items():
             self.correction[key] = val
+
+    @staticmethod
+    def _default_correction():
+        return (0.,0.)
 
     def init(self, source_name):
         # write all configuration variables to the dataset
@@ -83,10 +85,9 @@ class TimestampCorrector(H5FlowStage):
         # apply timestamp correction
         ts_corr_data = np.empty((len(packets_arr),), dtype=self.ts_dtype)
         if len(packets_arr):
-            unique_io_groups = np.unique(packets_arr['io_group'])
-            for io_group in unique_io_groups:
+            for io_group in np.unique(packets_arr['io_group']):
                 mask = packets_arr['io_group'] == io_group
-                ts_corr_data[mask]['ts'] = (packets_arr[mask]['timestamp'] - self.correction[io_group][0]) / (1. + self.correction[io_group][1])
+                ts_corr_data['ts'][mask] = (packets_arr[mask]['timestamp'].astype('f8') - self.correction[io_group][0]) / (1. + self.correction[io_group][1])
 
         # save corrected timestamps
         ts_slice = self.data_manager.reserve_data(self.ts_dset_name, len(ts_corr_data))
