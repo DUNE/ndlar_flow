@@ -40,7 +40,7 @@ class Charge2LightAssociation(H5FlowStage):
         self.data_manager.create_ref(self.ext_trigs_dset_name, self.light_event_dset_name)
 
         # load in light system timestamps (use max to get non-null timestamp entries)
-        self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['event_id'][:]
+        self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['id'][:]
         self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
         self.light_unix_ts = self.data_manager.get_dset(self.light_event_dset_name)['utime_ms'][:]
         self.light_unix_ts = ma.array(self.light_unix_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
