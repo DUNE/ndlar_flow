@@ -88,7 +88,7 @@ class RawEventGenerator(H5FlowGenerator):
         self.iteration = 0
 
         if self.rank == 0:
-            self.last_unix_ts = self.packets[np.argmax(self.packets.fields('packet_type')==4)] # first timestamp packet
+            self.last_unix_ts = self.packets[np.argmax(self.packets['packet_type']==4)] # first timestamp packet
         else:
             self.last_unix_ts = None
         self.last_unix_ts = self.comm.bcast(self.last_unix_ts, root=0) # distribute result from root thread to all
