@@ -101,7 +101,7 @@ class Charge2LightAssociation(H5FlowStage):
 
         # write references
         # ext trig -> light event
-        spec = ext_trigs_all['trig_id'] if len(ext_trigs_all) else np.empty((0,), dtype=int)
+        spec = ext_trigs_all['id'] if len(ext_trigs_all) else np.empty((0,), dtype=int)
         self.data_manager.reserve_ref(self.ext_trigs_dset_name, self.light_event_dset_name, spec)
         self.data_manager.write_ref(self.ext_trigs_dset_name, self.light_event_dset_name, spec, ext_trig_assoc)
 
