@@ -1,0 +1,53 @@
+# Generates the mid-level event built data for charge data (i.e. hits and external triggers)
+
+flow:
+  source: 'charge/raw_events'
+  stages: [timestamp_corrector, ext_trig_finder, hit_builder, event_builder]
+  drop: []
+
+timestamp_corrector: # corrects for different pacman frequencies
+  classname: TimestampCorrector # charge/timestamp_corrector.py
+  requires:
+    - 'charge/packets'
+  params:
+    ts_dset_name: 'charge/packets_corr_ts' # new dataset
+    packets_dset_name: 'charge/packets' # required datset
+    correction:
+      1: [-9.597, 4.0021e-6]
+      2: [-9.329, 1.1770e-6]
+
+ext_trig_finder: # converts pacman trigger packets to ext_trigs
+  classname: ExternalTriggerFinder # charge/external_trigger_finder.py
+  requires:
+    - 'charge/packets'
+    - 'charge/packets_corr_ts'
+  params:
+    ext_trigs_dset_name: 'charge/ext_trigs' # new dataset
+    packets_dset_name: 'charge/packets' # required dataset
+    ts_dset_name: 'charge/packets_corr_ts' # required dataset
+    pacman_trigger_enabled: True
+    pacman_trigger_word_filter: 2
+    larpix_trigger_channels: { All: [6] }
+
+hit_builder: # converts larpix data packets and raw events to hits
+  classname: HitBuilder # charge/hit_builder.py
+  requires:
+    - 'charge/packets'
+    - 'charge/packets_corr_ts'
+  params:
+    hits_dset_name: 'charge/hits' # new dataset
+    packets_dset_name: 'charge/packets' # required dataset
+    ts_dset_name: 'charge/packets_corr_ts' # required dataset
+    geometry_file: 'multi_tile_layout-2.1.16.yaml'
+    pedestal_file: 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
+    configuration_file: 'evd_config_21-03-31_12-36-13.json'
+
+event_builder: # combines hits and external triggers into events
+  classname: EventBuilder # charge/event_builder.py
+  requires:
+    - 'charge/hits'
+    - 'charge/ext_trigs'
+  params:
+    events_dset_name: 'charge/events' # new dataset
+    hits_dset_name: 'charge/hits' # required dataset
+    ext_trigs_dset_name: 'charge/ext_trigs' # required dataset

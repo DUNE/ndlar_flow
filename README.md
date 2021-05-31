@@ -19,10 +19,16 @@ To run charge event builder::
 
     mpiexec h5flow -c h5flow_yamls/charge_event_building.yaml -i <input file> -o <output file>
 
-This generates the ``charge/raw_events``, ``charge/packets``,
-``charge/packets_corr_ts``, ``charge/ext_trigs``, ``charge/hits``,
-and ``charge/events`` datasets.
+This generates the ``charge/raw_events`` and ``charge/packets`` datasets.
 
+## charge reconstruction
+
+To run charge reconstruction::
+
+    mpiexec h5flow -c h5flow_yamls/charge_event_reconstruction.yaml -i <input file> -o <output file>
+
+This generates ``charge/packets_corr_ts``, ``charge/ext_trigs``, ``charge/hits``,
+and ``charge/events`` datasets.
 
 ## light event builder
 
@@ -37,6 +43,9 @@ This generates the ``light/events`` and ``light/wvfm`` datasets
 To associate charge events to light events, run::
 
     mpiexec h5flow -c h5flow_yamls/charge_light_association.yaml -i <input file> -o <output file>
+
+This creates references between ``charge/ext_trigs`` and ``light/events`` as well
+as ``charge/events`` and ``light/events``.
 
 # file format
 
@@ -125,10 +134,7 @@ event::
         wvfms = ma.masked_where(~mask, wvfms, copy=False) # create a masked array of waveforms, note that the masked array convention is True == invalid
         light_integral[i] = wvfms.sum() # sums over all light events, ADCs, channels, and samples (ignoring the masked channels)
 
-Dereferencing is a bit slow because of the python loop, but this still shouldn't
-take more than a minute or two. One possibility for the future is to implement a
-`cython` helper function that makes use of the `cython` backend of `h5py`. This
-could dramatically speed up the dereferencing process.
+Dereferencing may take a minute or two.
 
 We can now plot the correlation between the charge and light systems::
 

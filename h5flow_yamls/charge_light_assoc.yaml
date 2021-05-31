@@ -3,6 +3,7 @@
 flow:
   source: 'charge/events'
   stages: [charge_light_associator]
+  drop: []
 
 charge_light_associator:
   classname: Charge2LightAssociation

@@ -133,9 +133,6 @@ class LightEventGenerator(H5FlowGenerator):
         self.root_file.Close()
 
     def next(self):
-        if self.entry >= self.end_position:
-            return H5FlowGenerator.EMPTY
-
         if self.rank == 0: # only use a single process
 
             subloop_flag = True
@@ -177,7 +174,10 @@ class LightEventGenerator(H5FlowGenerator):
         self.event_buffer = self.event_buffer[(nevents//self.size)*self.size:]
         nevents = len(events)
 
-        events, wvfms = zip(*events)
+        if nevents > 0:
+            events, wvfms = zip(*events)
+        else:
+            events, wvfms = [], []
 
         event_arr = np.concatenate(events, axis=0) if len(events) else np.empty(0, dtype=self.event_dtype)
         wvfm_arr = np.concatenate(wvfms, axis=0) if len(wvfms) else np.empty(0, dtype=self.wvfm_dtype)
@@ -196,6 +196,8 @@ class LightEventGenerator(H5FlowGenerator):
         ref = event_arr['id']
         self.data_manager.write_ref(self.event_dset_name, self.wvfm_dset_name, event_slice, ref)
 
+        if len(events) == 0:
+            return H5FlowGenerator.EMPTY
         return event_slice
 
     def _sn_hash(self, sn):
