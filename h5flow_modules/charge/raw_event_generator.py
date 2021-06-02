@@ -43,7 +43,7 @@ class RawEventGenerator(H5FlowGenerator):
     '''
     default_buffer_size = 38400
     default_nhit_cut = 100
-    default_sync_noise_cut = 100000
+    default_sync_noise_cut = [100000, 10000000]
     default_sync_noise_cut_enabled = True
     default_event_builder_class = 'SymmetricWindowRawEventBuilder'
     default_event_builder_config = dict()
@@ -113,6 +113,7 @@ class RawEventGenerator(H5FlowGenerator):
             classname=self.classname,
             class_version=self.class_version,
             nhit_cut=self.nhit_cut,
+            buffer_size=self.buffer_size,
             sync_noise_cut=self.sync_noise_cut,
             sync_noise_cut_enabled=self.sync_noise_cut_enabled,
             event_builder_class=self.event_builder_class,
