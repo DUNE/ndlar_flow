@@ -196,11 +196,13 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
 
     default_window = 1820//2
     default_threshold = 10
+    default_rollover_ticks = 10000000
 
     def __init__(self, **params):
         super(SymmetricWindowRawEventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
         self.threshold = params.get('threshold', self.default_threshold)
+        self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
 
         self.event_buffer = np.empty((0,)) # keep track of partial events from previous calls
         self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
@@ -208,7 +210,8 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
     def get_config(self):
         return dict(
             window=self.window,
-            threshold=self.threshold
+            threshold=self.threshold,
+            rollover_ticks=self.rollover_ticks,
             )
 
     def build_events(self, packets, unix_ts):
@@ -224,23 +227,30 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         # sort packets to fix 512 bug
         packets  = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
 
-        # roughly correct for rollovers
-        rollover = np.zeros((len(packets),), dtype='u8')
+        # correct for rollovers
+        rollover = np.zeros((len(packets),), dtype='i8')
         for io_group in np.unique(packets['io_group']):
+            # find rollovers
             mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type']==83)
-            rollover[mask] = packets[mask]['timestamp']
-
+            rollover[mask] = self.rollover_ticks
+            # calculate sum of rollovers
             mask = (packets['io_group'] == io_group)
             rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
-        ts          = packets['timestamp']+rollover
+            # correct for readout delay
+            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
+                & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
+            rollover[mask] -= self.rollover_ticks
+
+        ts = packets['timestamp'].astype('i8')+rollover
 
         sorted_idcs = np.argsort(ts)
+        ts          = ts[sorted_idcs]
         packets     = packets[sorted_idcs]
         unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
 
         # calculate time distance between hits
         min_ts, max_ts = np.min(ts), np.max(ts)
-        bin_edges = np.linspace(min_ts, max_ts, int((max_ts - min_ts + 2)//self.window))
+        bin_edges = np.linspace(min_ts-1, max_ts+1, int((max_ts - min_ts + 2)//self.window))
         hist, bin_edges = np.histogram(ts, bins=bin_edges)
 
         # find high correlation regions
@@ -276,7 +286,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             event_start_timestamp = np.r_[min_ts, event_start_timestamp]
         if event_end_timestamp[-1] < event_start_timestamp[-1]:
             # last event is incomplete, reserve for next iteration
-            mask = packets['timestamp'] >= event_start_timestamp[-1]
+            mask = ts >= event_start_timestamp[-1]
             self.event_buffer = packets[mask]
             self.event_buffer_unix_ts = unix_ts[mask]
             self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts')
@@ -289,8 +299,8 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts')
 
         # break up by event
-        event_mask = (packets['timestamp'].reshape(1,-1) > event_start_timestamp.reshape(-1,1)) \
-            & (packets['timestamp'].reshape(1,-1) < event_end_timestamp.reshape(-1,1))
+        event_mask = (ts.reshape(1,-1) > event_start_timestamp.reshape(-1,1)) \
+            & (ts.reshape(1,-1) < event_end_timestamp.reshape(-1,1))
         event_mask = np.any(event_mask, axis=0)
         event_diff = np.diff(event_mask, axis=-1)
         event_idcs = np.argwhere(event_diff).flatten() + 1

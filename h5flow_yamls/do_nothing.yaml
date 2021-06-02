@@ -1,0 +1,10 @@
+# Just loop over a dataset and load some data (as a test)
+
+flow:
+  source: 'charge/events'
+  stages: [test]
+
+test:
+  classname: H5FlowTestStage
+  requires:
+    - 'charge/ext_trigs'

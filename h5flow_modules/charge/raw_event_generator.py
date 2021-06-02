@@ -39,6 +39,7 @@ class RawEventGenerator(H5FlowGenerator):
                     event_builder_config:
                         window: 910
                         threshold: 10
+                        rollover_ticks: 10000000
 
     '''
     default_buffer_size = 38400
@@ -87,11 +88,7 @@ class RawEventGenerator(H5FlowGenerator):
         self.slices = [slice(st, st + self.buffer_size) for st in range(self.start_position + self.rank * self.buffer_size, self.end_position, self.size * self.buffer_size)]
         self.iteration = 0
 
-        if self.rank == 0:
-            self.last_unix_ts = self.packets[np.argmax(self.packets['packet_type']==4)] # first timestamp packet
-        else:
-            self.last_unix_ts = None
-        self.last_unix_ts = self.comm.bcast(self.last_unix_ts, root=0) # distribute result from root thread to all
+        self.last_unix_ts = self.packets[np.argmax(self.packets['packet_type']==4)] # first timestamp packet
 
     def __len__(self):
         return len(self.slices)
