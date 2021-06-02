@@ -12,7 +12,7 @@ class Charge2LightAssociation(H5FlowStage):
     class_version = '0.0.0'
 
     default_unix_ts_window = 1 # how big of a symmetric window to use with unix timestamps (0=exact match, 1=±1 second, ...) [s]
-    default_ts_window = 1000 # how big of a symmetric to use with PPS timestamps (0=exact match, 10=±10 ticks, ...) [ticks]
+    default_ts_window = 1000 # how big of a symmetric window to use with PPS timestamps (0=exact match, 10=±10 ticks, ...) [ticks]
 
     def __init__(self, **params):
         super(Charge2LightAssociation,self).__init__(**params)
