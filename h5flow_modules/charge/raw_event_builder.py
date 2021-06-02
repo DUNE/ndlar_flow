@@ -192,7 +192,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             threshold   - number of correlated hits to initiate event
 
     '''
-    version = '0.0.0'
+    version = '0.0.1'
 
     default_window = 1820//2
     default_threshold = 10
