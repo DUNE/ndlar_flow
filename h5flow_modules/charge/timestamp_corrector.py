@@ -11,7 +11,7 @@ class TimestampCorrector(H5FlowStage):
 
         The applied correction factor is given by::
 
-            ts_corrected = ts_original / (1. + correction_factor)
+            ts_corrected = (ts_original - correction_factor[0]) / (1. + correction_factor[1])
 
         Parameters:
          - ``ts_dset_name`` : ``str``, required, output dataset path
