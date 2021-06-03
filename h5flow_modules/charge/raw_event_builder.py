@@ -192,7 +192,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             threshold   - number of correlated hits to initiate event
 
     '''
-    version = '0.0.1'
+    version = '0.0.2'
 
     default_window = 1820//2
     default_threshold = 10
@@ -301,9 +301,10 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         # break up by event
         event_mask = (ts.reshape(1,-1) > event_start_timestamp.reshape(-1,1)) \
             & (ts.reshape(1,-1) < event_end_timestamp.reshape(-1,1))
+        event_idx = np.argmax(event_mask, axis=0)
         event_mask = np.any(event_mask, axis=0)
-        event_diff = np.diff(event_mask, axis=-1)
-        event_idcs = np.argwhere(event_diff).flatten() + 1
+        event_diff = np.diff(event_idx, axis=-1)
+        event_idcs = np.argwhere(event_diff | np.diff(event_mask, axis=-1)).flatten() + 1
 
         events = np.split(packets, event_idcs)
         event_unix_ts = np.split(unix_ts, event_idcs)
