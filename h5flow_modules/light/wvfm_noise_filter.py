@@ -5,11 +5,14 @@ from h5flow.core import H5FlowStage
 
 class WaveformNoiseFilter(H5FlowStage):
     '''
-        Applies a "modulo" noise filter algorithm across specified waveform channels, loop on light event data.
+        Applies a custom noise filter algorithm across specified waveform
+        channels, looping on light event data.
 
-        Noise filter averages every ``modulo_param``-th sample from
-        ``filter_samples[0]->filter_samples[1]``, e.g. ``avg[i] = 1/N * (sample[i] + sample[i+1*modulo_param] + sample[i+2*modulo_param] + ...)``. Then applies a subtraction across the
-        waveform of ``filtered[i] = sample[i] - avg[i % modulo_param]``.
+        Coherent noise filter averages every ``modulo_param``-th sample from
+        ``filter_samples[0]->filter_samples[1]``, e.g.
+        ``avg[i] = 1/N * (sample[i] + sample[i+1*modulo_param] + sample[i+2*modulo_param] + ...)``.
+        Then applies a subtraction across the waveform of
+        ``filtered[i] = sample[i] - avg[i % modulo_param]``.
 
         Parameters:
          - ``fwvfm_dset_name`` : ``str``, required, output dataset path
@@ -91,9 +94,11 @@ class WaveformNoiseFilter(H5FlowStage):
         masked_wvfm = wvfm_samples[wvfm_mask, self.filter_samples[0]:self.filter_samples[-1]]
         masked_wvfm = masked_wvfm[:,:subsamples - subsamples%self.modulo_param].reshape(-1,subsamples//self.modulo_param,self.modulo_param)
 
-        # take mean to combine wrapped waveforms
-        masked_wvfm = np.mean(masked_wvfm, axis=1)
+        # take "floating" mean to combine wrapped waveforms
+        offset = np.mean(masked_wvfm, axis=-1, keepdims=True)
+        masked_wvfm = np.mean(masked_wvfm - offset, axis=1)
 
+        # extrapolate noise template across waveform
         noise = np.zeros_like(wvfm_samples)
         idcs = np.indices(wvfm_samples[wvfm_mask].shape)
         noise[wvfm_mask] = masked_wvfm[idcs[0],idcs[1]%self.modulo_param]
@@ -101,10 +106,12 @@ class WaveformNoiseFilter(H5FlowStage):
         # cast back into original shape
         noise = noise.reshape(wvfm_data['samples'].shape)
 
-        # reserve new data
-        fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
+        # subtract noise from waveform
         fwvfm = wvfm_data.copy()
         fwvfm['samples'] = fwvfm['samples'] - noise
+
+        # reserve new data
+        fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
         self.data_manager.write_data(self.fwvfm_dset_name, source_slice, fwvfm)
 
         # save references
@@ -114,10 +121,10 @@ class WaveformNoiseFilter(H5FlowStage):
 
         if self.keep_noise:
             # reserve new data
-            noise_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
-            noise_data = wvfm_data.copy()
+            noise_slice = self.data_manager.reserve_data(self.noise_dset_name, source_slice)
+            noise_data = fwvfm.copy()
             noise_data['samples'] = noise
-            self.data_manager.write_data(self.fwvfm_dset_name, source_slice, noise_data)
+            self.data_manager.write_data(self.noise_dset_name, source_slice, noise_data)
 
             # save references
             self.data_manager.reserve_ref(source_name, self.noise_dset_name, source_slice)

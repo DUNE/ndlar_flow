@@ -18,16 +18,16 @@ class WaveformSummary(H5FlowStage):
         ('event_id','i8'), # a unique identifier (for the event)
         ('pre_std','f8'), # pre-trigger sample std
         ('pre_mean','f8'), # pre-trigger sample mean (used in sum calculation)
-        ('post_sum', 'f8'), # post-trigger sample sum (samples - pre_mean)
-        ('post_max', 'f8'), # post-trigger max sample value (samples - pre_mean)
-        ('post_rising', 'f8'), # post-trigger derivative max sample index (samples - pre_mean)
+        ('post_sum', 'f8'), # post-trigger sample sum
+        ('post_max', 'f8'), # post-trigger max sample value
+        ('post_rising', 'f8'), # post-trigger derivative max sample index
         ('ch', 'u4'), # channel id
         ('sn', 'u4'), # serial number
         ('adc', 'u4'), # adc index 1:1 w/ serial number
         ])
 
     def __init__(self, **params):
-        super(WaveformNoiseFilter,self).__init__(**params)
+        super(WaveformSummary,self).__init__(**params)
 
         self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.wvfm_summ_dset_name = params.get('wvfm_summ_dset_name',self.default_wvfm_summ_dset_fmt.format(self.wvfm_dset_name))
@@ -62,11 +62,12 @@ class WaveformSummary(H5FlowStage):
             post_rising = np.argmax(np.diff(post_wvfm - np.expand_dims(pre_mean,-1), axis=-1), axis=-1)
 
             ch = event_data['ch']
-            sn = event_data['sn']
-            adc = np.expand_dims(np.arange(sn.shape[-1]),axis=-1)
-            adc = np.broadcast_to(adc, sn.shape)
+            sn = np.expand_dims(event_data['sn'], axis=-1)
+            sn = np.broadcast_to(sn, ch.shape)
+            adc = np.arange(sn.shape[1]).reshape(1,-1,1)
+            adc = np.broadcast_to(adc, ch.shape)
 
-            event_id = np.broadcast_to(event_data['id'].reshape(-1,1,1), sn.shape)
+            event_id = np.broadcast_to(event_data['id'].reshape(-1,1,1), ch.shape)
 
         valid = event_data['wvfm_valid'].astype(bool)
 
