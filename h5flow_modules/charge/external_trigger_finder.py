@@ -1,4 +1,6 @@
 import numpy as np
+import numpy.ma as ma
+import numpy.lib.recfunctions as rfn
 import h5py
 import logging
 
@@ -40,16 +42,16 @@ class ExternalTriggerFinder(H5FlowStage):
             etf.set_parameters(pacman_trigger_enabled=True, larpix_trigger_channels={'1-1-1':[0]})
 
     '''
-    class_version = '0.0.0'
+    class_version = '1.0.0'
 
     default_pacman_trigger_enabled = True
     default_pacman_trigger_word_filter = 2
     default_larpix_trigger_channels = dict()
 
     ext_trigs_dtype = np.dtype([
-        ('id', 'u4'), # unique identifier
+        ('id', 'u8'), # unique identifier
         ('ts', 'f8'), # corrected PPS timestamp [ticks]
-        ('ts_raw', 'i8'), # PPS timestamp [ticks]
+        ('ts_raw', 'u8'), # PPS timestamp [ticks]
         ('type', 'i2'), # trigger type (from PACMAN)
         ('iogroup', 'u1') # PACMAN identifier
         ])
@@ -91,24 +93,25 @@ class ExternalTriggerFinder(H5FlowStage):
 
     def run(self, source_name, source_slice, cache):
         packets_data = cache[self.packets_dset_name]
-        ts_data = cache[self.ts_dset_name]
+        ts_data = cache[self.ts_dset_name].reshape(packets_data.shape)
 
         # find/join external triggers
         trigs = self.fit(packets_data, dict(ts=ts_data))
-        lengths = [len(t) for t in trigs]
 
         # write external triggers datasets
-        trigs_array = np.concatenate(trigs, axis=0) if len(trigs) else np.empty((0,), dtype=self.ext_trigs_dtype)
+        mask = ~rfn.structured_to_unstructured(trigs.mask).any(axis=-1)
+        trigs_array = trigs[mask]
         trigs_slice = self.data_manager.reserve_data(self.ext_trigs_dset_name, len(trigs_array))
-        trigs_idcs = np.arange(trigs_slice.start, trigs_slice.stop)
+        trigs_idcs = np.arange(trigs_slice.start, trigs_slice.stop, dtype=int)
         trigs_array['id'] = trigs_idcs
         self.data_manager.write_data(self.ext_trigs_dset_name, trigs_slice, trigs_array)
 
         # write references
         #   just raw event -> trigs refs for now
-        self.data_manager.reserve_ref(source_name, self.ext_trigs_dset_name, source_slice)
-        ref = [trigs_idcs[sum(lengths[:i]):sum(lengths[:i+1])] for i in range(len(trigs))]
-        self.data_manager.write_ref(source_name, self.ext_trigs_dset_name, source_slice, ref)
+        ev_id = np.expand_dims(np.arange(source_slice.start, source_slice.stop), axis=-1)
+        ev_id = np.broadcast_to(ev_id, trigs.shape)
+        ref = np.c_[ev_id[mask], trigs_array['id']]
+        self.data_manager.write_ref(source_name, self.ext_trigs_dset_name, ref)
 
     def get_parameters(self, *args):
         rv = dict()
@@ -126,7 +129,7 @@ class ExternalTriggerFinder(H5FlowStage):
     def fit(self, events, metadata):
         '''
         Pull external triggers from hit data within each event. ``metadata``
-        is a ``dict`` of ``ts``: <list of clock corrected timestamps>
+        is a ``dict`` of ``ts``: <array of clock corrected timestamps, same shape as events>
 
         Trigger types are inherited from the pacman trigger type bits (with
         `pacman_trigger_enabled`) or are given a value of `-1` for larpix external triggers.
@@ -134,68 +137,33 @@ class ExternalTriggerFinder(H5FlowStage):
         :returns: a list of a list of dicts (one list for each event), each dict describes a single external trigger with the following keys: `ts`-trigger timestamp, `type`-trigger type, `mask`-mask for which packets within the event are included in the trigger
 
         '''
-        event_trigs = list()
-        for i,event in enumerate(events):
-            event_trigs.append(list())
+        trigger_mask = np.zeros(events.shape, dtype=bool)
 
-            if self._pacman_trigger_enabled:
-                # first check for any pacman trigger packets
-                trigger_mask = event['packet_type'] == 7
-                trigger_mask[trigger_mask] = (event['trigger_type'][trigger_mask] & self._pacman_trigger_word_filter).astype(bool)
-                if np.any(trigger_mask):
-                    for j in np.argwhere(trigger_mask).flatten():
-                        trigger = event[j]
-                        mask = np.zeros(len(event), dtype=bool)
-                        mask[j] = True
-                        event_trigs[-1].append(dict(
-                            ts=metadata['ts'][i][mask]['ts'],
-                            ts_raw=trigger['timestamp'],
-                            type=trigger['trigger_type'],
-                            iogroup=trigger['io_group'],
-                            mask=mask
-                        ))
+        if self._pacman_trigger_enabled:
+            trigger_mask = (events['packet_type'] == 7)
+            trigger_mask[trigger_mask] = (events['trigger_type'][trigger_mask] & self._pacman_trigger_word_filter).astype(bool)
 
-            if self._larpix_trigger_channels:
-                # then check for larpix external triggers
-                trigger_mask = np.zeros(len(event), dtype=bool)
-                for chip_key, channels in self._larpix_trigger_channels.items():
-                    if chip_key == 'All':
-                        key_mask = trigger_mask
-                    else:
-                        io_group, io_channel, chip_id = chip_key.split('-')
-                        key_mask = np.logical_and.reduce((
-                            io_group == event['io_group'],
-                            io_channel == event['io_channel'],
-                            chip_id == event['chip_id'],
-                            trigger_mask
-                        ))
-                    for channel in channels:
-                        trigger_mask = np.logical_or(np.logical_and(
-                            event['channel_id'] == channel, key_mask), trigger_mask)
-                trigger_mask = np.logical_and(
-                    event['packet_type'] == 0, trigger_mask)
-                if np.any(trigger_mask) > 0:
-                    timestamps = event[trigger_mask]['timestamps']
-                    split_indices = np.argwhere(
-                        np.abs(np.diff(timestamps > 0)))
-                    for idx, trigger in zip(split_indices, np.split(event[trigger_mask], split_indices)):
-                        mask = np.zeros(len(event), dtype=bool)
-                        mask[trigger_mask][idx:idx+len(trigger)] = True
-                        event_trigs[-1].append(dict(
-                            ts=np.median(metadata['ts'][i][mask]['ts']),
-                            ts_raw=np.median(trigger['timestamp']),
-                            type=-1,
-                            iogroup=np.median(trigger['io_group']),
-                            mask=mask
-                        ))
+        if self._larpix_trigger_channels:
+            for chip_key, channels in self._larpix_trigger_channels.items():
+                if chip_key == 'All':
+                    key_mask = trigger_mask
+                else:
+                    io_group, io_channel, chip_id = chip_key.split('-')
+                    key_mask = np.logical_and.reduce((
+                        io_group == events['io_group'],
+                        io_channel == events['io_channel'],
+                        chip_id == events['chip_id'],
+                        trigger_mask
+                    ))
+                for channel in channels:
+                    trigger_mask = (((events['channel_id'] == channel) & key_mask) \
+                        | trigger_mask)
 
-        # format into numpy arrays
-        rv = list()
-        for trigs in event_trigs:
-            arr = np.empty((len(trigs),), dtype=self.ext_trigs_dtype)
-            arr['ts'] = [trig['ts'] for trig in trigs]
-            arr['ts_raw'] = [trig['ts_raw'] for trig in trigs]
-            arr['type'] = [trig['type'] for trig in trigs]
-            arr['iogroup'] = [trig['iogroup'] for trig in trigs]
-            rv.append(arr)
-        return rv
+        trigger_mask = trigger_mask & ~rfn.structured_to_unstructured(events.mask).any(axis=-1)
+
+        trigs = np.empty(events.shape, dtype=self.ext_trigs_dtype)
+        trigs['ts'] = metadata['ts']['ts']
+        trigs['ts_raw'] = events['timestamp']
+        trigs['type'] = events['trigger_type'] * (events['packet_type'] != 0) + -1 * (events['packet_type'] == 0)
+        trigs['iogroup'] = events['io_group']
+        return ma.array(trigs, mask=~trigger_mask)

@@ -126,7 +126,7 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
 
         # cluster into events by delta t
         packet_dt = packets['timestamp'][1:] - packets['timestamp'][:-1]
-        event_idx     = np.argwhere(np.abs(packet_dt) > self.event_dt).flatten() - 1
+        event_idx     = np.argwhere(np.abs(packet_dt) > self.event_dt).ravel() - 1
         events        = np.split(packets, event_idx)
         event_unix_ts = np.split(unix_ts, event_idx)
 
@@ -304,7 +304,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         event_idx = np.argmax(event_mask, axis=0)
         event_mask = np.any(event_mask, axis=0)
         event_diff = np.diff(event_idx, axis=-1)
-        event_idcs = np.argwhere(event_diff | np.diff(event_mask, axis=-1)).flatten() + 1
+        event_idcs = np.argwhere(event_diff | np.diff(event_mask, axis=-1)).ravel() + 1
 
         events = np.split(packets, event_idcs)
         event_unix_ts = np.split(unix_ts, event_idcs)

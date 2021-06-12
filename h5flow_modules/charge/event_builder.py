@@ -1,4 +1,6 @@
 import numpy as np
+import numpy.ma as ma
+import numpy.lib.recfunctions as rfn
 from collections import defaultdict
 import logging
 
@@ -30,10 +32,10 @@ class EventBuilder(H5FlowStage):
                     ext_trigs_dset_name: 'charge/ext_trigs'
 
     '''
-    class_version = '0.0.0'
+    class_version = '1.0.0'
 
     events_dtype = np.dtype([
-        ('id', 'u4'), # unique identifier
+        ('id', 'u8'), # unique identifier
         ('nhit', 'u4'), # number of hits in event
         ('q', 'f8'), # total charge in event [mV]
         ('ts_start', 'f8'), ('ts_end', 'f8'), # minimum and maximum corrected PPS timestamp [ticks]
@@ -68,24 +70,29 @@ class EventBuilder(H5FlowStage):
         hits_data = cache[self.hits_dset_name]
         ext_trigs_data = cache[self.ext_trigs_dset_name]
 
+        hits_mask = ~rfn.structured_to_unstructured(hits_data.mask).any(axis=-1)
+        ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
+
         # write event
         events_slice = self.data_manager.reserve_data(self.events_dset_name, source_slice)
         events_arr = np.zeros((len(raw_event_data,)), dtype=self.events_dtype)
         events_arr['id'] = raw_event_data['id']
         events_arr['unix_ts'] = raw_event_data['unix_ts']
-        events_arr['nhit'] = [len(hits) for hits in hits_data]
-        events_arr['q'] = [np.sum(hits['q']) for hits in hits_data]
-        events_arr['ts_start'] = [np.min(np.r_[hits_data[i]['ts'], ext_trigs_data[i]['ts']]) for i in range(len(raw_event_data))]
-        events_arr['ts_end'] = [np.max(np.r_[hits_data[i]['ts'], ext_trigs_data[i]['ts']]) for i in range(len(raw_event_data))]
-        events_arr['n_ext_trigs'] = [len(ext_trigs) for ext_trigs in ext_trigs_data]
+        events_arr['nhit'] = np.count_nonzero(hits_mask, axis=-1)
+        events_arr['q'] = hits_data['q'].sum(axis=-1)
+        ts = ma.concatenate((hits_data['ts'], ext_trigs_data['ts']), axis=-1)
+        events_arr['ts_start'] = ts.min(axis=-1)
+        events_arr['ts_end'] = ts.max(axis=-1)
+        events_arr['n_ext_trigs'] = np.count_nonzero(ext_trigs_mask, axis=-1)
         self.data_manager.write_data(self.events_dset_name, events_slice, events_arr)
 
         # save references
-        self.data_manager.reserve_ref(self.events_dset_name, self.hits_dset_name, source_slice)
-        ref = [hits['id'] if len(hits) else slice(0,0) for hits in hits_data]
-        self.data_manager.write_ref(self.events_dset_name, self.hits_dset_name, source_slice, ref)
+        ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1,1)
+        hits_ev_id = np.broadcast_to(ev_id, hits_data.shape)
+        ref = np.c_[hits_ev_id[hits_mask],hits_data[hits_mask]['id']]
+        self.data_manager.write_ref(self.events_dset_name, self.hits_dset_name, ref)
 
-        self.data_manager.reserve_ref(self.events_dset_name, self.ext_trigs_dset_name, source_slice)
-        ref = [trigs['id'] if len(trigs) else slice(0,0) for trigs in ext_trigs_data]
-        self.data_manager.write_ref(self.events_dset_name, self.ext_trigs_dset_name, source_slice, ref)
+        trigs_ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
+        ref = np.c_[trigs_ev_id[ext_trigs_mask],ext_trigs_data[ext_trigs_mask]['id']]
+        self.data_manager.write_ref(self.events_dset_name, self.ext_trigs_dset_name, ref)
 

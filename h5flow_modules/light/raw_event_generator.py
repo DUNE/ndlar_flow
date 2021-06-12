@@ -238,11 +238,11 @@ class LightEventGenerator(H5FlowGenerator):
             valid_mask = self.event['wvfm_valid'].astype(bool)
             if np.any(valid_mask):
                 # existing data in event, check if new data matches
-                event_ms = ma.array(self.event['utime_ms'].flatten(), mask=~valid_mask.flatten()).mean()
-                event_ns = ma.array(self.event['tai_ns'].flatten(), mask=~valid_mask.flatten()).mean() % self.tai_ns_mod
+                event_ms = ma.array(self.event['utime_ms'].ravel(), mask=~valid_mask.ravel()).mean()
+                event_ns = ma.array(self.event['tai_ns'].ravel(), mask=~valid_mask.ravel()).mean() % self.tai_ns_mod
                 match_idcs = np.argwhere(
                     (np.abs(utime_ms-event_ms) <= self.utime_ms_window) & (np.abs(tai_ns-event_ns) <= self.tai_ns_window)
-                    ).flatten()
+                    ).ravel()
 
                 if len(match_idcs):
                     # there's a match (or more), so just grab one of them
