@@ -16,8 +16,8 @@ datalog_subselection=''
 rwf_subselection=''
 
 # charge event building
-# rm -rf ${output_file//.h5/.cev.h5}
-# mpiexec h5flow -v -c h5flow_yamls/charge_event_building.yaml -i $input_datalog -o ${output_file//.h5/.cev.h5} $datalog_subselection
+rm -rf ${output_file//.h5/.cev.h5}
+mpiexec h5flow -v -c h5flow_yamls/charge_event_building.yaml -i $input_datalog -o ${output_file//.h5/.cev.h5} $datalog_subselection
 
 # charge event reconstruction
 rm -rf ${output_file//.h5/.cev.reco.h5}
