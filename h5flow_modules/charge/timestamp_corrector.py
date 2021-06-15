@@ -7,7 +7,9 @@ from h5flow.core import H5FlowStage
 class TimestampCorrector(H5FlowStage):
     '''
         Corrects larpix clock timestamps due to slightly different PACMAN clock
-        frequencies - creates a new dataset with 1:1 relationship to packets.
+        frequencies - creates a new dataset with 1:1 relationship to packets, but
+        filled with a single value representing the true number of 10MHz clock
+        cycles since the SYNC.
 
         The applied correction factor is given by::
 

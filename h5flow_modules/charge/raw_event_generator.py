@@ -5,7 +5,7 @@ import logging
 
 from h5flow.core import H5FlowGenerator
 
-from raw_event_builder import *
+from .raw_event_builder import *
 
 class RawEventGenerator(H5FlowGenerator):
     '''
@@ -125,6 +125,14 @@ class RawEventGenerator(H5FlowGenerator):
         self.input_fh.close()
 
     def next(self):
+        '''
+            Read in a new block of LArPix packet data from the input file and
+            apply the raw event building algorithm. Save packets to a dataset
+            (``packets_dset_name``) and create references to a raw event
+            (``raw_event_dset_name``).
+
+            :returns: ``slice`` into the dataset given by ``raw_event_dset_name``
+        '''
         if self.iteration >= len(self.slices):
             sl = H5FlowGenerator.EMPTY
         else:
