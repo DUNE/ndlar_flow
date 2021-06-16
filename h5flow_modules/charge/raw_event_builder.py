@@ -4,7 +4,8 @@ from mpi4py import MPI
 
 class RawEventBuilder(object):
     '''
-        Base class for raw event builder algorithms
+        Base class for raw event builder algorithms. Defines the following API
+        for implementing new event-building algorithms:
 
     '''
     version = '0.0.0'
@@ -18,7 +19,7 @@ class RawEventBuilder(object):
 
     def get_config(self):
         '''
-            :returns: a `dict` of the instance configuration
+            :returns: a `dict` of the instance configuration parameters
         '''
         return dict()
 
@@ -27,16 +28,23 @@ class RawEventBuilder(object):
             Run the event builder on a sub-set of packet-formatted array data
             The unix timestamp for each packet is provided as additional meta-data
 
+            :param packets: packet-formatted array (shape: ``(N,)``)
+
+            :param unix_ts: Unix timestamp for each packet in ``packets`` (shape: ``(N,)``)
+
             :returns: a `tuple` of `lists` of the packet array grouped into events, along with their corresponding unix timestamps
         '''
         raise NotImplementedError('Event building for this class has not been implemented!')
 
     def cross_rank_get_attrs(self, *attrs):
         '''
-            N-1 attr -> 0 attr
-            i value -> i+1 attr
-            i-1 value -> i attr
-            For rank <N-1: pass val
+            Get an attribute from another MPI process. In particular:
+
+             - ``N-1`` sends its stored attribute to ``0``
+             - then, ``i`` receives the attribute from ``i-1``
+
+            :param attrs: ``list`` of ``str`` specifying attributes to pass between ranks
+
         '''
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
@@ -60,10 +68,13 @@ class RawEventBuilder(object):
 
     def cross_rank_set_attrs(self, *attrs):
         '''
-            N-1 attr -> 0 attr
-            i value -> i+1 attr
-            i-1 value -> i attr
-            For rank <N-1: pass val
+            Update an attribute and send to another MPI process. In particular:
+
+             - ``i`` sends the attribute to ``i+1``
+             - ``N-1`` does nothing
+
+            :param attrs: ``list`` of ``str`` specifying attributes to pass between ranks
+
         '''
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
@@ -77,15 +88,14 @@ class RawEventBuilder(object):
             d = dict([(attr, getattr(self, attr)) for attr in attrs])
             comm.send(d, dest=rank+1)
 
-
 class TimeDeltaRawEventBuilder(RawEventBuilder):
     '''
         Original "gap-based" event building
 
-        Searches for separations in data greater than the `event_dt` parameter.
+        Searches for separations in data greater than the ``event_dt`` parameter.
         Events are formed at these boundaries. Any events that are greater than
-        `max_event_dt` in length are broken up into separate events at the
-        `max_event_dt` boundaries.
+        ``max_event_dt`` in length are broken up into separate events at the
+        ``max_event_dt`` boundaries.
 
         Configurable parameters::
 
@@ -181,8 +191,8 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
     '''
         A sliding-window based event builder.
 
-        Histograms the packets into bins of `window` width. Events are formed
-        if a bin content is greater than `threshold`. The event extent covers
+        Histograms the packets into bins of ``window`` width. Events are formed
+        if a bin content is greater than ``threshold``. The event extent covers
         the bin of interest and +/- 1 bin. If multiple adjacent bins exceed
         the threshold, they are merged into a single event.
 

@@ -14,9 +14,9 @@ class LightEventGenerator(H5FlowGenerator):
 
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, path to dataset to store raw waveforms
-         - ``n_adcs`` : ``int``, optional, number of ADC serial numbers
-         - ``n_channels`` : ``int``, optional, number of channels per ADC
-         - ``n_samples`` : ``int``, optional, number of samples in waveform
+         - ``n_adcs`` : ``int``, number of ADC serial numbers
+         - ``n_channels`` : ``int``, number of channels per ADC
+         - ``n_samples`` : ``int``, number of samples in waveform
          - ``chunk_size`` : ``int``, optional, number of events to buffer before initiating loop
 
         Generates a lightweight "event" dataset along with a dataset containing
@@ -24,21 +24,35 @@ class LightEventGenerator(H5FlowGenerator):
 
         Example config::
 
-        flow:
-            source: light_event_generator
-            stages: []
+            flow:
+                source: light_event_generator
+                stages: []
 
-        light_event_generator:
-            classname: LightEventGenerator
-            dset_name: 'light/events'
-            params:
-                wvfm_dset_name: 'light/wvfm'
-                n_adcs: 2
-                n_channels: 64
-                n_samples: 256
-                chunk_size: 128
-                utime_ms_window: 1000
-                tai_ns_window: 1000
+            light_event_generator:
+                classname: LightEventGenerator
+                dset_name: 'light/events'
+                params:
+                    wvfm_dset_name: 'light/wvfm'
+                    n_adcs: 2
+                    n_channels: 64
+                    n_samples: 256
+                    chunk_size: 128
+                    utime_ms_window: 1000
+                    tai_ns_window: 1000
+
+        ``events`` datatype::
+
+            id          u4,                     unique identifier per event
+            event       i4,                     event number from source ROOT file
+            sn          i4(n_adcs,),            serial number of adc
+            ch          u1(n_adcs,n_channels),  channel id
+            utime_ms    u8(n_adcs,n_channels),  unix time since epoch [ms]
+            tai_ns      u8(n_adcs,n_channels),  time since PPS [ns]
+            wvfm_valid  u1(n_adcs,n_channels),  boolean indicator if channel is present in event
+
+        ``wvfm`` datatype::
+
+            samples     i2(n_adc,n_channels,n_samples), sample 12-bit ADC value (lowest 3 bits are not used)
     '''
     default_n_adcs = 2
     default_n_channels = 64

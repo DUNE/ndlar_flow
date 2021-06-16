@@ -1,6 +1,7 @@
-# environment
+environment
+===========
 
-To install proper dependencies, use the provided conda environment file `env.yaml`::
+To install proper dependencies, use the provided conda environment file ``env.yaml``::
 
     conda env create -f env.yaml -n <environment name>
     conda activate <environment>
@@ -9,11 +10,25 @@ To update an existing environment::
 
     conda env update -f env.yaml -n <environment name>
 
-You will also need to install `h5flow` [https://github.com/peter-madigan/h5flow].
+The module0 flow code is built off of ``h5flow``
+[https://github.com/peter-madigan/h5flow], so you will also need to install this
+in order to run any of the workflows described here.
 
-# usage
+usage
+=====
 
-## charge event builder
+The ``module0_flow`` reconstruction chain breaks up the reconstruction into the
+following steps:
+
+    1. charge event building
+    2. light event building
+    3. charge event reconstruction
+    4. light event reconstruction
+    5. charge-to-light association
+    6. merged reconstruction
+
+charge event building
+---------------------
 
 To run charge event builder::
 
@@ -21,7 +36,8 @@ To run charge event builder::
 
 This generates the ``charge/raw_events`` and ``charge/packets`` datasets.
 
-## charge reconstruction
+charge event reconstruction
+---------------------------
 
 To run charge reconstruction::
 
@@ -30,7 +46,8 @@ To run charge reconstruction::
 This generates ``charge/packets_corr_ts``, ``charge/ext_trigs``, ``charge/hits``,
 and ``charge/events`` datasets.
 
-## light event builder
+light event building
+--------------------
 
 To run light event builder::
 
@@ -38,7 +55,13 @@ To run light event builder::
 
 This generates the ``light/events`` and ``light/wvfm`` datasets
 
-## charge-light association
+light event reconstruction
+--------------------------
+
+This is a work in progress...
+
+charge-to-light association
+---------------------------
 
 To associate charge events to light events, run::
 
@@ -47,17 +70,23 @@ To associate charge events to light events, run::
 This creates references between ``charge/ext_trigs`` and ``light/events`` as well
 as ``charge/events`` and ``light/events``.
 
-# file format
+merged event reconstruction
+---------------------------
 
-Let's walk through a simple example of how to access and use the combined hdf5
-file format. In particular, we will perform a mock analysis to compare the
-light system waveform integrals to the larpix charge sum. First, we'll open up
-the file::
+This is a work in progress...
+
+file structure and access
+=========================
+
+Let's walk through a simple example of how to access and use the hdf5
+file format containing both light `and` charge data. As an example, we will
+perform a mock analysis to compare the light system waveform integrals to the
+larpix charge sum. First, we'll open up the file::
 
     import h5py
     f = h5py.File('<example file>.h5','r')
 
-And list the available datasets using `visititems`, which will call a specific
+And list the available datasets using ``visititems``, which will call a specific
 function on all datasets and groups within the file. In particular, let's
 have it print out all available datasets::
 
@@ -65,14 +94,15 @@ have it print out all available datasets::
     f.visititems(my_func)
 
 You'll notice three different types of paths:
- 1. paths that end in `.../data`
- 2. paths that end in `.../ref`
- 3. paths that end in `.../ref_valid`
+
+ 1. paths that end in ``.../data``
+ 2. paths that end in ``.../ref``
+ 3. paths that end in ``.../ref_valid``
 
 The first contain the primitive data for that particular object as a 1D
 structured array, so for our example we want to access the charge sum for each
 event. So first, let's check what fields are available in the
-`'charge/events/data'` dataset::
+``'charge/events/data'`` dataset::
 
     print(f['charge/events/data'].dtype.names)
 
@@ -80,18 +110,18 @@ And then we can access the data by the field name::
 
     charge_qsum = f['charge/events/data']['q']
 
-The second type of path (ending in `.../ref`) contain uni-directional references
+The second type of path (ending in ``.../ref``) contain uni-directional references
 between two datasets. In particular, the paths to these datasets are structured
-like `<parent dataset name>/ref/<child dataset name>/ref`. Each entry in the
-`.../ref` dataset has a 1:1 correspondence to the parent dataset::
+like ``<parent dataset name>/ref/<child dataset name>/ref``. Each entry in the
+``.../ref`` dataset has a 1:1 correspondence to the parent dataset::
 
     f['charge/events/data'].shape == f['charge/events/ref/light/events/ref'].shape
     f['charge/events/ref/light/events/ref'][26] # reference to light/events/data for event 26
 
-The third type of path (ending in `.../ref_valid`) is a boolean array indicating
-if the corresponding reference is non-null. This is needed due to how `h5py`
+The third type of path (ending in ``.../ref_valid``) is a boolean array indicating
+if the corresponding reference is non-null. This is needed due to how ``h5py``
 handles null reference, not how native HDF5 handles null references, so should
-`h5py` be improved in the future this dataset will become irrelevant. But before
+``h5py`` be improved in the future this dataset will become irrelevant. But before
 we dereference the charge -> light references, we will need to check if there
 is a valid association::
 
@@ -113,7 +143,7 @@ light event ids::
     len(light_events) == len(charge_qsum)
 
 Some datasets have trivial 1:1 relationships and can associated via
-their `'id'` field rather than invoking the full HDF5 region reference
+their ``'id'`` field rather than invoking the full HDF5 region reference
 mechanics. We will use that to load and integrate the light waveforms for each
 event::
 
@@ -121,7 +151,7 @@ event::
     import numpy.ma as ma # use masked arrays for simpler math when using masks
 
     wvfm_dset = f['light/wvfm/data']
-    print(wvfm_dset.dtype) # inspect the data type for the waveform data, `'samples'` shape is: (nadcs, nchannels, nsamples)
+    print(wvfm_dset.dtype) # inspect the data type for the waveform data, 'samples' shape is: (nadcs, nchannels, nsamples)
 
     # exclude certain channels from the event sum
     channel_mask = np.zeros((1,) + light_event_dset.dtype.fields['wvfm_valid'][0].shape + (1,), dtype=bool) # shape is (1,nadcs,nchannels)

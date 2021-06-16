@@ -9,8 +9,9 @@ from h5flow.core import H5FlowStage
 
 class HitBuilder(H5FlowStage):
     '''
-        Converts larpix data packets into hits - this assigns geometric properties
-        and performs the conversion from ADC -> mV above pedestal
+        Converts larpix data packets into hits - assigns geometric properties,
+        filters by packet type, and performs the conversion from ADC -> mV above
+        pedestal.
 
         Parameters:
          - ``hits_dset_name`` : ``str``, required, output dataset path
@@ -38,18 +39,32 @@ class HitBuilder(H5FlowStage):
                     pedestal_file: 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
                     configuration_file: 'evd_config_21-03-31_12-36-13.json'
 
+        ``hits`` datatype::
+
+            id          u4, unique identifier per hit
+            px          f8, pixel x location [mm]
+            py          f8, pixel y location [mm]
+            ts          f8, PPS timestamp (corrected for clock frequency) [ticks]
+            ts_raw      u8, PPS timestamp [ticks]
+            q           f8, hit charge [mV]
+            iogroup     u1, io group id (PACMAN number)
+            iochannel   u1, io channel id (PACMAN UART number)
+            chipid      u1, chip id (ASIC number on PACMAN UART)
+            channelid   u1, channel id (channel number on ASIC)
+            geom        u1, unused
+
     '''
     class_version = '1.0.0'
 
     hits_dtype = np.dtype([
-        ('id', 'u8'), # unique identifier
-        ('px', 'f8'), # pixel x location [mm]
-        ('py', 'f8'), # pixel y location [mm]
-        ('ts', 'f8'), # PPS timestamp (corrected for clock frequency) [ticks]
-        ('ts_raw', 'u8'), # PPS timestamp [ticks]
-        ('q', 'f8'), # hit charge [mV]
-        ('iogroup', 'i8'), ('iochannel', 'i8'), ('chipid', 'i8'), ('channelid', 'i8'), # unique channel identifiers
-        ('geom', 'i8') # unused
+        ('id', 'u4'),
+        ('px', 'f8'),
+        ('py', 'f8'),
+        ('ts', 'f8'),
+        ('ts_raw', 'u8'),
+        ('q', 'f8'),
+        ('iogroup', 'u1'), ('iochannel', 'u1'), ('chipid', 'u1'), ('channelid', 'u1'),
+        ('geom', 'i8')
         ])
 
     def __init__(self, **params):

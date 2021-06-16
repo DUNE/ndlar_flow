@@ -10,7 +10,7 @@ class Charge2LightAssociation(H5FlowStage):
 
 
     '''
-    class_version = '0.0.0'
+    class_version = '0.0.1'
 
     default_unix_ts_window = 1 # how big of a symmetric window to use with unix timestamps (0=exact match, 1=±1 second, ...) [s]
     default_ts_window = 1000 # how big of a symmetric window to use with PPS timestamps (0=exact match, 10=±10 ticks, ...) [ticks]
@@ -66,7 +66,7 @@ class Charge2LightAssociation(H5FlowStage):
         ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
         ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1,1), ext_trigs_data.shape)[ext_trigs_mask]
 
-        if nevents:
+        if nevents and len(ext_trigs_all):
             unix_ts_start = ext_trigs_unix_ts.min()
             unix_ts_end = ext_trigs_unix_ts.max()
 
