@@ -42,7 +42,7 @@ class LightEventGenerator(H5FlowGenerator):
 
         ``events`` datatype::
 
-            id          u4,                     unique identifier per event
+            id          u8,                     unique identifier per event
             event       i4,                     event number from source ROOT file
             sn          i4(n_adcs,),            serial number of adc
             ch          u1(n_adcs,n_channels),  channel id

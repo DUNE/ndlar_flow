@@ -14,7 +14,7 @@ class WaveformSummary(H5FlowStage):
     default_wvfm_summ_dset_fmt = '{}_summ' # uses wvfm_dset + _summ as default
 
     dtype = np.dtype([
-        ('id','i8'), # a unique identifier
+        ('id','u8'), # a unique identifier
         ('event_id','i8'), # a unique identifier (for the event)
         ('pre_std','f8'), # pre-trigger sample std
         ('pre_mean','f8'), # pre-trigger sample mean (used in sum calculation)
