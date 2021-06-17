@@ -5,7 +5,7 @@ import logging
 
 from h5flow.core import H5FlowGenerator
 
-from .raw_event_builder import *
+from raw_event_builder import *
 
 class RawEventGenerator(H5FlowGenerator):
     '''
