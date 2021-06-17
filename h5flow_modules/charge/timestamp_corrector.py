@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.lib.recfunctions as rfn
 from collections import defaultdict
 import logging
 
@@ -36,10 +37,10 @@ class TimestampCorrector(H5FlowStage):
                         2: [-9.5, 0.93e-6]
 
     '''
-    class_version = '0.0.0'
+    class_version = '1.0.0'
 
     ts_dtype = np.dtype([
-        ('id','u4'), # unique identifier
+        ('id','u8'), # unique identifier
         ('ts','f8') # PPS timestamp after correcting for timestamp drift [ticks]
         ])
     correction_dtype = np.dtype([('iogroup','u1'),('offset','f8'),('slope','f8')])
@@ -77,28 +78,32 @@ class TimestampCorrector(H5FlowStage):
 
         # then set up new datasets
         self.data_manager.create_dset(self.ts_dset_name, dtype=self.ts_dtype)
-        self.data_manager.create_ref(source_name, self.ts_dset_name)
+        self.data_manager.create_ref(self.packets_dset_name, self.ts_dset_name)
 
     def run(self, source_name, source_slice, cache):
-        # manipulate data from cache
+        # get packet data from cache
         packets_data = cache[self.packets_dset_name]
-        packets_arr = np.concatenate(packets_data, axis=0) if len(packets_data) else np.empty((0,))
+        packets_index = cache[self.packets_dset_name+'_index']
+
+        mask = ~rfn.structured_to_unstructured(packets_data.mask).any(axis=-1)
+
+        packets_data = packets_data.data[mask]
+        packets_index = packets_index.data[mask]
 
         # apply timestamp correction
-        ts_corr_data = np.empty((len(packets_arr),), dtype=self.ts_dtype)
-        if len(packets_arr):
-            for io_group in np.unique(packets_arr['io_group']):
-                mask = packets_arr['io_group'] == io_group
-                ts_corr_data['ts'][mask] = (packets_arr[mask]['timestamp'].astype('f8') - self.correction[io_group][0]) / (1. + self.correction[io_group][1])
+        ts_corr_data = np.empty((len(packets_data),), dtype=self.ts_dtype)
+        if len(packets_data):
+            for io_group in np.unique(packets_data['io_group']):
+                mask = packets_data['io_group'] == io_group
+                ts_corr_data['ts'][mask] = (packets_data[mask]['timestamp'].astype('f8') - self.correction[io_group][0]) / (1. + self.correction[io_group][1])
 
         # save corrected timestamps
         ts_slice = self.data_manager.reserve_data(self.ts_dset_name, len(ts_corr_data))
         if len(ts_corr_data):
-            ts_corr_data['id'] = np.arange(ts_slice.start, ts_slice.stop)
+            ts_corr_data['id'] = packets_index
         self.data_manager.write_data(self.ts_dset_name, ts_slice, ts_corr_data)
 
         # save references
-        event_lengths = [len(p) for p in packets_data]
-        self.data_manager.reserve_ref(source_name, self.ts_dset_name, source_slice)
-        ref = [ts_corr_data['id'][sum(event_lengths[:i]):sum(event_lengths[:i+1])] for i in range(len(packets_data))]
-        self.data_manager.write_ref(source_name, self.ts_dset_name, source_slice, ref)
+        #   packet -> packet_ts (1:1)
+        ref = np.c_[packets_index, ts_corr_data['id']] if len(packets_data) else np.empty((0,2))
+        self.data_manager.write_ref(self.packets_dset_name, self.ts_dset_name, ref)

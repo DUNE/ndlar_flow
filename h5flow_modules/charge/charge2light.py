@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.ma as ma
+import numpy.lib.recfunctions as rfn
 import logging
 
 from h5flow.core import H5FlowStage
@@ -55,11 +56,15 @@ class Charge2LightAssociation(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         event_data = cache[self.events_dset_name]
         ext_trigs_data = cache[self.ext_trigs_dset_name]
+        ext_trigs_idcs = cache[self.ext_trigs_dset_name+'_idcs']
+        ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
+
         nevents = len(event_data)
 
-        lengths = [len(ext_trigs) for ext_trigs in ext_trigs_data]
-        ext_trigs_all = np.concatenate(ext_trigs_data, axis=0) if nevents else np.empty((0,))
-        ext_trigs_unix_ts = np.concatenate([np.full(length, event['unix_ts']) for length,event in zip(lengths, event_data)]) if nevents else np.empty((0,))
+        lengths = np.count_nonzero(ext_trigs_mask, axis=-1)
+        ext_trigs_all = ext_trigs_data.data[ext_trigs_mask]
+        ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
+        ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1,1), ext_trigs_data.shape)[ext_trigs_mask]
 
         if nevents and len(ext_trigs_all):
             unix_ts_start = ext_trigs_unix_ts.min()
@@ -90,26 +95,16 @@ class Charge2LightAssociation(H5FlowStage):
         else:
             idcs = np.empty((0,2), dtype=int)
 
-        # collect by external trigger
-        ext_trig_assoc = list()
-        for i in range(len(ext_trigs_all)):
-            mask = idcs[:,0] == i
-            if np.any(mask):
-                ext_trig_assoc.append(idcs[mask,1])
-            else:
-                ext_trig_assoc.append(list())
+        ext_trig_ref = np.c_[ext_trigs_idcs[idcs[:,0]], idcs[:,1]]
+
+        ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1,1)
+        ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
+        ev_ref = np.c_[ev_id[ext_trigs_mask][idcs[:,0]], idcs[:,1]]
 
         # write references
         # ext trig -> light event
-        spec = ext_trigs_all['id'] if len(ext_trigs_all) else np.empty((0,), dtype=int)
-        self.data_manager.reserve_ref(self.ext_trigs_dset_name, self.light_event_dset_name, spec)
-        self.data_manager.write_ref(self.ext_trigs_dset_name, self.light_event_dset_name, spec, ext_trig_assoc)
+        self.data_manager.write_ref(self.ext_trigs_dset_name, self.light_event_dset_name, ext_trig_ref)
 
         # charge event -> light event
-        self.data_manager.reserve_ref(self.events_dset_name, self.light_event_dset_name, source_slice)
-        ref = []
-        for i in range(len(event_data)):
-            sl = slice(sum(lengths[:i]), sum(lengths[:i+1]))
-            ref.append(self.data_manager.merge_region_specs(ext_trig_assoc[sl]))
-        self.data_manager.write_ref(self.events_dset_name, self.light_event_dset_name, source_slice, ref)
+        self.data_manager.write_ref(self.events_dset_name, self.light_event_dset_name, ev_ref)
 

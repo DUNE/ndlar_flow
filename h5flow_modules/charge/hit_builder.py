@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.lib.recfunctions as rfn
 from collections import defaultdict
 import logging
 import yaml
@@ -53,7 +54,7 @@ class HitBuilder(H5FlowStage):
             geom        u1, unused
 
     '''
-    class_version = '0.0.0'
+    class_version = '1.0.0'
 
     hits_dtype = np.dtype([
         ('id', 'u4'),
@@ -99,18 +100,16 @@ class HitBuilder(H5FlowStage):
 
     def run(self, source_name, source_slice, cache):
         packets_data = cache[self.packets_dset_name]
-        ts_data = cache[self.ts_dset_name]
+        ts_data = cache[self.ts_dset_name].reshape(packets_data.shape)
+
+        mask = ~rfn.structured_to_unstructured(packets_data.mask).any(axis=-1)
 
         # get event boundaries
-        if len(packets_data):
-            masks = [packets['packet_type'] == 0 for packets in packets_data]
-            lengths = [np.count_nonzero(mask) for mask in masks]
-            n = int(np.sum(lengths))
-            packets_arr = np.concatenate(packets_data, axis=0)
-            ts_arr = np.concatenate(ts_data, axis=0)
-            mask = np.concatenate(masks, axis=0)
-            packets_arr = packets_arr[mask]
-            ts_arr = ts_arr[mask]
+        if np.count_nonzero(mask):
+            mask = (packets_data['packet_type'] == 0) & mask
+            n = np.count_nonzero(mask)
+            packets_arr = packets_data.data[mask]
+            ts_arr = ts_data.data[mask]
         else:
             n = 0
 
@@ -120,7 +119,7 @@ class HitBuilder(H5FlowStage):
         # convert to hits array
         hits_arr = np.zeros((n,), dtype=self.hits_dtype)
         if n:
-            hits_arr['id'] = hits_slice.start + np.arange(n)
+            hits_arr['id'] = hits_slice.start + np.arange(n, dtype=int)
             hits_arr['ts'] = ts_arr['ts']
             hits_arr['ts_raw'] = packets_arr['timestamp']
             hits_arr['iogroup'] = packets_arr['io_group']
@@ -134,8 +133,6 @@ class HitBuilder(H5FlowStage):
             hit_uniqueid_str = hit_uniqueid.astype(str)
             if self.is_multi_tile:
                 xy = self.geometry[self.geometry_hash(packets_arr['io_group'], packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id'])]
-                # xy = np.array([self.geometry[(io_group, io_channel, chip_id, channel_id)]
-                #                for io_group, io_channel, chip_id, channel_id in zip(packets_arr['io_group'], packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id'])])
             else:
                 xy = np.array([self.geometry[(
                     1, 1, (unique_id//64) % 256, unique_id % 64)] for unique_id in hit_uniqueid])
@@ -154,9 +151,15 @@ class HitBuilder(H5FlowStage):
         self.data_manager.write_data(self.hits_dset_name, hits_slice, hits_arr)
 
         # save references
-        self.data_manager.reserve_ref(source_name, self.hits_dset_name, source_slice)
-        ref = [slice(sum(lengths[:i])+hits_slice.start, sum(lengths[:i+1])+hits_slice.start) for i in range(len(packets_data))]
-        self.data_manager.write_ref(source_name, self.hits_dset_name, source_slice, ref)
+        ev_id = np.broadcast_to(
+            np.expand_dims(
+                    np.arange(source_slice.start,source_slice.stop, dtype=int),
+                    axis=-1
+                ),
+                packets_data.shape
+            )
+        ref = np.c_[ev_id[mask], hits_arr['id']]
+        self.data_manager.write_ref(source_name, self.hits_dset_name, ref)
 
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped):

@@ -42,7 +42,7 @@ class LightEventGenerator(H5FlowGenerator):
 
         ``events`` datatype::
 
-            id          u4,                     unique identifier per event
+            id          u8,                     unique identifier per event
             event       i4,                     event number from source ROOT file
             sn          i4(n_adcs,),            serial number of adc
             ch          u1(n_adcs,n_channels),  channel id
@@ -71,7 +71,7 @@ class LightEventGenerator(H5FlowGenerator):
         ('wvfm', 'i2', self.n_samples) # sample value
         ])
     event_dtype = lambda self : np.dtype([
-        ('id', 'u4'), # unique identifier
+        ('id', 'u8'), # unique identifier
         ('event', 'i4'), # event number in source ROOT file
         ('sn', 'i4', self.n_adcs), # adc serial number
         ('ch', 'u1', (self.n_adcs, self.n_channels)), # channel number
@@ -206,9 +206,8 @@ class LightEventGenerator(H5FlowGenerator):
 
         # set up references
         #   just event -> wvfm 1:1 refs for now
-        self.data_manager.reserve_ref(self.event_dset_name, self.wvfm_dset_name, event_slice)
-        ref = event_arr['id']
-        self.data_manager.write_ref(self.event_dset_name, self.wvfm_dset_name, event_slice, ref)
+        ref = np.c_[event_arr['id'], event_arr['id']]
+        self.data_manager.write_ref(self.event_dset_name, self.wvfm_dset_name, ref)
 
         if len(events) == 0:
             return H5FlowGenerator.EMPTY
@@ -252,11 +251,11 @@ class LightEventGenerator(H5FlowGenerator):
             valid_mask = self.event['wvfm_valid'].astype(bool)
             if np.any(valid_mask):
                 # existing data in event, check if new data matches
-                event_ms = ma.array(self.event['utime_ms'].flatten(), mask=~valid_mask.flatten()).mean()
-                event_ns = ma.array(self.event['tai_ns'].flatten(), mask=~valid_mask.flatten()).mean() % self.tai_ns_mod
+                event_ms = ma.array(self.event['utime_ms'].ravel(), mask=~valid_mask.ravel()).mean()
+                event_ns = ma.array(self.event['tai_ns'].ravel(), mask=~valid_mask.ravel()).mean() % self.tai_ns_mod
                 match_idcs = np.argwhere(
                     (np.abs(utime_ms-event_ms) <= self.utime_ms_window) & (np.abs(tai_ns-event_ns) <= self.tai_ns_window)
-                    ).flatten()
+                    ).ravel()
 
                 if len(match_idcs):
                     # there's a match (or more), so just grab one of them
