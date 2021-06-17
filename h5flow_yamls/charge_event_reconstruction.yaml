@@ -48,7 +48,7 @@ hit_builder: # converts larpix data packets and raw events to hits
     hits_dset_name: 'charge/hits' # new dataset
     packets_dset_name: 'charge/packets' # required dataset
     ts_dset_name: 'charge/packets_corr_ts' # required dataset
-    geometry_file: 'multi_tile_layout-2.1.16.yaml'
+    geometry_file: 'multi_tile_layout-2.2.16.yaml'
     pedestal_file: 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
     configuration_file: 'evd_config_21-03-31_12-36-13.json'
 
