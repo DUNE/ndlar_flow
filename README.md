@@ -25,12 +25,9 @@ usage
 The ``module0_flow`` reconstruction chain breaks up the reconstruction into the
 following steps:
 
-    1. charge event building
-    2. light event building
-    3. charge event reconstruction
-    4. light event reconstruction
-    5. charge-to-light association
-    6. merged reconstruction
+    1. charge event building -> charge event reconstruction
+    2. light event building -> light event recontruction
+    3. charge-to-light association -> merged reconstruction
 
 charge event building
 ---------------------
@@ -39,7 +36,8 @@ To run charge event builder::
 
     mpiexec h5flow -c h5flow_yamls/charge_event_building.yaml -i <input file> -o <output file>
 
-This generates the ``charge/raw_events`` and ``charge/packets`` datasets.
+This generates the ``charge/raw_events`` and ``charge/packets`` datasets. The
+input file is a "datalog"- (a.k.a "packet"-) formatted LArPix data file.
 
 charge event reconstruction
 ---------------------------
@@ -49,7 +47,8 @@ To run charge reconstruction::
     mpiexec h5flow -c h5flow_yamls/charge_event_reconstruction.yaml -i <input file> -o <output file>
 
 This generates ``charge/packets_corr_ts``, ``charge/ext_trigs``, ``charge/hits``,
-and ``charge/events`` datasets.
+and ``charge/events`` datasets. The input file is a charge event built ``module0_flow``
+file.
 
 light event building
 --------------------
@@ -58,12 +57,15 @@ To run light event builder::
 
     mpiexec h5flow -c h5flow_yamls/light_event_building.yaml -i <input file> -o <output file>
 
-This generates the ``light/events`` and ``light/wvfm`` datasets.
+This generates the ``light/events`` and ``light/wvfm`` datasets. The input file
+is a PPS-timestamp corrected "rwf_XX" root file produced by the adapted ADCViewer
+code here [https://github.com/peter-madigan/ADCViewer64-Module0].
 
 light event reconstruction
 --------------------------
 
-This is a work in progress...
+This is a work in progress... but performs low-level waveform processing
+for light events. It takes as input a light event built ``module0_flow`` file.
 
 charge-to-light association
 ---------------------------
@@ -73,12 +75,22 @@ To associate charge events to light events, run::
     mpiexec h5flow -c h5flow_yamls/charge_light_association.yaml -i <input file> -o <output file>
 
 This creates references between ``charge/ext_trigs`` and ``light/events`` as well
-as ``charge/events`` and ``light/events``.
+as ``charge/events`` and ``light/events``. Both charge and light reconstructed
+events are expected in the input file, which can be facilitated by running both
+charge and light reconstruction flows on the same output file or by using
+and hdf5 tool::
+
+    # copy light data from a source file
+    h5copy -v -f ref -s light -d light -i <light event file> -o <destination file>
+
+    # copy charge data from a source file
+    h5copy -v -f ref -s charge -d charge -i <charge event file> -o <destination file>
 
 merged event reconstruction
 ---------------------------
 
-This is a work in progress...
+This is a work in progress... but performs mid-level analysis making use of both
+light system information and charge system information.
 
 file structure and access
 =========================
@@ -234,7 +246,7 @@ We can now plot the correlation between the charge and light systems::
     plt.ylabel('Light integral [ADC]')
 
 For more details on what different fields in the datatypes mean, look at the
-module-specific documentation. For more details on how to use the deferencing
+module-specific documentation. For more details on how to use the dereferencing
 schema, look at the h5flow documentation [https://h5flow.readthedocs.io/en/latest/].
 
 
