@@ -52,7 +52,7 @@ class LightEventGenerator(H5FlowGenerator):
 
         ``wvfm`` datatype::
 
-            samples     i2(n_adc,n_channels,n_samples), sample 12-bit ADC value (lowest 3 bits are not used)
+            samples     i2(n_adc,n_channels,n_samples), sample 10-bit ADC value (lowest 5 bits are not used)
     '''
     default_n_adcs = 2
     default_n_channels = 64

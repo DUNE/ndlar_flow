@@ -7,7 +7,35 @@ from h5flow.core import H5FlowStage
 
 class Charge2LightAssociation(H5FlowStage):
     '''
+    Generate references between charge events and light events. In general,
+    matches a given light event to a given charge event if::
 
+        |light_unix_ts_second - charge_unix_ts_second| <= unix_ts_window
+        AND
+        |light_ts_10MHz - charge_ts_10MHz| <= self.ts_window
+
+    where ``*_unix_ts_second`` is the unix timestamp of the event in seconds and
+    ``*_ts_10MHz`` is the timestamp in ticks since SYNC / PPS. Creates
+    references from both external triggers to light events as well as references
+    from charge events to light events.
+
+    Requires the ``ext_trigs_dset`` in the data cache as well as its indices
+    (stored under the name ``ext_trigs_dset + '_idcs'``).
+
+    Example config::
+
+        charge_light_associator:
+          classname: Charge2LightAssociation
+          requires:
+            - 'charge/ext_trigs'
+            - name: 'charge/ext_trigs_idcs'
+              path: 'charge/ext_trigs'
+              index_only: True
+          params:
+            light_event_dset_name: 'light/events'
+            ext_trigs_dset_name: 'charge/ext_trigs'
+            unix_ts_window: 3
+            ts_window: 10
 
     '''
     class_version = '0.0.1'
