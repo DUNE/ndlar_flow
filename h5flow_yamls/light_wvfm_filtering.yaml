@@ -1,4 +1,4 @@
-# Filters existing light waveforms (applies a coherent noise filter)
+# Filters existing light waveforms (applies a coherent noise filter and deconvolution filter)
 
 flow:
   source: 'light/events'

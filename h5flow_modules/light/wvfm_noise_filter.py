@@ -14,6 +14,10 @@ class WaveformNoiseFilter(H5FlowStage):
         Then applies a subtraction across the waveform of
         ``filtered[i] = sample[i] - avg[i % modulo_param]``.
 
+        Finally a pedestal subtraction is applied as::
+
+            filtered[i] = filtered[i] - filtered[filter_samples[0]:filter_samples[1]].mean()
+
         Parameters:
          - ``fwvfm_dset_name`` : ``str``, required, output dataset path
          - ``wvfm_dset_name`` : ``str``, required, input dataset path for waveforms
@@ -83,6 +87,9 @@ class WaveformNoiseFilter(H5FlowStage):
         wvfm_data = np.concatenate(cache[self.wvfm_dset_name],axis=0) if len(cache[self.wvfm_dset_name]) \
             else np.empty((0,), dtype=self.data_manager.get_dset(self.wvfm_dset_name).dtype)
 
+        # truncate lowest 5-bits
+        wvfm_data = wvfm_data - wvfm_data % 64
+
         # flatten into individual waveforms
         wvfm_samples = wvfm_data['samples'].reshape(-1, wvfm_data['samples'].shape[-1])
         wvfm_mask = event_data['wvfm_valid'].astype(bool).flatten()
@@ -109,6 +116,9 @@ class WaveformNoiseFilter(H5FlowStage):
         # subtract noise from waveform
         fwvfm = wvfm_data.copy()
         fwvfm['samples'] = fwvfm['samples'] - noise
+
+        # subtract pedestal value
+        fwvfm['sample'] = fwvfm['samples'] - fwvfm['samples'][..., self.filter_samples[0]:self.filter_samples[-1]].mean(axis=-1, keepdims=true)
 
         # reserve new data
         fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
