@@ -14,7 +14,7 @@ class WaveformSummary(H5FlowStage):
     default_wvfm_summ_dset_fmt = '{}_summ' # uses wvfm_dset + _summ as default
 
     dtype = np.dtype([
-        ('id','i8'), # a unique identifier
+        ('id','u8'), # a unique identifier
         ('event_id','i8'), # a unique identifier (for the event)
         ('pre_std','f8'), # pre-trigger sample std
         ('pre_mean','f8'), # pre-trigger sample mean (used in sum calculation)
@@ -48,8 +48,7 @@ class WaveformSummary(H5FlowStage):
 
     def run(self, source_name, source_slice, cache):
         event_data = cache[source_name]
-        wvfm_data = np.concatenate(cache[self.wvfm_dset_name],axis=0) if len(cache[self.wvfm_dset_name]) \
-            else np.empty((0,), dtype=self.data_manager.get_dset(self.wvfm_dset_name).dtype)
+        wvfm_data = cache[self.wvfm_dset_name].data
 
         if len(wvfm_data):
             pre_wvfm = np.take(wvfm_data['samples'].astype('f8'), np.arange(self.pretrigger_window[0], self.pretrigger_window[-1]), axis=-1)

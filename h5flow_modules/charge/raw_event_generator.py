@@ -50,10 +50,8 @@ class RawEventGenerator(H5FlowGenerator):
     default_event_builder_config = dict()
     default_packets_dset_name = 'charge/packets'
 
-    packets_id_dtype = np.dtype([('id', 'u4')])
-
     raw_event_dtype = np.dtype([
-        ('id', 'u4'), # unique event identifier
+        ('id', 'u8'), # unique event identifier
         ('unix_ts', 'u8') # unix timestamp of event [s since epoch]
         ])
 
@@ -103,7 +101,6 @@ class RawEventGenerator(H5FlowGenerator):
 
         # initialize data objects
         self.data_manager.create_dset(self.raw_event_dset_name, dtype=self.raw_event_dtype)
-        # self.data_manager.create_dset(self.packets_dset_name, dtype=np.dtype(self.packets_id_dtype.descr+self.packets_dtype.descr))
         self.data_manager.create_dset(self.packets_dset_name, dtype=self.packets_dtype)
         self.data_manager.create_ref(self.raw_event_dset_name, self.packets_dset_name)
         self.data_manager.set_attrs(self.raw_event_dset_name,
@@ -125,6 +122,14 @@ class RawEventGenerator(H5FlowGenerator):
         self.input_fh.close()
 
     def next(self):
+        '''
+            Read in a new block of LArPix packet data from the input file and
+            apply the raw event building algorithm. Save packets to a dataset
+            (``packets_dset_name``) and create references to a raw event
+            (``raw_event_dset_name``).
+
+            :returns: ``slice`` into the dataset given by ``raw_event_dset_name``
+        '''
         if self.iteration >= len(self.slices):
             sl = H5FlowGenerator.EMPTY
         else:
@@ -144,7 +149,7 @@ class RawEventGenerator(H5FlowGenerator):
 
         # find unix timestamp groups
         ts_mask = packet_buffer['packet_type'] == 4
-        ts_grps = np.split(packet_buffer, np.argwhere(ts_mask).flatten())
+        ts_grps = np.split(packet_buffer, np.argwhere(ts_mask).ravel())
         unix_ts_grps = [np.full(len(ts_grp[1:]), ts_grp[0], dtype=packet_buffer.dtype) for ts_grp in ts_grps if len(ts_grp) > 1]
         unix_ts = np.concatenate(unix_ts_grps, axis=0) \
             if len(unix_ts_grps) else np.empty((0,), dtype=packet_buffer.dtype)
@@ -172,7 +177,7 @@ class RawEventGenerator(H5FlowGenerator):
         # write event to file
         raw_event_array = np.zeros((nevents,), dtype=self.raw_event_dtype)
         raw_event_slice = self.data_manager.reserve_data(self.raw_event_dset_name, nevents)
-        raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop)
+        raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop, dtype=int)
         if nevents:
             raw_event_array['unix_ts'] = [p[0]['timestamp'] for p in event_unix_ts]
             raw_event_array['id'] = raw_event_idcs
@@ -181,16 +186,15 @@ class RawEventGenerator(H5FlowGenerator):
         # write packets to file
         packets_array = np.concatenate(events, axis=0) if nevents else np.empty((0,), dtype=self.packets_dtype)
         packets_slice = self.data_manager.reserve_data(self.packets_dset_name, len(packets_array))
-        packets_idcs = np.array(np.arange(packets_slice.start, packets_slice.stop), dtype=self.packets_id_dtype)
-        # packets_array = rfn.merge_arrays((packets_idcs, packets_array))
+        packets_idcs = np.arange(packets_slice.start, packets_slice.stop)
         self.data_manager.write_data(self.packets_dset_name, packets_slice, packets_array)
 
         # set up references
-        #   just event -> packet refs for now
-        event_lengths = [len(ev) for ev in events]
-        self.data_manager.reserve_ref(self.raw_event_dset_name, self.packets_dset_name, raw_event_slice)
-        ref = [packets_idcs[sum(event_lengths[:i]):sum(event_lengths[:i+1])] for i in range(nevents)]
-        self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, raw_event_slice, ref)
+        #   event -> packet refs
+        ev_idcs = np.concatenate([np.full(len(ev),i_ev) for i_ev,ev in zip(raw_event_idcs,events)], axis=0) \
+            if len(events) else np.empty(0, dtype=raw_event_idcs.dtype)
+        ref = np.c_[ev_idcs, packets_idcs]
+        self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, ref)
 
         return raw_event_slice if sl is not H5FlowGenerator.EMPTY else H5FlowGenerator.EMPTY
 

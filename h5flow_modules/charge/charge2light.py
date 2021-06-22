@@ -1,15 +1,44 @@
 import numpy as np
 import numpy.ma as ma
+import numpy.lib.recfunctions as rfn
 import logging
 
 from h5flow.core import H5FlowStage
 
 class Charge2LightAssociation(H5FlowStage):
     '''
+    Generate references between charge events and light events. In general,
+    matches a given light event to a given charge event if::
 
+        |light_unix_ts_second - charge_unix_ts_second| <= unix_ts_window
+        AND
+        |light_ts_10MHz - charge_ts_10MHz| <= self.ts_window
+
+    where ``*_unix_ts_second`` is the unix timestamp of the event in seconds and
+    ``*_ts_10MHz`` is the timestamp in ticks since SYNC / PPS. Creates
+    references from both external triggers to light events as well as references
+    from charge events to light events.
+
+    Requires the ``ext_trigs_dset`` in the data cache as well as its indices
+    (stored under the name ``ext_trigs_dset + '_idcs'``).
+
+    Example config::
+
+        charge_light_associator:
+          classname: Charge2LightAssociation
+          requires:
+            - 'charge/ext_trigs'
+            - name: 'charge/ext_trigs_idcs'
+              path: 'charge/ext_trigs'
+              index_only: True
+          params:
+            light_event_dset_name: 'light/events'
+            ext_trigs_dset_name: 'charge/ext_trigs'
+            unix_ts_window: 3
+            ts_window: 10
 
     '''
-    class_version = '0.0.0'
+    class_version = '0.0.1'
 
     default_unix_ts_window = 1 # how big of a symmetric window to use with unix timestamps (0=exact match, 1=±1 second, ...) [s]
     default_ts_window = 1000 # how big of a symmetric window to use with PPS timestamps (0=exact match, 10=±10 ticks, ...) [ticks]
@@ -55,13 +84,17 @@ class Charge2LightAssociation(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         event_data = cache[self.events_dset_name]
         ext_trigs_data = cache[self.ext_trigs_dset_name]
+        ext_trigs_idcs = cache[self.ext_trigs_dset_name+'_idcs']
+        ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
+
         nevents = len(event_data)
 
-        lengths = [len(ext_trigs) for ext_trigs in ext_trigs_data]
-        ext_trigs_all = np.concatenate(ext_trigs_data, axis=0) if nevents else np.empty((0,))
-        ext_trigs_unix_ts = np.concatenate([np.full(length, event['unix_ts']) for length,event in zip(lengths, event_data)]) if nevents else np.empty((0,))
+        lengths = np.count_nonzero(ext_trigs_mask, axis=-1)
+        ext_trigs_all = ext_trigs_data.data[ext_trigs_mask]
+        ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
+        ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1,1), ext_trigs_data.shape)[ext_trigs_mask]
 
-        if nevents:
+        if nevents and len(ext_trigs_all):
             unix_ts_start = ext_trigs_unix_ts.min()
             unix_ts_end = ext_trigs_unix_ts.max()
 
@@ -90,26 +123,16 @@ class Charge2LightAssociation(H5FlowStage):
         else:
             idcs = np.empty((0,2), dtype=int)
 
-        # collect by external trigger
-        ext_trig_assoc = list()
-        for i in range(len(ext_trigs_all)):
-            mask = idcs[:,0] == i
-            if np.any(mask):
-                ext_trig_assoc.append(idcs[mask,1])
-            else:
-                ext_trig_assoc.append(list())
+        ext_trig_ref = np.c_[ext_trigs_idcs[idcs[:,0]], idcs[:,1]]
+
+        ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1,1)
+        ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
+        ev_ref = np.c_[ev_id[ext_trigs_mask][idcs[:,0]], idcs[:,1]]
 
         # write references
         # ext trig -> light event
-        spec = ext_trigs_all['id'] if len(ext_trigs_all) else np.empty((0,), dtype=int)
-        self.data_manager.reserve_ref(self.ext_trigs_dset_name, self.light_event_dset_name, spec)
-        self.data_manager.write_ref(self.ext_trigs_dset_name, self.light_event_dset_name, spec, ext_trig_assoc)
+        self.data_manager.write_ref(self.ext_trigs_dset_name, self.light_event_dset_name, ext_trig_ref)
 
         # charge event -> light event
-        self.data_manager.reserve_ref(self.events_dset_name, self.light_event_dset_name, source_slice)
-        ref = []
-        for i in range(len(event_data)):
-            sl = slice(sum(lengths[:i]), sum(lengths[:i+1]))
-            ref.append(self.data_manager.merge_region_specs(ext_trig_assoc[sl]))
-        self.data_manager.write_ref(self.events_dset_name, self.light_event_dset_name, source_slice, ref)
+        self.data_manager.write_ref(self.events_dset_name, self.light_event_dset_name, ev_ref)
 

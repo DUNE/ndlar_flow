@@ -14,9 +14,9 @@ class LightEventGenerator(H5FlowGenerator):
 
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, path to dataset to store raw waveforms
-         - ``n_adcs`` : ``int``, optional, number of ADC serial numbers
-         - ``n_channels`` : ``int``, optional, number of channels per ADC
-         - ``n_samples`` : ``int``, optional, number of samples in waveform
+         - ``n_adcs`` : ``int``, number of ADC serial numbers
+         - ``n_channels`` : ``int``, number of channels per ADC
+         - ``n_samples`` : ``int``, number of samples in waveform
          - ``chunk_size`` : ``int``, optional, number of events to buffer before initiating loop
 
         Generates a lightweight "event" dataset along with a dataset containing
@@ -24,21 +24,35 @@ class LightEventGenerator(H5FlowGenerator):
 
         Example config::
 
-        flow:
-            source: light_event_generator
-            stages: []
+            flow:
+                source: light_event_generator
+                stages: []
 
-        light_event_generator:
-            classname: LightEventGenerator
-            dset_name: 'light/events'
-            params:
-                wvfm_dset_name: 'light/wvfm'
-                n_adcs: 2
-                n_channels: 64
-                n_samples: 256
-                chunk_size: 128
-                utime_ms_window: 1000
-                tai_ns_window: 1000
+            light_event_generator:
+                classname: LightEventGenerator
+                dset_name: 'light/events'
+                params:
+                    wvfm_dset_name: 'light/wvfm'
+                    n_adcs: 2
+                    n_channels: 64
+                    n_samples: 256
+                    chunk_size: 128
+                    utime_ms_window: 1000
+                    tai_ns_window: 1000
+
+        ``events`` datatype::
+
+            id          u8,                     unique identifier per event
+            event       i4,                     event number from source ROOT file
+            sn          i4(n_adcs,),            serial number of adc
+            ch          u1(n_adcs,n_channels),  channel id
+            utime_ms    u8(n_adcs,n_channels),  unix time since epoch [ms]
+            tai_ns      u8(n_adcs,n_channels),  time since PPS [ns]
+            wvfm_valid  u1(n_adcs,n_channels),  boolean indicator if channel is present in event
+
+        ``wvfm`` datatype::
+
+            samples     i2(n_adc,n_channels,n_samples), sample 10-bit ADC value (lowest 5 bits are not used)
     '''
     default_n_adcs = 2
     default_n_channels = 64
@@ -57,7 +71,7 @@ class LightEventGenerator(H5FlowGenerator):
         ('wvfm', 'i2', self.n_samples) # sample value
         ])
     event_dtype = lambda self : np.dtype([
-        ('id', 'u4'), # unique identifier
+        ('id', 'u8'), # unique identifier
         ('event', 'i4'), # event number in source ROOT file
         ('sn', 'i4', self.n_adcs), # adc serial number
         ('ch', 'u1', (self.n_adcs, self.n_channels)), # channel number
@@ -192,9 +206,8 @@ class LightEventGenerator(H5FlowGenerator):
 
         # set up references
         #   just event -> wvfm 1:1 refs for now
-        self.data_manager.reserve_ref(self.event_dset_name, self.wvfm_dset_name, event_slice)
-        ref = event_arr['id']
-        self.data_manager.write_ref(self.event_dset_name, self.wvfm_dset_name, event_slice, ref)
+        ref = np.c_[event_arr['id'], event_arr['id']]
+        self.data_manager.write_ref(self.event_dset_name, self.wvfm_dset_name, ref)
 
         if len(events) == 0:
             return H5FlowGenerator.EMPTY
@@ -238,11 +251,11 @@ class LightEventGenerator(H5FlowGenerator):
             valid_mask = self.event['wvfm_valid'].astype(bool)
             if np.any(valid_mask):
                 # existing data in event, check if new data matches
-                event_ms = ma.array(self.event['utime_ms'].flatten(), mask=~valid_mask.flatten()).mean()
-                event_ns = ma.array(self.event['tai_ns'].flatten(), mask=~valid_mask.flatten()).mean() % self.tai_ns_mod
+                event_ms = ma.array(self.event['utime_ms'].ravel(), mask=~valid_mask.ravel()).mean()
+                event_ns = ma.array(self.event['tai_ns'].ravel(), mask=~valid_mask.ravel()).mean() % self.tai_ns_mod
                 match_idcs = np.argwhere(
                     (np.abs(utime_ms-event_ms) <= self.utime_ms_window) & (np.abs(tai_ns-event_ns) <= self.tai_ns_window)
-                    ).flatten()
+                    ).ravel()
 
                 if len(match_idcs):
                     # there's a match (or more), so just grab one of them

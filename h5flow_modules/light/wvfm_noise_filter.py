@@ -84,8 +84,7 @@ class WaveformNoiseFilter(H5FlowStage):
 
     def run(self, source_name, source_slice, cache):
         event_data = cache[source_name]
-        wvfm_data = np.concatenate(cache[self.wvfm_dset_name],axis=0) if len(cache[self.wvfm_dset_name]) \
-            else np.empty((0,), dtype=self.data_manager.get_dset(self.wvfm_dset_name).dtype)
+        wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape).data # don't worry about masked data since 1:1 references
 
         # truncate lowest 5-bits
         wvfm_data = wvfm_data - wvfm_data % 64
@@ -125,9 +124,9 @@ class WaveformNoiseFilter(H5FlowStage):
         self.data_manager.write_data(self.fwvfm_dset_name, source_slice, fwvfm)
 
         # save references
-        self.data_manager.reserve_ref(source_name, self.fwvfm_dset_name, source_slice)
-        ref = range(fwvfm_slice.start, fwvfm_slice.stop)
-        self.data_manager.write_ref(source_name, self.fwvfm_dset_name, source_slice, ref)
+        idcs = range(fwvfm_slice.start, fwvfm_slice.stop, dtype=int)
+        ref = np.r_[idcs, idcs]
+        self.data_manager.write_ref(source_name, self.fwvfm_dset_name, ref)
 
         if self.keep_noise:
             # reserve new data
@@ -137,6 +136,4 @@ class WaveformNoiseFilter(H5FlowStage):
             self.data_manager.write_data(self.noise_dset_name, source_slice, noise_data)
 
             # save references
-            self.data_manager.reserve_ref(source_name, self.noise_dset_name, source_slice)
-            ref = range(noise_slice.start, noise_slice.stop)
             self.data_manager.write_ref(source_name, self.noise_dset_name, source_slice, ref)
