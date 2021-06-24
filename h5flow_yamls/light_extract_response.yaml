@@ -1,0 +1,18 @@
+# Pulls signal and noise from light waveforms (for deconvolution filter)
+
+flow:
+  source: 'light/events'
+  stages: [wvfm_extract_sig_noise]
+
+wvfm_extract_sig_noise:
+  classname: WaveformDeconvolution
+  requires:
+    - 'light/fwvfm'
+  params:
+    wvfm_dset_name: 'light/fwvfm' # use pedestal+noise subtracted waveforms
+    pps_threshold: 5000
+    gen_noise_spectrum: True
+    gen_signal_spectrum: True
+    gen_signal_impulse: True
+    impulse_alignment_oversampling: 10
+    do_filtering: False
