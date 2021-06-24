@@ -86,7 +86,7 @@ class WaveformNoiseFilter(H5FlowStage):
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape).data # don't worry about masked data since 1:1 references
 
-        # truncate lowest 5-bits
+        # truncate lowest 6-bits
         wvfm_data = wvfm_data - wvfm_data % 64
 
         # flatten into individual waveforms
