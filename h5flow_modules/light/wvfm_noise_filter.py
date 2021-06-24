@@ -86,11 +86,8 @@ class WaveformNoiseFilter(H5FlowStage):
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape).data # don't worry about masked data since 1:1 references
 
-        # truncate lowest 5-bits
-        wvfm_data = wvfm_data - wvfm_data % 64
-
-        # flatten into individual waveforms
-        wvfm_samples = wvfm_data['samples'].reshape(-1, wvfm_data['samples'].shape[-1])
+        # flatten into individual waveforms and truncate lowest 5-bits
+        wvfm_samples = (wvfm_data['samples'].reshape(-1, wvfm_data['samples'].shape[-1]).astype(int) // 32) * 32
         wvfm_mask = event_data['wvfm_valid'].astype(bool).flatten()
         wvfm_mask = wvfm_mask & \
             np.isin(event_data['ch'].flatten(), self.filter_channels)
@@ -117,15 +114,14 @@ class WaveformNoiseFilter(H5FlowStage):
         fwvfm['samples'] = fwvfm['samples'] - noise
 
         # subtract pedestal value
-        fwvfm['sample'] = fwvfm['samples'] - fwvfm['samples'][..., self.filter_samples[0]:self.filter_samples[-1]].mean(axis=-1, keepdims=true)
+        fwvfm['samples'] = fwvfm['samples'] - fwvfm['samples'][..., self.filter_samples[0]:self.filter_samples[-1]].mean(axis=-1, keepdims=True)
 
         # reserve new data
         fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
         self.data_manager.write_data(self.fwvfm_dset_name, source_slice, fwvfm)
 
         # save references
-        idcs = range(fwvfm_slice.start, fwvfm_slice.stop, dtype=int)
-        ref = np.r_[idcs, idcs]
+        ref = np.c_[fwvfm_slice, fwvfm_slice]
         self.data_manager.write_ref(source_name, self.fwvfm_dset_name, ref)
 
         if self.keep_noise:
@@ -136,4 +132,4 @@ class WaveformNoiseFilter(H5FlowStage):
             self.data_manager.write_data(self.noise_dset_name, source_slice, noise_data)
 
             # save references
-            self.data_manager.write_ref(source_name, self.noise_dset_name, source_slice, ref)
+            self.data_manager.write_ref(source_name, self.noise_dset_name, ref)
