@@ -117,15 +117,14 @@ class WaveformNoiseFilter(H5FlowStage):
         fwvfm['samples'] = fwvfm['samples'] - noise
 
         # subtract pedestal value
-        fwvfm['sample'] = fwvfm['samples'] - fwvfm['samples'][..., self.filter_samples[0]:self.filter_samples[-1]].mean(axis=-1, keepdims=true)
+        fwvfm['samples'] = fwvfm['samples'] - fwvfm['samples'][..., self.filter_samples[0]:self.filter_samples[-1]].mean(axis=-1, keepdims=True)
 
         # reserve new data
         fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
         self.data_manager.write_data(self.fwvfm_dset_name, source_slice, fwvfm)
 
         # save references
-        idcs = range(fwvfm_slice.start, fwvfm_slice.stop, dtype=int)
-        ref = np.r_[idcs, idcs]
+        ref = np.c_[fwvfm_slice, fwvfm_slice]
         self.data_manager.write_ref(source_name, self.fwvfm_dset_name, ref)
 
         if self.keep_noise:
@@ -136,4 +135,4 @@ class WaveformNoiseFilter(H5FlowStage):
             self.data_manager.write_data(self.noise_dset_name, source_slice, noise_data)
 
             # save references
-            self.data_manager.write_ref(source_name, self.noise_dset_name, source_slice, ref)
+            self.data_manager.write_ref(source_name, self.noise_dset_name, ref)
