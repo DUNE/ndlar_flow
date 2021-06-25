@@ -74,6 +74,21 @@ class WaveformDeconvolution(H5FlowStage):
         self.signal_spectrum_filename = params.get('signal_spectrum_filename', self.default_signal_spectrum_filename)
         self.signal_impulse_filename = params.get('signal_impulse_filename', self.default_signal_impulse_filename)
 
+    def write_spectrum_or_impulse(self, name, data, spectrum=False, impulse=False, **attrs):
+        if spectrum:
+            dtype = np.dtype([('spectrum', data.dtype, data.shape)])
+        if impulse:
+            dtype = np.dtype([('impulse', data.dtype, data.shape)])
+
+        write_data = np.empty((1,), dtype=dtype)
+        write_data['spectrum' if spectrum else 'impulse'] = data
+        self.data_manager.set_attrs(self.deconv_dset_name+'/'+name,**attrs)
+        self.data_manager.create_dset(self.deconv_dset_name+'/'+name, dtype=dtype)
+        self.data_manager.reserve_data(self.deconv_dset_name+'/'+name, slice(0,1))
+        self.data_manager.write_data(self.deconv_dset_name+'/'+name, slice(0,1), write_data)
+
+        return self.data_manager.get_dset(self.deconv_dset_name+'/'+name)
+
     def init(self, source_name):
         wvfm_dset = self.data_manager.get_dset(self.wvfm_dset_name)
 
@@ -82,28 +97,26 @@ class WaveformDeconvolution(H5FlowStage):
             self.signal_spectrum = dict(np.load(self.signal_spectrum_filename))
             self.signal_impulse = dict(np.load(self.signal_impulse_filename))
 
-            self.data_manager.create_dset(self.deconv_dset_name, dtype=wvfm_dset.dtype)
-            self.data_manager.create_ref(source_name, self.deconv_dset_name)
-            print(dict(
-                dset=self.deconv_dset_name,
-                classname=self.classname,
-                                        class_version=self.class_version,
-                                        noise_spectrum=self.noise_spectrum['spectrum'],
-                                        signal_spectrum=self.signal_spectrum['spectrum'],
-                                        signal_impulse=self.signal_impulse['impulse'],
-                                        noise_spectrum_filename=self.noise_spectrum_filename,
-                                        signal_spectrum_filename=self.signal_spectrum_filename,
-                                        signal_impulse_filename=self.signal_impulse_filename))
+            # save noise / signal spectra used for processing
+            noise_spectrum_dset = self.write_spectrum_or_impulse('noise_spectrum',
+                self.noise_spectrum['spectrum'], spectrum=True,
+                filename=self.noise_spectrum_filename)
+            signal_spectrum_dset = self.write_spectrum_or_impulse('signal_spectrum',
+                self.signal_spectrum['spectrum'], spectrum=True,
+                filename=self.signal_spectrum_filename)
+            signal_impulse_dset = self.write_spectrum_or_impulse('signal_impulse',
+                self.signal_impulse['impulse'], impulse=True,
+                filename=self.signal_impulse_filename)
+
             self.data_manager.set_attrs(self.deconv_dset_name,
                                         classname=self.classname,
                                         class_version=self.class_version,
-                                        noise_spectrum=self.noise_spectrum['spectrum'],
-                                        signal_spectrum=self.signal_spectrum['spectrum'],
-                                        signal_impulse=self.signal_impulse['impulse'],
-                                        noise_spectrum_filename=self.noise_spectrum_filename,
-                                        signal_spectrum_filename=self.signal_spectrum_filename,
-                                        signal_impulse_filename=self.signal_impulse_filename
+                                        noise_spectrum=noise_spectrum_dset.ref,
+                                        signal_spectrum=signal_spectrum_dset.ref,
+                                        signal_impulse=signal_impulse_dset.ref
             )
+            self.data_manager.create_dset(self.deconv_dset_name, dtype=wvfm_dset.dtype)
+            self.data_manager.create_ref(source_name, self.deconv_dset_name)
         else:
             fft_shape = (wvfm_dset.dtype['samples'].shape[-1]//2+1,)
             self.noise_spectrum = dict(
