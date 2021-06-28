@@ -1,6 +1,9 @@
 import numpy as np
 import logging
-from mpi4py import MPI
+
+from h5flow import H5FLOW_MPI
+if H5FLOW_MPI:
+    from mpi4py import MPI
 
 class RawEventBuilder(object):
     '''

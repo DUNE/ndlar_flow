@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.ma as ma
 import logging
 import scipy.interpolate
 
@@ -41,6 +42,8 @@ class WaveformDeconvolution(H5FlowStage):
                     gen_signal_impulse: True
                     do_filtering: False
                     filter_type: Wiener # or Inverse
+                    noise_strategy: PPS # or slice
+                    noise_slice: [-256, null] # last 256 samples
 
     '''
     class_version = '0.0.0'
@@ -49,8 +52,11 @@ class WaveformDeconvolution(H5FlowStage):
     default_signal_spectrum_filename = 'wvfm_deconv_signal_power.npz'
     default_signal_impulse_filename = 'wvfm_deconv_signal_impulse.npz'
 
-    WIENER = 'Wiener'
-    INVERSE = 'Inverse'
+    FILT_WIENER = 'wiener'
+    FILT_INVERSE = 'inverse'
+
+    NOISE_PPS = 'pps'
+    NOISE_SLICE = 'slice'
 
     def __init__(self, **params):
         super(WaveformDeconvolution,self).__init__(**params)
@@ -59,14 +65,19 @@ class WaveformDeconvolution(H5FlowStage):
 
         self.pps_channel = params.get('pps_channel',32)
         self.pps_threshold = params.get('pps_threshold',0)
+        self.noise_strategy = params.get('noise_strategy',self.NOISE_PPS).lower()
+        if self.noise_strategy not in (self.NOISE_PPS, self.NOISE_SLICE):
+            raise RuntimeError(f'Invalid noise estimation strategy: {self.noise_strategy}')
+        self.noise_slice = slice(*params.get('noise_slice',(None,None)))
+
         self.gen_noise_spectrum = params.get('gen_noise_spectrum',False)
         self.gen_signal_spectrum = params.get('gen_signal_spectrum',False)
         self.impulse_alignment_oversampling = params.get('impulse_alignment_oversampling',10)
         self.gen_signal_impulse = params.get('gen_signal_impulse',False)
 
         self.do_filtering = params.get('do_filtering',True)
-        self.filter_type = params.get('filter_type',self.WIENER)
-        if self.filter_type not in (self.WIENER, self.INVERSE):
+        self.filter_type = params.get('filter_type',self.FILT_WIENER).lower()
+        if self.filter_type not in (self.FILT_WIENER, self.FILT_INVERSE):
             raise RuntimeError(f'Invalid filter type: {self.filter_type}')
 
         self.deconv_dset_name = params.get('deconv_dset_name')
@@ -97,6 +108,29 @@ class WaveformDeconvolution(H5FlowStage):
             self.signal_spectrum = dict(np.load(self.signal_spectrum_filename))
             self.signal_impulse = dict(np.load(self.signal_impulse_filename))
 
+            # interpolate mis-matched FFTs
+            fft_shape = (wvfm_dset.dtype['samples'].shape[-1]//2+1,)
+            for spectrum in (self.noise_spectrum, self.signal_spectrum):
+                s = spectrum['spectrum']
+                s_shape = s.shape[-1]
+                if s_shape != fft_shape:
+                    logging.warning(f'Input spectrum size mismatch (in: {s_shape}, needed: {fft_shape}). '\
+                                 'Interpolating assuming same sample rate...')
+                    spline = scipy.interpolate.CubicSpline(np.linspace(0,fft_shape,s_shape), s, axis=-1)
+                    s = spline(np.arange(fft_shape))
+                    s[np.isnan(s)] = 0
+                    spectrum['spectrum'] = s
+
+            wvfm_shape = wvfm_dset.dtype['samples'].shape[-1]
+            impulse = self.signal_impulse['impulse']
+            if impulse.shape[-1] != wvfm_shape:
+                logging.warning(f'Input impulse function size mismatch (in: {impulse.shape[-1]}, needed: {wvfm_shape}). '\
+                                 'Truncating to shorter length...')
+                    new_impulse = np.zeros(wvfm_dset.dtype['samples'].shape, dtype=wvfm_dset.dtype['samples'].base)
+                    valid_samples = min(wvfm_shape, impulse_shape[-1])
+                    new_impulse[...,:valid_samples] = impulse[...,:valid_samples]
+                    self.signal_impulse['impulse'] = new_impulse
+
             # save noise / signal spectra used for processing
             noise_spectrum_dset = self.write_spectrum_or_impulse('noise_spectrum',
                 self.noise_spectrum['spectrum'], spectrum=True,
@@ -108,6 +142,9 @@ class WaveformDeconvolution(H5FlowStage):
                 self.signal_impulse['impulse'], impulse=True,
                 filename=self.signal_impulse_filename)
 
+
+            self.data_manager.create_dset(self.deconv_dset_name, dtype=wvfm_dset.dtype)
+            self.data_manager.create_ref(source_name, self.deconv_dset_name)
             self.data_manager.set_attrs(self.deconv_dset_name,
                                         classname=self.classname,
                                         class_version=self.class_version,
@@ -115,21 +152,19 @@ class WaveformDeconvolution(H5FlowStage):
                                         signal_spectrum=signal_spectrum_dset.ref,
                                         signal_impulse=signal_impulse_dset.ref
             )
-            self.data_manager.create_dset(self.deconv_dset_name, dtype=wvfm_dset.dtype)
-            self.data_manager.create_ref(source_name, self.deconv_dset_name)
         else:
             fft_shape = (wvfm_dset.dtype['samples'].shape[-1]//2+1,)
             self.noise_spectrum = dict(
-                spectrum = np.empty(wvfm_dset.dtype['samples'].shape[:-1]+fft_shape, dtype=wvfm_dset.dtype['samples'].base),
-                n = np.zeros(1, dtype=int)
+                spectrum = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+fft_shape, dtype=wvfm_dset.dtype['samples'].base),
+                n = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+(1,), dtype=int)
                 )
             self.signal_spectrum = dict(
-                spectrum = np.empty(wvfm_dset.dtype['samples'].shape[:-1]+fft_shape, dtype=wvfm_dset.dtype['samples'].base),
-                n = np.zeros(1, dtype=int)
+                spectrum = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+fft_shape, dtype=wvfm_dset.dtype['samples'].base),
+                n = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+(1,), dtype=int)
                 )
             self.signal_impulse = dict(
-                impulse = np.empty(wvfm_dset.dtype['samples'].shape, dtype=wvfm_dset.dtype['samples'].base),
-                n = np.zeros(1, dtype=int)
+                impulse = np.zeros(wvfm_dset.dtype['samples'].shape, dtype=wvfm_dset.dtype['samples'].base),
+                n = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+(1,), dtype=int)
                 )
 
     def run(self, source_name, source_slice, cache):
@@ -140,47 +175,75 @@ class WaveformDeconvolution(H5FlowStage):
 
         # generate a noise spectrum from PPS signals
         if self.gen_noise_spectrum:
-            # only use events with all ADCs with valid PPS signal
-            pps_mask = (wvfms[:,:,self.pps_channel,:] > self.pps_threshold).any(axis=-1).all(axis=-1) \
-                & (~wvfms.mask).all(axis=-1).any(axis=-1).all(axis=-1)
+            if self.noise_strategy == self.NOISE_PPS:
+                # only use events with all ADCs with valid PPS signal, use full waveforms
+                pps_mask = (wvfms[:,:,self.pps_channel,:] > self.pps_threshold).any(axis=-1) \
+                    & (~wvfms.mask).all(axis=-1).any(axis=-1)
+                pps_mask = pps_mask.reshape(pps_mask.shape + (1,1))
 
-            if np.any(pps_mask):
-                pps_fft = np.fft.rfft(wvfms[pps_mask], axis=-1)
+                if np.any(pps_mask):
+                    pps_fft = np.fft.rfft(wvfms, axis=-1)
 
-                spectrum = (np.abs(pps_fft)**2).mean(axis=0)
-                n = np.count_nonzero(pps_mask)
+                    spectrum = ma.array(np.abs(pps_fft)**2, mask=~np.broadcast_to(pps_mask, pps_fft.shape))
+                    spectrum = spectrum.mean(axis=0)
+                    n = np.count_nonzero(pps_mask, axis=0)
 
-                old_n = self.noise_spectrum['n']
-                self.noise_spectrum['spectrum'] = (n * spectrum + \
-                    old_n * self.noise_spectrum['spectrum'])/ (n + old_n)
-                self.noise_spectrum['n'] = n + old_n
+                    old_n = self.noise_spectrum['n']
+                    self.noise_spectrum['spectrum'] = (n * spectrum + \
+                        old_n * self.noise_spectrum['spectrum'])/ (n + old_n + 1.e-9)
+                    self.noise_spectrum['n'] = n + old_n
+            elif self.noise_strategy == self.NOISE_SLICE:
+                # use all events, but only a subset of waveform
+                mask = (~wvfms.mask).all(axis=-1).any(axis=-1)
+                mask = mask.reshape(mask.shape + (1,1))
+
+                if np.any(mask):
+                    fft = np.fft.rfft(wvfms[...,self.noise_slice], axis=-1)
+
+                    spectrum = ma.array(np.abs(fft)**2, mask=~np.broadcast_to(mask, fft.shape))
+                    spectrum = spectrum.mean(axis=0)
+                    n = np.count_nonzero(mask, axis=0)
+
+                    # interpolate back to "full" fft
+                    fft_bins = fft.shape[-1]
+                    exp_fft_bins = self.noise_spectrum['spectrum'].shape[-1]
+
+                    spline = scipy.interpolate.CubicSpline(np.linspace(0,exp_fft_bins,fft_bins), spectrum, axis=-1)
+                    spectrum = spline(np.arange(exp_fft_bins))
+                    spectrum[np.isnan(spectrum)] = 0
+
+                    old_n = self.noise_spectrum['n']
+                    self.noise_spectrum['spectrum'] = (n * spectrum + \
+                        old_n * self.noise_spectrum['spectrum'])/ (n + old_n + 1.e-9)
+                    self.noise_spectrum['n'] = n + old_n
 
         # generate a signal spectrum from non-PPS signals
         if self.gen_signal_spectrum:
             # only use events with all ADCs with no PPS signal
-            pps_mask = (~(wvfms[:,:,self.pps_channel,:] > self.pps_threshold).any(axis=-1)).all(axis=-1) \
-                & (~wvfms.mask).all(axis=-1).any(axis=-1).all(axis=-1)
+            pps_mask = (~(wvfms[:,:,self.pps_channel,:] > self.pps_threshold).any(axis=-1)) \
+                & (~wvfms.mask).all(axis=-1).any(axis=-1)
+            pps_mask = pps_mask.reshape(pps_mask.shape + (1,1))
 
             if np.any(pps_mask):
-                signal_fft = np.fft.rfft(wvfms[pps_mask], axis=-1)
+                signal_fft = np.fft.rfft(wvfms, axis=-1)
 
-                spectrum = (np.abs(signal_fft)**2).mean(axis=0)
-                n = np.count_nonzero(pps_mask)
+                spectrum = ma.array(np.abs(signal_fft)**2, mask=~np.broadcast_to(pps_mask, signal_fft.shape))
+                spectrum = spectrum.mean(axis=0)
+                n = np.count_nonzero(pps_mask, axis=0)
 
                 old_n = self.signal_spectrum['n']
                 self.signal_spectrum['spectrum'] = (n * spectrum + \
-                    old_n * self.signal_spectrum['spectrum'])/ (n + old_n)
+                    old_n * self.signal_spectrum['spectrum'])/ (n + old_n + 1.e-9)
                 self.signal_spectrum['n'] = n + old_n
 
         # generate an impulse response function from non-PPS signals
         if self.gen_signal_impulse:
-            # only use events with all ADCs with no PPS signal
-            pps_mask = (~(wvfms[:,:,self.pps_channel,:] > self.pps_threshold).any(axis=-1)).all(axis=-1) \
-                & (~wvfms.mask).all(axis=-1).any(axis=-1).all(axis=-1)
+            # only use waveforms with no PPS signal in event
+            pps_mask = (~(wvfms[:,:,self.pps_channel,:] > self.pps_threshold).any(axis=-1)) \
+                & (~wvfms.mask).all(axis=-1).any(axis=-1)
+            pps_mask = pps_mask.reshape(pps_mask.shape + (1,1))
 
             if np.any(pps_mask):
-                wvfms = wvfms[pps_mask]
-
                 # oversample waveform
                 interpolation_samples = wvfms.shape[-1] * self.impulse_alignment_oversampling
                 signal_wvfms_interp = scipy.interpolate.CubicSpline(
@@ -214,24 +277,25 @@ class WaveformDeconvolution(H5FlowStage):
                 # resample
                 aligned_wvfms = aligned_wvfms[:,:,:,::self.impulse_alignment_oversampling]
 
-                impulse = aligned_wvfms.mean(axis=0)
-                n = np.count_nonzero(pps_mask)
+                impulse = ma.array(aligned_wvfms, mask=~np.broadcast_to(pps_mask, aligned_wvfms.shape))
+                impulse = impulse.mean(axis=0)
+                n = np.count_nonzero(pps_mask, axis=0)
 
                 old_n = self.signal_impulse['n']
                 self.signal_impulse['impulse'] = (n * impulse + \
-                    old_n * self.signal_impulse['impulse'])/ (n + old_n)
+                    old_n * self.signal_impulse['impulse'])/ (n + old_n + 1.e-9)
                 self.signal_impulse['n'] = n + old_n
 
         if self.do_filtering:
             fft = np.fft.rfft(wvfms, axis=-1)
             impulse_fft = np.fft.rfft(self.signal_impulse['impulse'])
 
-            # wiener deconvolution
             with np.errstate(divide='ignore', invalid='ignore'):
-                if self.filter_type == self.WIENER:
+                # wiener deconvolution
+                if self.filter_type == self.FILT_WIENER:
                     filt_fft = fft * np.conj(impulse_fft) * self.signal_spectrum['spectrum']\
                                / (self.signal_spectrum['spectrum'] * np.abs(impulse_fft)**2 + self.noise_spectrum['spectrum'])
-                elif self.filter_type == self.INVERSE:
+                elif self.filter_type == self.FILT_INVERSE:
                     # inverse filter
                     filt_fft = fft * np.conj(impulse_fft) / np.abs(impulse_fft)**2
 
