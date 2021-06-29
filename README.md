@@ -203,7 +203,7 @@ item::
 
     # get the bounds for where the first charge event references exist within the ref dataset
     sel = 0
-    region = f['charge/events/ref_region'][sel]
+    region = f['charge/events/ref/light/events/ref_region'][sel]
 
     print(region['start']) # the first index in ref that is associated with charge event 0
     print(region['stop'])  # the last index + 1 in ref that is associated with charge event 0
@@ -219,7 +219,7 @@ efficient way (this is the recommended approach)::
     ref = f['charge/events/ref/light/events/ref']
     dset = f['light/events/data']
 
-    region = f['charge/events/ref_region']
+    region = f['charge/events/ref/light/events/ref_region']
 
     # this will load only necessary references and then find the data related to your selection
     data = dereference(sel, ref, dset, region=region)
@@ -242,7 +242,7 @@ compare the charge sum of an event to the integral of the raw waveforms::
     # first get the data
     ref = f['charge/events/ref/light/events/ref']
     dset = f['light/events/data']
-    region = f['charge/events/ref_region']
+    region = f['charge/events/ref/light/events/ref_region']
 
     charge_events = f['charge/events/data'][sel]
     light_events = dereference(sel, ref, f['light/events/data'], region=region)
