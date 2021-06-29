@@ -78,7 +78,7 @@ This creates references between ``charge/ext_trigs`` and ``light/events`` as wel
 as ``charge/events`` and ``light/events``. Both charge and light reconstructed
 events are expected in the input file, which can be facilitated by running both
 charge and light reconstruction flows on the same output file or by using
-and hdf5 tool::
+the ``h5copy`` hdf5 tool::
 
     # copy light data from a source file
     h5copy -v -f ref -s light -d light -i <light event file> -o <destination file>
@@ -127,6 +127,7 @@ event. So first, let's check what fields are available in the
 And then we can access the data by the field name::
 
     charge_qsum = f['charge/events/data']['q']
+    print(charge_qsum.shape, charge_qsum.dtype)
 
 The second type of path (ending in ``.../ref``) contain bi-directional references
 between two datasets. In particular, the paths to these datasets are structured
@@ -135,9 +136,12 @@ like ``<parent dataset name>/ref/<child dataset name>/ref``. Each entry in the
 datasets::
 
     f['charge/events/ref/light/events/ref'][0]
-    # returns something like [1, 2], i.e. charge event 1 is linked to light event 2
+    # returns something like [1, 2]
 
-You can directly use these references as indices into the corresponding dataset::
+By convention, the first value corresponds to the index into the ``charge/events/data``
+dataset and the second value corresponds to the index into the ``light/events/data``
+dataset. To use, you can directly pass these references as indices into the
+corresponding datasets::
 
     ref = f['charge/events/ref/light/events/ref'][0]
     # get the first charge event that has a light event associated with it
@@ -146,7 +150,7 @@ You can directly use these references as indices into the corresponding dataset:
     f['light/events/data'][ref[1]]
 
 You could loop over these references and load the rows of the dataset in that
-way, but it would be very slow. Luckily ``h5flow`` offers a helper function
+way, but it would be very slow. Instead, ``h5flow`` offers a helper function
 (``dereference``) to load references::
 
     from h5flow.data import dereference
@@ -155,43 +159,65 @@ way, but it would be very slow. Luckily ``h5flow`` offers a helper function
     ref = f['charge/events/ref/light/events/ref']
     # data you want to load
     dset = f['light/events/data']
-    # parent indices you want to use (i.e. event id 0-99)
-    sel = slice(0,100)
+    # parent indices you want to use (i.e. event id 0)
+    sel = 0
 
-    # this will load *ALL* references
+    # this will load *ALL* the references
     # and then find the data related to your selection
     data = dereference(sel, ref, dset)
 
-    # other selections are possible, either integers or iterables
-    dereference(0, ref, dset)
-    defererence([0,1,2,3,1,0], ref, dset)
+    # other selections are possible, either slices or iterables
+    dereference(slice(0,100), ref, dset)
+    dereference([0,1,2,3,1,0], ref, dset)
 
 Data is loaded as a ``numpy`` masked array with shape ``(len(sel), max_ref)``.
 So if there are only up to 5 light events associated any of the 100 charge
 events we wanted before::
 
-    data.shape # (100, 5)
+    print(data.shape, data.dtype) # e.g. (100, 5)
 
-The first index corresponds to our charge event selection and the second index
+The first dimension corresponds to our charge event selection and the second dimension
 corresponds to the light event(s) that are associated with a given charge event.
 
-This will likely take some time if you have a very large reference dataset
-(>500k). To speed things up, we can can use the ``../ref_region`` datasets to
+We can also load references with the opposite orientation (e.g.
+``light/events -> charge/events``), by using the ``ref_direction`` argument::
+
+    # we use the same reference dataset as before
+    ref = f['charge/events/ref/light/events/ref']
+    # but now we load from the charge dataset
+    dset = f['charge/events/data']
+    # and the parent indices correspond to positions within the light events
+    sel = 0 # get charge events associated with the first light event
+
+    # to load, we modify the reference direction from (0,1) [default] to (1,0) since
+    # we want to use the second index of the ref dset as the "parent" and the
+    # first index as the "child"
+    data = dereference(sel, ref, dset, ref_direction=(1,0))
+    print(data.shape, data.dtype)
+
+Loading references can take some time if you have a very large reference dataset
+(>50k). To speed things up, we can can use the ``../ref_region`` datasets to
 find out where in the reference dataset we need to look for each item. In
 particular, this dataset provides a ``'start'`` and ``'stop'`` index for each
 item::
 
     # get the bounds for where the first charge event references exist within the ref dataset
-    region = f['charge/events/ref_region'][0]
+    sel = 0
+    region = f['charge/events/ref_region'][sel]
 
-    region['start'] # the first index in ref that is associated with charge event 0
-    region['stop']  # the last index + 1 in ref that is associated with charge event 0
+    print(region['start']) # the first index in ref that is associated with charge event 0
+    print(region['stop'])  # the last index + 1 in ref that is associated with charge event 0
 
     # gets all references that *might* be associated with charge event 0
     ref = f['charge/events/ref/light/events/ref'][region['start']:region['stop']]
+    print(ref)
 
 You can use this dataset with the helper function to load referred data in an
 efficient way (this is the recommended approach)::
+
+    sel = 0
+    ref = f['charge/events/ref/light/events/ref']
+    dset = f['light/events/data']
 
     region = f['charge/events/ref_region']
 
@@ -210,46 +236,65 @@ compare the charge sum of an event to the integral of the raw waveforms::
 
     import numpy.ma as ma # use masked arrays
 
+    # we'll only look at a events 0-1000 since the raw waveforms will use a lot of memory
+    sel = slice(0,1000)
+
     # first get the data
+    ref = f['charge/events/ref/light/events/ref']
+    dset = f['light/events/data']
+    region = f['charge/events/ref_region']
+
     charge_events = f['charge/events/data'][sel]
+    light_events = dereference(sel, ref, f['light/events/data'], region=region)
+    light_wvfms = dereference(sel, ref, f['light/wvfm/data'], region=region)
+
     print('charge_events:',charge_events.shape)
     print('light_events:',light_events.shape)
     print('light_wvfms:',light_wvfms.shape)
 
-    # now apply a channel mask to the waveforms
+    # now apply a channel mask to the waveforms to ignore certain channels and waveforms
     valid_wvfm = light_events['wvfm_valid'].astype(bool)
     # (event index, light event index, adc index, channel index)
     print('valid_wvfm',valid_wvfm.shape)
     channel_mask = np.zeros_like(valid_wvfm)
-    # only use channel sum waveforms for both adcs
-    channel_mask[:,:,:,[31,24,15,8,63,56,47,40]] = True
+    sipm_channels = np.array(
+        [2,3,4,5,6,7] + [18,19,20,21,22,23] + [34,35,36,37,38,39] + [50,51,52,53,54,55] + \
+        [9,10,11,12,13,14] + [25,26,27,28,29,30] + [41,42,43,44,45,46] + [57,58,59,60,61,62]
+    )
+    channel_mask[:,:,:,sipm_channels] = True
 
     samples = light_wvfms['samples']
     # (event index, light event index, adc index, channel index, sample index)
     print('samples:',samples.shape)
-    # numpy masked arrays use the mask convention True == invalid
+    # numpy masked arrays use the mask convention: True == invalid
     samples.mask = samples.mask | np.expand_dims(~channel_mask,-1) | np.expand_dims(~valid_wvfm,-1)
 
-    # calculating the integrals is now trivial!
-    # axis 4 = integral over waveform, axis 3 = integral over valid channels,
-    # axis 2 = integral over valid adcs, axis 1 = sum over light events
+    # now we can subtract the pedestals (using the mean of the first 50 samples)
+    samples = samples.astype(float) - samples[...,:50].mean(axis=-1, keepdims=True)
+
+    # and we can integrate over each of the dimensions:
+    # axis 4 = integral over waveform, axis 3 = sum over valid channels,
+    # axis 2 = sum over valid adcs, axis 1 = sum over light events associated to a charge event
     light_integrals = samples.sum(axis=4).sum(axis=3).sum(axis=2).sum(axis=1)
 
-We can now plot the correlation between the charge and light systems::
+    # we can either create a mask for only the valid entries (i.e. the charge-
+    # to-light association exists)
+    valid_event_mask = ~light_integrals.mask
+    # or we can zero out the invalid entries (beware: this will update the
+    # light_integral.mask to indicate that these are now valid entries)
+    light_integrals[light_integrals.mask] = 0.
+
+And we plot the correlation between the charge and light systems::
 
     import matplotlib.pyplot as plt
 
     plt.ion()
     plt.figure()
-    plt.hist2d(charge_qsum, light_integrals, bins=(1000,1000))
+    plt.hist2d(charge_qsum[valid_event_mask], light_integrals[valid_event_mask],
+        bins=(1000,1000))
     plt.xlabel('Charge sum [mV]')
     plt.ylabel('Light integral [ADC]')
 
 For more details on what different fields in the datatypes mean, look at the
 module-specific documentation. For more details on how to use the dereferencing
 schema, look at the h5flow documentation [https://h5flow.readthedocs.io/en/latest/].
-
-
-
-
-
