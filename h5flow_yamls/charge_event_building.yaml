@@ -2,7 +2,7 @@
 
 flow:
   source: raw_event_generator
-  stages: []
+  stages: [] # just generate events, no analysis stages
   drop: []
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files

@@ -6,7 +6,7 @@ flow:
   drop: []
 
 light_event_generator:
-  classname: LightEventGenerator
+  classname: LightEventGenerator # light/raw_event_generator.py
   dset_name: 'light/events'
   params:
     wvfm_dset_name: 'light/wvfm'

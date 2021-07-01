@@ -21,8 +21,7 @@ class WaveformNoiseFilter(H5FlowStage):
          - ``filter_samples`` : ``list`` of ``int``, length of 2, min and max sample to use for filter
          - ``modulo_param`` : ``int``, repeat template after this number of samples (starting with ``filter_samples[0]``)
 
-        Both the ``packets_dset_name`` and ``ts_dset_name`` are required in
-        the data cache.
+        ``wvfm_dset_name`` is required in the data cache.
 
         Example config::
 
@@ -39,6 +38,8 @@ class WaveformNoiseFilter(H5FlowStage):
                     modulo_param: 10
                     keep_noise: True
                     noise_dset_name: 'light/fwvfm_noise'
+
+        Uses the same dtype as the input waveform dataset.
 
     '''
     class_version = '0.0.0'

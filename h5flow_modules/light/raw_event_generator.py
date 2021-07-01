@@ -9,7 +9,7 @@ from h5flow.core import H5FlowGenerator
 
 class LightEventGenerator(H5FlowGenerator):
     '''
-        Light system event builder - converts rwf_XX.root files to event-packed
+        Light system event builder - converts ``rwf_XX.root`` files to an event-packed
         h5flow-readable format
 
         Parameters:
@@ -20,7 +20,7 @@ class LightEventGenerator(H5FlowGenerator):
          - ``chunk_size`` : ``int``, optional, number of events to buffer before initiating loop
 
         Generates a lightweight "event" dataset along with a dataset containing
-        event-packed light waveforms.
+        event-packed raw waveforms.
 
         Example config::
 
@@ -52,7 +52,7 @@ class LightEventGenerator(H5FlowGenerator):
 
         ``wvfm`` datatype::
 
-            samples     i2(n_adc,n_channels,n_samples), sample 10-bit ADC value (lowest 5 bits are not used)
+            samples     i2(n_adc,n_channels,n_samples), sample 10-bit ADC value (lowest 6 bits are not used)
     '''
     default_n_adcs = 2
     default_n_channels = 64

@@ -15,7 +15,7 @@ class Charge2LightAssociation(H5FlowStage):
         |light_ts_10MHz - charge_ts_10MHz| <= self.ts_window
 
     where ``*_unix_ts_second`` is the unix timestamp of the event in seconds and
-    ``*_ts_10MHz`` is the timestamp in ticks since SYNC / PPS. Creates
+    ``*_ts_10MHz`` is the timestamp in 10MHz ticks since SYNC / PPS. Creates
     references from both external triggers to light events as well as references
     from charge events to light events.
 

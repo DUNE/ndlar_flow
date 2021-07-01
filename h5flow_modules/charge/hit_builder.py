@@ -13,6 +13,10 @@ class HitBuilder(H5FlowStage):
         filters by packet type, and performs the conversion from ADC -> mV above
         pedestal.
 
+        The external data files used for ``geometry_file``, ``pedestal_file``,
+        and ``configuration_file`` are searched for in the current working
+        directory, if the paths are not specified as global paths.
+
         Parameters:
          - ``hits_dset_name`` : ``str``, required, output dataset path
          - ``packets_dset_name`` : ``str``, required, input dataset path for packets
@@ -35,7 +39,7 @@ class HitBuilder(H5FlowStage):
                     hits_dset_name: 'charge/hits'
                     packets_dset_name: 'charge/packets'
                     ts_dset_name: 'charge/packets_corr_ts'
-                    geometry_file: 'multi_tile_layout-2.1.16.yaml'
+                    geometry_file: 'multi_tile_layout-2.2.16.yaml'
                     pedestal_file: 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
                     configuration_file: 'evd_config_21-03-31_12-36-13.json'
 
