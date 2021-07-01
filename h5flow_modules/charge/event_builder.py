@@ -31,16 +31,26 @@ class EventBuilder(H5FlowStage):
                     hits_dset_name: 'charge/hits'
                     ext_trigs_dset_name: 'charge/ext_trigs'
 
+        ``events`` datatype::
+
+            id              u8, unique identifier per event
+            nhit            u4, number of hits in event
+            q               f8, total charge in event [mV]
+            ts_start        f8, first external trigger or hit corrected PPS timestamp [ticks]
+            ts_end          f8, last external trigger of hit corrected PPS timestamp [ticks]
+            n_ext_trigs     u4, number of external triggers in event
+            unix_ts         u8, unix timestamp of event [s since epoch]
+
     '''
     class_version = '1.0.0'
 
     events_dtype = np.dtype([
-        ('id', 'u8'), # unique identifier
-        ('nhit', 'u4'), # number of hits in event
-        ('q', 'f8'), # total charge in event [mV]
-        ('ts_start', 'f8'), ('ts_end', 'f8'), # minimum and maximum corrected PPS timestamp [ticks]
-        ('n_ext_trigs', 'u4'), # number of external triggers
-        ('unix_ts', 'u8'), # unix timestamp [s since epoch]
+        ('id', 'u8'),
+        ('nhit', 'u4'),
+        ('q', 'f8'),
+        ('ts_start', 'f8'), ('ts_end', 'f8'),
+        ('n_ext_trigs', 'u4'),
+        ('unix_ts', 'u8'),
         ])
 
     def __init__(self, **params):

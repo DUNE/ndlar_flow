@@ -32,6 +32,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'recommonmark',
     'sphinx.ext.autosectionlabel',
+    'sphinx.ext.viewcode',
 ]
 
 # Add any paths that contain templates here, relative to this directory.

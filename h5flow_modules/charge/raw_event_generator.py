@@ -7,7 +7,7 @@ from h5flow.core import H5FlowGenerator
 
 try:
     from raw_event_builder import *
-except ImportError:
+except:
     from .raw_event_builder import *
 
 class RawEventGenerator(H5FlowGenerator):
@@ -44,6 +44,11 @@ class RawEventGenerator(H5FlowGenerator):
                         threshold: 10
                         rollover_ticks: 10000000
 
+        ``raw_event`` datatype::
+
+            id          u8, unique event identifier
+            unix_ts     u8, unix timestamp of event [s since epoch]
+
     '''
     default_buffer_size = 38400
     default_nhit_cut = 100
@@ -54,8 +59,8 @@ class RawEventGenerator(H5FlowGenerator):
     default_packets_dset_name = 'charge/packets'
 
     raw_event_dtype = np.dtype([
-        ('id', 'u8'), # unique event identifier
-        ('unix_ts', 'u8') # unix timestamp of event [s since epoch]
+        ('id', 'u8'),
+        ('unix_ts', 'u8')
         ])
 
     def __init__(self, **params):

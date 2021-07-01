@@ -1,5 +1,12 @@
 .. include:: ../README.md
 
+workflow documentation
+======================
+
+.. toctree::
+
+   workflows
+
 module documentation
 ====================
 

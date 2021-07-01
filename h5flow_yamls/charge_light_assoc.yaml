@@ -5,8 +5,8 @@ flow:
   stages: [charge_light_associator]
   drop: []
 
-charge_light_associator:
-  classname: Charge2LightAssociation
+charge_light_associator: # performs charge/light association
+  classname: Charge2LightAssociation # charge/charge2light.py
   requires:
     - 'charge/ext_trigs'
     - name: 'charge/ext_trigs_idcs'
