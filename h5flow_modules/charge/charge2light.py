@@ -15,7 +15,7 @@ class Charge2LightAssociation(H5FlowStage):
         |light_ts_10MHz - charge_ts_10MHz| <= self.ts_window
 
     where ``*_unix_ts_second`` is the unix timestamp of the event in seconds and
-    ``*_ts_10MHz`` is the timestamp in ticks since SYNC / PPS. Creates
+    ``*_ts_10MHz`` is the timestamp in 10MHz ticks since SYNC / PPS. Creates
     references from both external triggers to light events as well as references
     from charge events to light events.
 
@@ -127,7 +127,7 @@ class Charge2LightAssociation(H5FlowStage):
 
         ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1,1)
         ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
-        ev_ref = np.c_[ev_id[ext_trigs_mask][idcs[:,0]], idcs[:,1]]
+        ev_ref = np.unique(np.c_[ev_id[ext_trigs_mask][idcs[:,0]], idcs[:,1]], axis=0)
 
         # write references
         # ext trig -> light event

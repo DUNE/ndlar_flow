@@ -21,7 +21,8 @@ class TimestampCorrector(H5FlowStage):
          - ``packets_dset_name`` : ``str``, required, input dataset path for packets
          - ``correction`` : ``dict``, optional, ``iogroup : [<constant offset>, <slope>]`` pairs
 
-        The ``packets_dset_name`` is required in the data cache.
+        The ``packets_dset_name`` is required in the data cache along with
+        its indices under the name of ``'{packets_dset_name}_index'``.
 
         Example config::
 
@@ -29,12 +30,20 @@ class TimestampCorrector(H5FlowStage):
                 classname: TimestampCorrector
                 requires:
                     - 'charge/packets'
+                    - name: 'charge/packets_index'
+                      path: 'charge/packets'
+                      index_only: True
                 params:
                     ts_dset_name: 'charge/packets_corr_ts'
                     packets_dset_name: 'charge/packets'
                     correction:
-                        1: [-9.5, 3.56e-6]
-                        2: [-9.5, 0.93e-6]
+                        1: [-9.597, 4.0021e-6]
+                        2: [-9.329, 1.1770e-6]
+
+        ``ts`` datatype:
+
+            id  u8, unique identifier
+            ts  f8, PPS timestamp after correction for timestamp drift [ticks]
 
     '''
     class_version = '1.0.0'

@@ -2,11 +2,11 @@
 
 flow:
   source: 'light/events'
-  stages: [wvfm_noise_filter, wvfm_raw_summ, wvfm_noise_summ, wvfm_filt_summ]
+  stages: [wvfm_noise_filter]
   # drop: ['light/wvfm']
 
 wvfm_noise_filter:
-  classname: WaveformNoiseFilter
+  classname: WaveformNoiseFilter # light/wvfm_noise_filter.py
   requires:
     - 'light/events'
     - 'light/wvfm'
@@ -18,27 +18,3 @@ wvfm_noise_filter:
     modulo_param: 10 # template length
     keep_noise: True # save extracted coherent noise
     noise_dset_name: 'light/fwvfm_noise'
-
-wvfm_raw_summ:
-  classname: WaveformSummary
-  requires:
-    - 'light/events'
-    - 'light/wvfm'
-  params:
-    wvfm_dset_name: 'light/wvfm'
-
-wvfm_noise_summ:
-  classname: WaveformSummary
-  requires:
-    - 'light/events'
-    - 'light/fwvfm_noise'
-  params:
-    wvfm_dset_name: 'light/fwvfm_noise'
-
-wvfm_filt_summ:
-  classname: WaveformSummary
-  requires:
-    - 'light/events'
-    - 'light/fwvfm'
-  params:
-    wvfm_dset_name: 'light/fwvfm'

@@ -30,16 +30,28 @@ class ExternalTriggerFinder(H5FlowStage):
         chip key of `'All'` can be used in the event that all triggers on a particular
         channel of any chip key should be extracted as external triggers.
 
-        You can access and set the parameters at initialization::
+        Example config::
 
-            etf = ExternalTriggerFinder(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
+            ext_trig_finder:
+              classname: ExternalTriggerFinder
+              requires:
+                - 'charge/packets'
+                - name: 'charge/packets_corr_ts'
+                  path: ['charge/packets', 'charge/packets_corr_ts'] # get corrected timestamps for each packet
+              params:
+                ext_trigs_dset_name: 'charge/ext_trigs'
+                packets_dset_name: 'charge/packets'
+                ts_dset_name: 'charge/packets_corr_ts'
+                pacman_trigger_enabled: True
+                pacman_trigger_word_filter: 2
 
-        or via the getter/setters::
+        ``ext_trigs`` datatype::
 
-            etf.get_parameters() # dict(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
-            etf.get_parameters('pacman_trigger_enabled') # dict(pacman_trigger_enabled=True)
-
-            etf.set_parameters(pacman_trigger_enabled=True, larpix_trigger_channels={'1-1-1':[0]})
+            id          u8, unique identifier per event
+            ts          f8, corrected PPS timestamp [ticks]
+            ts_raw      u8, PPS timestamp [ticks]
+            type        i2, trigger type from PACMAN
+            iogroup     u1, PACMAN id
 
     '''
     class_version = '1.0.0'

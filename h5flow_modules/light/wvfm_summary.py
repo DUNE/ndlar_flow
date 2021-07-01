@@ -6,6 +6,25 @@ from h5flow.core import H5FlowStage
 class WaveformSummary(H5FlowStage):
     '''
         Extracts summary parameters from light waveforms
+
+        Parameters:
+         - ``pretrigger_window`` : ``tuple`` of first sample and last sample to use for calculating pre-trigger values
+         - ``wvfm_dset_name`` : ``str`` dataset path to waveforms to process
+         - ``wvfm_summ_dset_name`` : ``str``, optional, output dataset name, defaults to ``{wvfm_dset_name}_summ``
+
+         ``{}_summ`` datatype::
+
+            id              u8, unique identifier per waveform
+            event_id        i8, unique identifier for event
+            pre_std         f8, std of pretrigger samples
+            pre_mean        f8, mean of pretrigger samples
+            post_sum        f8, sum of posttrigger samples
+            post_max        f8, max of posttrigger samples
+            post_rising     f8, sample index of max derivative
+            ch              u4, channel id
+            sn              u4, serial number of adc
+            adc             u4, adc index 1:1 w/ serial number
+
     '''
     class_version = '0.0.0'
 
@@ -14,16 +33,16 @@ class WaveformSummary(H5FlowStage):
     default_wvfm_summ_dset_fmt = '{}_summ' # uses wvfm_dset + _summ as default
 
     dtype = np.dtype([
-        ('id','u8'), # a unique identifier
-        ('event_id','i8'), # a unique identifier (for the event)
-        ('pre_std','f8'), # pre-trigger sample std
-        ('pre_mean','f8'), # pre-trigger sample mean (used in sum calculation)
-        ('post_sum', 'f8'), # post-trigger sample sum
-        ('post_max', 'f8'), # post-trigger max sample value
-        ('post_rising', 'f8'), # post-trigger derivative max sample index
-        ('ch', 'u4'), # channel id
-        ('sn', 'u4'), # serial number
-        ('adc', 'u4'), # adc index 1:1 w/ serial number
+        ('id','u8'),
+        ('event_id','i8'),
+        ('pre_std','f8'),
+        ('pre_mean','f8'),
+        ('post_sum', 'f8'),
+        ('post_max', 'f8'),
+        ('post_rising', 'f8'),
+        ('ch', 'u4'),
+        ('sn', 'u4'),
+        ('adc', 'u4'),
         ])
 
     def __init__(self, **params):
