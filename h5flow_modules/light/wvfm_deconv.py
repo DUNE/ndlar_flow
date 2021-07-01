@@ -79,6 +79,7 @@ class WaveformDeconvolution(H5FlowStage):
         self.filter_type = params.get('filter_type',self.FILT_WIENER).lower()
         if self.filter_type not in (self.FILT_WIENER, self.FILT_INVERSE):
             raise RuntimeError(f'Invalid filter type: {self.filter_type}')
+        self.filter_channels = np.array(params.get('filter_channels'))
 
         self.deconv_dset_name = params.get('deconv_dset_name')
         self.noise_spectrum_filename = params.get('noise_spectrum_filename', self.default_noise_spectrum_filename)
@@ -93,7 +94,7 @@ class WaveformDeconvolution(H5FlowStage):
 
         write_data = np.empty((1,), dtype=dtype)
         write_data['spectrum' if spectrum else 'impulse'] = data
-        self.data_manager.set_attrs(self.deconv_dset_name+'/'+name,**attrs)
+        self.data_manager.set_attrs(self.deconv_dset_name+'/'+name, **attrs)
         self.data_manager.create_dset(self.deconv_dset_name+'/'+name, dtype=dtype)
         self.data_manager.reserve_data(self.deconv_dset_name+'/'+name, slice(0,1))
         self.data_manager.write_data(self.deconv_dset_name+'/'+name, slice(0,1), write_data)
@@ -146,11 +147,12 @@ class WaveformDeconvolution(H5FlowStage):
             self.data_manager.create_dset(self.deconv_dset_name, dtype=wvfm_dset.dtype)
             self.data_manager.create_ref(source_name, self.deconv_dset_name)
             self.data_manager.set_attrs(self.deconv_dset_name,
-                                        classname=self.classname,
-                                        class_version=self.class_version,
-                                        noise_spectrum=noise_spectrum_dset.ref,
-                                        signal_spectrum=signal_spectrum_dset.ref,
-                                        signal_impulse=signal_impulse_dset.ref
+                classname=self.classname,
+                class_version=self.class_version,
+                noise_spectrum=noise_spectrum_dset.ref,
+                signal_spectrum=signal_spectrum_dset.ref,
+                signal_impulse=signal_impulse_dset.ref,
+                filter_channels=self.filter_channels
             )
         else:
             fft_shape = (wvfm_dset.dtype['samples'].shape[-1]//2+1,)
@@ -304,7 +306,9 @@ class WaveformDeconvolution(H5FlowStage):
 
             # save waveforms
             fwvfm = cache[self.wvfm_dset_name].reshape(cache[source_name].shape).copy()
-            fwvfm['samples'] = filt_wvfms
+            unfiltered_mask = ~np.isin(np.arange(fwvfm.shape[-2]), self.filter_channels)
+            fwvfm['samples'][...,self.filter_channels,:] = filt_wvfms[...,self.filter_channels,:]
+            fwvfm['samples'][...,unfiltered_mask,:] = wvfms[...,unfiltered_mask,:]
             
             fwvfm_slice = self.data_manager.reserve_data(self.deconv_dset_name, source_slice)
             self.data_manager.write_data(self.deconv_dset_name, source_slice, fwvfm)
