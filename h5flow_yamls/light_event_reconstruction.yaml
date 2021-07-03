@@ -13,7 +13,7 @@ timestamp_corrector:
       0: -1.18e-7
       1: 1.18e-7
 
-wvfm_noise_filter:
+wvfm_filt:
   classname: WaveformNoiseFilter
   requires:
     - 'light/wvfm'
@@ -34,7 +34,8 @@ wvfm_deconv:
     wvfm_dset_name: 'light/fwvfm' # use pedestal+noise subtracted waveforms
     deconv_dset_name: 'light/deconv' # new dataset to produce
     do_filtering: True
-    filter_type: Wiener
+    filter_type: Inverse
+    inverse_gaus_width: 1.5
     filter_channels: [ 2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63 ] # apply filtering to these channels
     noise_spectrum_filename: 'rwf_20210624_094156.fwvfm.noise_power.npz'
     signal_spectrum_filename: 'wvfm_deconv_signal_power.npz'
@@ -49,9 +50,9 @@ hit_finder:
     wvfm_dset_name: 'light/deconv' # waveform dataset to find hits
     t_ns_dset_name: 'light/t_ns' # timestamps to use for hits
     hits_dset_name: 'light/hits' # new dataset to produce
-    near_samples: 3
+    near_samples: 2
     busy_channel: 0
     sample_rate: 10. # ns
-    channel_threshold: 500 # global hit threshold
+    channel_threshold: 1000 # global hit threshold
     channel_mask: [0, 1, 8, 15, 16, 17, 24, 31, 32, 33, 40, 47, 48, 49, 56, 63] # don't make hits on these channels
 
