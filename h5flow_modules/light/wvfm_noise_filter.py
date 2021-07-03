@@ -43,15 +43,17 @@ class WaveformNoiseFilter(H5FlowStage):
                     keep_noise: True
                     noise_dset_name: 'light/fwvfm_noise'
 
-        Uses the same dtype as the input waveform dataset.
+        Uses the same dtype as the input waveform dataset except with ``'samples'`` converted to floats.
 
     '''
-    class_version = '0.0.0'
+    class_version = '1.0.0'
 
     default_filter_samples = (0, 80)
     default_modulo_param = 10
     default_keep_noise = False
     default_noise_dset_name = 'light/fwvfm_noise'
+
+    fwvfm_dtype = lambda self,nadc,nchannels,nsamples:np.dtype([('samples','f4',(nadc,nchannels,nsamples))])
 
     def __init__(self, **params):
         super(WaveformNoiseFilter,self).__init__(**params)
@@ -77,7 +79,8 @@ class WaveformNoiseFilter(H5FlowStage):
 
         # then set up new datasets
         wvfm_dset = self.data_manager.get_dset(self.wvfm_dset_name)
-        self.data_manager.create_dset(self.fwvfm_dset_name, dtype=wvfm_dset.dtype)
+        self.fwvfm_dtype = self.fwvfm_dtype(*wvfm_dset.dtype['samples'].shape)
+        self.data_manager.create_dset(self.fwvfm_dset_name, dtype=self.fwvfm_dtype)
         self.data_manager.create_ref(source_name, self.fwvfm_dset_name)
         if self.keep_noise:
             self.data_manager.create_dset(self.noise_dset_name, dtype=wvfm_dset.dtype)
@@ -87,11 +90,10 @@ class WaveformNoiseFilter(H5FlowStage):
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape).data # don't worry about masked data since 1:1 references
 
-        # truncate lowest 6-bits
-        wvfm_data = wvfm_data - wvfm_data % 64
-
         # flatten into individual waveforms
         wvfm_samples = wvfm_data['samples'].reshape(-1, wvfm_data['samples'].shape[-1])
+        # truncate lowest 6-bits and convert to float        
+        wvfm_samples = (wvfm_samples - wvfm_samples % 64).astype(float)
         wvfm_mask = event_data['wvfm_valid'].astype(bool).flatten()
         wvfm_mask = wvfm_mask & \
             np.isin(event_data['ch'].flatten(), self.filter_channels)
@@ -114,8 +116,8 @@ class WaveformNoiseFilter(H5FlowStage):
         noise = noise.reshape(wvfm_data['samples'].shape)
 
         # subtract noise from waveform
-        fwvfm = wvfm_data.copy()
-        fwvfm['samples'] = fwvfm['samples'] - noise
+        fwvfm = np.empty(wvfm_data.shape, dtype=self.fwvfm_dtype)
+        fwvfm['samples'] = wvfm_samples.reshape(noise.shape) - noise
 
         # subtract pedestal value
         fwvfm['samples'] = fwvfm['samples'] - fwvfm['samples'][..., self.filter_samples[0]:self.filter_samples[-1]].mean(axis=-1, keepdims=True)

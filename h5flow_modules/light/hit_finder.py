@@ -32,12 +32,12 @@ class WaveformHitFinder(H5FlowStage):
             ch          u1,             channel id
             ns          f8,             PPS timestamp of peak [ns]
             busy_ns     f8,             timestamp of peak relative to busy rising edge [ns]
-            samples     i2(2*near+1,),  sample adc value around peak
-            sum         i2,             sum of sample adc values (out to nearest local minima or edge of near_samples)
-            max         i2,             peak adc value
-            sum_spline  f8,             integral of spline around peak (out to nearest local minima or edge of near_samples)
-            max_spline  f8,             maximum of spline around peak
-            ns_spline   f8,             offset from PPS timestamp of peak for maximum of spline [ns]
+            samples     f4(2*near+1,),  sample adc value around peak
+            sum         f4,             sum of sample adc values (out to nearest local minima or edge of near_samples)
+            max         f4,             peak adc value
+            sum_spline  f4,             integral of spline around peak (out to nearest local minima or edge of near_samples)
+            max_spline  f4,             maximum of spline around peak
+            ns_spline   f4,             offset from PPS timestamp of peak for maximum of spline [ns]
 
     '''
 
@@ -49,19 +49,19 @@ class WaveformHitFinder(H5FlowStage):
     default_channel_threshold = lambda global_threshold : defaultdict(lambda : defaultdict(lambda : global_threshold))
     default_channel_mask = []
 
-    hits_dtype = lambda near_samples: np.dtype([
+    hits_dtype = lambda self,near_samples: np.dtype([
         ('id', 'u4'),
         ('adc', 'u1'),
         ('sn', 'u4'),
         ('ch', 'u1'),
         ('ns', 'f8'),
         ('busy_ns', 'f8'),
-        ('samples', f'i2({near_samples},)'),
-        ('sum', 'i2'),
-        ('max', 'i2'),
-        ('sum_spline', 'f8'),
-        ('max_spline', 'f8'),
-        ('ns_spline', 'f8')
+        ('samples', 'f4', (2*near_samples+1,)),
+        ('sum', 'f4'),
+        ('max', 'f4'),
+        ('sum_spline', 'f4'),
+        ('max_spline', 'f4'),
+        ('ns_spline', 'f4')
         ])
 
     def __init__(self, **params):
