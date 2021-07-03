@@ -42,6 +42,7 @@ class WaveformDeconvolution(H5FlowStage):
                     gen_signal_impulse: True
                     do_filtering: False
                     filter_type: Wiener # or Inverse
+                    inverse_gaus_width: 2 # use a gaussian filter with inverse filter to reduce HF noise
                     noise_strategy: PPS # or slice
                     noise_slice: [-256, null] # last 256 samples
 
@@ -51,6 +52,7 @@ class WaveformDeconvolution(H5FlowStage):
     default_noise_spectrum_filename = 'wvfm_deconv_noise_power.npz'
     default_signal_spectrum_filename = 'wvfm_deconv_signal_power.npz'
     default_signal_impulse_filename = 'wvfm_deconv_signal_impulse.npz'
+    default_inverse_gaus_width = 2
 
     FILT_WIENER = 'wiener'
     FILT_INVERSE = 'inverse'
@@ -79,6 +81,7 @@ class WaveformDeconvolution(H5FlowStage):
         self.filter_type = params.get('filter_type',self.FILT_WIENER).lower()
         if self.filter_type not in (self.FILT_WIENER, self.FILT_INVERSE):
             raise RuntimeError(f'Invalid filter type: {self.filter_type}')
+        self.inverse_gaus_width = params.get('inverse_gaus_width', self.default_inverse_gaus_width)
         self.filter_channels = np.array(params.get('filter_channels'))
 
         self.deconv_dset_name = params.get('deconv_dset_name')
@@ -110,7 +113,7 @@ class WaveformDeconvolution(H5FlowStage):
             self.signal_impulse = dict(np.load(self.signal_impulse_filename))
 
             # interpolate mis-matched FFTs
-            fft_shape = (wvfm_dset.dtype['samples'].shape[-1]//2+1,)
+            fft_shape = wvfm_dset.dtype['samples'].shape[-1]//2+1
             for spectrum in (self.noise_spectrum, self.signal_spectrum):
                 s = spectrum['spectrum']
                 s_shape = s.shape[-1]
@@ -127,10 +130,16 @@ class WaveformDeconvolution(H5FlowStage):
             if impulse.shape[-1] != wvfm_shape:
                 logging.warning(f'Input impulse function size mismatch (in: {impulse.shape[-1]}, needed: {wvfm_shape}). '\
                                  'Truncating to shorter length...')
-                    new_impulse = np.zeros(wvfm_dset.dtype['samples'].shape, dtype=wvfm_dset.dtype['samples'].base)
-                    valid_samples = min(wvfm_shape, impulse_shape[-1])
-                    new_impulse[...,:valid_samples] = impulse[...,:valid_samples]
-                    self.signal_impulse['impulse'] = new_impulse
+                new_impulse = np.zeros(wvfm_dset.dtype['samples'].shape, dtype=wvfm_dset.dtype['samples'].base)
+                valid_samples = min(wvfm_shape, impulse_shape[-1])
+                new_impulse[...,:valid_samples] = impulse[...,:valid_samples]
+                self.signal_impulse['impulse'] = new_impulse
+
+            if self.filter_type == self.FILT_INVERSE:
+                gaus = np.exp(-0.5*np.arange(-wvfm_shape//2,wvfm_shape//2)**2/self.inverse_gaus_width**2)
+                gaus /= gaus.sum()
+                gaus = gaus.reshape(1,1,1,wvfm_shape)
+                self.gaus_fft = np.abs(np.fft.rfft(gaus, axis=-1))
 
             # save noise / signal spectra used for processing
             noise_spectrum_dset = self.write_spectrum_or_impulse('noise_spectrum',
@@ -142,7 +151,6 @@ class WaveformDeconvolution(H5FlowStage):
             signal_impulse_dset = self.write_spectrum_or_impulse('signal_impulse',
                 self.signal_impulse['impulse'], impulse=True,
                 filename=self.signal_impulse_filename)
-
 
             self.data_manager.create_dset(self.deconv_dset_name, dtype=wvfm_dset.dtype)
             self.data_manager.create_ref(source_name, self.deconv_dset_name)
@@ -299,14 +307,14 @@ class WaveformDeconvolution(H5FlowStage):
                                / (self.signal_spectrum['spectrum'] * np.abs(impulse_fft)**2 + self.noise_spectrum['spectrum'])
                 elif self.filter_type == self.FILT_INVERSE:
                     # inverse filter
-                    filt_fft = fft * np.conj(impulse_fft) / np.abs(impulse_fft)**2
+                    filt_fft = fft * np.conj(impulse_fft) * self.gaus_fft / np.abs(impulse_fft)**2
 
             filt_fft[np.isnan(filt_fft) | ~np.isfinite(filt_fft)] = 0. # protect against invalid values
             filt_wvfms = np.fft.irfft(filt_fft, axis=-1)
 
             # save waveforms
             fwvfm = cache[self.wvfm_dset_name].reshape(cache[source_name].shape).copy()
-            unfiltered_mask = ~np.isin(np.arange(fwvfm.shape[-2]), self.filter_channels)
+            unfiltered_mask = ~np.isin(np.arange(fwvfm.dtype['samples'].shape[-2]), self.filter_channels)
             fwvfm['samples'][...,self.filter_channels,:] = filt_wvfms[...,self.filter_channels,:]
             fwvfm['samples'][...,unfiltered_mask,:] = wvfms[...,unfiltered_mask,:]
             
