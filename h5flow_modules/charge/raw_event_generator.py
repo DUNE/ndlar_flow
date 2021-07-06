@@ -23,6 +23,7 @@ class RawEventGenerator(H5FlowGenerator):
          - ``sync_noise_cut`` : ``int``, optional, if ``sync_noise_cut_enabled`` removes all events that have a timestamp less than this value
          - ``event_builder_class`` : ``str``, optional, event builder algorithm to use (see ``raw_event_builder.py``)
          - ``event_builder_config`` : ``dict``, optional, modify parameters of the event builder algorithm (see ``raw_event_builder.py``)
+         - ``mc_tracks_dset_name`` : ``str``, optional, output dataset path for mc truth tracks (if present)
 
         The ``dset_name`` points to a lightweight array used to organize
         low-level event references.
@@ -50,6 +51,8 @@ class RawEventGenerator(H5FlowGenerator):
             unix_ts     u8, unix timestamp of event [s since epoch]
 
     '''
+    class_version = '0.1.0'
+
     default_buffer_size = 38400
     default_nhit_cut = 100
     default_sync_noise_cut = [100000, 10000000]
@@ -57,6 +60,7 @@ class RawEventGenerator(H5FlowGenerator):
     default_event_builder_class = 'SymmetricWindowRawEventBuilder'
     default_event_builder_config = dict()
     default_packets_dset_name = 'charge/packets'
+    default_mc_tracks_dset_name = 'charge/mc_truth/tracks'
 
     raw_event_dtype = np.dtype([
         ('id', 'u8'),
@@ -80,11 +84,16 @@ class RawEventGenerator(H5FlowGenerator):
         # set up input file
         self.input_fh = h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm)
         self.packets = self.input_fh['packets']
+        self.is_mc = 'mc_packets_assn' in self.input_fh
+        self.mc_assn = self.input_fh['mc_packets_assn'] if self.is_mc else None
+        self.mc_tracks = self.input_fh['tracks'] if self.is_mc else None
 
         # set up new data objects
         self.packets_dtype = self.packets.dtype
         self.packets_dset_name = params.get('packets_dset_name', self.default_packets_dset_name)
         self.raw_event_dset_name = self.dset_name
+        self.mc_tracks_dtype = self.mc_tracks.dtype if self.is_mc else None
+        self.mc_tracks_dset_name = params.get('mc_tracks_dset_name', self.default_mc_tracks_dset_name)
 
         # set up loop variables
         if self.start_position is None:
@@ -123,8 +132,13 @@ class RawEventGenerator(H5FlowGenerator):
             start_position=self.start_position,
             end_position=self.end_position,
             input_filename=self.input_filename,
+            is_mc=self.is_mc,
+            packets_dset_name=self.packets_dset_name,
             **self.event_builder.get_config()
             )
+        if self.is_mc:
+            self.data_manager.set_attrs(self.raw_event_dset_name,
+                mc_tracks_dset_name=self.mc_tracks_dset_name)
 
     def finish(self):
         self.input_fh.close()
@@ -145,6 +159,10 @@ class RawEventGenerator(H5FlowGenerator):
         self.iteration += 1
 
         block = self.packets[sl]
+        if self.is_mc:
+            mc_assn = self.mc_assn[sl]
+        else:
+            mc_assn = None
 
         mask = (block['valid_parity'].astype(bool) & (block['packet_type'] == 0)) # data packets
         mask = mask | (block['packet_type'] == 4) # timestamp packets
@@ -154,6 +172,8 @@ class RawEventGenerator(H5FlowGenerator):
         packet_buffer = np.copy(block[mask])
         self.pass_last_unix_ts(packet_buffer)
         packet_buffer = np.insert(packet_buffer, [0], self.last_unix_ts)
+        if self.is_mc:
+            mc_assn = mc_assn[mask]
 
         # find unix timestamp groups
         ts_mask = packet_buffer['packet_type'] == 4
@@ -162,6 +182,8 @@ class RawEventGenerator(H5FlowGenerator):
         unix_ts = np.concatenate(unix_ts_grps, axis=0) \
             if len(unix_ts_grps) else np.empty((0,), dtype=packet_buffer.dtype)
         packet_buffer = packet_buffer[~ts_mask]
+        if self.is_mc:
+            mc_assn = mc_assn[~ts_mask]
         packet_buffer['timestamp'] = packet_buffer['timestamp'].astype(int) % (2**31) # ignore 32nd bit from pacman triggers
         self.last_unix_ts = unix_ts[-1] if len(unix_ts) else self.last_unix_ts
 
@@ -170,16 +192,30 @@ class RawEventGenerator(H5FlowGenerator):
             sync_noise_mask = (packet_buffer['timestamp'] > self.sync_noise_cut[0]) & (packet_buffer['timestamp'] < self.sync_noise_cut[1])
             packet_buffer = packet_buffer[sync_noise_mask]
             unix_ts = unix_ts[sync_noise_mask]
+            if self.is_mc:
+                mc_assn = mc_assn[sync_noise_mask]
 
         # run event builder
-        events, event_unix_ts = self.event_builder.build_events(packet_buffer, unix_ts)
+        eb_rv = self.event_builder.build_events(packet_buffer, unix_ts, mc_assn)
+        events, event_unix_ts = eb_rv if not self.is_mc else eb_rv[:-1]
+        if self.is_mc:
+            event_mc_assn = eb_rv[-1]
+        else:
+            event_mc_assn = None
 
         # apply nhit cut
         nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
+        if self.is_mc
+            mc_assn_filtered = list(filter(lambda x: len(x) >= self.nhit_cut, event_mc_assn))
+
         if len(nhit_filtered):
             events, event_unix_ts = zip(*nhit_filtered)
+            if self.is_mc:
+                event_mc_assn = mc_assn_filtered
         else:
             events, event_unix_ts = list(),list()
+            if self.is_mc:
+                event_mc_assn = list()
         nevents = len(events)
 
         # write event to file
@@ -203,6 +239,21 @@ class RawEventGenerator(H5FlowGenerator):
             if len(events) else np.empty(0, dtype=raw_event_idcs.dtype)
         ref = np.c_[ev_idcs, packets_idcs]
         self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, ref)
+
+        if self.is_mc:
+            # write mc data to file
+            track_src_idx, track_src_idx_inv = np.unique(np.concatenate(event_mc_assn, axis=0), return_inverse=True)
+            tracks = self.mc_tracks[track_src_idx] if len(track_src_idx) else np.empty((0,), dtype=self.mc_tracks_dtype)
+            tracks_slice = self.data_manager.reserve_data(self.mc_tracks_dset_name, len(tracks_array))
+            tracks_dest_idx = np.r_[tracks_slice]
+
+            # set up packet references
+            ref = np.c_[packets_index, tracks_dest_idx[track_src_idx_inv]]
+            self.data_manager.write_ref(self.packets_dset_name, self.mc_tracks_dset_name, ref)
+
+            # set up event references
+            ref = np.unique(np.c_[ev_idcs, tracks_dest_idx[track_src_idx_inv]], axis=0)
+            self.data_manager.write_ref(self.raw_event_dset_name, self.mc_tracks_dset_name, ref)
 
         return raw_event_slice if sl is not H5FlowGenerator.EMPTY else H5FlowGenerator.EMPTY
 
