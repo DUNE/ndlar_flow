@@ -69,6 +69,11 @@ class TimestampCorrector(H5FlowStage):
         return (0.,0.)
 
     def init(self, source_name):
+        # check if MC
+        if self.data_manager.get_attrs(source_name)['is_mc']:
+            # don't do a correction
+            self.correction = defaultdict(self._default_correction)
+
         # write all configuration variables to the dataset
         self.data_manager.set_attrs(self.ts_dset_name,
             classname=self.classname,
