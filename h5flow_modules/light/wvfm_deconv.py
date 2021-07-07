@@ -92,7 +92,7 @@ class WaveformDeconvolution(H5FlowStage):
         if self.noise_strategy not in (self.NOISE_PPS, self.NOISE_SLICE):
             raise RuntimeError(f'Invalid noise estimation strategy: {self.noise_strategy}')
         self.noise_slice = slice(*params.get('noise_slice',(None,None)))
-        self.signal_amplitude = slice(*params.get('signal_amplitude',(-np.inf,np.inf)))
+        self.signal_amplitude = params.get('signal_amplitude',(-np.inf,np.inf))
 
         self.gen_noise_spectrum = params.get('gen_noise_spectrum',False)
         self.gen_signal_spectrum = params.get('gen_signal_spectrum',False)
@@ -260,7 +260,7 @@ class WaveformDeconvolution(H5FlowStage):
             if np.any(pps_mask):
                 # only use wvfms within signal amplitude window
                 wvfm_mask = (wvfms > self.signal_amplitude[0]) & (wvfms < self.signal_amplitude[-1])
-                wvfm_mask = wvfm_mask.any(axis=-1)
+                wvfm_mask = wvfm_mask.any(axis=-1, keepdims=True)
 
                 signal_fft = np.fft.rfft(wvfms, axis=-1)
 
@@ -284,7 +284,7 @@ class WaveformDeconvolution(H5FlowStage):
             if np.any(pps_mask):
                 # only use wvfms within signal amplitude window
                 wvfm_mask = (wvfms > self.signal_amplitude[0]) & (wvfms < self.signal_amplitude[-1])
-                wvfm_mask = wvfm_mask.any(axis=-1)
+                wvfm_mask = wvfm_mask.any(axis=-1, keepdims=True)
 
                 # oversample waveform
                 interpolation_samples = wvfms.shape[-1] * self.impulse_alignment_oversampling
