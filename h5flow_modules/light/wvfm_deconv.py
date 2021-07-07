@@ -137,7 +137,7 @@ class WaveformDeconvolution(H5FlowStage):
             # interpolate mis-matched FFTs
             fft_shape = wvfm_dset.dtype['samples'].shape[-1]//2+1
             for spectrum in (self.noise_spectrum, self.signal_spectrum):
-                s = spectrum['spectrum']
+                s = spectrum['spectrum'] / spectrum['spectrum'].shape[-1]
                 s_shape = s.shape[-1]
                 if s_shape != fft_shape:
                     logging.warning(f'Input spectrum size mismatch (in: {s_shape}, needed: {fft_shape}). '\
@@ -367,7 +367,6 @@ class WaveformDeconvolution(H5FlowStage):
                 # merge
                 total_n = np.sum([s['n'] for s in noise_spectra], axis=0)
                 total_spectrum = np.sum([s['spectrum'] * s['n'] for s in noise_spectra], axis=0) / total_n
-                total_spectrum /= total_spectrum.shape[-1]
 
                 # save to file
                 np.savez_compressed(self.noise_spectrum_filename, spectrum=total_spectrum, n=total_n)
@@ -380,7 +379,6 @@ class WaveformDeconvolution(H5FlowStage):
                 # merge
                 total_n = np.sum([s['n'] for s in signal_spectra], axis=0)
                 total_spectrum = np.sum([s['spectrum'] * s['n'] for s in signal_spectra], axis=0) / total_n
-                total_spectrum /= total_spectrum.shape[-1]
 
                 # save to file
                 np.savez_compressed(self.signal_spectrum_filename, spectrum=total_spectrum, n=total_n)
