@@ -27,6 +27,26 @@ class WaveformDeconvolution(H5FlowStage):
         Finally, can also generate an impulse response function from non-PPS
         light triggers using the rising-edge aligned waveform average
 
+        Parameters:
+         - ``wvfm_dset_name``: waveform dataset to analyze, required
+         - ``filter_channels``: ``list`` of channels to apply filter on, others are copied, required
+         - ``deconv_dset_name``: output dataset name, required
+         - ``pps_channel``: channel to detect PPS events, default=32
+         - ``pps_threshold``: threshold to detect PPS events, default=0
+         - ``noise_strategy``: noise estimation strategy (for noise extraction only), either ``pps`` or ``slice``, default=``pps``
+         - ``noise_slice``: samples to use for noise estimation if noise strategy is ``slice``
+         - ``signal_amplitude``: bounds for waveform amplitude to include in signal and impulse function extraction, default=``(-inf,inf)``
+         - ``gen_noise_spectrum``: flag to produce a noise spectrum .npz file from analyzed waveforms, default=``False``
+         - ``gen_signal_spectrum``: flag to produce a signal spectrum .npz file from analyzed waveforms, default=``False``
+         - ``gen_signal_impulse``: flag to produce an impulse .npz file from analyzed waveforms, default=``False``
+         - ``impulse_alignment_oversampling``: factor to increase samples for aligning waveforms, default=10
+         - ``do_filtering``: flag to produce inverse/wiener filtered dataset from input .npz files, , default=``True``
+         - ``filter_type``: set inverse filtering strategy, either ``wiener`` or ``inverse``, default=``wiener``
+         - ``inverse_gaus_width``: set gaussian filter width applied to inverse-filtered waveforms, default=``2``
+         - ``noise_spectrum_filename``: filename for input/output noise spectrum .npz, default=``wvfm_deconv_noise_power.npz``
+         - ``signal_spectrum_filename``: filename for input/output signal spectrum .npz, default=``wvfm_deconv_signal_power.npz``
+         - ``signal_impulse_filename``: filename for input/output signal impulse .npz, default=``wvfm_deconv_signal_impulse.npz``
+
         Example config::
 
             # configuration for impulse, signal, and noise extraction
@@ -53,6 +73,7 @@ class WaveformDeconvolution(H5FlowStage):
     default_signal_spectrum_filename = 'wvfm_deconv_signal_power.npz'
     default_signal_impulse_filename = 'wvfm_deconv_signal_impulse.npz'
     default_inverse_gaus_width = 2
+    default_signal_amplitude = (0,np.inf)
 
     FILT_WIENER = 'wiener'
     FILT_INVERSE = 'inverse'
@@ -71,6 +92,7 @@ class WaveformDeconvolution(H5FlowStage):
         if self.noise_strategy not in (self.NOISE_PPS, self.NOISE_SLICE):
             raise RuntimeError(f'Invalid noise estimation strategy: {self.noise_strategy}')
         self.noise_slice = slice(*params.get('noise_slice',(None,None)))
+        self.signal_amplitude = slice(*params.get('signal_amplitude',(-np.inf,np.inf)))
 
         self.gen_noise_spectrum = params.get('gen_noise_spectrum',False)
         self.gen_signal_spectrum = params.get('gen_signal_spectrum',False)
@@ -212,6 +234,7 @@ class WaveformDeconvolution(H5FlowStage):
 
                     spectrum = ma.array(np.abs(fft)**2, mask=~np.broadcast_to(mask, fft.shape))
                     spectrum = spectrum.mean(axis=0)
+                    spectrum[spectrum.mask] = 0
                     n = np.count_nonzero(mask, axis=0)
 
                     # interpolate back to "full" fft
@@ -235,11 +258,16 @@ class WaveformDeconvolution(H5FlowStage):
             pps_mask = pps_mask.reshape(pps_mask.shape + (1,1))
 
             if np.any(pps_mask):
+                # only use wvfms within signal amplitude window
+                wvfm_mask = (wvfms > self.signal_amplitude[0]) & (wvfms < self.signal_amplitude[-1])
+                wvfm_mask = wvfm_mask.any(axis=-1)
+
                 signal_fft = np.fft.rfft(wvfms, axis=-1)
 
-                spectrum = ma.array(np.abs(signal_fft)**2, mask=~np.broadcast_to(pps_mask, signal_fft.shape))
+                spectrum = ma.array(np.abs(signal_fft)**2, mask=~np.broadcast_to(pps_mask & wvfm_mask, signal_fft.shape))
                 spectrum = spectrum.mean(axis=0)
-                n = np.count_nonzero(pps_mask, axis=0)
+                spectrum[spectrum.mask] = 0.
+                n = np.count_nonzero(pps_mask & wvfm_mask, axis=0)
 
                 old_n = self.signal_spectrum['n']
                 self.signal_spectrum['spectrum'] = (n * spectrum + \
@@ -254,6 +282,10 @@ class WaveformDeconvolution(H5FlowStage):
             pps_mask = pps_mask.reshape(pps_mask.shape + (1,1))
 
             if np.any(pps_mask):
+                # only use wvfms within signal amplitude window
+                wvfm_mask = (wvfms > self.signal_amplitude[0]) & (wvfms < self.signal_amplitude[-1])
+                wvfm_mask = wvfm_mask.any(axis=-1)
+
                 # oversample waveform
                 interpolation_samples = wvfms.shape[-1] * self.impulse_alignment_oversampling
                 signal_wvfms_interp = scipy.interpolate.CubicSpline(
@@ -287,9 +319,10 @@ class WaveformDeconvolution(H5FlowStage):
                 # resample
                 aligned_wvfms = aligned_wvfms[:,:,:,::self.impulse_alignment_oversampling]
 
-                impulse = ma.array(aligned_wvfms, mask=~np.broadcast_to(pps_mask, aligned_wvfms.shape))
+                impulse = ma.array(aligned_wvfms, mask=~np.broadcast_to(pps_mask & wvfm_mask, aligned_wvfms.shape))
                 impulse = impulse.mean(axis=0)
-                n = np.count_nonzero(pps_mask, axis=0)
+                impulse[impulse.mask] = 0
+                n = np.count_nonzero(pps_mask & wvfm_mask, axis=0)
 
                 old_n = self.signal_impulse['n']
                 self.signal_impulse['impulse'] = (n * impulse + \
@@ -334,6 +367,7 @@ class WaveformDeconvolution(H5FlowStage):
                 # merge
                 total_n = np.sum([s['n'] for s in noise_spectra], axis=0)
                 total_spectrum = np.sum([s['spectrum'] * s['n'] for s in noise_spectra], axis=0) / total_n
+                total_spectrum /= total_spectrum.shape[-1]
 
                 # save to file
                 np.savez_compressed(self.noise_spectrum_filename, spectrum=total_spectrum, n=total_n)
@@ -346,6 +380,7 @@ class WaveformDeconvolution(H5FlowStage):
                 # merge
                 total_n = np.sum([s['n'] for s in signal_spectra], axis=0)
                 total_spectrum = np.sum([s['spectrum'] * s['n'] for s in signal_spectra], axis=0) / total_n
+                total_spectrum /= total_spectrum.shape[-1]
 
                 # save to file
                 np.savez_compressed(self.signal_spectrum_filename, spectrum=total_spectrum, n=total_n)

@@ -10,9 +10,13 @@ wvfm_extract_sig_noise:
     - 'light/fwvfm'
   params:
     wvfm_dset_name: 'light/fwvfm' # use pedestal+noise subtracted waveforms
+    noise_strategy: PPS # or slice
+    noise_slice: [-256, null] # last 256 samples
     pps_threshold: 5000
+    signal_amplitude: [1000,5000]
     gen_noise_spectrum: True
     gen_signal_spectrum: True
     gen_signal_impulse: True
     impulse_alignment_oversampling: 10
     do_filtering: False
+
