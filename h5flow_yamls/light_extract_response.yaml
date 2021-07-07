@@ -1,8 +1,14 @@
 # Pulls signal and noise from light waveforms (for deconvolution filter)
 
 flow:
-  source: 'light/events'
+  source: event_loop
   stages: [wvfm_extract_sig_noise]
+
+event_loop:
+  classname: H5FlowDatasetLoopGenerator
+  dset_name: 'light/events'
+  params:
+    chunk_size: 128
 
 wvfm_extract_sig_noise:
   classname: WaveformDeconvolution
