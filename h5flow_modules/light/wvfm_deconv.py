@@ -103,7 +103,7 @@ class WaveformDeconvolution(H5FlowStage):
 
         self.do_filtering = params.get('do_filtering',True)
         self.filter_type = params.get('filter_type',self.FILT_WIENER).lower()
-        if self.filter_type not in (self.FILT_WIENER, self.FILT_INVERSE):
+        if self.filter_type not in (self.FILT_WIENER, self.FILT_INVERSE, self.FILT_MATCHED):
             raise RuntimeError(f'Invalid filter type: {self.filter_type}')
         self.gaus_filter_width = params.get('gaus_filter_width', self.default_gaus_filter_width)
         self.filter_channels = np.array(params.get('filter_channels'))
