@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.ma as ma
 import logging
+import os
 import scipy.interpolate
 
 from h5flow.core import H5FlowStage
@@ -136,6 +137,7 @@ class WaveformDeconvolution(H5FlowStage):
 
         if self.do_filtering:
             self.noise_spectrum = dict(np.load(self.noise_spectrum_filename))
+            self.signal_impulse = dict(np.load(self.signal_impulse_filename))
             self.signal_spectrum = dict(np.load(self.signal_spectrum_filename)) \
                 if os.path.exists(self.signal_spectrum_filename) else \
                 dict(
@@ -344,7 +346,7 @@ class WaveformDeconvolution(H5FlowStage):
             with np.errstate(divide='ignore', invalid='ignore'):
                 # wiener deconvolution
                 if self.filter_type == self.FILT_WIENER:
-                    sig_power = np.mean(np.abs(fft)**2 - self.noise_spectrum['spectrum'], axis=-1)
+                    sig_power = np.mean(np.abs(fft)**2 - self.noise_spectrum['spectrum'], axis=-1, keepdims=True)
                     filt_fft = fft * np.conj(impulse_fft) * sig_power \
                                / (sig_power * np.abs(impulse_fft)**2 + self.noise_spectrum['spectrum'])
                 elif self.filter_type == self.FILT_INVERSE:
