@@ -64,8 +64,12 @@ code here [https://github.com/peter-madigan/ADCViewer64-Module0].
 light event reconstruction
 --------------------------
 
-This is a work in progress... but performs low-level waveform processing
-for light events. It takes as input a light event built ``module0_flow`` file.
+To run light reconstruction::
+
+    mpiexec h5flow -c h5flow_yamls/light_event_reconstruction.yaml -i <input file> -o <output file>
+
+This generates ``light/t_ns`` and ``light/hits`` datasets. The input file is a light event built ``module0_flow``
+file. The light event reconstruction also removes raw waveforms from the file.
 
 charge-to-light association
 ---------------------------
