@@ -42,8 +42,8 @@ class WaveformDeconvolution(H5FlowStage):
          - ``gen_signal_impulse``: flag to produce an impulse .npz file from analyzed waveforms, default=``False``
          - ``impulse_alignment_oversampling``: factor to increase samples for aligning waveforms, default=10
          - ``do_filtering``: flag to produce inverse/wiener filtered dataset from input .npz files, , default=``True``
-         - ``filter_type``: set inverse filtering strategy, either ``wiener`` or ``inverse``, default=``wiener``
-         - ``inverse_gaus_width``: set gaussian filter width applied to inverse-filtered waveforms, default=``2``
+         - ``filter_type``: set inverse filtering strategy, either ``wiener``, ``inverse``, or ``matched``, default=``wiener``
+         - ``gaus_filter_width``: set gaussian filter width applied to filtered waveforms, a value of 0 does not apply a gaussian filter, default=``0``
          - ``noise_spectrum_filename``: filename for input/output noise spectrum .npz, default=``wvfm_deconv_noise_power.npz``
          - ``signal_spectrum_filename``: filename for input/output signal spectrum .npz, default=``wvfm_deconv_signal_power.npz``
          - ``signal_impulse_filename``: filename for input/output signal impulse .npz, default=``wvfm_deconv_signal_impulse.npz``
@@ -62,8 +62,8 @@ class WaveformDeconvolution(H5FlowStage):
                     gen_signal_spectrum: True
                     gen_signal_impulse: True
                     do_filtering: False
-                    filter_type: Wiener # or Inverse
-                    inverse_gaus_width: 2 # use a gaussian filter with inverse filter to reduce HF noise
+                    filter_type: Wiener #, Inverse, or Matched
+                    gaus_filter_width: 2 # use a gaussian filter to reduce HF noise
                     noise_strategy: PPS # or slice
                     noise_slice: [-256, null] # last 256 samples
 
@@ -73,11 +73,12 @@ class WaveformDeconvolution(H5FlowStage):
     default_noise_spectrum_filename = 'wvfm_deconv_noise_power.npz'
     default_signal_spectrum_filename = 'wvfm_deconv_signal_power.npz'
     default_signal_impulse_filename = 'wvfm_deconv_signal_impulse.npz'
-    default_inverse_gaus_width = 2
+    default_gaus_filter_width = 0
     default_signal_amplitude = (0,np.inf)
 
     FILT_WIENER = 'wiener'
     FILT_INVERSE = 'inverse'
+    FILT_MATCHED = 'matched'
 
     NOISE_PPS = 'pps'
     NOISE_SLICE = 'slice'
@@ -104,7 +105,7 @@ class WaveformDeconvolution(H5FlowStage):
         self.filter_type = params.get('filter_type',self.FILT_WIENER).lower()
         if self.filter_type not in (self.FILT_WIENER, self.FILT_INVERSE):
             raise RuntimeError(f'Invalid filter type: {self.filter_type}')
-        self.inverse_gaus_width = params.get('inverse_gaus_width', self.default_inverse_gaus_width)
+        self.gaus_filter_width = params.get('gaus_filter_width', self.default_gaus_filter_width)
         self.filter_channels = np.array(params.get('filter_channels'))
 
         self.deconv_dset_name = params.get('deconv_dset_name')
@@ -132,7 +133,8 @@ class WaveformDeconvolution(H5FlowStage):
 
         if self.do_filtering:
             self.noise_spectrum = dict(np.load(self.noise_spectrum_filename))
-
+            self.signal_spectrum = dict(np.load(self.signal_spectrum_filename))
+            self.signal_impulse = dict(np.load(self.signal_impulse_filename))
 
             # interpolate mis-matched FFTs
             fft_shape = wvfm_dset.dtype['samples'].shape[-1]//2+1
@@ -157,11 +159,13 @@ class WaveformDeconvolution(H5FlowStage):
                 new_impulse[...,:valid_samples] = impulse[...,:valid_samples]
                 self.signal_impulse['impulse'] = new_impulse
 
-            if self.filter_type == self.FILT_INVERSE:
-                gaus = np.exp(-0.5*np.arange(-wvfm_shape//2,wvfm_shape//2)**2/self.inverse_gaus_width**2)
+            if self.gaus_filter_width > 0:
+                gaus = np.exp(-0.5*np.arange(-wvfm_shape//2,wvfm_shape//2)**2/self.gaus_filter_width**2)
                 gaus /= gaus.sum()
                 gaus = gaus.reshape(1,1,1,wvfm_shape)
                 self.gaus_fft = np.abs(np.fft.rfft(gaus, axis=-1))
+            else:
+                self.gaus_fft = None
 
             # save noise / signal spectra used for processing
             noise_spectrum_dset = self.write_spectrum_or_impulse('noise_spectrum',
@@ -334,14 +338,21 @@ class WaveformDeconvolution(H5FlowStage):
             impulse_fft = np.fft.rfft(self.signal_impulse['impulse'])
 
             with np.errstate(divide='ignore', invalid='ignore'):
-                # wiener deconvolution
                 if self.filter_type == self.FILT_WIENER:
+                    # wiener deconvolution assuming delta-funtion signal (optimizes MSE)
                     sig_power = self.signal_spectrum['spectrum'] - self.noise_spectrum['spectrum']
                     filt_fft = fft * np.conj(impulse_fft) * sig_power \
                                / (sig_power * np.abs(impulse_fft)**2 + self.noise_spectrum['spectrum'])
                 elif self.filter_type == self.FILT_INVERSE:
-                    # inverse filter
-                    filt_fft = fft * np.conj(impulse_fft) * self.gaus_fft / np.abs(impulse_fft)**2
+                    # inverse filter (perfect if no noise)
+                    filt_fft = fft * np.conj(impulse_fft) / np.abs(impulse_fft)**2
+                elif self.filter_type == self.FILT_MATCHED:
+                    # general matched filter (optimizes SNR)
+                    filt_fft = fft * np.conj(impulse_fft) / np.sqrt(self.noise_spectrum['spectrum'])
+
+                # further gaussian filtering
+                if self.gaus_fft is not None:
+                    filt_fft *= self.gaus_fft
 
             filt_fft[np.isnan(filt_fft) | ~np.isfinite(filt_fft)] = 0. # protect against invalid values
             filt_wvfms = np.fft.irfft(filt_fft, axis=-1)
