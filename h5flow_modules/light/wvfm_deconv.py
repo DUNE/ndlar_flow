@@ -336,7 +336,7 @@ class WaveformDeconvolution(H5FlowStage):
             with np.errstate(divide='ignore', invalid='ignore'):
                 # wiener deconvolution
                 if self.filter_type == self.FILT_WIENER:
-                    sig_power = np.mean(np.abs(fft)**2 - self.noise_spectrum['spectrum'], axis=-1, keepdims=True)
+                    sig_power = self.signal_spectrum['spectrum'] - self.noise_spectrum['spectrum']
                     filt_fft = fft * np.conj(impulse_fft) * sig_power \
                                / (sig_power * np.abs(impulse_fft)**2 + self.noise_spectrum['spectrum'])
                 elif self.filter_type == self.FILT_INVERSE:
