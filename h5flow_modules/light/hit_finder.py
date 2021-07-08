@@ -50,7 +50,7 @@ class WaveformHitFinder(H5FlowStage):
     default_busy_channel = 0
     default_sample_rate = 10
     default_interpolation = 256
-    default_global_threshold = 500
+    default_global_threshold = 2000
     default_channel_threshold = lambda self,global_threshold : defaultdict(lambda : defaultdict(lambda : global_threshold))
     default_channel_mask = []
 
