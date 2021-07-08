@@ -41,7 +41,7 @@ class WaveformHitFinder(H5FlowStage):
             max_spline  f4,             maximum of spline around peak
             ns_spline   f4,             offset from PPS timestamp of peak for maximum of spline [ns]
             rising_spline f4,           projection of spline to rising edge zero-crossing (offset from peak) [ns]
-            rising_spline_err f4,       an estimate of the error on the rising edge zero-crossing [ns]
+            rising_err_spline f4,       an estimate of the error on the rising edge zero-crossing [ns]
 
     '''
 
@@ -179,7 +179,7 @@ class WaveformHitFinder(H5FlowStage):
             rising_subsamples = subsamples[:self.near_samples*self.interpolation]
             # project back to 0-crossing
             peak_rising_spline = rising_subsamples - peak_spline(rising_subsamples) / peak_spline_d(rising_subsamples)
-            peak_rising_spline_err = peak_rising_spline.std(axis=-1) * self.sample_rate
+            peak_rising_err_spline = peak_rising_spline.std(axis=-1) * self.sample_rate
             peak_rising_spline = peak_rising_spline.mean(axis=-1) * self.sample_rate
             
             # find busy signal rising edge
@@ -203,7 +203,7 @@ class WaveformHitFinder(H5FlowStage):
             hit_data['max_spline'] = peak_max_spline.ravel()
             hit_data['ns_spline'] = peak_ns_spline.ravel()
             hit_data['rising_spline'] = peak_rising_spline.ravel()
-            hit_data['rising_spline_err'] = peak_rising_spline_err.ravel()
+            hit_data['rising_err_spline'] = peak_rising_err_spline.ravel()
         else:
             hit_data = np.empty((0,), dtype=self.hits_dtype)
 
