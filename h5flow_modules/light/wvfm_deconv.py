@@ -111,6 +111,10 @@ class WaveformDeconvolution(H5FlowStage):
         self.signal_spectrum_filename = params.get('signal_spectrum_filename', self.default_signal_spectrum_filename)
         self.signal_impulse_filename = params.get('signal_impulse_filename', self.default_signal_impulse_filename)
 
+        self.noise_spectrum = None
+        self.signal_spectrum = None
+        self.signal_impulse = None
+
     def write_spectrum_or_impulse(self, name, data, spectrum=False, impulse=False, **attrs):
         if spectrum:
             dtype = np.dtype([('spectrum', data.dtype, data.shape)])
@@ -128,24 +132,29 @@ class WaveformDeconvolution(H5FlowStage):
 
     def init(self, source_name):
         wvfm_dset = self.data_manager.get_dset(self.wvfm_dset_name)
+        fft_shape = (wvfm_dset.dtype['samples'].shape[-1]//2+1,)
 
         if self.do_filtering:
             self.noise_spectrum = dict(np.load(self.noise_spectrum_filename))
-            self.signal_spectrum = dict(np.load(self.signal_spectrum_filename))
-            self.signal_impulse = dict(np.load(self.signal_impulse_filename))
+            self.signal_spectrum = dict(np.load(self.signal_spectrum_filename)) \
+                if os.path.exists(self.signal_spectrum_filename) else \
+                dict(
+                    spectrum = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+fft_shape, dtype=wvfm_dset.dtype['samples'].base),
+                    n = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+(1,), dtype=int)
+                )
 
-            # interpolate mis-matched FFTs
+            # interpolate mis-matched noise FFTs
             fft_shape = wvfm_dset.dtype['samples'].shape[-1]//2+1
-            for spectrum in (self.noise_spectrum, self.signal_spectrum):
-                s = spectrum['spectrum'] / spectrum['spectrum'].shape[-1]
-                s_shape = s.shape[-1]
-                if s_shape != fft_shape:
-                    logging.warning(f'Input spectrum size mismatch (in: {s_shape}, needed: {fft_shape}). '\
-                                 'Interpolating assuming same sample rate...')
-                    spline = scipy.interpolate.CubicSpline(np.linspace(0,fft_shape,s_shape), s, axis=-1)
-                    s = spline(np.arange(fft_shape))
-                    s[np.isnan(s)] = 0
-                    spectrum['spectrum'] = s
+            spectrum = self.noise_spectrum
+            s = spectrum['spectrum'] / spectrum['spectrum'].shape[-1]
+            s_shape = s.shape[-1]
+            if s_shape != fft_shape:
+                logging.warning(f'Input spectrum size mismatch (in: {s_shape}, needed: {fft_shape}). '\
+                             'Interpolating assuming same sample rate...')
+                spline = scipy.interpolate.CubicSpline(np.linspace(0,fft_shape,s_shape), s, axis=-1)
+                s = spline(np.arange(fft_shape))
+                s[np.isnan(s)] = 0
+                spectrum['spectrum'] = s
 
             wvfm_shape = wvfm_dset.dtype['samples'].shape[-1]
             impulse = self.signal_impulse['impulse']
@@ -167,9 +176,6 @@ class WaveformDeconvolution(H5FlowStage):
             noise_spectrum_dset = self.write_spectrum_or_impulse('noise_spectrum',
                 self.noise_spectrum['spectrum'], spectrum=True,
                 filename=self.noise_spectrum_filename)
-            signal_spectrum_dset = self.write_spectrum_or_impulse('signal_spectrum',
-                self.signal_spectrum['spectrum'], spectrum=True,
-                filename=self.signal_spectrum_filename)
             signal_impulse_dset = self.write_spectrum_or_impulse('signal_impulse',
                 self.signal_impulse['impulse'], impulse=True,
                 filename=self.signal_impulse_filename)
@@ -180,20 +186,22 @@ class WaveformDeconvolution(H5FlowStage):
                 classname=self.classname,
                 class_version=self.class_version,
                 noise_spectrum=noise_spectrum_dset.ref,
-                signal_spectrum=signal_spectrum_dset.ref,
                 signal_impulse=signal_impulse_dset.ref,
                 filter_channels=self.filter_channels
             )
-        else:
-            fft_shape = (wvfm_dset.dtype['samples'].shape[-1]//2+1,)
+
+        # make sure all spectra / impulse tables are loaded
+        if self.noise_spectrum is None:
             self.noise_spectrum = dict(
                 spectrum = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+fft_shape, dtype=wvfm_dset.dtype['samples'].base),
                 n = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+(1,), dtype=int)
                 )
+        if self.signal_spectrum is None:
             self.signal_spectrum = dict(
                 spectrum = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+fft_shape, dtype=wvfm_dset.dtype['samples'].base),
                 n = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+(1,), dtype=int)
                 )
+        if self.signal_impulse is None:
             self.signal_impulse = dict(
                 impulse = np.zeros(wvfm_dset.dtype['samples'].shape, dtype=wvfm_dset.dtype['samples'].base),
                 n = np.zeros(wvfm_dset.dtype['samples'].shape[:-1]+(1,), dtype=int)
