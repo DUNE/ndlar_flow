@@ -44,6 +44,7 @@ class WaveformHitFinder(H5FlowStage):
             rising_err_spline f4,       an estimate of the error on the rising edge zero-crossing [ns]
 
     '''
+    class_version = '0.0.1'
 
     default_hits_dset_name = 'light/hits'
     default_near_samples = 3
