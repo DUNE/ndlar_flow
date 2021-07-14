@@ -158,7 +158,7 @@ class WaveformHitFinder(H5FlowStage):
             # hits are present in event, extract parameters
             peaks = tuple(p[threshold_mask].reshape(-1,1) for p in peaks)
             peak_max = peak_max[threshold_mask]
-            peak_ns = t[peaks[:3]] + peaks[-1] * self.sample_rate
+            peak_ns = t[peaks[:3]]
 
             # get neighboring samples
             peak_sample_index = np.clip(
