@@ -192,6 +192,7 @@ class WaveformHitFinder(H5FlowStage):
             peak_busy_ns = (peaks[-1] - rising_edge[peaks[:2]].reshape(-1,1)) * self.sample_rate
 
             hit_data = np.empty((len(peaks[-1])), dtype=self.hits_dtype)
+            hit_data['adc'] = peaks[1].ravel()
             hit_data['sn'] = wvfm_sn[peaks[:2]].ravel()
             hit_data['ch'] = wvfm_ch[peaks[:3]].ravel()
             hit_data['ns'] = peak_ns.ravel()
