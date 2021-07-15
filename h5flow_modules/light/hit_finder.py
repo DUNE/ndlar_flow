@@ -182,6 +182,9 @@ class WaveformHitFinder(H5FlowStage):
             peak_rising_spline_samples = ma.array(rising_subsamples - peak_spline(rising_subsamples) / peak_spline_d(rising_subsamples), mask=rising_subsamples >= peak_ns_spline)
             peak_rising_spline = ma.median(peak_rising_spline_samples, axis=-1) * self.sample_rate
             peak_rising_err_spline = ma.median(np.abs(peak_rising_spline_samples-peak_rising_spline), axis=-1) * self.sample_rate
+            peak_rising_spline_samples = ma.array(peak_rising_spline_samples, mask=np.abs(peak_rising_spline_samples-peak_rising_spline) < peak_rising_err_spline)
+            peak_rising_spline = ma.median(peak_rising_spline_samples, axis=-1) * self.sample_rate
+            peak_rising_err_spline = ma.median(np.abs(peak_rising_spline_samples-peak_rising_spline), axis=-1) * self.sample_rate
 
             # find busy signal rising edge
             busy_sig = wvfms[...,self.busy_channel,:]
