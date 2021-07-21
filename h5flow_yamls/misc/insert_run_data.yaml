@@ -1,0 +1,11 @@
+# Inserts run and lar data into analysis files from runlist, if not present
+
+flow:
+  source: 'charge/raw_events' # uncomment for charge files
+  # source: 'light/events' # uncomment for light files
+  stages: [] # don't do any processing, just loop
+  drop: []
+
+resources:
+  - !include h5flow_yamls/resources/run_data.yaml
+  - !include h5flow_yamls/resources/lar_data.yaml

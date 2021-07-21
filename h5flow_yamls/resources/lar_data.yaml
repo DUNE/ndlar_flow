@@ -1,0 +1,3 @@
+classname: LArData
+params:
+  path: 'lar_info'

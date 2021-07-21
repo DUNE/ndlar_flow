@@ -5,6 +5,8 @@ flow:
   stages: [charge_light_associator]
   drop: []
 
+resources: !include h5flow_yamls/resources/*.yaml
+
 charge_light_associator: # performs charge/light association
   classname: Charge2LightAssociation # charge/charge2light.py
   requires:

@@ -4,6 +4,8 @@ flow:
   source: event_loop
   stages: [wvfm_extract_sig_noise]
 
+resources: !include h5flow_yamls/resources/*.yaml
+
 event_loop:
   classname: H5FlowDatasetLoopGenerator
   dset_name: 'light/events'

@@ -5,6 +5,8 @@ flow:
   stages: [] # just generate events, no analysis stages
   drop: []
 
+resources: !include h5flow_yamls/resources/*.yaml
+
 light_event_generator:
   classname: LightEventGenerator # light/raw_event_generator.py
   dset_name: 'light/events'
