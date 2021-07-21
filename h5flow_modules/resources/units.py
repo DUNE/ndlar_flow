@@ -12,8 +12,6 @@ class Units(H5FlowResource):
             module0_val = ext_val * (resources['Units'].m / resources['Units'].s)
             module0_val # 0.001 mm/us
 
-            1000 / 1000000
-
         To export a number from Module 0 flow units to a particular unit system,
         divide::
 
@@ -21,34 +19,55 @@ class Units(H5FlowResource):
             ext_val = module0_val / (resources['Units'].kV / resources['Units'].cm)
             ext_val # 0.5 kV/cm
 
+        Example config::
+
+            resources:
+                - classname: Units
+
     '''
     # ~~~ time units ~~~
-    s   = 1000000*us
-    ms  = 1000*us
+    #: microseconds
     us  = 1
+    #: seconds
+    s   = 1000000*us
+    #: milliseconds
+    ms  = 1000*us
+    #: nanoseconds
     ns  = 1e-3*us
 
+    #: LArPix 10MHz clock cycles
     larpix_ticks    = 100*ns
+    #: Light detector 100MHz clock cycles
     lds_ticks       = 10*ns
 
     # ~~~ length units ~~~
+    #: millimeter
     mm  = 1
+    #: centimeter
     cm  = 10*mm
+    #: meter
     m   = 1000*mm
+    #: kilometer
     km  = 1000000*mm
 
     # ~~~ energy units ~~~
-    GeV     = 1000000*keV
-    MeV     = 1000*keV
+    #: kiloelectron-volts
     keV     = 1
-    eV      = 1e-3*keV
+    #: gigaelectron-volts
+    GeV     = 1000000*keV
+    #: megaelectron-volts
+    MeV     = 1000*keV
 
     # ~~~ electrodynamic units ~~~
+    #: electron charge
     e   = 1
-    MV  = 1000*kV
+    #: kilovolts
     kV  = keV/e
+    #: volts
     V   = 1e-3*kV
+    #: millivolts
     mV  = 1e-6*kV
 
     # ~~~ temperature units ~~~
+    #: Kelvin
     K   = 1

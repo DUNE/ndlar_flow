@@ -6,9 +6,29 @@ from h5flow.core import H5FlowResource, resources
 class LArData(H5FlowResource):
     '''
         Provides helper functions for calculating properties of liquid argon.
-        Some values will be saved to attributes in the
+        Values will be saved and/or loaded from metadata within the output file.
 
-        Requires both Units and RunData resources within workflow.
+        Requires both ``Units`` and ``RunData`` resources within workflow.
+
+        Parameters:
+         - ``path``: ``str``, path to stored lar data within file
+         - ``electron_mobility_params``: ``list``, electron mobility calculation parameters, see ``LArData.electron_mobility``
+
+        Provides:
+         - ``v_drift``: electron drift velocity in mm/us
+
+        Example usage::
+
+            from h5flow.core import resources
+
+            resources['LArData'].v_drift
+
+        Example config::
+
+            resources:
+                - classname: LArData
+                  params:
+                    path: 'lar_info'
 
     '''
     class_version = '0.0.0'
@@ -17,7 +37,7 @@ class LArData(H5FlowResource):
     default_electron_mobility_params = np.array([551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053])
 
     def __init__(self, **params):
-        super(LArData,self).__init__(self, **params)
+        super(LArData,self).__init__(**params)
 
         self.path = params.get('path', self.default_path)
 
@@ -31,8 +51,9 @@ class LArData(H5FlowResource):
 
         logging.info(f'v_drift: {self.v_drift}')
 
-    @cached_property
+    @property
     def v_drift(self):
+        ''' Electron drift velocity in kV/mm '''
         if 'v_drift' in self.data:
             return self.data['v_drift']
 
@@ -44,25 +65,23 @@ class LArData(H5FlowResource):
 
         return self.data['v_drift']
 
-    def electron_mobility(self, e, t=89):
+    def electron_mobility(self, e, t=85.3):
         '''
             Calculation of the electron mobility w.r.t temperature and electric
             field.
 
-            Refs:
-                [0]: https://lar.bnl.gov/properties/trans.html (summary)
-                [1]: https://doi.org/10.1016/j.nima.2016.01.073
+            References:
+             - https://lar.bnl.gov/properties/trans.html (summary)
+             - https://doi.org/10.1016/j.nima.2016.01.073 (parameterization)
 
-            Note for units:
-                Accepts an electric field and temperature in "module0_flow" units
+            :param e: electric field in kV/mm
+
+            :param t: temperature in K
+
+            :returns: electron mobility in mm^2/kV/us
 
         '''
-        a0 = self.electron_mobility_params[0]
-        a1 = self.electron_mobility_params[1]
-        a2 = self.electron_mobility_params[2]
-        a3 = self.electron_mobility_params[3]
-        a4 = self.electron_mobility_params[4]
-        a5 = self.electron_mobility_params[5]
+        a0,a1,a2,a3,a4,a5 = self.electron_mobility_params
 
         e = e / (resources['Units'].kV / resources['Units'].cm)
         t = t / (resources['Units'].K)
@@ -72,10 +91,10 @@ class LArData(H5FlowResource):
         temp_corr = np.power(t/89,-1.5)
 
         mu = num / denom * temp_corr
+
         mu = mu * ((resources['Units'].cm**2) / resources['Units'].V / resources['Units'].s)
 
         return mu
-
 
     def finish(self, source_name):
         # write data (if present)
