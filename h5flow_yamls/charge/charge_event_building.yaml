@@ -5,7 +5,10 @@ flow:
   stages: [] # just generate events, no analysis stages
   drop: []
 
-resources: !include h5flow_yamls/resources/*.yaml
+resources:
+  - !include h5flow_yamls/resources/units.yaml
+  - !include h5flow_yamls/resources/run_data.yaml
+  - !include h5flow_yamls/resources/lar_data.yaml
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files
   classname: RawEventGenerator # charge/raw_event_generator.py

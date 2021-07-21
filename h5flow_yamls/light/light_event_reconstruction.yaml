@@ -5,7 +5,10 @@ flow:
   stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, hit_finder]
   drop: ['light/wvfm', 'light/fwvfm', 'light/deconv'] # drop waveforms from output file
 
-resources: !include h5flow_yamls/resources/*.yaml
+resources:
+  - !include h5flow_yamls/resources/units.yaml
+  - !include h5flow_yamls/resources/run_data.yaml
+  - !include h5flow_yamls/resources/lar_data.yaml
 
 timestamp_corrector:
   classname: LightTimestampCorrector # light/timestamp_corrector.py

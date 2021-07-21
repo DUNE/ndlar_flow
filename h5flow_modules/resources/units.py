@@ -1,5 +1,4 @@
 from h5flow.core import H5FlowResource
-from h5flow import resources
 
 class Units(H5FlowResource):
     '''

@@ -5,8 +5,7 @@ import ROOT
 from collections import defaultdict
 import logging
 
-from h5flow.core import H5FlowGenerator
-from h5flow import resources
+from h5flow.core import H5FlowGenerator, resources
 
 class LightEventGenerator(H5FlowGenerator):
     '''

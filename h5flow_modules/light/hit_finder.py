@@ -4,8 +4,8 @@ import logging
 from collections import defaultdict
 import scipy.interpolate
 
-from h5flow.core import H5FlowStage
-from h5flow import H5FLOW_MPI, resources
+from h5flow.core import H5FlowStage, resources
+from h5flow import H5FLOW_MPI
 
 class WaveformHitFinder(H5FlowStage):
     '''

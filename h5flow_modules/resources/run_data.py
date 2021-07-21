@@ -2,10 +2,8 @@ import numpy as np
 import numpy.lib.recfunctions as rfn
 from collections import defaultdict
 import logging
-from functools import cached_property
 
-from h5flow.core import H5FlowResource
-from h5flow import resources
+from h5flow.core import H5FlowResource, resources
 
 class RunData(H5FlowResource):
     '''
@@ -110,23 +108,23 @@ class RunData(H5FlowResource):
         self.data['e_field'] = float(self.data['e_field']) * (resources['Units'].kV / resources['Units'].cm)
         self.data['light_samples'] = int(self.data['light_samples'])
 
-    @cached_property
+    @property
     def charge_filename(self):
         return self.data['charge_filename']
 
-    @cached_property
+    @property
     def light_filename(self):
         return self.data['light_filename']
 
-    @cached_property
+    @property
     def e_field(self):
         return self.data['e_field']
 
-    @cached_property
+    @property
     def light_samples(self):
         return self.data['light_samples']
 
-    @cached_property
+    @property
     def charge_thresholds(self):
         return self.data['charge_thresholds']
 

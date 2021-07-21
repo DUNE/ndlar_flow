@@ -1,7 +1,7 @@
-from functools import cached_property
+import numpy as np
+import logging
 
-from h5flow.core import H5FlowResource
-from h5flow import resources
+from h5flow.core import H5FlowResource, resources
 
 class LArData(H5FlowResource):
     '''
