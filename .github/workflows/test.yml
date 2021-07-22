@@ -1,0 +1,45 @@
+name: Linting and tests
+
+on:
+  push:
+    branches: [ develop, main ]
+  pull_request:
+    branches: [ develop, main ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: conda-incubator/setup-miniconda@v2
+      with:
+        auto-update-conda: true
+        activate-environment: test
+        python-version: "3.7"
+    - name: Install
+      run: |
+        cd ..
+        git clone https://github.com/peter-madigan/h5flow.git
+        conda env update --file environment.yml
+        pip install --no-deps .
+
+        cd module0_flow
+        conda env update --file env.yml
+        conda install flake8
+    - name: Lint
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: Run tests
+      run: |
+        pytest
+        mpiexec pytest --with-mpi
