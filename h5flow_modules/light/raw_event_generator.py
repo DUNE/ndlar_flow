@@ -105,7 +105,7 @@ class LightEventGenerator(H5FlowGenerator):
         self.entry = self.rank
 
     def init(self):
-        super(LightEventGenerator,self).init()
+        super(LightEventGenerator,self).init(source_name)
 
         if self.data_manager.dset_exists(self.event_dset_name):
             raise RuntimeError(f'{self.event_dset_name} already exists, refusing to append!')
