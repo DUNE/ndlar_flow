@@ -17,6 +17,22 @@ LRS waveform noise filter module
    :members:
    :show-inheritance:
 
+LRS waveform deconvolution module
+---------------------------------
+
+.. automodule:: h5flow_modules.light.wvfm_deconv
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
+LRS waveform hit finding module
+-------------------------------
+
+.. automodule:: h5flow_modules.light.hit_finder
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
 LRS waveform summary module
 ---------------------------
 

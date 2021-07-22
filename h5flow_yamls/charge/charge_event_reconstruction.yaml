@@ -5,11 +5,16 @@ flow:
   stages: [timestamp_corrector, ext_trig_finder, hit_builder, event_builder]
   drop: []
 
+resources:
+  - !include h5flow_yamls/resources/units.yaml
+  - !include h5flow_yamls/resources/run_data.yaml
+  - !include h5flow_yamls/resources/lar_data.yaml
+
 raw_events:
   classname: H5FlowDatasetLoopGenerator
   dset_name: 'charge/raw_events'
   params:
-    chunk_size: 256
+    chunk_size: 8
 
 timestamp_corrector: # corrects for different pacman frequencies
   classname: TimestampCorrector # charge/timestamp_corrector.py

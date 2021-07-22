@@ -1,0 +1,4 @@
+classname: RunData
+params:
+  path: 'run_info'
+  runlist_file: 'runlist.txt'

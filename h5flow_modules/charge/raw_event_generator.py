@@ -103,7 +103,13 @@ class RawEventGenerator(H5FlowGenerator):
         self.slices = [slice(st, st + self.buffer_size) for st in range(self.start_position + self.rank * self.buffer_size, self.end_position, self.size * self.buffer_size)]
         self.iteration = 0
 
-        self.last_unix_ts = self.packets[np.argmax(self.packets['packet_type']==4)] # first timestamp packet
+        # get first timestamp packet from file, without loading the full dataset
+        self.last_unix_ts = np.empty((0,), dtype=self.packets_dtype)
+        for sl in self.slices:
+            timestamp_packets = self.packets[sl]['packet_type'] == 4
+            if np.any(timestamp_packets):
+                self.last_unix_ts = self.packets[np.argmax(timestamp_packets)]
+                break
 
     def __len__(self):
         return len(self.slices)
