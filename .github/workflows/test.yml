@@ -25,14 +25,15 @@ jobs:
         python-version: "3.7"
     - name: Install
       run: |
-        cd ..
+        pwd
+        cd .. ; pwd
         git clone https://github.com/peter-madigan/h5flow.git
-        cd h5flow
+        cd h5flow ; pwd
         conda env update --file environment.yml
         pip install --no-deps .
 
-        cd ../module0_flow
-        conda env update --file env.yml
+        cd ../module0_flow ; pwd
+        conda env update --file env.yaml
         conda install flake8
     - name: Lint
       run: |
