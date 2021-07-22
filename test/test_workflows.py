@@ -66,7 +66,7 @@ def data_directory(pytestconfig, tmp_path_factory):
             # a temporary directory exists in cache, copy from there
             new_dirname = tmp_path_factory.mktemp('module0_flow', numbered=False)
 
-            print(f'Copying existing data from {dirname}...')
+            print(f'Copying cached data from {dirname}...')
 
             for file in data_files:
                 if not os.path.exists(os.path.join(new_dirname, file)):
@@ -99,7 +99,7 @@ def charge_event_built_file(fresh_data_files):
         charge_source_file,
         verbose=2,
         start_position=5273174,
-        end_position=5273174+10000)
+        end_position=5273174+1000)
 
     return output_filename
 
@@ -141,8 +141,8 @@ def light_event_built_file(fresh_data_files):
         output_filename,
         light_source_file,
         verbose=2,
-        start_position=9*128*128,
-        end_position=10*128*128)
+        start_position=153840,
+        end_position=153840+10000)
 
     return output_filename
 
@@ -158,7 +158,7 @@ def test_light_event_building(light_event_built_file):
 
 @pytest.fixture
 def light_reco_file(light_event_built_file):
-    print('Charge event reconstruction...')
+    print('Light event reconstruction...')
     h5flow.run('h5flow_yamls/light/light_event_reconstruction.yaml',
         output_filename,
         light_event_built_file,
