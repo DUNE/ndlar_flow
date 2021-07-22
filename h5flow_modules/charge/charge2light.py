@@ -132,7 +132,11 @@ class Charge2LightAssociation(H5FlowStage):
 
         ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1,1)
         ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
-        ev_ref = np.unique(np.c_[ev_id[ext_trigs_mask][idcs[:,0]], idcs[:,1]], axis=0)
+
+        if len(idcs):
+            ev_ref = np.unique(np.c_[ev_id[ext_trigs_mask][idcs[:,0]], idcs[:,1]], axis=0)
+        else:
+            ev_ref = np.empty((0,2), dtype=int)
 
         # write references
         # ext trig -> light event

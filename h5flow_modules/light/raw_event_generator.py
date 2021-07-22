@@ -102,10 +102,10 @@ class LightEventGenerator(H5FlowGenerator):
         self.rwf = self.root_file.Get('rwf')
         self.end_position = self.rwf.GetEntries() if self.end_position is None else min(self.end_position, self.rwf.GetEntries())
         self.start_position = 0 if self.start_position is None else self.start_position
-        self.entry = self.rank
+        self.entry = self.start_position
 
     def init(self):
-        super(LightEventGenerator,self).init(source_name)
+        super(LightEventGenerator,self).init()
 
         if self.data_manager.dset_exists(self.event_dset_name):
             raise RuntimeError(f'{self.event_dset_name} already exists, refusing to append!')
