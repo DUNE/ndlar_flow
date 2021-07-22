@@ -139,6 +139,9 @@ class RawEventGenerator(H5FlowGenerator):
         if self.is_mc:
             self.data_manager.set_attrs(self.raw_event_dset_name,
                 mc_tracks_dset_name=self.mc_tracks_dset_name)
+            self.data_manager.create_dset(self.mc_tracks_dset_name, dtype=self.mc_tracks_dtype)
+            self.data_manager.create_ref(self.packets_dset_name, self.mc_tracks_dset_name)
+            self.data_manager.create_ref(self.raw_event_dset_name, self.mc_tracks_dset_name)
 
     def finish(self):
         self.input_fh.close()
