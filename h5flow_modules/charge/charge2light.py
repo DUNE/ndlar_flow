@@ -3,7 +3,7 @@ import numpy.ma as ma
 import numpy.lib.recfunctions as rfn
 import logging
 
-from h5flow.core import H5FlowStage
+from h5flow.core import H5FlowStage, resources
 
 class Charge2LightAssociation(H5FlowStage):
     '''
@@ -12,7 +12,7 @@ class Charge2LightAssociation(H5FlowStage):
 
         |light_unix_ts_second - charge_unix_ts_second| <= unix_ts_window
         AND
-        |light_ts_10MHz - charge_ts_10MHz| <= self.ts_window
+        |light_ts_10MHz - charge_ts_10MHz| <= ts_window
 
     where ``*_unix_ts_second`` is the unix timestamp of the event in seconds and
     ``*_ts_10MHz`` is the timestamp in 10MHz ticks since SYNC / PPS. Creates
@@ -22,7 +22,12 @@ class Charge2LightAssociation(H5FlowStage):
     Requires the ``ext_trigs_dset`` in the data cache as well as its indices
     (stored under the name ``ext_trigs_dset + '_idcs'``).
 
+    Also requires Units resource.
+
     Example config::
+
+        resources:
+            - classname: Units
 
         charge_light_associator:
           classname: Charge2LightAssociation
@@ -73,10 +78,10 @@ class Charge2LightAssociation(H5FlowStage):
         self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
         self.light_unix_ts = self.data_manager.get_dset(self.light_event_dset_name)['utime_ms'][:]
         self.light_unix_ts = ma.array(self.light_unix_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
-        self.light_unix_ts = self.light_unix_ts / 1000. # convert ms -> s
+        self.light_unix_ts = self.light_unix_ts * (resources['Units'].ms / resources['Units'].s) # convert ms -> s
         self.light_ts = self.data_manager.get_dset(self.light_event_dset_name)['tai_ns'][:]
         self.light_ts = ma.array(self.light_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
-        self.light_ts = self.light_ts / 100. # convert ns -> 0.1us
+        self.light_ts = self.light_ts * (resources['Units'].ns / resources['Units'].larpix_ticks) # convert ns -> larpix clock ticks
 
         self.light_unix_ts_start = self.light_unix_ts.min()
         self.light_unix_ts_end = self.light_unix_ts.max()

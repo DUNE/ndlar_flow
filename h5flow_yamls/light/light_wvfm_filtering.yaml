@@ -4,6 +4,11 @@ flow:
   source: 'light/events'
   stages: [wvfm_noise_filter, wvfm_deconv_inverse, wvfm_deconv_wiener, wvfm_deconv_matched]
 
+resources:
+  - !include h5flow_yamls/resources/units.yaml
+  - !include h5flow_yamls/resources/run_data.yaml
+  - !include h5flow_yamls/resources/lar_data.yaml
+
 wvfm_noise_filter:
   classname: WaveformNoiseFilter # light/wvfm_noise_filter.py
   requires:
