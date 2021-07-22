@@ -60,7 +60,7 @@ class RawEventGenerator(H5FlowGenerator):
     default_event_builder_class = 'SymmetricWindowRawEventBuilder'
     default_event_builder_config = dict()
     default_packets_dset_name = 'charge/packets'
-    default_mc_tracks_dset_name = 'charge/mc_truth/tracks'
+    default_mc_tracks_dset_name = 'mc_truth/tracks'
 
     raw_event_dtype = np.dtype([
         ('id', 'u8'),
