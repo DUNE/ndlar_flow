@@ -155,7 +155,7 @@ class WaveformDeconvolution(H5FlowStage):
                 logging.warning(f'Input impulse function size mismatch (in: {impulse.shape[-1]}, needed: {wvfm_shape}). '\
                                  'Truncating to shorter length...')
                 new_impulse = np.zeros(wvfm_dset.dtype['samples'].shape, dtype=wvfm_dset.dtype['samples'].base)
-                valid_samples = min(wvfm_shape, impulse_shape[-1])
+                valid_samples = min(wvfm_shape, impulse.shape[-1])
                 new_impulse[...,:valid_samples] = impulse[...,:valid_samples]
                 self.signal_impulse['impulse'] = new_impulse
 
