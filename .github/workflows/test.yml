@@ -27,10 +27,11 @@ jobs:
       run: |
         cd ..
         git clone https://github.com/peter-madigan/h5flow.git
+        cd h5flow
         conda env update --file environment.yml
         pip install --no-deps .
 
-        cd module0_flow
+        cd ../module0_flow
         conda env update --file env.yml
         conda install flake8
     - name: Lint
