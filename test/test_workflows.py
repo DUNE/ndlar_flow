@@ -7,7 +7,7 @@ import shutil
 import h5flow
 
 charge_source_file    = 'datalog_2021_04_04_00_41_40_CEST.h5'
-charge_source_file_mc = 'datalog.edep.14110.h5'
+charge_source_file_mc = 'datalog.edep.all.h5'
 light_source_file     = 'rwf_20210404_004206.data.root'
 geometry_file       = 'multi_tile_layout-2.2.16.yaml'
 larpix_config_file  = 'evd_config_21-03-31_12-36-13.json'
@@ -66,7 +66,7 @@ def data_directory(pytestconfig, tmp_path_factory):
                 print(f'{src}/{file} -> {file}')
                 shutil.copy(os.path.join(src, file), os.path.join(dest, file))
 
-    return dirname
+    return dest
 
 @pytest.fixture
 def fresh_data_files(data_directory):
