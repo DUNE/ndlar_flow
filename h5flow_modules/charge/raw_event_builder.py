@@ -274,10 +274,11 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             # calculate sum of rollovers
             mask = (packets['io_group'] == io_group)
             rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
-            # correct for readout delay
-            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
-                & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
-            rollover[mask] -= self.rollover_ticks
+            # correct for readout delay (only in real data)
+            if mc_assn is None:
+                mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
+                    & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
+                rollover[mask] -= self.rollover_ticks
 
         ts = packets['timestamp'].astype('i8')+rollover
 
