@@ -5,7 +5,12 @@ on:
     branches: [ develop, main ]
   pull_request:
     branches: [ develop, main ]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      refresh_cache:
+        description: 'Refresh caches'
+        required: true
+        default: false
 
 jobs:
   build:
@@ -40,14 +45,13 @@ jobs:
 
     - name: Install
       run: |
-        pwd ; ls -lah; ls -lah *
-        cd .. ; pwd ; ls -lah
+        cd -v ..
         git clone https://github.com/peter-madigan/h5flow.git
-        cd h5flow ; pwd ; ls -lah
+        cd -v h5flow
         conda env update --file environment.yml
         pip install --no-deps .
 
-        cd ../module0_flow ; pwd ; ls -lah
+        cd -v ../module0_flow
         conda env update --file env.yaml
         conda install flake8
 
@@ -58,9 +62,12 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-    - name: Run tests
+    - name: Run tests (w/o cached data)
+      if: github.event.inputs.refresh_cache
       run: |
-        pwd ; ls -lah
-        mkdir -p .pytest/
-        pwd ; ls -lah; ls -lah .pytest/*
+        pytest -s -vv --basetemp=.pytest --cache-clear
+
+    - name: Run tests (w/ cached data)
+      if: github.event.inputs.refresh_cache == false
+      run: |
         pytest -s -vv --basetemp=.pytest
