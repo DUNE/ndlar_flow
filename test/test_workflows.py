@@ -31,7 +31,6 @@ data_files = [
 
 output_filename = 'test.h5'
 
-
 @pytest.fixture
 def data_directory(pytestconfig, tmp_path_factory):
     dirname = pytestconfig.cache.get('data_directory', None)
