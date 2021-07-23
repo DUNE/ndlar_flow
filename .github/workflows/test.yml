@@ -25,6 +25,9 @@ jobs:
           .pytest
           .pytest_cache
         key: ${{ runner.OS }}-pytest-${{ hashFiles('**/test*.py') }}-0
+      run: |
+        pwd; ls -lah;
+        ls -lah .pytest*
 
     - uses: actions/cache@v2
       with:
@@ -40,14 +43,14 @@ jobs:
 
     - name: Install
       run: |
-        pwd
-        cd .. ; pwd
+        pwd ; ls -lah
+        cd .. ; pwd ; ls -lah
         git clone https://github.com/peter-madigan/h5flow.git
-        cd h5flow ; pwd
+        cd h5flow ; pwd ; ls -lah
         conda env update --file environment.yml
         pip install --no-deps .
 
-        cd ../module0_flow ; pwd
+        cd ../module0_flow ; pwd ; ls -lah
         conda env update --file env.yaml
         conda install flake8
 
@@ -60,5 +63,7 @@ jobs:
 
     - name: Run tests
       run: |
+        pwd ; ls -lah
         mkdir -p .pytest/
+        pwd ; ls -lah; ls -lah .pytest/*
         pytest -s -vv --basetemp=.pytest
