@@ -146,10 +146,10 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.create_ref(self.packets_dset_name, self.mc_tracks_dset_name)
             self.data_manager.create_ref(self.raw_event_dset_name, self.mc_tracks_dset_name)
 
-        if self.is_mc:
-            # copy meta-data from input file
-            resources['LArData'].data['v_drift'] = self.input_fh['configs'].attrs['vdrift'] * \
-                (resources['Units'].cm / resources['Units'].us)
+        # if self.is_mc:
+        #     # copy meta-data from input file
+        #     resources['LArData'].data['v_drift'] = self.input_fh['configs'].attrs['vdrift'] * \
+        #         (resources['Units'].cm / resources['Units'].us)
 
         # get first timestamp packet from file, without loading the full dataset
         self.last_unix_ts = np.empty((0,), dtype=self.packets_dtype)
