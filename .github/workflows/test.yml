@@ -21,7 +21,7 @@ jobs:
 
     - uses: actions/cache@v2
       with:
-        path: ~/.pytest
+        path: .pytest
         key: ${{ runner.OS }}-pytest-${{ hashFiles('**/test*.py') }}
 
     - uses: actions/cache@v2
@@ -58,4 +58,5 @@ jobs:
 
     - name: Run tests
       run: |
-        pytest -s -vv --basetemp=~/.pytest/
+        mkdir -p .pytest/
+        pytest -s -vv --basetemp=.pytest
