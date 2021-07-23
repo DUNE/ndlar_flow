@@ -25,9 +25,6 @@ jobs:
           .pytest
           .pytest_cache
         key: ${{ runner.OS }}-pytest-${{ hashFiles('**/test*.py') }}-0
-      run: |
-        pwd; ls -lah;
-        ls -lah .pytest*
 
     - uses: actions/cache@v2
       with:
@@ -43,7 +40,7 @@ jobs:
 
     - name: Install
       run: |
-        pwd ; ls -lah
+        pwd ; ls -lah; ls -lah *
         cd .. ; pwd ; ls -lah
         git clone https://github.com/peter-madigan/h5flow.git
         cd h5flow ; pwd ; ls -lah
