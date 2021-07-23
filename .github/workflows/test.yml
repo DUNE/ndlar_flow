@@ -20,13 +20,10 @@ jobs:
     - name: checkout
       uses: actions/checkout@v2
 
-    - name: pytest cache
-      uses: actions/cache@v2
-      with:
-        path: |
-          .pytest
-          .pytest_cache
-        key: ${{ runner.OS }}-pytest-${{ hashFiles('**/test*.py') }}-1
+    - name: checkout h5flow
+      run: |
+        cd ..
+        git clone https://github.com/peter-madigan/h5flow.git
 
     - name: conda cache
       uses: actions/cache@v2
@@ -42,15 +39,16 @@ jobs:
         python-version: "3.7"
         use-only-tar-bz2: true
 
-    - name: install
+    - name: install h5flow
       run: |
-        cd ..
-        git clone https://github.com/peter-madigan/h5flow.git
         cd h5flow
         conda env update --file environment.yml
         pip install --no-deps .
+        cd -
 
-        cd ../module0_flow
+    - name: install module0_flow
+      run: |
+        cd module0_flow
         conda env update --file env.yaml
         conda install flake8
 
@@ -63,6 +61,4 @@ jobs:
 
     - name: test
       run: |
-        mkdir -p .pytest
-        ls -a .pytest ; if [ -e .pytest/module0_flow ]; then ls -a .pytest/*; fi
-        pytest -s -vv --basetemp=.pytest
+        pytest -s -vv
