@@ -22,12 +22,9 @@ class Charge2LightAssociation(H5FlowStage):
     Requires the ``ext_trigs_dset`` in the data cache as well as its indices
     (stored under the name ``ext_trigs_dset + '_idcs'``).
 
-    Also requires Units resource.
+    Also requires Units and RunData resources in workflow.
 
     Example config::
-
-        resources:
-            - classname: Units
 
         charge_light_associator:
           classname: Charge2LightAssociation

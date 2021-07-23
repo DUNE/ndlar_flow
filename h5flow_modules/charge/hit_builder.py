@@ -29,6 +29,8 @@ class HitBuilder(H5FlowStage):
         ``packets_dset_name``, ``ts_dset_name``, and ``packets_index_name`` are required in
         the data cache. ``packets_index_name`` must point to the index for ``packets_dset_name``.
 
+        Requires RunData resource in workflow.
+
         Example config::
 
             hit_builder:

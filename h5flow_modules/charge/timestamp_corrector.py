@@ -24,6 +24,8 @@ class TimestampCorrector(H5FlowStage):
         The ``packets_dset_name`` is required in the data cache along with
         its indices under the name of ``'{packets_dset_name}_index'``.
 
+        Requires RunData resource in workflow.
+
         Example config::
 
             timestamp_corrector:

@@ -22,6 +22,8 @@ class LightEventGenerator(H5FlowGenerator):
         Generates a lightweight "event" dataset along with a dataset containing
         event-packed raw waveforms.
 
+        Requires RunData resource in workflow.
+
         Example config::
 
             flow:

@@ -25,6 +25,8 @@ class WaveformHitFinder(H5FlowStage):
 
          Both ``wvfm_dset_name`` and ``t_ns_dset_name`` are required in the cache.
 
+         Requires RunData resource in workflow.
+
          ``hits`` datatype::
 
             id          u4,             unique identifier
