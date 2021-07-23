@@ -21,8 +21,10 @@ jobs:
 
     - uses: actions/cache@v2
       with:
-        path: .pytest
-        key: ${{ runner.OS }}-pytest-${{ hashFiles('**/test*.py') }}
+        path: |
+          .pytest
+          .pytest_cache
+        key: ${{ runner.OS }}-pytest-${{ hashFiles('**/test*.py') }}-0
 
     - uses: actions/cache@v2
       with:
