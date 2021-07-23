@@ -5,7 +5,7 @@ import logging
 import yaml
 import json
 
-from h5flow.core import H5FlowStage
+from h5flow.core import H5FlowStage, resources
 
 class HitBuilder(H5FlowStage):
     '''
@@ -65,6 +65,20 @@ class HitBuilder(H5FlowStage):
     '''
     class_version = '1.1.0'
 
+    #: pixel xy, replaced by lookup table appropriate for input geometry file
+    geometry = lambda self,max_hash : np.zeros((max_hash+1, 2)) # pixel xy
+
+    #: ASIC ADC configuration lookup table
+    configuration = defaultdict(lambda: dict(
+            vref_mv=1300,
+            vcm_mv=288
+        ))
+
+    #: pixel pedestal value
+    pedestal = defaultdict(lambda: dict(
+            pedestal_mv=580
+        ))
+
     hits_dtype = np.dtype([
         ('id', 'u4'),
         ('px', 'f8'),
@@ -87,11 +101,11 @@ class HitBuilder(H5FlowStage):
         self.pedestal_file = params.get('pedestal_file','')
         self.configuration_file = params.get('configuration_file','')
 
+    def init(self, source_name):
         self.load_geometry()
         self.load_pedestals()
         self.load_configurations()
 
-    def init(self, source_name):
         # save all config info
         self.data_manager.set_attrs(self.hits_dset_name,
             classname=self.classname,
@@ -234,7 +248,8 @@ class HitBuilder(H5FlowStage):
                     (np.min(chip_ids), np.max(chip_ids)),
                     (np.min(channel_ids), np.max(channel_ids))
                     )
-                self.geometry = np.zeros((max_hash+1, 2)) # pixel xy
+                self.geometry = self.geometry(max_hash) # initialize lookup table
+
                 logging.debug(f'max geometry hash value: {max_hash}')
 
                 for tile in geometry_yaml['tile_chip_to_io']:
@@ -281,20 +296,13 @@ class HitBuilder(H5FlowStage):
                                           ] = geo['pixels'][pixel_id][1:3]
 
     def load_pedestals(self):
-        self.pedestal = defaultdict(lambda: dict(
-            pedestal_mv=580
-        ))
-        if self.pedestal_file != '':
+        if self.pedestal_file != '' and not resources['RunData'].is_mc:
             with open(self.pedestal_file, 'r') as infile:
                 for key, value in json.load(infile).items():
                     self.pedestal[key] = value
 
     def load_configurations(self):
-        self.configuration = defaultdict(lambda: dict(
-            vref_mv=1300,
-            vcm_mv=288
-        ))
-        if self.configuration_file != '':
+        if self.configuration_file != '' and not resources['RunData'].is_mc:
             with open(self.configuration_file, 'r') as infile:
                 for key, value in json.load(infile).items():
                     self.configuration[key] = value

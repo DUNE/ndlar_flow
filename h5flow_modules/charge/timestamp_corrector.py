@@ -3,7 +3,7 @@ import numpy.lib.recfunctions as rfn
 from collections import defaultdict
 import logging
 
-from h5flow.core import H5FlowStage
+from h5flow.core import H5FlowStage, resources
 
 class TimestampCorrector(H5FlowStage):
     '''
@@ -70,8 +70,8 @@ class TimestampCorrector(H5FlowStage):
 
     def init(self, source_name):
         # check if MC
-        if self.data_manager.get_attrs(source_name)['is_mc']:
-            # don't do a correction
+        if resources['RunData'].is_mc:
+            # bypass correction for MC
             self.correction = defaultdict(self._default_correction)
 
         # write all configuration variables to the dataset
