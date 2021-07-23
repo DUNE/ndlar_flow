@@ -22,6 +22,7 @@ jobs:
 
     - name: checkout h5flow
       run: |
+        cd ..
         git clone https://github.com/peter-madigan/h5flow.git
 
     - name: conda cache
@@ -40,7 +41,7 @@ jobs:
 
     - name: install h5flow
       run: |
-        cd h5flow
+        cd ../h5flow
         conda env update --file environment.yml
         pip install --no-deps .
 
