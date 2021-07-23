@@ -35,7 +35,6 @@ jobs:
         activate-environment: test
         python-version: "3.7"
         use-only-tar-bz2: true
-        channel-priority: strict
 
     - name: Install
       run: |
