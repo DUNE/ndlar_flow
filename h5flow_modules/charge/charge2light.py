@@ -78,7 +78,7 @@ class Charge2LightAssociation(H5FlowStage):
         self.light_unix_ts = self.light_unix_ts * (resources['Units'].ms / resources['Units'].s) # convert ms -> s
         self.light_ts = self.data_manager.get_dset(self.light_event_dset_name)['tai_ns'][:]
         self.light_ts = ma.array(self.light_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
-        self.light_ts = self.light_ts * (resources['Units'].ns / resources['Units'].larpix_ticks) # convert ns -> larpix clock ticks
+        self.light_ts = self.light_ts * (resources['Units'].ns / resources['RunData'].crs_ticks) # convert ns -> larpix clock ticks
 
         self.light_unix_ts_start = self.light_unix_ts.min()
         self.light_unix_ts_end = self.light_unix_ts.max()

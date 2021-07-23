@@ -106,7 +106,7 @@ class WaveformHitFinder(H5FlowStage):
 
         # get convert sample rate to ns
         if self.sample_rate is None:
-            self.sample_rate = resources['Units'].lds_ticks / resources['Units'].ns
+            self.sample_rate = resources['RunData'].lrs_ticks / resources['Units'].ns
 
         # get waveform shape information
         self.nadc = wvfm_dset.dtype['samples'].shape[0]
