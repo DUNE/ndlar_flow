@@ -5,12 +5,7 @@ on:
     branches: [ develop, main ]
   pull_request:
     branches: [ develop, main ]
-  workflow_dispatch:
-    inputs:
-      refresh_cache:
-        description: 'Refresh caches'
-        required: true
-        default: false
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -62,12 +57,6 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-    - name: Run tests (w/o cached data)
-      if: github.event.inputs.refresh_cache
-      run: |
-        pytest -s -vv --basetemp=.pytest --cache-clear
-
     - name: Run tests (w/ cached data)
-      if: github.event.inputs.refresh_cache == false
       run: |
         pytest -s -vv --basetemp=.pytest
