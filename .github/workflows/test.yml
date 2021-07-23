@@ -63,4 +63,6 @@ jobs:
 
     - name: test
       run: |
+        mkdir -p .pytest
+        ls -a .pytest ; if [ -e .pytest/module0_flow ]; then ls -a .pytest/*; fi
         pytest -s -vv --basetemp=.pytest
