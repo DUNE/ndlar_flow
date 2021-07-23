@@ -36,11 +36,13 @@ output_filename = 'test.h5'
 def data_directory(pytestconfig, tmp_path_factory):
     src = pytestconfig.cache.get('data_directory', None)
     dest = tmp_path_factory.mktemp('module0_flow', numbered=False)
+
     print(f'Saving data to cache {dest}...')
+    pytestconfig.cache.set('data_directory', str(dest))
 
     urls = (
         f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/dataRuns/packetData/{charge_source_file}',
-        f'https://portal.nersc.gov/project/dune/data/Module0/simulation/larndsim/{charge_source_file_mc}'
+        f'https://portal.nersc.gov/project/dune/data/Module0/simulation/larndsim/{charge_source_file_mc}',
         f'https://portal.nersc.gov/project/dune/data/Module0/LRS/Converted/{light_source_file}',
         f'https://portal.nersc.gov/project/dune/data/Module0/{geometry_file}',
         f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/{larpix_config_file}',
@@ -63,8 +65,6 @@ def data_directory(pytestconfig, tmp_path_factory):
                 # copy from cache
                 print(f'{src}/{file} -> {file}')
                 shutil.copy(os.path.join(src, file), os.path.join(dest, file))
-
-    pytestconfig.cache.set('data_directory', str(dirname))
 
     return dirname
 
