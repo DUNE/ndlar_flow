@@ -40,6 +40,7 @@ def data_directory(pytestconfig, tmp_path_factory):
 
     urls = (
         f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/dataRuns/packetData/{charge_source_file}',
+        f'https://portal.nersc.gov/project/dune/data/Module0/simulation/larndsim/{charge_source_file_mc}'
         f'https://portal.nersc.gov/project/dune/data/Module0/LRS/Converted/{light_source_file}',
         f'https://portal.nersc.gov/project/dune/data/Module0/{geometry_file}',
         f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/{larpix_config_file}',
@@ -47,8 +48,7 @@ def data_directory(pytestconfig, tmp_path_factory):
         f'https://portal.nersc.gov/project/dune/data/Module0/{runlist_file}',
         f'https://portal.nersc.gov/project/dune/data/Module0-Run2/LRS/LED/{light_noise_file}',
         f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_signal_file}',
-        f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_impulse_file}',
-        f'https://portal.nersc.gov/project/dune/data/Module0/simulation/larndsim/{charge_source_file_mc}'
+        f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_impulse_file}'
         )
 
     for file,url in zip(data_files,urls):
