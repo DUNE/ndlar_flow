@@ -40,13 +40,13 @@ jobs:
 
     - name: Install
       run: |
-        cd -v ..
+        cd ..
         git clone https://github.com/peter-madigan/h5flow.git
-        cd -v h5flow
+        cd h5flow
         conda env update --file environment.yml
         pip install --no-deps .
 
-        cd -v ../module0_flow
+        cd ../module0_flow
         conda env update --file env.yaml
         conda install flake8
 
@@ -57,6 +57,6 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-    - name: Run tests (w/ cached data)
+    - name: Run tests
       run: |
         pytest -s -vv --basetemp=.pytest
