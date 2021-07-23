@@ -9,3 +9,5 @@ params:
     light_samples: 256
     charge_thresholds: 'medm'
     is_mc: False
+    crs_ticks: 0.1
+    lrs_ticks: 0.01

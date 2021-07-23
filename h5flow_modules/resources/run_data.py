@@ -48,13 +48,14 @@ class RunData(H5FlowResource):
         ``e_field`` run list file units are V/cm.
 
     '''
-    class_version = '0.0.0'
+    class_version = '0.1.0'
 
     default_path = 'run_info'
     default_runlist_file = 'runlist.txt'
 
     source_filename_columns = ('charge_filename', 'light_filename')
-    required_attr = ('charge_filename', 'light_filename', 'e_field', 'light_samples', 'charge_thresholds', 'is_mc')
+    required_attr = ('charge_filename', 'light_filename', 'e_field',
+        'light_samples', 'charge_thresholds', 'is_mc', 'crs_ticks', 'lrs_ticks')
 
     def __init__(self, **params):
         super(RunData,self).__init__(**params)
@@ -150,6 +151,7 @@ class RunData(H5FlowResource):
         for key in self.required_attr:
             assert key in self.data, f'missing {key} from RunData'
 
+        # convert types that might be incorrect
         self.data['e_field'] = float(self.data['e_field']) * (resources['Units'].V / resources['Units'].cm)
         self.data['light_samples'] = int(self.data['light_samples'])
 
@@ -182,6 +184,21 @@ class RunData(H5FlowResource):
     def is_mc(self):
         ''' Simulation flag, ``True`` if file comes from simulation '''
         return self.data['is_mc']
+
+    @property
+    def cds_ticks(self):
+        ''' Charge readout system clock cycle (us) '''
+        return self.data['cds_ticks']
+
+    @property
+    def crs_ticks(self):
+        ''' Charge readout system clock cycle (us) '''
+        return self.data['crs_ticks']
+
+    @property
+    def lrs_ticks(self):
+        ''' Light readout system clock cycle (us) '''
+        return self.data['lrs_ticks']
 
     def finish(self, source_name):
         self.data_manager.set_attrs(self.path, **self.data)

@@ -35,11 +35,6 @@ class Units(H5FlowResource):
     #: nanoseconds
     ns  = 1e-3*us
 
-    #: LArPix 10MHz clock cycles
-    larpix_ticks    = 100*ns
-    #: Light detector 100MHz clock cycles
-    lds_ticks       = 10*ns
-
     # ~~~ length units ~~~
     #: millimeter
     mm  = 1
