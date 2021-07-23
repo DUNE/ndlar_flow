@@ -7,7 +7,7 @@ import shutil
 import h5flow
 
 charge_source_file    = 'datalog_2021_04_04_00_41_40_CEST.h5'
-charge_source_file_mc = 'larndsim.10171.h5'
+charge_source_file_mc = 'datalog.edep.14110.h5'
 light_source_file     = 'rwf_20210404_004206.data.root'
 geometry_file       = 'multi_tile_layout-2.2.16.yaml'
 larpix_config_file  = 'evd_config_21-03-31_12-36-13.json'
@@ -34,51 +34,35 @@ output_filename = 'test.h5'
 
 @pytest.fixture
 def data_directory(pytestconfig, tmp_path_factory):
-    dirname = pytestconfig.cache.get('data_directory', None)
-    if dirname is None or not os.path.exists(dirname):
-        try:
-            # download files from nersc portal
-            dirname = tmp_path_factory.mktemp('module0_flow', numbered=False)
+    src = pytestconfig.cache.get('data_directory', None)
+    dest = tmp_path_factory.mktemp('module0_flow', numbered=False)
+    print(f'Saving data to cache {dest}...')
 
-            print(f'Saving data to temporary directory {dirname}...')
+    urls = (
+        f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/dataRuns/packetData/{charge_source_file}',
+        f'https://portal.nersc.gov/project/dune/data/Module0/LRS/Converted/{light_source_file}',
+        f'https://portal.nersc.gov/project/dune/data/Module0/{geometry_file}',
+        f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/{larpix_config_file}',
+        f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/{larpix_pedestal_config_file}',
+        f'https://portal.nersc.gov/project/dune/data/Module0/{runlist_file}',
+        f'https://portal.nersc.gov/project/dune/data/Module0-Run2/LRS/LED/{light_noise_file}',
+        f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_signal_file}',
+        f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_impulse_file}',
+        f'https://portal.nersc.gov/project/dune/data/Module0/simulation/larndsim/{charge_source_file_mc}'
+        )
 
-            urls = (
-                f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/dataRuns/packetData/{charge_source_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/LRS/Converted/{light_source_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/{geometry_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/{larpix_config_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/{larpix_pedestal_config_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/{runlist_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0-Run2/LRS/LED/{light_noise_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_signal_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_impulse_file}'
-                f'https://portal.nersc.gov/project/dune/data/Module0/simulation/larndsim/20210630_lookup/{charge_source_file_mc}'
-                )
+    for file,url in zip(data_files,urls):
+        if not os.path.exists(os.path.join(dest, file)):
+            if src is None or not os.path.exists(os.path.join(src, file)):
+                # copy from nersc portal
+                print(f'{url} -> {file}')
+                subprocess.run(['curl','-f','-O',url], check=True)
+                os.replace(file, os.path.join(dest, file))
 
-            for url in urls:
-                basename = os.path.basename(url)
-                if not os.path.exists(os.path.join(dirname, basename)):
-                    print(f'{url} -> {basename}')
-                    subprocess.run(['curl','-f','-O',url], check=True)
-                    os.replace(basename, os.path.join(dirname, basename))
-        except FileExistsError:
-            # temporary directory is already available, use that
-            dirname = os.path.join(tmp_path_factory.getbasetemp(),'module0_flow')
-    else:
-        try:
-            # a temporary directory exists in cache, copy from there
-            new_dirname = tmp_path_factory.mktemp('module0_flow', numbered=False)
-
-            print(f'Copying cached data from {dirname}...')
-
-            for file in data_files:
-                if not os.path.exists(os.path.join(new_dirname, file)):
-                    shutil.copy(os.path.join(dirname, file), os.path.join(new_dirname, file))
-
-            dirname = new_dirname
-        except FileExistsError:
-            # temporary directory is already available, use that
-            dirname = os.path.join(tmp_path_factory.getbasetemp(),'module0_flow')
+            else:
+                # copy from cache
+                print(f'{src}/{file} -> {file}')
+                shutil.copy(os.path.join(src, file), os.path.join(dest, file))
 
     pytestconfig.cache.set('data_directory', str(dirname))
 
