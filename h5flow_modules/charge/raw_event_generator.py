@@ -38,7 +38,7 @@ class RawEventGenerator(H5FlowGenerator):
                     packets_dset_name: 'charge/packets'
                     buffer_size: 38400
                     nhit_cut: 100
-                    sync_noise_cut: 100000
+                    sync_noise_cut: [100000, 10000000]
                     sync_noise_cut_enabled: True
                     event_builder_class: 'SymmetricWindowRawEventBuilder'
                     event_builder_config:
