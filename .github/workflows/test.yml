@@ -22,7 +22,6 @@ jobs:
 
     - name: checkout h5flow
       run: |
-        cd ..
         git clone https://github.com/peter-madigan/h5flow.git
 
     - name: conda cache
@@ -44,11 +43,9 @@ jobs:
         cd h5flow
         conda env update --file environment.yml
         pip install --no-deps .
-        cd -
 
     - name: install module0_flow
       run: |
-        cd module0_flow
         conda env update --file env.yaml
         conda install flake8
 
