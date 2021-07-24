@@ -4,7 +4,7 @@ import logging
 from collections import defaultdict
 import scipy.interpolate
 
-from h5flow.core import H5FlowStage
+from h5flow.core import H5FlowStage, resources
 from h5flow import H5FLOW_MPI
 
 class WaveformHitFinder(H5FlowStage):
@@ -19,11 +19,13 @@ class WaveformHitFinder(H5FlowStage):
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``near_samples``: ``int``, number of neighboring samples to keep
          - ``busy_channel``: ``int``, channel to extract ADC busy signal (used for timing)
-         - ``sample_rate``: ``float``, sample rate of waveform [ns]
+         - ``sample_rate``: ``float``, sample rate of waveform [ns], if not specified, fetched from Units resource
          - ``channel_threshold``: ``dict`` of ``dict`` containing sets of ``adc_index: {channel_index: adc_threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
          - ``channel_mask``: ``list`` of ``int``, channels to ignore when finding hits
 
          Both ``wvfm_dset_name`` and ``t_ns_dset_name`` are required in the cache.
+
+         Requires RunData resource in workflow.
 
          ``hits`` datatype::
 
@@ -49,7 +51,6 @@ class WaveformHitFinder(H5FlowStage):
     default_hits_dset_name = 'light/hits'
     default_near_samples = 3
     default_busy_channel = 0
-    default_sample_rate = 10
     default_interpolation = 256
     default_global_threshold = 2000
     default_channel_threshold = lambda self,global_threshold : defaultdict(lambda : defaultdict(lambda : global_threshold))
@@ -81,7 +82,7 @@ class WaveformHitFinder(H5FlowStage):
         self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
         self.near_samples = params.get('near_samples', self.default_near_samples)
         self.busy_channel = params.get('busy_channel', self.default_busy_channel)
-        self.sample_rate = params.get('sample_rate', self.default_sample_rate)
+        self.sample_rate = params.get('sample_rate')
         self.channel_mask = np.array(params.get('channel_mask', self.default_channel_mask))
         self.interpolation = params.get('interpolation',self.default_interpolation)
 
@@ -102,6 +103,10 @@ class WaveformHitFinder(H5FlowStage):
 
     def init(self, source_name):
         wvfm_dset = self.data_manager.get_dset(self.wvfm_dset_name)
+
+        # get convert sample rate to ns
+        if self.sample_rate is None:
+            self.sample_rate = resources['RunData'].lrs_ticks / resources['Units'].ns
 
         # get waveform shape information
         self.nadc = wvfm_dset.dtype['samples'].shape[0]
@@ -180,11 +185,11 @@ class WaveformHitFinder(H5FlowStage):
             rising_subsamples = subsamples
             # project back to 0-crossing
             peak_rising_spline_samples = ma.array(rising_subsamples - peak_spline(rising_subsamples) / peak_spline_d(rising_subsamples), mask=rising_subsamples >= peak_ns_spline)
-            peak_rising_spline = ma.median(peak_rising_spline_samples, axis=-1) * self.sample_rate
-            peak_rising_err_spline = ma.median(np.abs(peak_rising_spline_samples-peak_rising_spline), axis=-1) * self.sample_rate
+            peak_rising_spline = ma.median(peak_rising_spline_samples, axis=-1, keepdims=True) * self.sample_rate
+            peak_rising_err_spline = ma.median(np.abs(peak_rising_spline_samples-peak_rising_spline), axis=-1, keepdims=True) * self.sample_rate
             peak_rising_spline_samples = ma.array(peak_rising_spline_samples, mask=np.abs(peak_rising_spline_samples-peak_rising_spline) < peak_rising_err_spline)
-            peak_rising_spline = ma.median(peak_rising_spline_samples, axis=-1) * self.sample_rate
-            peak_rising_err_spline = ma.median(np.abs(peak_rising_spline_samples-peak_rising_spline), axis=-1) * self.sample_rate
+            peak_rising_spline = ma.median(peak_rising_spline_samples, axis=-1, keepdims=True) * self.sample_rate
+            peak_rising_err_spline = ma.median(np.abs(peak_rising_spline_samples-peak_rising_spline), axis=-1, keepdims=True) * self.sample_rate
 
             # find busy signal rising edge
             busy_sig = wvfms[...,self.busy_channel,:]

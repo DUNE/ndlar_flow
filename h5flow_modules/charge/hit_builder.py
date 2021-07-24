@@ -5,7 +5,7 @@ import logging
 import yaml
 import json
 
-from h5flow.core import H5FlowStage
+from h5flow.core import H5FlowStage, resources
 
 class HitBuilder(H5FlowStage):
     '''
@@ -20,13 +20,16 @@ class HitBuilder(H5FlowStage):
         Parameters:
          - ``hits_dset_name`` : ``str``, required, output dataset path
          - ``packets_dset_name`` : ``str``, required, input dataset path for packets
+         - ``packets_index_name`` : ``str``, required, input dataset path for packet index (defaults to ``{packets_dset_name}_index'``)
          - ``ts_dset_name`` : ``str``, required, input dataset path for clock-corrected packet timestamps
          - ``geometry_file`` : ``str``, optional, path to a pixel geometry yaml file
          - ``pedestal_file`` : ``str``, optional, path to a pedestal json file
          - ``configuration_file`` : ``str``, optional, path to a vref/vcm config json file
 
-        Both the ``packets_dset_name`` and ``ts_dset_name`` are required in
-        the data cache.
+        ``packets_dset_name``, ``ts_dset_name``, and ``packets_index_name`` are required in
+        the data cache. ``packets_index_name`` must point to the index for ``packets_dset_name``.
+
+        Requires RunData resource in workflow.
 
         Example config::
 
@@ -35,9 +38,13 @@ class HitBuilder(H5FlowStage):
                 requires:
                     - 'charge/packets'
                     - 'charge/packets_corr_ts'
+                    - name: 'charge/packets_index'
+                      path: 'charge/packets'
+                      index_only: True
                 params:
                     hits_dset_name: 'charge/hits'
                     packets_dset_name: 'charge/packets'
+                    packets_index_name: 'charge/packets_index'
                     ts_dset_name: 'charge/packets_corr_ts'
                     geometry_file: 'multi_tile_layout-2.2.16.yaml'
                     pedestal_file: 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
@@ -58,7 +65,21 @@ class HitBuilder(H5FlowStage):
             geom        u1, unused
 
     '''
-    class_version = '1.0.0'
+    class_version = '1.1.0'
+
+    #: pixel xy, replaced by lookup table appropriate for input geometry file
+    geometry = lambda self,max_hash : np.zeros((max_hash+1, 2)) # pixel xy
+
+    #: ASIC ADC configuration lookup table
+    configuration = defaultdict(lambda: dict(
+            vref_mv=1300,
+            vcm_mv=288
+        ))
+
+    #: pixel pedestal value
+    pedestal = defaultdict(lambda: dict(
+            pedestal_mv=580
+        ))
 
     hits_dtype = np.dtype([
         ('id', 'u4'),
@@ -76,16 +97,17 @@ class HitBuilder(H5FlowStage):
 
         self.hits_dset_name = params.get('hits_dset_name')
         self.packets_dset_name = params.get('packets_dset_name')
+        self.packets_index_name = params.get('packets_index_name', self.packets_dset_name+'_index')
         self.ts_dset_name = params.get('ts_dset_name')
         self.geometry_file = params.get('geometry_file','')
         self.pedestal_file = params.get('pedestal_file','')
         self.configuration_file = params.get('configuration_file','')
 
+    def init(self, source_name):
         self.load_geometry()
         self.load_pedestals()
         self.load_configurations()
 
-    def init(self, source_name):
         # save all config info
         self.data_manager.set_attrs(self.hits_dset_name,
             classname=self.classname,
@@ -101,9 +123,11 @@ class HitBuilder(H5FlowStage):
         # then set up new datasets
         self.data_manager.create_dset(self.hits_dset_name, dtype=self.hits_dtype)
         self.data_manager.create_ref(source_name, self.hits_dset_name)
+        self.data_manager.create_ref(self.hits_dset_name, self.packets_dset_name)
 
     def run(self, source_name, source_slice, cache):
         packets_data = cache[self.packets_dset_name]
+        packets_index = cache[self.packets_index_name]
         ts_data = cache[self.ts_dset_name].reshape(packets_data.shape)
 
         mask = ~rfn.structured_to_unstructured(packets_data.mask).any(axis=-1)
@@ -114,8 +138,10 @@ class HitBuilder(H5FlowStage):
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
             ts_arr = ts_data.data[mask]
+            index_arr = packets_index.data[mask]
         else:
             n = 0
+            index_arr = np.zeros((0,), dtype=packets_index.dtype)
 
         # reserve new data
         hits_slice = self.data_manager.reserve_data(self.hits_dset_name, n)
@@ -155,15 +181,14 @@ class HitBuilder(H5FlowStage):
         self.data_manager.write_data(self.hits_dset_name, hits_slice, hits_arr)
 
         # save references
-        ev_id = np.broadcast_to(
-            np.expand_dims(
-                    np.arange(source_slice.start,source_slice.stop, dtype=int),
-                    axis=-1
-                ),
-                packets_data.shape
-            )
+        ev_id = np.broadcast_to(np.expand_dims(np.r_[source_slice], axis=-1), packets_data.shape)
+        # event -> hit
         ref = np.c_[ev_id[mask], hits_arr['id']]
         self.data_manager.write_ref(source_name, self.hits_dset_name, ref)
+
+        # hit -> packet
+        ref = np.c_[hits_arr['id'], index_arr]
+        self.data_manager.write_ref(self.hits_dset_name, self.packets_dset_name, ref)
 
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped):
@@ -225,7 +250,8 @@ class HitBuilder(H5FlowStage):
                     (np.min(chip_ids), np.max(chip_ids)),
                     (np.min(channel_ids), np.max(channel_ids))
                     )
-                self.geometry = np.zeros((max_hash+1, 2)) # pixel xy
+                self.geometry = self.geometry(max_hash) # initialize lookup table
+
                 logging.debug(f'max geometry hash value: {max_hash}')
 
                 for tile in geometry_yaml['tile_chip_to_io']:
@@ -272,20 +298,13 @@ class HitBuilder(H5FlowStage):
                                           ] = geo['pixels'][pixel_id][1:3]
 
     def load_pedestals(self):
-        self.pedestal = defaultdict(lambda: dict(
-            pedestal_mv=580
-        ))
-        if self.pedestal_file != '':
+        if self.pedestal_file != '' and not resources['RunData'].is_mc:
             with open(self.pedestal_file, 'r') as infile:
                 for key, value in json.load(infile).items():
                     self.pedestal[key] = value
 
     def load_configurations(self):
-        self.configuration = defaultdict(lambda: dict(
-            vref_mv=1300,
-            vcm_mv=288
-        ))
-        if self.configuration_file != '':
+        if self.configuration_file != '' and not resources['RunData'].is_mc:
             with open(self.configuration_file, 'r') as infile:
                 for key, value in json.load(infile).items():
                     self.configuration[key] = value

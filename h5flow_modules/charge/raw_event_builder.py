@@ -26,7 +26,7 @@ class RawEventBuilder(object):
         '''
         return dict()
 
-    def build_events(self, packets, unix_ts):
+    def build_events(self, packets, unix_ts, mc_assn=None):
         '''
             Run the event builder on a sub-set of packet-formatted array data
             The unix timestamp for each packet is provided as additional meta-data
@@ -34,6 +34,8 @@ class RawEventBuilder(object):
             :param packets: packet-formatted array (shape: ``(N,)``)
 
             :param unix_ts: Unix timestamp for each packet in ``packets`` (shape: ``(N,)``)
+
+            :param mc_assn: array of mc truth associations for each packet in ``packets`` (shape: ``(N,)``)
 
             :returns: a `tuple` of `lists` of the packet array grouped into events, along with their corresponding unix timestamps
         '''
@@ -118,6 +120,7 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
 
         self.event_buffer = np.empty((0,)) # keep track of partial events from previous calls
         self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
+        self.event_buffer_mc_assn = np.empty((0,))
 
     def get_config(self):
         return dict(
@@ -125,23 +128,28 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
             max_event_dt=self.max_event_dt
             )
 
-    def build_events(self, packets, unix_ts):
-        self.cross_rank_get_attrs('event_buffer', 'event_buffer_unix_ts')
+    def build_events(self, packets, unix_ts, mc_assn=None):
+        self.cross_rank_get_attrs('event_buffer', 'event_buffer_unix_ts','event_buffer_mc_assn')
 
         if len(packets) == 0:
-            return [], []
+            return ([], []) if mc_assn is None \
+                else ([], [], [])
 
         # sort packets to fix 512 bug
         packets     = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
         sorted_idcs = np.argsort(packets, order='timestamp')
         packets     = packets[sorted_idcs]
         unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
+        if mc_assn is not None:
+            mc_assn = np.append(self.event_buffer_mc_assn, unix_ts)[sorted_idcs] if len(self.event_buffer_mc_assn) else mc_assn[sorted_idcs]
 
         # cluster into events by delta t
         packet_dt = packets['timestamp'][1:] - packets['timestamp'][:-1]
         event_idx     = np.argwhere(np.abs(packet_dt) > self.event_dt).ravel() - 1
         events        = np.split(packets, event_idx)
         event_unix_ts = np.split(unix_ts, event_idx)
+        if mc_assn is not None:
+            event_mc_assn = np.split(mc_assn, event_idx)
 
         # reserve last event of every chunk for next iteration
         if len(events):
@@ -149,24 +157,37 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
             self.event_buffer_unix_ts = np.copy(event_unix_ts[-1])
             del events[-1]
             del event_unix_ts[-1]
-        self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts')
+            if mc_assn is not None:
+                self.event_buffer_mc_assn = np.copy(event_mc_assn[-1])
+                del event_mc_assn[-1]
+        self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
 
         # break up events longer than max window
         i = 0
         while i < len(events) and len(events[i]) \
                 and events[i]['timestamp'][-1] - events[i]['timestamp'][0] > self.max_event_dt:
-            event0, event1, unix_ts0, unix_ts1 = self.split_at_timestamp(
-                events[i]['timestamp'][0] + self.max_event_dt,
-                events[i],
-                event_unix_ts[i]
+            event0, event1, unix_ts0, unix_ts1, mc_assn0, mc_assn1 = self.split_at_timestamp(
+                    events[i]['timestamp'][0] + self.max_event_dt,
+                    events[i],
+                    event_unix_ts[i]
+                ),None,None if mc_assn is None else self.split_at_timestamp(
+                    events[i]['timestamp'][0] + self.max_event_dt,
+                    events[i],
+                    event_unix_ts[i],
+                    mc_assn[i]
                 )
+
             events[i] = event0
             events.insert(i+1, event1)
             event_unix_ts[i] = unix_ts0
             event_unix_ts.insert(i+1, unix_ts1)
+            if mc_assn is not None:
+                event_mc_assn[i] = mc_assn0
+                event_mc_assn.insert(i+1, mc_assn1)
             i += 1
 
-        return events, event_unix_ts
+        return events, event_unix_ts if mc_assn is None \
+            else events, event_unix_ts, event_mc_assn
 
     @staticmethod
     def split_at_timestamp(timestamp,event,*args):
@@ -219,6 +240,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
 
         self.event_buffer = np.empty((0,)) # keep track of partial events from previous calls
         self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
+        self.event_buffer_mc_assn = np.empty((0,))
 
     def get_config(self):
         return dict(
@@ -227,15 +249,18 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             rollover_ticks=self.rollover_ticks,
             )
 
-    def build_events(self, packets, unix_ts):
+    def build_events(self, packets, unix_ts, mc_assn=None):
         # fetch attribute from appropriate process
-        self.cross_rank_get_attrs('event_buffer', 'event_buffer_unix_ts')
+        self.cross_rank_get_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
 
         if len(packets) == 0:
             self.event_buffer = np.empty((0,), dtype=packets.dtype)
             self.event_buffer_unix_ts = np.empty((0,), dtype=unix_ts.dtype)
-            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts')
-            return [], []
+            if mc_assn is not None:
+                self.event_buffer_mc_assn = np.empty((0,), dtype=mc_assn.dtype)
+            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
+            return ([], []) if mc_assn is None \
+                else ([], [], [])
 
         # sort packets to fix 512 bug
         packets  = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
@@ -249,10 +274,11 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             # calculate sum of rollovers
             mask = (packets['io_group'] == io_group)
             rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
-            # correct for readout delay
-            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
-                & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
-            rollover[mask] -= self.rollover_ticks
+            # correct for readout delay (only in real data)
+            if mc_assn is None:
+                mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
+                    & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
+                rollover[mask] -= self.rollover_ticks
 
         ts = packets['timestamp'].astype('i8')+rollover
 
@@ -260,6 +286,8 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         ts          = ts[sorted_idcs]
         packets     = packets[sorted_idcs]
         unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
+        if mc_assn is not None:
+            mc_assn = np.append(self.event_buffer_mc_assn, mc_assn)[sorted_idcs] if len(self.event_buffer_mc_assn) else mc_assn[sorted_idcs]
 
         # calculate time distance between hits
         min_ts, max_ts = np.min(ts), np.max(ts)
@@ -281,8 +309,11 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             # no events
             self.event_buffer = np.empty((0,), dtype=packets.dtype)
             self.event_buffer_unix_ts = np.empty((0,), dtype=unix_ts.dtype)
-            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts')
-            return [], []
+            if mc_assn is not None:
+                self.event_buffer_mc_assn = np.empty((0,), dtype=mc_assn.dtype)
+            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
+            return ([], []) if mc_assn is None \
+                else ([], [], [])
         if not len(event_start_timestamp):
             # first packet starts event
             event_start_timestamp = np.r_[min_ts, event_start_timestamp]
@@ -291,8 +322,11 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             mask = ts >= event_start_timestamp[-1]
             self.event_buffer = packets[mask]
             self.event_buffer_unix_ts = unix_ts[mask]
-            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts')
-            return [], []
+            if mc_assn is not None:
+                self.event_buffer_mc_assn = mc_assn[mask]
+            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
+            return ([], []) if mc_assn is None \
+                else ([], [], [])
 
         if event_end_timestamp[0] < event_start_timestamp[0]:
             # first packet is in first event, make sure you align the start/end idcs correctly
@@ -302,14 +336,19 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             mask = ts >= event_start_timestamp[-1]
             self.event_buffer = packets[mask]
             self.event_buffer_unix_ts = unix_ts[mask]
-            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts')
+            if mc_assn is not None:
+                self.event_buffer_mc_assn = mc_assn[mask]
+            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
             packets = packets[~mask]
             unix_ts = unix_ts[~mask]
+            mc_assn = mc_assn[~mask]
             event_start_timestamp = event_start_timestamp[:-1]
         else:
             self.event_buffer = np.empty((0,), dtype=packets.dtype)
             self.event_buffer_unix_ts = np.empty((0,), dtype=unix_ts.dtype)
-            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts')
+            if mc_assn is not None:
+                self.event_buffer_mc_assn = np.empty((0,), dtype=mc_assn.dtype)
+            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
 
         # break up by event
         event_mask = (ts.reshape(1,-1) > event_start_timestamp.reshape(-1,1)) \
@@ -321,9 +360,12 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
 
         events = np.split(packets, event_idcs)
         event_unix_ts = np.split(unix_ts, event_idcs)
+        if mc_assn is not None:
+            event_mc_assn = np.split(mc_assn, event_idcs)
         is_event = np.r_[False, event_mask[event_idcs]]
 
         # only return packets from events
-        return zip(*[v for i,v in enumerate(zip(events, event_unix_ts)) if is_event[i]])
+        return zip(*[v for i,v in enumerate(zip(events, event_unix_ts)) if is_event[i]]) if mc_assn is None \
+            else zip(*[v for i,v in enumerate(zip(events, event_unix_ts, event_mc_assn)) if is_event[i]])
 
 

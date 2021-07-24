@@ -5,7 +5,7 @@ import ROOT
 from collections import defaultdict
 import logging
 
-from h5flow.core import H5FlowGenerator
+from h5flow.core import H5FlowGenerator, resources
 
 class LightEventGenerator(H5FlowGenerator):
     '''
@@ -16,11 +16,13 @@ class LightEventGenerator(H5FlowGenerator):
          - ``wvfm_dset_name`` : ``str``, required, path to dataset to store raw waveforms
          - ``n_adcs`` : ``int``, number of ADC serial numbers
          - ``n_channels`` : ``int``, number of channels per ADC
-         - ``n_samples`` : ``int``, number of samples in waveform
+         - ``n_samples`` : ``int``, number of samples in waveform, optional if RunData resource exists
          - ``chunk_size`` : ``int``, optional, number of events to buffer before initiating loop
 
         Generates a lightweight "event" dataset along with a dataset containing
         event-packed raw waveforms.
+
+        Requires RunData resource in workflow.
 
         Example config::
 
@@ -89,13 +91,31 @@ class LightEventGenerator(H5FlowGenerator):
         # set up parameters
         self.n_adcs = params.get('n_adcs', self.default_n_adcs)
         self.n_channels = params.get('n_channels', self.default_n_channels)
-        self.n_samples = params.get('n_samples', self.default_n_samples)
+        self.n_samples = params.get('n_samples')
         self.chunk_size = params.get('chunk_size', self.default_chunk_size)
         self.utime_ms_window = params.get('utime_ms_window', self.default_utime_ms_window)
         self.tai_ns_window = params.get('tai_ns_window', self.default_tai_ns_window)
         self.tai_ns_mod = int(params.get('tai_ns_mod', self.default_tai_ns_mod))
         self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.event_dset_name = self.dset_name
+
+        # set up input file
+        self.root_file = ROOT.TFile(self.input_filename, 'r')
+        self.rwf = self.root_file.Get('rwf')
+        self.end_position = self.rwf.GetEntries() if self.end_position is None else min(self.end_position, self.rwf.GetEntries())
+        self.start_position = 0 if self.start_position is None else self.start_position
+        self.entry = self.start_position
+
+    def init(self):
+        super(LightEventGenerator,self).init()
+
+        if self.data_manager.dset_exists(self.event_dset_name):
+            raise RuntimeError(f'{self.event_dset_name} already exists, refusing to append!')
+        if self.data_manager.dset_exists(self.wvfm_dset_name):
+            raise RuntimeError(f'{self.wvfm_dset_name} already exists, refusing to append!')
+
+        if not self.n_samples:
+            self.n_samples = resources['RunData'].light_samples
 
         # fix dataset dtypes
         self.buffer_dtype = self.buffer_dtype()
@@ -108,21 +128,6 @@ class LightEventGenerator(H5FlowGenerator):
         self.wvfms = np.zeros((1,), dtype=self.wvfm_dtype)
         self.event_buffer = list()
         self.curr_event = 0
-
-        # set up input file
-        self.root_file = ROOT.TFile(self.input_filename, 'r')
-        self.rwf = self.root_file.Get('rwf')
-        self.end_position = self.rwf.GetEntries() if self.end_position is None else min(self.end_position, self.rwf.GetEntries())
-        self.start_position = 0 if self.start_position is None else self.start_position
-        self.entry = self.rank
-
-    def init(self):
-        super(LightEventGenerator,self).init()
-
-        if self.data_manager.dset_exists(self.event_dset_name):
-            raise RuntimeError(f'{self.event_dset_name} already exists, refusing to append!')
-        if self.data_manager.dset_exists(self.wvfm_dset_name):
-            raise RuntimeError(f'{self.wvfm_dset_name} already exists, refusing to append!')
 
         # initialize data objects
         self.data_manager.create_dset(self.event_dset_name, dtype=self.event_dtype)

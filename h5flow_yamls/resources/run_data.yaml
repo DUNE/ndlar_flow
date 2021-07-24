@@ -1,0 +1,13 @@
+classname: RunData
+params:
+  path: 'run_info'
+  runlist_file: 'runlist.txt'
+  defaults:
+    charge_filename: '-'
+    light_filename: '-'
+    e_field: 500 # V/cm
+    light_samples: 256
+    charge_thresholds: 'medm'
+    is_mc: False
+    crs_ticks: 0.1
+    lrs_ticks: 0.01
