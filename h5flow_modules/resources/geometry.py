@@ -112,7 +112,7 @@ class Geometry(H5FlowResource):
         return self._drift_dir
 
 
-    def get_z_coordinate(io_group, io_channel, drift):
+    def get_z_coordinate(self, io_group, io_channel, drift):
         '''
             Convert a drift distance on a set of ``(io group, io channel)`` to
             a z-coordinate.
