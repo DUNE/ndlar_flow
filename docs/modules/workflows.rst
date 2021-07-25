@@ -31,4 +31,5 @@ Charge/light matching
 Combined reconstruction
 =======================
 
-Not implemented yet
+.. include:: ../../h5flow_yamls/combined/combined_reconstruction.yaml
+    :literal:

@@ -1,0 +1,22 @@
+# Performs combined reconstruction, generating t0s, tracklets, ...
+
+flow:
+  source: 'charge/events'
+  stages: [t0_reco]
+  drop: []
+
+resources:
+  - !include h5flow_yamls/resources/units.yaml
+  - !include h5flow_yamls/resources/run_data.yaml
+  - !include h5flow_yamls/resources/geometry.yaml
+  - !include h5flow_yamls/resources/lar_data.yaml
+
+t0_reco:
+  classname: T0Reconstruction # combined/t0_reco.py
+  requires:
+    - 'charge/ext_trigs'
+    - name: 'light/hits'
+      path: ['light/events', 'light/hits']
+  params:
+    light_hits_dset_name: 'light/hits'
+    ext_trigs_dset_name: 'charge/ext_trigs'

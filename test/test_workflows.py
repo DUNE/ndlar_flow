@@ -81,6 +81,14 @@ def fresh_data_files(data_directory):
     if os.path.exists(output_filename):
         os.remove(output_filename)
 
+    yield None
+
+    for file in data_files:
+        if os.path.exists(file):
+            os.remove(file)
+    if os.path.exists(output_filename):
+        os.remove(output_filename)
+
 @pytest.fixture(params=[(charge_source_file, 5273174, 1000), (charge_source_file_mc, 0, 1000)])
 def charge_event_built_file(fresh_data_files, request):
     print('Charge event building...')
@@ -91,15 +99,15 @@ def charge_event_built_file(fresh_data_files, request):
         start_position=request.param[1],
         end_position=request.param[1]+request.param[2])
 
-    f = h5py.File(output_filename,'r')
+    with h5py.File(output_filename,'r') as f:
 
-    required_datasets = (
-        'charge/raw_events/data',
-        'charge/packets/data',
-        )
+        required_datasets = (
+            'charge/raw_events/data',
+            'charge/packets/data',
+            )
 
-    assert all([d in f for d in required_datasets])
-    assert all([len(f[d]) for d in required_datasets])
+        assert all([d in f for d in required_datasets])
+        assert all([len(f[d]) for d in required_datasets])
 
     return output_filename
 
@@ -111,16 +119,17 @@ def charge_reco_file(charge_event_built_file):
         charge_event_built_file,
         verbose=2)
 
-    f = h5py.File(output_filename,'r')
 
-    required_datasets = (
-        'charge/hits/data',
-        'charge/ext_trigs/data',
-        'charge/events/data'
-        )
+    with h5py.File(output_filename,'r') as f:
 
-    assert all([d in f for d in required_datasets])
-    assert all([len(f[d]) for d in required_datasets])
+        required_datasets = (
+            'charge/hits/data',
+            'charge/ext_trigs/data',
+            'charge/events/data'
+            )
+
+        assert all([d in f for d in required_datasets])
+        assert all([len(f[d]) for d in required_datasets])
 
     return output_filename
 
@@ -134,15 +143,16 @@ def light_event_built_file(fresh_data_files):
         start_position=153840,
         end_position=153840+10000)
 
-    f = h5py.File(output_filename,'r')
 
-    required_datasets = (
-        'light/events/data',
-        'light/wvfm/data',
-        )
+    with h5py.File(output_filename,'r') as f:
 
-    assert all([d in f for d in required_datasets])
-    assert all([len(f[d]) for d in required_datasets])
+        required_datasets = (
+            'light/events/data',
+            'light/wvfm/data',
+            )
+
+        assert all([d in f for d in required_datasets])
+        assert all([len(f[d]) for d in required_datasets])
 
     return output_filename
 
@@ -154,15 +164,16 @@ def light_reco_file(light_event_built_file):
         light_event_built_file,
         verbose=2)
 
-    f = h5py.File(output_filename,'r')
 
-    required_datasets = (
-        'light/hits/data',
-        'light/t_ns/data',
-        )
+    with h5py.File(output_filename,'r') as f:
 
-    assert all([d in f for d in required_datasets])
-    assert all([len(f[d]) for d in required_datasets])
+        required_datasets = (
+            'light/hits/data',
+            'light/t_ns/data',
+            )
+
+        assert all([d in f for d in required_datasets])
+        assert all([len(f[d]) for d in required_datasets])
 
     return output_filename
 
@@ -174,24 +185,37 @@ def charge_assoc_file(charge_reco_file, light_reco_file):
         charge_reco_file,
         verbose=2)
 
-    f = h5py.File(output_filename,'r')
 
-    required_datasets = (
-        # charge datasets
-        'charge/raw_events/data',
-        'charge/packets/data',
-        'charge/hits/data',
-        'charge/ext_trigs/data',
-        'charge/events/data',
+    with h5py.File(output_filename,'r') as f:
 
-        # light datasets
-        'light/events/data',
-        'light/hits/data',
-        'light/t_ns/data'
-        )
+        required_datasets = (
+            'charge/events/ref/light/events/ref',
+            'charge/ext_trigs/ref/light/events/ref'
+            )
 
-    assert all([d in f for d in required_datasets])
-    assert all([len(f[d]) for d in required_datasets])
+        assert all([d in f for d in required_datasets])
+        assert all([len(f[d]) for d in required_datasets])
+
+    return output_filename
+
+@pytest.fixture
+def combined_file(charge_assoc_file):
+    print('Combined reconstruction...')
+    h5flow.run('h5flow_yamls/combined/combined_reconstruction.yaml',
+        output_filename,
+        charge_assoc_file,
+        verbose=2)
+
+
+    with h5py.File(output_filename,'r') as f:
+
+        required_datasets = (
+            'combined/t0/data',
+            'combined/tracklet/data'
+            )
+
+        assert all([d in f for d in required_datasets])
+        assert all([len(f[d]) for d in required_datasets])
 
     return output_filename
 
@@ -210,5 +234,5 @@ def charge_assoc_file(charge_reco_file, light_reco_file):
 # def test_charge_assoc(charge_assoc_file):
 #     pass
 
-def test_chain(charge_assoc_file):
+def test_chain(combined_file):
     pass
