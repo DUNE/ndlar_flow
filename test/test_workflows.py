@@ -91,8 +91,8 @@ def fresh_data_files(data_directory):
 
 def check_dsets(filename, datasets):
     with h5py.File(filename,'r') as f:
-        assert all([d in f for d in required_datasets]), ('Missing dataset(s)',f.visit(print))
-        assert all([len(f[d]) for d in required_datasets]), ('Empty dataset(s)',f.visititems(print))
+        assert all([d in f for d in datasets]), ('Missing dataset(s)',f.visit(print))
+        assert all([len(f[d]) for d in datasets]), ('Empty dataset(s)',f.visititems(print))
 
 @pytest.fixture(params=[(charge_source_file, 5273174, 1000), (charge_source_file_mc, 0, 1000)])
 def charge_event_built_file(fresh_data_files, request):
