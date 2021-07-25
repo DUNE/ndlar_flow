@@ -109,6 +109,9 @@ def charge_event_built_file(fresh_data_files, request):
         assert all([d in f for d in required_datasets])
         assert all([len(f[d]) for d in required_datasets])
 
+    assert all([d in f for d in required_datasets])
+    assert all([len(f[d]) for d in required_datasets])
+
     return output_filename
 
 @pytest.fixture
@@ -119,9 +122,7 @@ def charge_reco_file(charge_event_built_file):
         charge_event_built_file,
         verbose=2)
 
-
     with h5py.File(output_filename,'r') as f:
-
         required_datasets = (
             'charge/hits/data',
             'charge/ext_trigs/data',
@@ -143,9 +144,7 @@ def light_event_built_file(fresh_data_files):
         start_position=153840,
         end_position=153840+10000)
 
-
     with h5py.File(output_filename,'r') as f:
-
         required_datasets = (
             'light/events/data',
             'light/wvfm/data',
@@ -164,9 +163,7 @@ def light_reco_file(light_event_built_file):
         light_event_built_file,
         verbose=2)
 
-
     with h5py.File(output_filename,'r') as f:
-
         required_datasets = (
             'light/hits/data',
             'light/t_ns/data',
@@ -184,7 +181,6 @@ def charge_assoc_file(charge_reco_file, light_reco_file):
         output_filename,
         charge_reco_file,
         verbose=2)
-
 
     with h5py.File(output_filename,'r') as f:
 
