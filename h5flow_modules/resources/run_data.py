@@ -70,8 +70,9 @@ class RunData(H5FlowResource):
         self.data = dict(self.data_manager.get_attrs(self.path))
 
         if not len(self.data.keys()):
-            # run data does not exist, generate it!
+            # run data does not exist, get it from input run list file
             self.update_data()
+            self.data_manager.set_attrs(self.path, **self.data)
 
         for attr in self.required_attr:
             logging.info(f'{attr}: {getattr(self,attr)}')
@@ -90,7 +91,7 @@ class RunData(H5FlowResource):
 
         try:
             input_filenames.append(self.data_manager.get_attrs(self.source_name)['input_filename'])
-        except KeyError:
+        except (RuntimeError,KeyError):
             logging.warning(f'Source dataset {self.source_name} has no input file in metadata stored under \'input_filename\', using {self.input_filename} for RunData lookup')
             input_filenames.append(self.input_filename)
 
@@ -151,7 +152,7 @@ class RunData(H5FlowResource):
         for key in self.required_attr:
             assert key in self.data, f'missing {key} from RunData'
 
-        # convert types that might be incorrect
+        # convert data types that might be incorrect
         self.data['e_field'] = float(self.data['e_field']) * (resources['Units'].V / resources['Units'].cm)
         self.data['light_samples'] = int(self.data['light_samples'])
 
@@ -199,7 +200,3 @@ class RunData(H5FlowResource):
     def lrs_ticks(self):
         ''' Light readout system clock cycle (us) '''
         return self.data['lrs_ticks']
-
-    def finish(self, source_name):
-        self.data_manager.set_attrs(self.path, **self.data)
-

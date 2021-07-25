@@ -49,6 +49,11 @@ class LArData(H5FlowResource):
         # load data (if present)
         self.data = dict(self.data_manager.get_attrs(self.path))
 
+        if not self.data:
+            # no data stored in file, generate it
+            self.v_drift
+            self.data_manager.set_attrs(self.path, **self.data)
+
         logging.info(f'v_drift: {self.v_drift}')
 
     @property
@@ -95,7 +100,3 @@ class LArData(H5FlowResource):
         mu = mu * ((resources['Units'].cm**2) / resources['Units'].V / resources['Units'].s)
 
         return mu
-
-    def finish(self, source_name):
-        # write data (if present)
-        self.data_manager.set_attrs(self.path, **self.data)
