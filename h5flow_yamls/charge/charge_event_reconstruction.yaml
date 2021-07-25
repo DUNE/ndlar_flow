@@ -14,7 +14,7 @@ raw_events:
   classname: H5FlowDatasetLoopGenerator
   dset_name: 'charge/raw_events'
   params:
-    chunk_size: 8
+    chunk_size: 128
 
 timestamp_corrector: # corrects for different pacman frequencies
   classname: TimestampCorrector # charge/timestamp_corrector.py

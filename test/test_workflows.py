@@ -3,11 +3,11 @@ import h5py
 import subprocess
 import os
 import shutil
-import tqdm
 
 import h5flow
 
 charge_source_file    = 'datalog_2021_04_04_00_41_40_CEST.h5'
+charge_source_file_mc = 'datalog.edep.all.h5'
 light_source_file     = 'rwf_20210404_004206.data.root'
 geometry_file       = 'multi_tile_layout-2.2.16.yaml'
 larpix_config_file  = 'evd_config_21-03-31_12-36-13.json'
@@ -19,6 +19,7 @@ light_impulse_file  = 'wvfm_deconv_signal_impulse.fit.npz'
 
 data_files = [
     charge_source_file,
+    charge_source_file_mc,
     light_source_file,
     geometry_file,
     larpix_config_file,
@@ -33,53 +34,42 @@ output_filename = 'test.h5'
 
 @pytest.fixture
 def data_directory(pytestconfig, tmp_path_factory):
-    dirname = pytestconfig.cache.get('data_directory', None)
-    if dirname is None or not os.path.exists(dirname):
-        try:
-            # download files from nersc portal
-            dirname = tmp_path_factory.mktemp('module0_flow', numbered=False)
+    src = pytestconfig.cache.get('data_directory', None)
+    try:
+        dest = tmp_path_factory.mktemp('module0_flow', numbered=False)
 
-            print(f'Saving data to temporary directory {dirname}...')
+        print(f'Saving data to cache {dest}...')
+        pytestconfig.cache.set('data_directory', str(dest))
 
-            urls = (
-                f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/dataRuns/packetData/{charge_source_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/LRS/Converted/{light_source_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/{geometry_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/{larpix_config_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/{larpix_pedestal_config_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/{runlist_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0-Run2/LRS/LED/{light_noise_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_signal_file}',
-                f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_impulse_file}'
-                )
+        urls = (
+            f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/dataRuns/packetData/{charge_source_file}',
+            f'https://portal.nersc.gov/project/dune/data/Module0/simulation/larndsim/{charge_source_file_mc}',
+            f'https://portal.nersc.gov/project/dune/data/Module0/LRS/Converted/{light_source_file}',
+            f'https://portal.nersc.gov/project/dune/data/Module0/{geometry_file}',
+            f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/{larpix_config_file}',
+            f'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/{larpix_pedestal_config_file}',
+            f'https://portal.nersc.gov/project/dune/data/Module0/{runlist_file}',
+            f'https://portal.nersc.gov/project/dune/data/Module0-Run2/LRS/LED/{light_noise_file}',
+            f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_signal_file}',
+            f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_impulse_file}'
+            )
 
-            for url in tqdm.tqdm(urls):
-                basename = os.path.basename(url)
-                if not os.path.exists(os.path.join(dirname, basename)):
+        for file,url in zip(data_files,urls):
+            if not os.path.exists(os.path.join(dest, file)):
+                if src is None or not os.path.exists(os.path.join(src, file)):
+                    # copy from nersc portal
+                    print(f'{url} -> {file}')
                     subprocess.run(['curl','-f','-O',url], check=True)
-                    os.replace(basename, os.path.join(dirname, basename))
-        except FileExistsError:
-            # temporary directory is already available, use that
-            dirname = os.path.join(tmp_path_factory.getbasetemp(),'module0_flow')
-    else:
-        try:
-            # a temporary directory exists in cache, copy from there
-            new_dirname = tmp_path_factory.mktemp('module0_flow', numbered=False)
+                    os.replace(file, os.path.join(dest, file))
 
-            print(f'Copying cached data from {dirname}...')
+                else:
+                    # copy from cache
+                    print(f'{src}/{file} -> {file}')
+                    shutil.copy(os.path.join(src, file), os.path.join(dest, file))
+    except FileExistsError:
+        dest = pytestconfig.cache.get('data_directory', None)
 
-            for file in data_files:
-                if not os.path.exists(os.path.join(new_dirname, file)):
-                    shutil.copy(os.path.join(dirname, file), os.path.join(new_dirname, file))
-
-            dirname = new_dirname
-        except FileExistsError:
-            # temporary directory is already available, use that
-            dirname = os.path.join(tmp_path_factory.getbasetemp(),'module0_flow')
-
-    pytestconfig.cache.set('data_directory', str(dirname))
-
-    return dirname
+    return dest
 
 @pytest.fixture
 def fresh_data_files(data_directory):
@@ -91,20 +81,17 @@ def fresh_data_files(data_directory):
     if os.path.exists(output_filename):
         os.remove(output_filename)
 
-@pytest.fixture
-def charge_event_built_file(fresh_data_files):
+@pytest.fixture(params=[(charge_source_file, 5273174, 1000), (charge_source_file_mc, 0, 1000)])
+def charge_event_built_file(fresh_data_files, request):
     print('Charge event building...')
     h5flow.run('h5flow_yamls/charge/charge_event_building.yaml',
         output_filename,
-        charge_source_file,
+        request.param[0],
         verbose=2,
-        start_position=5273174,
-        end_position=5273174+1000)
+        start_position=request.param[1],
+        end_position=request.param[1]+request.param[2])
 
-    return output_filename
-
-def test_charge_event_building(charge_event_built_file):
-    f = h5py.File(charge_event_built_file,'r')
+    f = h5py.File(output_filename,'r')
 
     required_datasets = (
         'charge/raw_events/data',
@@ -112,6 +99,9 @@ def test_charge_event_building(charge_event_built_file):
         )
 
     assert all([d in f for d in required_datasets])
+    assert all([len(f[d]) for d in required_datasets])
+
+    return output_filename
 
 @pytest.fixture
 def charge_reco_file(charge_event_built_file):
@@ -121,10 +111,7 @@ def charge_reco_file(charge_event_built_file):
         charge_event_built_file,
         verbose=2)
 
-    return output_filename
-
-def test_charge_reco(charge_reco_file):
-    f = h5py.File(charge_reco_file,'r')
+    f = h5py.File(output_filename,'r')
 
     required_datasets = (
         'charge/hits/data',
@@ -133,6 +120,9 @@ def test_charge_reco(charge_reco_file):
         )
 
     assert all([d in f for d in required_datasets])
+    assert all([len(f[d]) for d in required_datasets])
+
+    return output_filename
 
 @pytest.fixture
 def light_event_built_file(fresh_data_files):
@@ -144,10 +134,7 @@ def light_event_built_file(fresh_data_files):
         start_position=153840,
         end_position=153840+10000)
 
-    return output_filename
-
-def test_light_event_building(light_event_built_file):
-    f = h5py.File(light_event_built_file,'r')
+    f = h5py.File(output_filename,'r')
 
     required_datasets = (
         'light/events/data',
@@ -155,6 +142,9 @@ def test_light_event_building(light_event_built_file):
         )
 
     assert all([d in f for d in required_datasets])
+    assert all([len(f[d]) for d in required_datasets])
+
+    return output_filename
 
 @pytest.fixture
 def light_reco_file(light_event_built_file):
@@ -164,10 +154,7 @@ def light_reco_file(light_event_built_file):
         light_event_built_file,
         verbose=2)
 
-    return output_filename
-
-def test_light_reco(light_reco_file):
-    f = h5py.File(light_reco_file,'r')
+    f = h5py.File(output_filename,'r')
 
     required_datasets = (
         'light/hits/data',
@@ -175,6 +162,9 @@ def test_light_reco(light_reco_file):
         )
 
     assert all([d in f for d in required_datasets])
+    assert all([len(f[d]) for d in required_datasets])
+
+    return output_filename
 
 @pytest.fixture
 def charge_assoc_file(charge_reco_file, light_reco_file):
@@ -184,10 +174,7 @@ def charge_assoc_file(charge_reco_file, light_reco_file):
         charge_reco_file,
         verbose=2)
 
-    return output_filename
-
-def test_chain(charge_assoc_file):
-    f = h5py.File(charge_assoc_file,'r')
+    f = h5py.File(output_filename,'r')
 
     required_datasets = (
         # charge datasets
@@ -204,3 +191,24 @@ def test_chain(charge_assoc_file):
         )
 
     assert all([d in f for d in required_datasets])
+    assert all([len(f[d]) for d in required_datasets])
+
+    return output_filename
+
+# def test_charge_event_building(charge_event_built_file):
+#     pass
+
+# def test_charge_reco(charge_reco_file):
+#     pass
+
+# def test_light_event_building(light_event_built_file):
+#     pass
+
+# def test_light_reco(light_reco_file):
+#     pass
+
+# def test_charge_assoc(charge_assoc_file):
+#     pass
+
+def test_chain(charge_assoc_file):
+    pass

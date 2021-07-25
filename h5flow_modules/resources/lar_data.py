@@ -65,7 +65,7 @@ class LArData(H5FlowResource):
 
         return self.data['v_drift']
 
-    def electron_mobility(self, e, t=85.3):
+    def electron_mobility(self, e, t=87.17):
         '''
             Calculation of the electron mobility w.r.t temperature and electric
             field.

@@ -25,6 +25,8 @@ class WaveformHitFinder(H5FlowStage):
 
          Both ``wvfm_dset_name`` and ``t_ns_dset_name`` are required in the cache.
 
+         Requires RunData resource in workflow.
+
          ``hits`` datatype::
 
             id          u4,             unique identifier
@@ -104,7 +106,7 @@ class WaveformHitFinder(H5FlowStage):
 
         # get convert sample rate to ns
         if self.sample_rate is None:
-            self.sample_rate = resources['Units'].lds_ticks / resources['Units'].ns
+            self.sample_rate = resources['RunData'].lrs_ticks / resources['Units'].ns
 
         # get waveform shape information
         self.nadc = wvfm_dset.dtype['samples'].shape[0]

@@ -3,7 +3,7 @@ import numpy.lib.recfunctions as rfn
 from collections import defaultdict
 import logging
 
-from h5flow.core import H5FlowStage
+from h5flow.core import H5FlowStage, resources
 
 class TimestampCorrector(H5FlowStage):
     '''
@@ -23,6 +23,8 @@ class TimestampCorrector(H5FlowStage):
 
         The ``packets_dset_name`` is required in the data cache along with
         its indices under the name of ``'{packets_dset_name}_index'``.
+
+        Requires RunData resource in workflow.
 
         Example config::
 
@@ -69,6 +71,11 @@ class TimestampCorrector(H5FlowStage):
         return (0.,0.)
 
     def init(self, source_name):
+        # check if MC
+        if resources['RunData'].is_mc:
+            # bypass correction for MC
+            self.correction = defaultdict(self._default_correction)
+
         # write all configuration variables to the dataset
         self.data_manager.set_attrs(self.ts_dset_name,
             classname=self.classname,
