@@ -269,18 +269,19 @@ class LUT(object):
 
     '''
     def __init__(self, dtype, *min_max_keys, default=None, shape=None):
+        self.dtype = dtype
         self.min_max_keys = min_max_keys
         self.lengths = [max_-min_+1 for min_,max_ in self.min_max_keys]
         self.max_hash = int(self._hash(*[max_ for min_,max_ in min_max_keys]))
         shape = (self.max_hash+1,)+shape if shape else (self.max_hash+1,)
-        self._data = np.empty(shape, dtype=dtype)
+        self._data = np.empty(shape, dtype=self.dtype)
         self._filled = np.zeros_like(self._data, dtype=bool)
         if default is not None:
             self.default = default
 
     def __repr__(self):
         str_ = 'LUT('
-        str_ += repr(self._data.dtype)
+        str_ += repr(self.dtype)
         for min_max in self.min_max_keys:
             str_ += ', ' + repr(min_max)
         str_ += f', default={repr(self.default)}'
@@ -288,10 +289,16 @@ class LUT(object):
         str_ += ')'
         return str_
 
+    def __eq__(self, other):
+        self_arr = self.to_array()
+        other_arr = other.to_array()
+        return all(self_arr[0].ravel() == other_arr[0].ravel()) and \
+            all(self_arr[1].ravel() == other_arr[1].ravel())
+
     @staticmethod
     def from_array(meta_arr, data_arr):
-        min_max_keys = meta_arr['min_max_keys']
-        default = meta_arr['default']
+        min_max_keys = meta_arr[0]['min_max_keys']
+        default = meta_arr[0]['default']
         data = data_arr['data']
         filled = data_arr['filled']
 
@@ -306,10 +313,10 @@ class LUT(object):
     def to_array(self):
         dtype_meta = np.dtype([
             ('min_max_keys', 'i8', (len(self.min_max_keys),2)),
-            ('default', self._data.dtype, self._data.shape[1:])
+            ('default', self.dtype, self._data.shape[1:])
             ])
         dtype_data = np.dtype([
-            ('data', self._data.dtype, self._data.shape[1:]),
+            ('data', self.dtype, self._data.shape[1:]),
             ('filled', self._filled.dtype, self._filled.shape[1:])
             ])
         meta_arr =np.empty((1,), dtype=dtype_meta)
@@ -323,9 +330,9 @@ class LUT(object):
         return meta_arr, data_arr
 
     def _hash(self, *keys):
-        val = 1
-        for i,key in enumerate(keys):
-            val += (np.array(key)-self.min_max_keys[i][0]) * sum(self.lengths[:i])
+        val = 1 + np.array(keys[0])-self.min_max_keys[0][0]
+        for i,key in enumerate(keys[1:]):
+            val += (np.array(key)-self.min_max_keys[i][0]) * sum(self.lengths[:i+1])
         return val.astype(int).ravel()
 
     def hash(self, *keys):
@@ -350,10 +357,14 @@ class LUT(object):
         return self._data[0] # position 0 is reserved for the default value
 
     @default.setter
-    def default(self,val):
-        new_default = np.broadcast_to(np.expand_dims(np.array(val), axis=0),
-            self._data.shape)
-        self._data[~self._filled] = new_default[~self._filled]
+    def default(self, val):
+        if isinstance(val, np.number):
+            new_default = val
+        else:
+            new_default = np.broadcast_to(np.expand_dims(val, axis=0),
+                self._data.shape)[~self._filled]
+
+        self._data[~self._filled] = new_default
 
     def clear(self, *keys):
         '''
