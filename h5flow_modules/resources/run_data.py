@@ -28,8 +28,9 @@ class RunData(H5FlowResource):
 
             resources['RunData'].e_field
 
-        This will load the data from the runlist file if the value is not already
-        present as metadata in the file.
+        A runlist file is required the first time the resource is included in
+        a workflow. For subsequent workflows, data is stored and loaded directly
+        from the hdf5 file.
 
         Example config::
 
@@ -70,13 +71,19 @@ class RunData(H5FlowResource):
         self.data = dict(self.data_manager.get_attrs(self.path))
 
         if not len(self.data.keys()):
-            # run data does not exist, generate it!
-            self.update_data()
+            # run data does not exist, get it from input run list file
+            self._update_data()
+            self.data['classname'] = self.classname
+            self.data['class_version'] = self.class_version
+            self.data['runlist_file'] = self.runlist_file
+            for key,val in self.defaults.items():
+                self.data[f'{key}_default'] = val
+            self.data_manager.set_attrs(self.path, **self.data)
 
         for attr in self.required_attr:
             logging.info(f'{attr}: {getattr(self,attr)}')
 
-    def lookup_row_in_runlist(self):
+    def _lookup_row_in_runlist(self):
         '''
             Load the run list file and check the charge or light data files against:
 
@@ -90,7 +97,7 @@ class RunData(H5FlowResource):
 
         try:
             input_filenames.append(self.data_manager.get_attrs(self.source_name)['input_filename'])
-        except KeyError:
+        except (RuntimeError,KeyError):
             logging.warning(f'Source dataset {self.source_name} has no input file in metadata stored under \'input_filename\', using {self.input_filename} for RunData lookup')
             input_filenames.append(self.input_filename)
 
@@ -118,7 +125,7 @@ class RunData(H5FlowResource):
 
         self.data.update(row)
 
-    def lookup_mc_info(self):
+    def _lookup_mc_info(self):
         '''
             Check if input file is a larnd-sim output file with MC truth
             information, and set ``is_mc`` flag.
@@ -136,12 +143,12 @@ class RunData(H5FlowResource):
         else:
             self.data['is_mc'] = False
 
-    def update_data(self):
+    def _update_data(self):
         # check input file for MC info to set mc flag
-        self.lookup_mc_info()
+        self._lookup_mc_info()
 
         # read in run list file and update run data
-        self.lookup_row_in_runlist()
+        self._lookup_row_in_runlist()
 
         # fill in from defaults
         for key,val in self.defaults.items():
@@ -151,7 +158,7 @@ class RunData(H5FlowResource):
         for key in self.required_attr:
             assert key in self.data, f'missing {key} from RunData'
 
-        # convert types that might be incorrect
+        # convert data types that might be incorrect
         self.data['e_field'] = float(self.data['e_field']) * (resources['Units'].V / resources['Units'].cm)
         self.data['light_samples'] = int(self.data['light_samples'])
 
@@ -199,7 +206,3 @@ class RunData(H5FlowResource):
     def lrs_ticks(self):
         ''' Light readout system clock cycle (us) '''
         return self.data['lrs_ticks']
-
-    def finish(self, source_name):
-        self.data_manager.set_attrs(self.path, **self.data)
-

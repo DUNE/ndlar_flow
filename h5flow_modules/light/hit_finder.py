@@ -19,7 +19,6 @@ class WaveformHitFinder(H5FlowStage):
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``near_samples``: ``int``, number of neighboring samples to keep
          - ``busy_channel``: ``int``, channel to extract ADC busy signal (used for timing)
-         - ``sample_rate``: ``float``, sample rate of waveform [ns], if not specified, fetched from Units resource
          - ``channel_threshold``: ``dict`` of ``dict`` containing sets of ``adc_index: {channel_index: adc_threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
          - ``channel_mask``: ``list`` of ``int``, channels to ignore when finding hits
 
@@ -46,7 +45,7 @@ class WaveformHitFinder(H5FlowStage):
             rising_err_spline f4,       an estimate of the error on the rising edge zero-crossing [ns]
 
     '''
-    class_version = '0.0.1'
+    class_version = '1.0.0'
 
     default_hits_dset_name = 'light/hits'
     default_near_samples = 3
@@ -82,7 +81,6 @@ class WaveformHitFinder(H5FlowStage):
         self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
         self.near_samples = params.get('near_samples', self.default_near_samples)
         self.busy_channel = params.get('busy_channel', self.default_busy_channel)
-        self.sample_rate = params.get('sample_rate')
         self.channel_mask = np.array(params.get('channel_mask', self.default_channel_mask))
         self.interpolation = params.get('interpolation',self.default_interpolation)
 
@@ -105,8 +103,7 @@ class WaveformHitFinder(H5FlowStage):
         wvfm_dset = self.data_manager.get_dset(self.wvfm_dset_name)
 
         # get convert sample rate to ns
-        if self.sample_rate is None:
-            self.sample_rate = resources['RunData'].lrs_ticks / resources['Units'].ns
+        self.sample_rate = resources['RunData'].lrs_ticks / resources['Units'].ns
 
         # get waveform shape information
         self.nadc = wvfm_dset.dtype['samples'].shape[0]
@@ -131,7 +128,6 @@ class WaveformHitFinder(H5FlowStage):
             t_ns_dset=self.t_ns_dset_name,
             near_samples=self.near_samples,
             busy_channel=self.busy_channel,
-            sample_rate=self.sample_rate,
             channel_thresholds=self.channel_threshold,
             channel_mask=self.channel_mask
         )

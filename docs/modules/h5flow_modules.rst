@@ -15,3 +15,4 @@ module documentation
    h5flow_modules.resources
    h5flow_modules.charge
    h5flow_modules.light
+   h5flow_modules.combined

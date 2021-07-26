@@ -81,6 +81,20 @@ def fresh_data_files(data_directory):
     if os.path.exists(output_filename):
         os.remove(output_filename)
 
+    yield None
+
+    for file in data_files:
+        if os.path.exists(file):
+            os.remove(file)
+    if os.path.exists(output_filename):
+        os.remove(output_filename)
+
+def check_dsets(filename, datasets, check_empty=True):
+    with h5py.File(filename,'r') as f:
+        assert all([d in f for d in datasets]), ('Missing dataset(s)',f.visit(print))
+        if check_empty:
+            assert all([len(f[d]) for d in datasets]), ('Empty dataset(s)',f.visititems(print))
+
 @pytest.fixture(params=[(charge_source_file, 5273174, 1000), (charge_source_file_mc, 0, 1000)])
 def charge_event_built_file(fresh_data_files, request):
     print('Charge event building...')
@@ -91,15 +105,10 @@ def charge_event_built_file(fresh_data_files, request):
         start_position=request.param[1],
         end_position=request.param[1]+request.param[2])
 
-    f = h5py.File(output_filename,'r')
-
-    required_datasets = (
+    check_dsets(output_filename, (
         'charge/raw_events/data',
         'charge/packets/data',
-        )
-
-    assert all([d in f for d in required_datasets])
-    assert all([len(f[d]) for d in required_datasets])
+        ))
 
     return output_filename
 
@@ -111,16 +120,11 @@ def charge_reco_file(charge_event_built_file):
         charge_event_built_file,
         verbose=2)
 
-    f = h5py.File(output_filename,'r')
-
-    required_datasets = (
+    check_dsets(output_filename, (
         'charge/hits/data',
         'charge/ext_trigs/data',
         'charge/events/data'
-        )
-
-    assert all([d in f for d in required_datasets])
-    assert all([len(f[d]) for d in required_datasets])
+        ))
 
     return output_filename
 
@@ -134,15 +138,10 @@ def light_event_built_file(fresh_data_files):
         start_position=153840,
         end_position=153840+10000)
 
-    f = h5py.File(output_filename,'r')
-
-    required_datasets = (
+    check_dsets(output_filename, (
         'light/events/data',
         'light/wvfm/data',
-        )
-
-    assert all([d in f for d in required_datasets])
-    assert all([len(f[d]) for d in required_datasets])
+        ))
 
     return output_filename
 
@@ -154,15 +153,10 @@ def light_reco_file(light_event_built_file):
         light_event_built_file,
         verbose=2)
 
-    f = h5py.File(output_filename,'r')
-
-    required_datasets = (
+    check_dsets(output_filename, (
         'light/hits/data',
         'light/t_ns/data',
-        )
-
-    assert all([d in f for d in required_datasets])
-    assert all([len(f[d]) for d in required_datasets])
+        ))
 
     return output_filename
 
@@ -174,24 +168,24 @@ def charge_assoc_file(charge_reco_file, light_reco_file):
         charge_reco_file,
         verbose=2)
 
-    f = h5py.File(output_filename,'r')
+    check_dsets(output_filename, (
+        'charge/events/ref/light/events/ref',
+        'charge/ext_trigs/ref/light/events/ref'
+        ), check_empty=False)
 
-    required_datasets = (
-        # charge datasets
-        'charge/raw_events/data',
-        'charge/packets/data',
-        'charge/hits/data',
-        'charge/ext_trigs/data',
-        'charge/events/data',
+    return output_filename
 
-        # light datasets
-        'light/events/data',
-        'light/hits/data',
-        'light/t_ns/data'
-        )
+@pytest.fixture
+def combined_file(charge_assoc_file):
+    print('Combined reconstruction...')
+    h5flow.run('h5flow_yamls/combined/combined_reconstruction.yaml',
+        output_filename,
+        charge_assoc_file,
+        verbose=2)
 
-    assert all([d in f for d in required_datasets])
-    assert all([len(f[d]) for d in required_datasets])
+    check_dsets(output_filename, (
+        'combined/t0/data',
+        ))
 
     return output_filename
 
@@ -210,5 +204,5 @@ def charge_assoc_file(charge_reco_file, light_reco_file):
 # def test_charge_assoc(charge_assoc_file):
 #     pass
 
-def test_chain(charge_assoc_file):
+def test_chain(combined_file):
     pass

@@ -1,0 +1,4 @@
+classname: Geometry
+params:
+  path: 'geometry_info'
+  crs_geometry_file: 'multi_tile_layout-2.2.16.yaml'
