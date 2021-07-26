@@ -130,11 +130,12 @@ class Geometry(H5FlowResource):
             :returns: z coordinate [mm], ``shape: (N,)``
 
         '''
-        tile_id = self.tile_id[io_group, io_channel]
-        z_anode = self.anode_z[np.array(tile_id)]
-        drift_direction = self.drift_dir[np.array(tile_id)]
+        tile_id = self.tile_id[(io_group, io_channel)]
+        z_anode = self.anode_z[(np.array(tile_id),)]
+        drift_direction = self.drift_dir[(np.array(tile_id),)]
 
-        return z_anode + drift_direction * drift
+        return z_anode.reshape(drift.shape) + \
+            drift_direction.reshape(drift.shape) * drift
 
     @staticmethod
     def _rotate_pixel(pixel_pos, tile_orientation):
