@@ -14,7 +14,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../'))
 
-autodoc_mock_imports = ['h5py','yaml','tqdm','ROOT','scipy','numpy','h5flow','mpi4py']
+autodoc_mock_imports = ['h5py','yaml','tqdm','ROOT','scipy','numpy','h5flow','mpi4py','sklearn','skimage']
 
 # -- Project information -----------------------------------------------------
 

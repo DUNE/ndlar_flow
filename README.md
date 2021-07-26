@@ -34,7 +34,8 @@ charge event building
 
 To run charge event builder::
 
-    mpiexec h5flow -c h5flow_yamls/charge_event_building.yaml -i <input file> -o <output file>
+    mpiexec h5flow -c h5flow_yamls/charge/charge_event_building.yaml \
+        -i <input file> -o <output file>
 
 This generates the ``charge/raw_events`` and ``charge/packets`` datasets. The
 input file is a "datalog"- (a.k.a "packet"-) formatted LArPix data file.
@@ -44,7 +45,8 @@ charge event reconstruction
 
 To run charge reconstruction::
 
-    mpiexec h5flow -c h5flow_yamls/charge_event_reconstruction.yaml -i <input file> -o <output file>
+    mpiexec h5flow -c h5flow_yamls/charge/charge_event_reconstruction.yaml \
+        -i <input file> -o <output file>
 
 This generates ``charge/packets_corr_ts``, ``charge/ext_trigs``, ``charge/hits``,
 and ``charge/events`` datasets. The input file is a charge event built ``module0_flow``
@@ -55,7 +57,8 @@ light event building
 
 To run light event builder::
 
-    mpiexec h5flow -c h5flow_yamls/light_event_building.yaml -i <input file> -o <output file>
+    mpiexec h5flow -c h5flow_yamls/light/light_event_building.yaml \
+        -i <input file> -o <output file>
 
 This generates the ``light/events`` and ``light/wvfm`` datasets. The input file
 is a PPS-timestamp corrected "rwf_XX" root file produced by the adapted ADCViewer
@@ -66,7 +69,8 @@ light event reconstruction
 
 To run light reconstruction::
 
-    mpiexec h5flow -c h5flow_yamls/light_event_reconstruction.yaml -i <input file> -o <output file>
+    mpiexec h5flow -c h5flow_yamls/light/light_event_reconstruction.yaml \
+        -i <input file> -o <output file>
 
 This generates ``light/t_ns`` and ``light/hits`` datasets. The input file is a light event built ``module0_flow``
 file. The light event reconstruction also removes raw waveforms from the file.
@@ -76,7 +80,8 @@ charge-to-light association
 
 To associate charge events to light events, run::
 
-    mpiexec h5flow -c h5flow_yamls/charge_light_association.yaml -i <input file> -o <output file>
+    mpiexec h5flow -c h5flow_yamls/charge/charge_light_association.yaml \
+        -i <input file> -o <output file>
 
 This creates references between ``charge/ext_trigs`` and ``light/events`` as well
 as ``charge/events`` and ``light/events``. Both charge and light reconstructed
@@ -85,16 +90,20 @@ charge and light reconstruction flows on the same output file or by using
 the ``h5copy`` hdf5 tool::
 
     # copy light data from a source file
-    h5copy -v -f ref -s light -d light -i <light event file> -o <destination file>
+    h5copy -v -f ref -s light -d light -i <light event file> \
+        -o <destination file>
 
     # copy charge data from a source file
-    h5copy -v -f ref -s charge -d charge -i <charge event file> -o <destination file>
+    h5copy -v -f ref -s charge -d charge -i <charge event file> \
+        -o <destination file>
 
 merged event reconstruction
 ---------------------------
 
-This is a work in progress... but performs mid-level analysis making use of both
-light system information and charge system information.
+To generate T0s and tracks, run::
+
+    mpiexec h5flow -c h5flow_yamls/combined/combined_reconstruction.yaml \
+        -i <input file> -o <output file>
 
 file structure and access
 =========================
@@ -111,7 +120,8 @@ And list the available datasets using ``visititems``, which will call a specific
 function on all datasets and groups within the file. In particular, let's
 have it print out all available datasets::
 
-    my_func = lambda name,dset : print(name) if isinstance(dset, h5py.Dataset) else None
+    my_func = lambda name,dset : print(name) if isinstance(dset, h5py.Dataset) \
+        else None
     f.visititems(my_func)
 
 This will print out quite a number of things, but you'll notice three different
@@ -193,9 +203,9 @@ We can also load references with the opposite orientation (e.g.
     # and the parent indices correspond to positions within the light events
     sel = 0 # get charge events associated with the first light event
 
-    # to load, we modify the reference direction from (0,1) [default] to (1,0) since
-    # we want to use the second index of the ref dset as the "parent" and the
-    # first index as the "child"
+    # to load, we modify the reference direction from (0,1) [default] to (1,0)
+    # since we want to use the second index of the ref dset as the "parent" and
+    # the first index as the "child"
     data = dereference(sel, ref, dset, ref_direction=(1,0))
     print(data.shape, data.dtype)
 
@@ -205,12 +215,15 @@ find out where in the reference dataset we need to look for each item. In
 particular, this dataset provides a ``'start'`` and ``'stop'`` index for each
 item::
 
-    # get the bounds for where the first charge event references exist within the ref dataset
+    # get the bounds for where the first charge event references exist within
+    # the ref dataset
     sel = 0
     region = f['charge/events/ref/light/events/ref_region'][sel]
 
-    print(region['start']) # the first index in ref that is associated with charge event 0
-    print(region['stop'])  # the last index + 1 in ref that is associated with charge event 0
+    # the first index in ref that is associated with charge event 0
+    print(region['start'])
+    # the last index + 1 in ref that is associated with charge event 0
+    print(region['stop'])
 
     # gets all references that *might* be associated with charge event 0
     ref = f['charge/events/ref/light/events/ref'][region['start']:region['stop']]
@@ -225,7 +238,8 @@ efficient way (this is the recommended approach)::
 
     region = f['charge/events/ref/light/events/ref_region']
 
-    # this will load only necessary references and then find the data related to your selection
+    # this will load only necessary references and then find the data related
+    # to your selection
     data = dereference(sel, ref, dset, region=region)
 
 For datasets with a trivial 1:1 relationship (``light/events/data`` and
@@ -240,7 +254,8 @@ compare the charge sum of an event to the integral of the raw waveforms::
 
     import numpy.ma as ma # use masked arrays
 
-    # we'll only look at a events 0-1000 since the raw waveforms will use a lot of memory
+    # we'll only look at a events 0-1000 since the raw waveforms will use a
+    # lot of memory
     sel = slice(0,1000)
 
     # first get the data
@@ -256,14 +271,17 @@ compare the charge sum of an event to the integral of the raw waveforms::
     print('light_events:',light_events.shape)
     print('light_wvfms:',light_wvfms.shape)
 
-    # now apply a channel mask to the waveforms to ignore certain channels and waveforms
+    # now apply a channel mask to the waveforms to ignore certain channels
+    # and waveforms
     valid_wvfm = light_events['wvfm_valid'].astype(bool)
     # (event index, light event index, adc index, channel index)
     print('valid_wvfm',valid_wvfm.shape)
     channel_mask = np.zeros_like(valid_wvfm)
     sipm_channels = np.array(
-        [2,3,4,5,6,7] + [18,19,20,21,22,23] + [34,35,36,37,38,39] + [50,51,52,53,54,55] + \
-        [9,10,11,12,13,14] + [25,26,27,28,29,30] + [41,42,43,44,45,46] + [57,58,59,60,61,62]
+        [2,3,4,5,6,7] + [18,19,20,21,22,23] + [34,35,36,37,38,39] + \
+        [50,51,52,53,54,55] + \
+        [9,10,11,12,13,14] + [25,26,27,28,29,30] + [41,42,43,44,45,46] + \
+        [57,58,59,60,61,62]
     )
     channel_mask[:,:,:,sipm_channels] = True
 
@@ -271,14 +289,16 @@ compare the charge sum of an event to the integral of the raw waveforms::
     # (event index, light event index, adc index, channel index, sample index)
     print('samples:',samples.shape)
     # numpy masked arrays use the mask convention: True == invalid
-    samples.mask = samples.mask | np.expand_dims(~channel_mask,-1) | np.expand_dims(~valid_wvfm,-1)
+    samples.mask = samples.mask | np.expand_dims(~channel_mask,-1) | \
+        np.expand_dims(~valid_wvfm,-1)
 
     # now we can subtract the pedestals (using the mean of the first 50 samples)
     samples = samples.astype(float) - samples[...,:50].mean(axis=-1, keepdims=True)
 
     # and we can integrate over each of the dimensions:
     # axis 4 = integral over waveform, axis 3 = sum over valid channels,
-    # axis 2 = sum over valid adcs, axis 1 = sum over light events associated to a charge event
+    # axis 2 = sum over valid adcs, axis 1 = sum over light events associated
+    #          to a charge event
     light_integrals = samples.sum(axis=4).sum(axis=3).sum(axis=2).sum(axis=1)
 
     # we can either create a mask for only the valid entries (i.e. the charge-

@@ -10,7 +10,42 @@ from skimage.measure import LineModelND, ransac
 from h5flow.core import H5FlowStage, resources
 
 class TrackletReconstruction(H5FlowStage):
+    '''
+        Reconstructs "tracklets" or short, collinear track segments from hit
+        data using DBSCAN and RANSAC. The track direction is estimated using
+        a PCA fit.
 
+        Parameters:
+         - ``tracklet_dset_name``: ``str``, path to output dataset
+         - ``t0_dset_name``: ``str``, path to input t0 dataset
+         - ``hits_dset_name``: ``str``, path to input charge hits dataset
+         - ``dbscan_eps``: ``float``, dbscan epsilon parameter
+         - ``dbscan_min_samples``: ``int``, dbscan min neighbor points to consider as "core" point
+         - ``ransac_min_samples``: ``int``, min points to run ransac algorithm
+         - ``ransac_residual_threshold``: ``float``, max distance from trial axis
+         - ``ransac_max_trials``: ``int``, number of ransac trials per cluster
+
+         Both ``hits_dset_name`` and ``t0_dset_name`` are required in the cache.
+
+         Requires Geometry, RunData, and Units resource in workflow.
+
+         ``tracklets`` datatype::
+
+            id          u4,     unique identifier
+            theta       f8,     track inclination w.r.t anode
+            phi         f8,     track orientation w.r.t anode
+            xp          f8,     intersection of track with ``x=0,y=0`` plane [mm]
+            yp          f8,     intersection of track with ``x=0,y=0`` plane [mm]
+            nhit        i8,     number of hits in track
+            q           f8,     charge sum [mV]
+            ts_start    f8,     PPS timestamp of track start [crs ticks]
+            ts_end      f8,     PPS timestamp of track end [crs ticks]
+            residual    f8(3,)  average track fit error in (x,y,z) [mm]
+            length      f8      track length [mm]
+            start       f8(3,)  track start point (x,y,z) [mm]
+            end         f8(3,)  track end point (x,y,z) [mm]
+
+    '''
     default_tracklet_dset_name = 'combined/tracklets'
     default_hits_dset_name = 'charge/hits'
     default_t0_dset_name = 'combined/t0'
@@ -149,6 +184,17 @@ class TrackletReconstruction(H5FlowStage):
         return ma.array(track_id, mask=hits['id'].mask)
 
     def calc_tracks(self, hits, t0, track_ids):
+        '''
+            Calculate track parameters from hits and t0
+
+            :param hits: masked array, ``shape: (N,M)``
+
+            :param t0: masked array, ``shape: (N,1)``
+
+            :param track_ids: masked array, ``shape: (N,M)``
+
+            :returns: masked array, ``shape: (N,m)``
+        '''
         xyz = self._hit_xyz(hits, t0)
 
         n_tracks = track_ids.max() + 1 if np.count_nonzero(~track_ids.mask) \
@@ -238,12 +284,29 @@ class TrackletReconstruction(H5FlowStage):
         return np.mean(res, axis=0)
 
     def theta(self, axis):
+        '''
+            :param axis: array, ``shape: (3,)``
+
+            :returns: angle of axis w.r.t z-axis
+        '''
         return np.arctan2(np.linalg.norm(axis[:2]), axis[-1])
 
     def phi(self, axis):
+        '''
+            :param axis: array, ``shape: (3,)``
+
+            :returns: orientation of axis about z-axis
+        '''
         return np.arctan2(axis[1], axis[0])
 
     def xyp(self, axis, centroid):
+        '''
+            :param axis: array, ``shape: (3,)``
+
+            :param centroid: array, ``shape: (3,)``
+
+            :returns: x,y coordinate where line intersects ``x=0,y=0`` plane
+        '''
         if axis[-1] == 0:
             return centroid[:2]
         s = -centroid[-1] / axis[-1]

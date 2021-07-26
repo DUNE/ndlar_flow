@@ -28,8 +28,9 @@ class RunData(H5FlowResource):
 
             resources['RunData'].e_field
 
-        This will load the data from the runlist file if the value is not already
-        present as metadata in the file.
+        A runlist file is required the first time the resource is included in
+        a workflow. For subsequent workflows, data is stored and loaded directly
+        from the hdf5 file.
 
         Example config::
 
