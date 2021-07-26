@@ -341,7 +341,8 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
             packets = packets[~mask]
             unix_ts = unix_ts[~mask]
-            mc_assn = mc_assn[~mask]
+            if mc_assn is not None:
+                mc_assn = mc_assn[~mask]
             event_start_timestamp = event_start_timestamp[:-1]
         else:
             self.event_buffer = np.empty((0,), dtype=packets.dtype)
