@@ -8,7 +8,7 @@ class Geometry(H5FlowResource):
     class_version = '0.0.0'
 
     default_path = 'geometry_info'
-    default_crs_geometry_file = 'multi_tile_layout-2.2.16.yaml'
+    default_crs_geometry_file = '-'
     # default_lrs_geometry_file = 'lrs_layout-0.0.0.yaml'
 
     # for light detectors (a proposal):
@@ -36,9 +36,12 @@ class Geometry(H5FlowResource):
         self.data = dict(self.data_manager.get_attrs(self.path))
 
         if not self.data:
+            # first time loading geometry, save to file
             self.load_geometry()
 
             self.data_manager.set_attrs(self.path,
+                classname=self.classname,
+                class_version=self.class_version,
                 pixel_pitch=self.pixel_pitch,
                 crs_geometry_file=self.crs_geometry_file
                 )
@@ -47,6 +50,7 @@ class Geometry(H5FlowResource):
             self.write_lut('anode_z', self.anode_z)
             self.write_lut('drift_dir', self.drift_dir)
         else:
+            # load geometry from file
             self._pixel_pitch = self.data['pixel_pitch']
             self._pixel_xy = self.read_lut('pixel_xy')
             self._tile_id = self.read_lut('tile_id')

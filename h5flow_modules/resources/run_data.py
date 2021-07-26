@@ -72,6 +72,11 @@ class RunData(H5FlowResource):
         if not len(self.data.keys()):
             # run data does not exist, get it from input run list file
             self.update_data()
+            self.data['classname'] = self.classname
+            self.data['class_version'] = self.class_version
+            self.data['runlist_file'] = self.runlist_file
+            for key,val in self.defaults.items():
+                self.data[f'{key}_default'] = val
             self.data_manager.set_attrs(self.path, **self.data)
 
         for attr in self.required_attr:

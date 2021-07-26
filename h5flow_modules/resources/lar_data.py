@@ -52,6 +52,9 @@ class LArData(H5FlowResource):
         if not self.data:
             # no data stored in file, generate it
             self.v_drift
+            self.data['classname'] = self.classname
+            self.data['class_version'] = self.class_version
+            self.data['electron_mobility_params'] = self.electron_mobility_params
             self.data_manager.set_attrs(self.path, **self.data)
 
         logging.info(f'v_drift: {self.v_drift}')
