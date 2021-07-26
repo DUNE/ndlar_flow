@@ -61,7 +61,7 @@ class TrackletReconstruction(H5FlowStage):
             ('theta', 'f8'), ('phi', 'f8'),
             ('xp', 'f8'), ('yp', 'f8'),
             ('nhit', 'i8'), ('q', 'f8'),
-            ('ts_start', 'i8'), ('ts_end', 'i8'),
+            ('ts_start', 'f8'), ('ts_end', 'f8'),
             ('residual', 'f8', (3,)), ('length', 'f8'),
             ('start', 'f8', (4,)), ('end', 'f8', (4,))
         ])
@@ -224,8 +224,8 @@ class TrackletReconstruction(H5FlowStage):
                 tracks[i,j]['ts_end'] = np.max(hits[i][mask]['ts'])
                 tracks[i,j]['residual'] = residual
                 tracks[i,j]['length'] = np.linalg.norm(r_max-r_min)
-                tracks[i,j]['start'] = np.append(r_min, tracks[i,j]['ts_start']-t0[i]['ts'])
-                tracks[i,j]['end'] = np.append(r_min, tracks[i,j]['ts_end']-t0[i]['ts'])
+                tracks[i,j]['start'] = r_min
+                tracks[i,j]['end'] = r_max
 
                 tracks_mask[i,j] = False
 
