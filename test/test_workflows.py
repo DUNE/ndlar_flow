@@ -89,10 +89,11 @@ def fresh_data_files(data_directory):
     if os.path.exists(output_filename):
         os.remove(output_filename)
 
-def check_dsets(filename, datasets):
+def check_dsets(filename, datasets, check_empty=True):
     with h5py.File(filename,'r') as f:
         assert all([d in f for d in datasets]), ('Missing dataset(s)',f.visit(print))
-        assert all([len(f[d]) for d in datasets]), ('Empty dataset(s)',f.visititems(print))
+        if check_empty:
+            assert all([len(f[d]) for d in datasets]), ('Empty dataset(s)',f.visititems(print))
 
 @pytest.fixture(params=[(charge_source_file, 5273174, 1000), (charge_source_file_mc, 0, 1000)])
 def charge_event_built_file(fresh_data_files, request):
@@ -170,7 +171,7 @@ def charge_assoc_file(charge_reco_file, light_reco_file):
     check_dsets(output_filename, (
         'charge/events/ref/light/events/ref',
         'charge/ext_trigs/ref/light/events/ref'
-        ))
+        ), check_empty=False)
 
     return output_filename
 
