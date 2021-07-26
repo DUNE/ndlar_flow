@@ -2,6 +2,10 @@
     :target: https://module0-flow.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
+.. image:: https://github.com/peter-madigan/module0_flow/actions/workflows/test.yml/badge.svg
+    :target: https://github.com/peter-madigan/module0_flow/actions/
+    :alt: Test Status
+
 environment
 ===========
 
