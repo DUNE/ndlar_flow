@@ -1,3 +1,7 @@
+.. image:: https://readthedocs.org/projects/module0-flow/badge/?version=latest
+:target: https://module0-flow.readthedocs.io/en/latest/?badge=latest
+:alt: Documentation Status
+
 environment
 ===========
 
