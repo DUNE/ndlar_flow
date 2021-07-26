@@ -63,7 +63,7 @@ class TrackletReconstruction(H5FlowStage):
             ('nhit', 'i8'), ('q', 'f8'),
             ('ts_start', 'f8'), ('ts_end', 'f8'),
             ('residual', 'f8', (3,)), ('length', 'f8'),
-            ('start', 'f8', (4,)), ('end', 'f8', (4,))
+            ('start', 'f8', (3,)), ('end', 'f8', (3,))
         ])
 
     def __init__(self, **params):
