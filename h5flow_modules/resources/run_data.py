@@ -72,7 +72,7 @@ class RunData(H5FlowResource):
 
         if not len(self.data.keys()):
             # run data does not exist, get it from input run list file
-            self.update_data()
+            self._update_data()
             self.data['classname'] = self.classname
             self.data['class_version'] = self.class_version
             self.data['runlist_file'] = self.runlist_file
@@ -83,7 +83,7 @@ class RunData(H5FlowResource):
         for attr in self.required_attr:
             logging.info(f'{attr}: {getattr(self,attr)}')
 
-    def lookup_row_in_runlist(self):
+    def _lookup_row_in_runlist(self):
         '''
             Load the run list file and check the charge or light data files against:
 
@@ -125,7 +125,7 @@ class RunData(H5FlowResource):
 
         self.data.update(row)
 
-    def lookup_mc_info(self):
+    def _lookup_mc_info(self):
         '''
             Check if input file is a larnd-sim output file with MC truth
             information, and set ``is_mc`` flag.
@@ -143,12 +143,12 @@ class RunData(H5FlowResource):
         else:
             self.data['is_mc'] = False
 
-    def update_data(self):
+    def _update_data(self):
         # check input file for MC info to set mc flag
-        self.lookup_mc_info()
+        self._lookup_mc_info()
 
         # read in run list file and update run data
-        self.lookup_row_in_runlist()
+        self._lookup_row_in_runlist()
 
         # fill in from defaults
         for key,val in self.defaults.items():
