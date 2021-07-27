@@ -4,6 +4,7 @@ import yaml
 
 from h5flow.core import H5FlowResource, resources
 
+
 class Geometry(H5FlowResource):
     class_version = '0.0.0'
 
@@ -23,7 +24,7 @@ class Geometry(H5FlowResource):
     # panel_shape -> (dx,dy,dz) [half-width]
 
     def __init__(self, **params):
-        super(Geometry,self).__init__(**params)
+        super(Geometry, self).__init__(**params)
 
         self.path = params.get('path', self.default_path)
         self.crs_geometry_file = params.get('crs_geometry_file', self.default_crs_geometry_file)
@@ -40,11 +41,11 @@ class Geometry(H5FlowResource):
             self.load_geometry()
 
             self.data_manager.set_attrs(self.path,
-                classname=self.classname,
-                class_version=self.class_version,
-                pixel_pitch=self.pixel_pitch,
-                crs_geometry_file=self.crs_geometry_file
-                )
+                                        classname=self.classname,
+                                        class_version=self.class_version,
+                                        pixel_pitch=self.pixel_pitch,
+                                        crs_geometry_file=self.crs_geometry_file
+                                        )
             self.write_lut('pixel_xy', self.pixel_xy)
             self.write_lut('tile_id', self.tile_id)
             self.write_lut('anode_z', self.anode_z)
@@ -59,15 +60,15 @@ class Geometry(H5FlowResource):
 
     def write_lut(self, name, lut):
         lut_meta, lut_arr = lut.to_array()
-        self.data_manager.create_dset(self.path+'/'+name, dtype=lut_arr.dtype)
-        self.data_manager.reserve_data(self.path+'/'+name, slice(0,len(lut_arr)))
-        self.data_manager.write_data(self.path+'/'+name, slice(0,len(lut_arr)), lut_arr)
-        self.data_manager.set_attrs(self.path+'/'+name, meta=lut_meta)
-        self.data_manager.set_attrs(self.path, **{name+'_table': self.path+'/'+name})
+        self.data_manager.create_dset(self.path + '/' + name, dtype=lut_arr.dtype)
+        self.data_manager.reserve_data(self.path + '/' + name, slice(0, len(lut_arr)))
+        self.data_manager.write_data(self.path + '/' + name, slice(0, len(lut_arr)), lut_arr)
+        self.data_manager.set_attrs(self.path + '/' + name, meta=lut_meta)
+        self.data_manager.set_attrs(self.path, **{name + '_table': self.path + '/' + name})
 
     def read_lut(self, name):
-        lut_arr = self.data_manager.get_dset(self.path+'/'+name)
-        lut_meta = self.data_manager.get_attrs(self.path+'/'+name)['meta'][0]
+        lut_arr = self.data_manager.get_dset(self.path + '/' + name)
+        lut_meta = self.data_manager.get_attrs(self.path + '/' + name)['meta']
         return LUT.from_array(lut_meta, lut_arr)
 
     @property
@@ -115,7 +116,6 @@ class Geometry(H5FlowResource):
         '''
         return self._drift_dir
 
-
     def get_z_coordinate(self, io_group, io_channel, drift):
         '''
             Convert a drift distance on a set of ``(io group, io channel)`` to
@@ -139,7 +139,7 @@ class Geometry(H5FlowResource):
 
     @staticmethod
     def _rotate_pixel(pixel_pos, tile_orientation):
-        return pixel_pos[0]*tile_orientation[2], pixel_pos[1]*tile_orientation[1]
+        return pixel_pos[0] * tile_orientation[2], pixel_pos[1] * tile_orientation[1]
 
     def load_geometry(self):
         logging.warning(f'Loading geometry from {self.crs_geometry_file}...')
@@ -160,38 +160,38 @@ class Geometry(H5FlowResource):
             :, 0] * self.pixel_pitch
         ys = np.array(list(chip_channel_to_position.values()))[
             :, 1] * self.pixel_pitch
-        x_size = max(xs)-min(xs)+self.pixel_pitch
-        y_size = max(ys)-min(ys)+self.pixel_pitch
+        x_size = max(xs) - min(xs) + self.pixel_pitch
+        y_size = max(ys) - min(ys) + self.pixel_pitch
 
         tiles = [tile for tile in geometry_yaml['tile_chip_to_io']]
         io_groups = [
-            geometry_yaml['tile_chip_to_io'][tile][chip]//1000
+            geometry_yaml['tile_chip_to_io'][tile][chip] // 1000
             for tile in geometry_yaml['tile_chip_to_io']
             for chip in geometry_yaml['tile_chip_to_io'][tile]
-            ]
+        ]
         io_channels = [
-            geometry_yaml['tile_chip_to_io'][tile][chip]%1000
+            geometry_yaml['tile_chip_to_io'][tile][chip] % 1000
             for tile in geometry_yaml['tile_chip_to_io']
             for chip in geometry_yaml['tile_chip_to_io'][tile]
-            ]
+        ]
         chip_ids = [
-            chip_channel//1000
+            chip_channel // 1000
             for chip_channel in geometry_yaml['chip_channel_to_position']
-            ]
+        ]
         channel_ids = [
-            chip_channel%1000
+            chip_channel % 1000
             for chip_channel in geometry_yaml['chip_channel_to_position']
-            ]
+        ]
 
-        pixel_xy_min_max = [(min(v),max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
+        pixel_xy_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
         self._pixel_xy = LUT('f4', *pixel_xy_min_max, shape=(2,))
         self._pixel_xy.default = 0.
 
-        tile_min_max = [(min(v),max(v)) for v in (io_groups, io_channels)]
+        tile_min_max = [(min(v), max(v)) for v in (io_groups, io_channels)]
         self._tile_id = LUT('i4', *tile_min_max)
         self._tile_id.default = -1
 
-        anode_min_max = [(min(tiles),max(tiles))]
+        anode_min_max = [(min(tiles), max(tiles))]
         self._anode_z = LUT('f4', *anode_min_max)
         self._anode_z.default = 0.
         self._drift_dir = LUT('i1', *anode_min_max)
@@ -204,7 +204,7 @@ class Geometry(H5FlowResource):
             tile_orientation = tile_orientations[tile]
             for chip in geometry_yaml['tile_chip_to_io'][tile]:
                 io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
-                io_group = io_group_io_channel//1000
+                io_group = io_group_io_channel // 1000
                 io_channel = io_group_io_channel % 1000
                 self._tile_id[([io_group], [io_channel])] = tile
 
@@ -230,6 +230,7 @@ class Geometry(H5FlowResource):
                     tpc_centers[tile_indeces[tile][1]][1]
 
                 self._pixel_xy[([io_group], [io_channel], [chip], [channel])] = np.array([x, y])
+
 
 class LUT(object):
     '''
@@ -268,12 +269,13 @@ class LUT(object):
             lut[([0],[0])] # np.array([-1,-1])
 
     '''
+
     def __init__(self, dtype, *min_max_keys, default=None, shape=None):
         self.dtype = dtype
         self.min_max_keys = min_max_keys
-        self.lengths = [max_-min_+1 for min_,max_ in self.min_max_keys]
-        self.max_hash = int(self._hash(*[max_ for min_,max_ in min_max_keys]))
-        shape = (self.max_hash+1,)+shape if shape else (self.max_hash+1,)
+        self.lengths = [max_ - min_ + 1 for min_, max_ in self.min_max_keys]
+        self.max_hash = int(self._hash(*[max_ for min_, max_ in min_max_keys]))
+        shape = (self.max_hash + 1,) + shape if shape else (self.max_hash + 1,)
         self._data = np.empty(shape, dtype=self.dtype)
         self._filled = np.zeros_like(self._data, dtype=bool)
         if default is not None:
@@ -312,14 +314,14 @@ class LUT(object):
 
     def to_array(self):
         dtype_meta = np.dtype([
-            ('min_max_keys', 'i8', (len(self.min_max_keys),2)),
+            ('min_max_keys', 'i8', (len(self.min_max_keys), 2)),
             ('default', self.dtype, self._data.shape[1:])
-            ])
+        ])
         dtype_data = np.dtype([
             ('data', self.dtype, self._data.shape[1:]),
             ('filled', self._filled.dtype, self._filled.shape[1:])
-            ])
-        meta_arr =np.empty((1,), dtype=dtype_meta)
+        ])
+        meta_arr = np.empty((1,), dtype=dtype_meta)
         meta_arr['min_max_keys'] = self.min_max_keys
         meta_arr['default'] = self.default
 
@@ -330,9 +332,9 @@ class LUT(object):
         return meta_arr, data_arr
 
     def _hash(self, *keys):
-        val = 1 + np.array(keys[0])-self.min_max_keys[0][0]
-        for i,key in enumerate(keys[1:]):
-            val += (np.array(key)-self.min_max_keys[i][0]) * sum(self.lengths[:i+1])
+        val = 1 + np.array(keys[0]) - self.min_max_keys[0][0]
+        for i, key in enumerate(keys[1:]):
+            val += (np.array(key) - self.min_max_keys[i][0]) * sum(self.lengths[:i + 1])
         return val.astype(int).ravel()
 
     def hash(self, *keys):
@@ -354,7 +356,7 @@ class LUT(object):
             Default value to return if key not found in table. Datatype is
             same as lookup table
         '''
-        return self._data[0] # position 0 is reserved for the default value
+        return self._data[0]  # position 0 is reserved for the default value
 
     @default.setter
     def default(self, val):
@@ -362,7 +364,7 @@ class LUT(object):
             new_default = val
         else:
             new_default = np.broadcast_to(np.expand_dims(val, axis=0),
-                self._data.shape)[~self._filled]
+                                          self._data.shape)[~self._filled]
 
         self._data[~self._filled] = new_default
 
