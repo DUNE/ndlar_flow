@@ -216,10 +216,10 @@ class WaveformHitFinder(H5FlowStage):
 
             # calculate FWHM
             peak_lhm_spline_samples = ma.array(subsamples
-                                               + (peak_max_spline * 0.5 - peak_spline_subsamples) / peak_spline_d,
+                                               + (np.expand_dims(peak_max_spline, axis=-1) * 0.5 - peak_spline_subsamples) / peak_spline_d,
                                                mask=subsamples >= peak_ns_spline)
             peak_uhm_spline_samples = ma.array(subsamples
-                                               + (peak_max_spline * 0.5 - peak_spline_subsamples) / peak_spline_d,
+                                               + (np.expand_dims(peak_max_spline, axis=-1) * 0.5 - peak_spline_subsamples) / peak_spline_d,
                                                mask=subsamples <= peak_ns_spline)
             lhm_outlier_mask = self.find_outlier_mask(peak_lhm_spline_samples)
             uhm_outlier_mask = self.find_outlier_mask(peak_uhm_spline_samples)
