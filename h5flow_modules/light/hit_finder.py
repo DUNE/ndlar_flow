@@ -52,29 +52,30 @@ class WaveformHitFinder(H5FlowStage):
     default_busy_channel = 0
     default_interpolation = 256
     default_global_threshold = 2000
-
-    def default_channel_threshold(self, global_threshold): return
-        defaultdict(lambda: defaultdict(lambda: global_threshold))
     default_channel_mask = []
 
-    def hits_dtype(self, near_samples): return np.dtype([
-        ('id', 'u4'),
-        ('adc', 'u1'),
-        ('sn', 'u4'),
-        ('ch', 'u1'),
-        ('sample_idx', 'u2'),
-        ('ns', 'f8'),
-        ('busy_ns', 'f8'),
-        ('samples', 'f4', (2 * near_samples + 1,)),
-        ('sum', 'f4'),
-        ('max', 'f4'),
-        ('sum_spline', 'f4'),
-        ('max_spline', 'f4'),
-        ('ns_spline', 'f4'),
-        ('rising_spline', 'f4'),
-        ('rising_err_spline', 'f4'),
-        ('fwhm_spline', 'f4')
-    ])
+    def default_channel_threshold(self, global_threshold):
+        return defaultdict(lambda: defaultdict(lambda: global_threshold))
+
+    def hits_dtype(self, near_samples):
+        return np.dtype([
+            ('id', 'u4'),
+            ('adc', 'u1'),
+            ('sn', 'u4'),
+            ('ch', 'u1'),
+            ('sample_idx', 'u2'),
+            ('ns', 'f8'),
+            ('busy_ns', 'f8'),
+            ('samples', 'f4', (2 * near_samples + 1,)),
+            ('sum', 'f4'),
+            ('max', 'f4'),
+            ('sum_spline', 'f4'),
+            ('max_spline', 'f4'),
+            ('ns_spline', 'f4'),
+            ('rising_spline', 'f4'),
+            ('rising_err_spline', 'f4'),
+            ('fwhm_spline', 'f4')
+        ])
 
     def __init__(self, **params):
         super(WaveformHitFinder, self).__init__(**params)
@@ -95,8 +96,7 @@ class WaveformHitFinder(H5FlowStage):
         # set channel hit finding thresholds (will be converted to an array later in init())
         self.channel_threshold = params.get('channel_threshold',
                                             self.default_global_threshold)
-        if isinstance(self.channel_threshold, int) or
-                isinstance(self.channel_threshold, float):
+        if isinstance(self.channel_threshold, int) or isinstance(self.channel_threshold, float):
             # if a global threshold is specified, use the default generator
             self.channel_threshold = self.default_channel_threshold(
                 self.channel_threshold)
@@ -115,8 +115,8 @@ class WaveformHitFinder(H5FlowStage):
         wvfm_dset = self.data_manager.get_dset(self.wvfm_dset_name)
 
         # get convert sample rate to ns
-        self.sample_rate = resources['RunData'].lrs_ticks /
-            resources['Units'].ns
+        self.sample_rate = (resources['RunData'].lrs_ticks
+                            / resources['Units'].ns)
 
         # get waveform shape information
         self.nadc = wvfm_dset.dtype['samples'].shape[0]
@@ -161,10 +161,10 @@ class WaveformHitFinder(H5FlowStage):
 
         # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
-        peaks = (np.sign(wvfm_d[..., 1:])*np.sign(wvfm_d[..., :-1]) < 0)
-            & (np.sign(np.diff(wvfm_d, axis=-1)) <= 0)
-            & ~np.isin(np.arange(self.nchan), self.channel_mask).reshape(1, 1, -1, 1)
-            & np.all(~wvfms.mask, axis=-1, keepdims=True)
+        peaks = ((np.sign(wvfm_d[..., 1:]) * np.sign(wvfm_d[..., :-1]) < 0)
+                 & (np.sign(np.diff(wvfm_d, axis=-1)) <= 0)
+                 & ~np.isin(np.arange(self.nchan), self.channel_mask).reshape(1, 1, -1, 1)
+                 & np.all(~wvfms.mask, axis=-1, keepdims=True))
         peaks = np.where(peaks)  # tuple of (ev, adc, ch, index)
         peak_max = wvfms[..., 1:][peaks]  # waveform value at each peak
 
@@ -180,13 +180,13 @@ class WaveformHitFinder(H5FlowStage):
 
             # get neighboring samples
             peak_sample_index = np.clip(peaks[-1].reshape(-1, 1)
-                + np.arange(-self.near_samples+1,self.near_samples+2), 0, self.nsamples-1)
-            peak_samples = wvfms[peaks[:-1]+(peak_sample_index,)]
+                                        + np.arange(-self.near_samples + 1, self.near_samples + 2), 0, self.nsamples - 1)
+            peak_samples = wvfms[peaks[:-1] + (peak_sample_index,)]
             peak_sum = np.sum(peak_samples.astype(int), axis=-1)
 
             # create hit spline
             peak_spline = scipy.interpolate.CubicSpline(
-                np.arange(-self.near_samples, self.near_samples+1),
+                np.arange(-self.near_samples, self.near_samples + 1),
                 peak_samples, axis=-1, extrapolate=True)
             # calculate integral
             peak_sum_spline = peak_spline.integrate(-self.near_samples,
@@ -216,10 +216,10 @@ class WaveformHitFinder(H5FlowStage):
 
             # calculate FWHM
             peak_lhm_spline_samples = ma.array(subsamples
-                                               + (peak_max_spline*0.5-peak_spline_subsamples) / peak_spline_d,
+                                               + (peak_max_spline * 0.5 - peak_spline_subsamples) / peak_spline_d,
                                                mask=subsamples >= peak_ns_spline)
             peak_uhm_spline_samples = ma.array(subsamples
-                                               + (peak_max_spline*0.5-peak_spline_subsamples) / peak_spline_d,
+                                               + (peak_max_spline * 0.5 - peak_spline_subsamples) / peak_spline_d,
                                                mask=subsamples <= peak_ns_spline)
             lhm_outlier_mask = self.find_outlier_mask(peak_lhm_spline_samples)
             uhm_outlier_mask = self.find_outlier_mask(peak_uhm_spline_samples)
@@ -229,7 +229,7 @@ class WaveformHitFinder(H5FlowStage):
             peak_uhm_spline_samples = ma.array(peak_uhm_spline_samples,
                                                mask=uhm_outlier_mask)
             peak_fwhm_spline = peak_uhm_spline_samples.mean(axis=-1)
-                - peak_lhm_spline_samples.mean(axis=-1)
+            - peak_lhm_spline_samples.mean(axis=-1)
 
             # find busy signal rising edge
             busy_sig = wvfms[..., self.busy_channel, :]
@@ -246,10 +246,10 @@ class WaveformHitFinder(H5FlowStage):
             hit_data['sn'] = wvfm_sn[peaks[:2]].ravel()
             hit_data['ch'] = wvfm_ch[peaks[:3]].ravel()
             hit_data['ns'] = peak_ns.ravel()
-            hit_data['sample_idx'] = peaks[-1].ravel()+1
+            hit_data['sample_idx'] = peaks[-1].ravel() + 1
             hit_data['busy_ns'] = peak_busy_ns.ravel()
             hit_data['samples'] = peak_samples.reshape(-1,
-                2*self.near_samples+1)
+                                                       2 * self.near_samples + 1)
             hit_data['sum'] = peak_sum.ravel()
             hit_data['max'] = peak_max.ravel()
             hit_data['sum_spline'] = peak_sum_spline.ravel()
@@ -296,5 +296,5 @@ class WaveformHitFinder(H5FlowStage):
 
         '''
         med = ma.median(arr, axis=-1, keepdims=True)
-        mad = ma.median(np.abs(arr-med), axis=-1, keepdims=True)
-        return np.abs(arr-med) > mad
+        mad = ma.median(np.abs(arr - med), axis=-1, keepdims=True)
+        return np.abs(arr - med) > mad
