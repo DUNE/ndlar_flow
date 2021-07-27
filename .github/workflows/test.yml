@@ -49,6 +49,7 @@ jobs:
       run: |
         conda env update --file env.yaml
         conda install flake8
+        pip install --no-deps .
 
     - name: lint
       run: |
@@ -59,4 +60,4 @@ jobs:
 
     - name: test
       run: |
-        pytest -s -vv
+        pytest -s -vv --log-cli-level=DEBUG
