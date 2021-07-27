@@ -9,6 +9,7 @@ from skimage.measure import LineModelND, ransac
 
 from h5flow.core import H5FlowStage, resources
 
+
 class TrackletReconstruction(H5FlowStage):
     '''
         Reconstructs "tracklets" or short, collinear track segments from hit
@@ -50,28 +51,28 @@ class TrackletReconstruction(H5FlowStage):
     default_hits_dset_name = 'charge/hits'
     default_t0_dset_name = 'combined/t0'
 
-    default_dbscan_eps = 2.5
+    default_dbscan_eps = 25
     default_dbscan_min_samples = 5
     default_ransac_min_samples = 2
     default_ransac_residual_threshold = 8
     default_ransac_max_trials = 100
 
     tracklet_dtype = np.dtype([
-            ('id', 'u4'),
-            ('theta', 'f8'), ('phi', 'f8'),
-            ('xp', 'f8'), ('yp', 'f8'),
-            ('nhit', 'i8'), ('q', 'f8'),
-            ('ts_start', 'f8'), ('ts_end', 'f8'),
-            ('residual', 'f8', (3,)), ('length', 'f8'),
-            ('start', 'f8', (3,)), ('end', 'f8', (3,))
-        ])
+        ('id', 'u4'),
+        ('theta', 'f8'), ('phi', 'f8'),
+        ('xp', 'f8'), ('yp', 'f8'),
+        ('nhit', 'i8'), ('q', 'f8'),
+        ('ts_start', 'f8'), ('ts_end', 'f8'),
+        ('residual', 'f8', (3,)), ('length', 'f8'),
+        ('start', 'f8', (3,)), ('end', 'f8', (3,))
+    ])
 
     def __init__(self, **params):
-        super(TrackletReconstruction,self).__init__(**params)
+        super(TrackletReconstruction, self).__init__(**params)
 
-        self.tracklet_dset_name = params.get('tracklet_dset_name',self.default_tracklet_dset_name)
-        self.hits_dset_name = params.get('hits_dset_name',self.default_hits_dset_name)
-        self.t0_dset_name = params.get('t0_dset_name',self.default_t0_dset_name)
+        self.tracklet_dset_name = params.get('tracklet_dset_name', self.default_tracklet_dset_name)
+        self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
+        self.t0_dset_name = params.get('t0_dset_name', self.default_t0_dset_name)
 
         self._dbscan_eps = params.get('dbscan_eps', self.default_dbscan_eps)
         self._dbscan_min_samples = params.get('dbscan_min_samples', self.default_dbscan_min_samples)
@@ -84,26 +85,26 @@ class TrackletReconstruction(H5FlowStage):
 
     def init(self, source_name):
         self.data_manager.set_attrs(self.tracklet_dset_name,
-            classname=self.classname,
-            class_version=self.class_version,
-            hits_dset=self.hits_dset_name,
-            t0_dset=self.t0_dset_name,
-            dbscan_eps=self._dbscan_eps,
-            dbscan_min_samples=self._dbscan_min_samples,
-            ransac_min_samples=self._ransac_min_samples,
-            ransac_residual_threshold=self._ransac_residual_threshold,
-            ransac_max_trials=self._ransac_max_trials
-            )
+                                    classname=self.classname,
+                                    class_version=self.class_version,
+                                    hits_dset=self.hits_dset_name,
+                                    t0_dset=self.t0_dset_name,
+                                    dbscan_eps=self._dbscan_eps,
+                                    dbscan_min_samples=self._dbscan_min_samples,
+                                    ransac_min_samples=self._ransac_min_samples,
+                                    ransac_residual_threshold=self._ransac_residual_threshold,
+                                    ransac_max_trials=self._ransac_max_trials
+                                    )
 
         self.data_manager.create_dset(self.tracklet_dset_name, self.tracklet_dtype)
         self.data_manager.create_ref(self.tracklet_dset_name, self.hits_dset_name)
         self.data_manager.create_ref(source_name, self.tracklet_dset_name)
 
     def run(self, source_name, source_slice, cache):
-        events = cache[source_name]                     # shape: (N,)
-        t0 = cache[self.t0_dset_name]                   # shape: (N,1)
-        hits = cache[self.hits_dset_name]               # shape: (N,M)
-        hit_idx = cache[self.hits_dset_name+'_index']   # shape: (N,M)
+        events = cache[source_name]                         # shape: (N,)
+        t0 = cache[self.t0_dset_name]                       # shape: (N,1)
+        hits = cache[self.hits_dset_name]                   # shape: (N,M)
+        hit_idx = cache[self.hits_dset_name + '_index']     # shape: (N,M)
 
         track_ids = self.find_tracks(hits, t0)
         tracks = self.calc_tracks(hits, t0, track_ids)
@@ -135,7 +136,7 @@ class TrackletReconstruction(H5FlowStage):
             np.expand_dims(hits['px'], axis=-1),
             np.expand_dims(hits['py'], axis=-1),
             np.expand_dims(z, axis=-1),
-            ), axis=-1)
+        ), axis=-1)
         return xyz
 
     def find_tracks(self, hits, t0):
@@ -197,7 +198,7 @@ class TrackletReconstruction(H5FlowStage):
         '''
         xyz = self._hit_xyz(hits, t0)
 
-        n_tracks = track_ids.max() + 1 if np.count_nonzero(~track_ids.mask) \
+        n_tracks = np.clip(track_ids.max() + 1, 0, np.inf).astype(int) if np.count_nonzero(~track_ids.mask) \
             else 1
         tracks = np.empty((len(t0), n_tracks), dtype=self.tracklet_dtype)
         tracks_mask = np.ones(tracks.shape, dtype=bool)
@@ -214,20 +215,20 @@ class TrackletReconstruction(H5FlowStage):
                 residual = self._track_residual(centroid, axis, xyz[i][mask])
                 xyp = self.xyp(axis, centroid)
 
-                tracks[i,j]['theta'] = self.theta(axis)
-                tracks[i,j]['phi'] = self.phi(axis)
-                tracks[i,j]['xp'] = xyp[0]
-                tracks[i,j]['yp'] = xyp[1]
-                tracks[i,j]['nhit'] = np.count_nonzero(mask)
-                tracks[i,j]['q'] = np.sum(hits[i][mask]['q'])
-                tracks[i,j]['ts_start'] = np.min(hits[i][mask]['ts'])
-                tracks[i,j]['ts_end'] = np.max(hits[i][mask]['ts'])
-                tracks[i,j]['residual'] = residual
-                tracks[i,j]['length'] = np.linalg.norm(r_max-r_min)
-                tracks[i,j]['start'] = r_min
-                tracks[i,j]['end'] = r_max
+                tracks[i, j]['theta'] = self.theta(axis)
+                tracks[i, j]['phi'] = self.phi(axis)
+                tracks[i, j]['xp'] = xyp[0]
+                tracks[i, j]['yp'] = xyp[1]
+                tracks[i, j]['nhit'] = np.count_nonzero(mask)
+                tracks[i, j]['q'] = np.sum(hits[i][mask]['q'])
+                tracks[i, j]['ts_start'] = np.min(hits[i][mask]['ts'])
+                tracks[i, j]['ts_end'] = np.max(hits[i][mask]['ts'])
+                tracks[i, j]['residual'] = residual
+                tracks[i, j]['length'] = np.linalg.norm(r_max - r_min)
+                tracks[i, j]['start'] = r_min
+                tracks[i, j]['end'] = r_max
 
-                tracks_mask[i,j] = False
+                tracks_mask[i, j] = False
 
         return ma.array(tracks, mask=tracks_mask)
 
@@ -240,7 +241,7 @@ class TrackletReconstruction(H5FlowStage):
             :returns: ``shape: (N,)`` array of grouped track ids
         '''
         clustering = self.dbscan.fit(xyz[mask])
-        track_ids = np.zeros(len(mask))-1
+        track_ids = np.zeros(len(mask)) - 1
         track_ids[mask] = clustering.labels_
         return track_ids
 

@@ -34,7 +34,7 @@ tracklet_reco:
     tracklet_dset_name: 'combined/tracklets'
     hits_dset_name: 'charge/hits'
     t0_dset_name: 'combined/t0'
-    dbscan_eps: 2.5
+    dbscan_eps: 25
     dbscan_min_samples: 5
     ransac_min_samples: 2
     ransac_residual_threshold: 8
