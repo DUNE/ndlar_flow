@@ -6,16 +6,16 @@ import shutil
 
 import h5flow
 
-charge_source_file    = 'datalog_2021_04_04_00_41_40_CEST.h5'
+charge_source_file = 'datalog_2021_04_04_00_41_40_CEST.h5'
 charge_source_file_mc = 'datalog.edep.all.h5'
-light_source_file     = 'rwf_20210404_004206.data.root'
-geometry_file       = 'multi_tile_layout-2.2.16.yaml'
-larpix_config_file  = 'evd_config_21-03-31_12-36-13.json'
+light_source_file = 'rwf_20210404_004206.data.root'
+geometry_file = 'multi_tile_layout-2.2.16.yaml'
+larpix_config_file = 'evd_config_21-03-31_12-36-13.json'
 larpix_pedestal_config_file = 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
-runlist_file        = 'runlist.txt'
-light_noise_file    = 'rwf_20210624_094156.fwvfm.noise_power.npz'
-light_signal_file   = 'wvfm_deconv_signal_power.npz'
-light_impulse_file  = 'wvfm_deconv_signal_impulse.fit.npz'
+runlist_file = 'runlist.txt'
+light_noise_file = 'rwf_20210624_094156.fwvfm.noise_power.npz'
+light_signal_file = 'wvfm_deconv_signal_power.npz'
+light_impulse_file = 'wvfm_deconv_signal_impulse.fit.npz'
 
 data_files = [
     charge_source_file,
@@ -28,9 +28,10 @@ data_files = [
     light_noise_file,
     light_signal_file,
     light_impulse_file,
-    ]
+]
 
 output_filename = 'test.h5'
+
 
 @pytest.fixture
 def data_directory(pytestconfig, tmp_path_factory):
@@ -52,14 +53,14 @@ def data_directory(pytestconfig, tmp_path_factory):
             f'https://portal.nersc.gov/project/dune/data/Module0-Run2/LRS/LED/{light_noise_file}',
             f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_signal_file}',
             f'https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/{light_impulse_file}'
-            )
+        )
 
-        for file,url in zip(data_files,urls):
+        for file, url in zip(data_files, urls):
             if not os.path.exists(os.path.join(dest, file)):
                 if src is None or not os.path.exists(os.path.join(src, file)):
                     # copy from nersc portal
                     print(f'{url} -> {file}')
-                    subprocess.run(['curl','-f','-O',url], check=True)
+                    subprocess.run(['curl', '-f', '-O', url], check=True)
                     os.replace(file, os.path.join(dest, file))
 
                 else:
@@ -71,15 +72,13 @@ def data_directory(pytestconfig, tmp_path_factory):
 
     return dest
 
+
 @pytest.fixture
 def fresh_data_files(data_directory):
     for file in data_files:
         if os.path.exists(file):
             os.remove(file)
         shutil.copy(os.path.join(data_directory, file), './')
-
-    if os.path.exists(output_filename):
-        os.remove(output_filename)
 
     yield None
 
@@ -89,103 +88,110 @@ def fresh_data_files(data_directory):
     if os.path.exists(output_filename):
         os.remove(output_filename)
 
+
 def check_dsets(filename, datasets, check_empty=True):
-    with h5py.File(filename,'r') as f:
-        assert all([d in f for d in datasets]), ('Missing dataset(s)',f.visit(print))
+    with h5py.File(filename, 'r') as f:
+        assert all([d in f for d in datasets]), ('Missing dataset(s)', f.visit(print))
         if check_empty:
-            assert all([len(f[d]) for d in datasets]), ('Empty dataset(s)',f.visititems(print))
+            assert all([len(f[d]) for d in datasets]), ('Empty dataset(s)', f.visititems(print))
+
 
 @pytest.fixture(params=[(charge_source_file, 5273174, 1000), (charge_source_file_mc, 0, 1000)])
 def charge_event_built_file(fresh_data_files, request):
     print('Charge event building...')
     h5flow.run('h5flow_yamls/charge/charge_event_building.yaml',
-        output_filename,
-        request.param[0],
-        verbose=2,
-        start_position=request.param[1],
-        end_position=request.param[1]+request.param[2])
+               output_filename,
+               request.param[0],
+               verbose=2,
+               start_position=request.param[1],
+               end_position=request.param[1] + request.param[2])
 
     check_dsets(output_filename, (
         'charge/raw_events/data',
         'charge/packets/data',
-        ))
+    ))
 
     return output_filename
+
 
 @pytest.fixture
 def charge_reco_file(charge_event_built_file):
     print('Charge event reconstruction...')
     h5flow.run('h5flow_yamls/charge/charge_event_reconstruction.yaml',
-        output_filename,
-        charge_event_built_file,
-        verbose=2)
+               output_filename,
+               charge_event_built_file,
+               verbose=2)
 
     check_dsets(output_filename, (
         'charge/hits/data',
         'charge/ext_trigs/data',
         'charge/events/data'
-        ))
+    ))
 
     return output_filename
+
 
 @pytest.fixture
 def light_event_built_file(fresh_data_files):
     print('Light event building...')
     h5flow.run('h5flow_yamls/light/light_event_building.yaml',
-        output_filename,
-        light_source_file,
-        verbose=2,
-        start_position=153840,
-        end_position=153840+10000)
+               output_filename,
+               light_source_file,
+               verbose=2,
+               start_position=153840,
+               end_position=153840 + 10000)
 
     check_dsets(output_filename, (
         'light/events/data',
         'light/wvfm/data',
-        ))
+    ))
 
     return output_filename
+
 
 @pytest.fixture
 def light_reco_file(light_event_built_file):
     print('Light event reconstruction...')
     h5flow.run('h5flow_yamls/light/light_event_reconstruction.yaml',
-        output_filename,
-        light_event_built_file,
-        verbose=2)
+               output_filename,
+               light_event_built_file,
+               verbose=2)
 
     check_dsets(output_filename, (
         'light/hits/data',
         'light/t_ns/data',
-        ))
+    ))
 
     return output_filename
+
 
 @pytest.fixture
 def charge_assoc_file(charge_reco_file, light_reco_file):
     print('Charge/light association...')
     h5flow.run('h5flow_yamls/charge/charge_light_assoc.yaml',
-        output_filename,
-        charge_reco_file,
-        verbose=2)
+               output_filename,
+               charge_reco_file,
+               verbose=2)
 
     check_dsets(output_filename, (
         'charge/events/ref/light/events/ref',
         'charge/ext_trigs/ref/light/events/ref'
-        ), check_empty=False)
+    ), check_empty=False)
 
     return output_filename
+
 
 @pytest.fixture
 def combined_file(charge_assoc_file):
     print('Combined reconstruction...')
     h5flow.run('h5flow_yamls/combined/combined_reconstruction.yaml',
-        output_filename,
-        charge_assoc_file,
-        verbose=2)
+               output_filename,
+               charge_assoc_file,
+               verbose=2)
 
     check_dsets(output_filename, (
         'combined/t0/data',
-        ))
+    ))
 
     return output_filename
 
@@ -203,6 +209,7 @@ def combined_file(charge_assoc_file):
 
 # def test_charge_assoc(charge_assoc_file):
 #     pass
+
 
 def test_chain(combined_file):
     pass
