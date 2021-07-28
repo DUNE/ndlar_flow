@@ -253,7 +253,7 @@ class LUT(object):
             key1 = [5,6,7,8]
             shape = (2,)
             dtype = 'f8'
-            lut = LUT(shape, dtype, (min(key0), max(key0)), (min(key1), max(key1)))
+            lut = LUT(dtype, (min(key0), max(key0)), (min(key1), max(key1)), shape=shape)
 
         Data can then be stored in the table using a tuple of key arrays::
 
@@ -272,7 +272,7 @@ class LUT(object):
 
     def __init__(self, dtype, *min_max_keys, default=None, shape=None):
         self.dtype = dtype
-        self.min_max_keys = min_max_keys
+        self.min_max_keys = np.array(min_max_keys, dtype='i8')
         self.lengths = [max_ - min_ + 1 for min_, max_ in self.min_max_keys]
         self.max_hash = int(self._hash(*[max_ for min_, max_ in min_max_keys]))
         shape = (self.max_hash + 1,) + shape if shape else (self.max_hash + 1,)
@@ -332,9 +332,9 @@ class LUT(object):
         return meta_arr, data_arr
 
     def _hash(self, *keys):
-        val = 1 + np.array(keys[0]) - self.min_max_keys[0][0]
+        val = 1 + np.array(keys[0]).astype('i8') - self.min_max_keys[0][0]
         for i, key in enumerate(keys[1:]):
-            val += (np.array(key) - self.min_max_keys[i][0]) * sum(self.lengths[:i + 1])
+            val += (np.array(key).astype('i8') - self.min_max_keys[i + 1][0]) * np.prod(self.lengths[:i + 1])
         return val.astype(int).ravel()
 
     def hash(self, *keys):
@@ -383,5 +383,11 @@ class LUT(object):
 
     def __setitem__(self, keys, val):
         idx = self.hash(*keys)
+        default = self.default
+
         self._data[idx] = val
         self._filled[idx] = True
+
+        if np.any(self._filled[0]):
+            i = np.where(idx == 0)[0]
+            raise RuntimeError(f'invalid key tried to overwrite default: {[np.array(key)[i] for key in keys]}, value={np.array(val)[i]}')
