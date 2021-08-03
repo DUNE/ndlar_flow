@@ -297,14 +297,14 @@ class LUT(object):
         return all(self_arr[0].ravel() == other_arr[0].ravel()) and \
             all(self_arr[1].ravel() == other_arr[1].ravel())
 
-    def compress(self, sel=(,)):
+    def compress(self, sel=tuple()):
         sel = (..., ) + sel
         return np.compress(self._filled[sel], self._data[sel], axis=0)
 
-    def min(self, sel=(,)):
+    def min(self, sel=tuple()):
         return self.compress(sel).min()
 
-    def max(self, axis=(,)):
+    def max(self, sel=tuple()):
         return self.compress(sel).max()
 
     @staticmethod
