@@ -120,7 +120,21 @@ class BrokenTrackSim(H5FlowStage):
         self.pixel_y = np.unique(resources['Geometry'].pixel_xy.compress((0,)))
 
     def finish(self, source_name):
-        pass
+        # gather from all processes
+        if self.generate_2track_joint_pdf:
+            pdf = self.comm.gather(self.pdf, root=0) if H5FLOW_MPI else [self.pdf]
+
+            if self.rank == 0:
+                # merge
+                d = dict()
+
+                for key in self.pdf:
+                    d[key] = np.sum([p[key].hist for p in pdf], axis=0)
+                    d[key + '_bins'] = self.pdf[key].bins
+                    d[key + '_n'] = np.sum([p[key].n for p in pdf], axis=0)
+
+                # save to file
+                np.savez_compressed('joint_pdf.npz', **d)
 
     def run(self, source_name, source_slice, cache):
         tracks = cache[self.tracks_dset_name]
