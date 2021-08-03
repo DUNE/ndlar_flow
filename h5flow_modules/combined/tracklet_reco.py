@@ -119,6 +119,7 @@ class TrackletReconstruction(H5FlowStage):
         track_ref_id = np.take_along_axis(tracks['id'], track_ids, axis=-1)
         mask = (~track_ref_id.mask) & (track_ids != -1)
         ref = np.c_[track_ref_id[mask], hit_idx[mask]]
+        print(ref)
         self.data_manager.write_ref(self.tracklet_dset_name, self.hits_dset_name, ref)
 
         # event -> track ref
