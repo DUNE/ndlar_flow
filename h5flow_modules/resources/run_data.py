@@ -4,7 +4,7 @@ from collections import defaultdict
 import logging
 import h5py
 
-from h5flow.core import H5FlowResource, resources
+from h5flow.core import H5FlowResource, resources, H5FLOW_MPI
 
 class RunData(H5FlowResource):
     '''
@@ -136,8 +136,12 @@ class RunData(H5FlowResource):
             return
 
         if self.input_filename[-3:] == '.h5':
-            with h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm) as f:
-                is_mc = 'mc_packets_assn' in f
+            if H5FLOW_MPI:
+                with h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm) as f:
+                    is_mc = 'mc_packets_assn' in f
+            else:
+                with h5py.File(self.input_filename, 'r') as f:
+                    is_mc = 'mc_packets_assn' in f
 
             self.data['is_mc'] = is_mc
         else:
