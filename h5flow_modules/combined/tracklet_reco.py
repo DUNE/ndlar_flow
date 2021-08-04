@@ -119,8 +119,6 @@ class TrackletReconstruction(H5FlowStage):
         track_ref_id = np.take_along_axis(tracks['id'], track_ids, axis=-1)
         mask = (~track_ref_id.mask) & (track_ids != -1) & (~hit_idx.mask)
         ref = np.c_[track_ref_id[mask], hit_idx[mask]]
-        if len(ref):
-            print(np.max(ref, axis=0))
         self.data_manager.write_ref(self.tracklet_dset_name, self.hits_dset_name, ref)
 
         # event -> track ref
@@ -173,13 +171,24 @@ class TrackletReconstruction(H5FlowStage):
                     # ransac for collinear hits
                     inliers = self._do_ransac(xyz[i], mask)
                     mask[mask] = inliers
-
-                    if np.sum(mask) < 2:
+                    
+                    if np.sum(mask) < 1:
                         continue
+                    
+                    # and a final dbscan for re-clustering
+                    final_track_ids = self._do_dbscan(xyz[i], mask)
+                    
+                    for id_ in np.unique(final_track_ids):
+                        if id_ == -1:
+                            continue
+                        mask = final_track_ids == id_
 
-                    current_track_id += 1
-                    track_id[i, mask] = current_track_id
-                    iter_mask[i, mask] = False
+                        if np.sum(mask) < 2:
+                            continue
+
+                        current_track_id += 1
+                        track_id[i, mask] = current_track_id
+                        iter_mask[i, mask] = False
 
                 if np.all(track_ids == -1) or not np.any(iter_mask[i]):
                     break
