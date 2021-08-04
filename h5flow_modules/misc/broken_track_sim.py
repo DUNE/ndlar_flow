@@ -17,10 +17,11 @@ class JointPDF(object):
 
     def fill(self, *val):
         self.n += len(val[0].ravel()) if not isinstance(val, ma.MaskedArray) else len(val[0].compressed())
-        _sample = np.concatenate([np.expand_dims(np.clip(v.ravel(), self.bins[i][0], self.bins[i][-1])
-                                                 if not isinstance(v, ma.MaskedArray)
-                                                 else np.clip(v.compressed(), self.bins[i][0], self.bins[i][-1]), axis=-1)
-                                                 for i,v in enumerate(val)], axis=-1)
+        _sample = [np.expand_dims(np.clip(v.ravel(), self.bins[i][0], self.bins[i][-1])
+                                  if not isinstance(v, ma.MaskedArray)
+                                  else np.clip(v.compressed(), self.bins[i][0], self.bins[i][-1]), axis=-1)
+                   for i,v in enumerate(val)]
+        _sample = np.concatenate(_sample, axis=-1)
         hist, _ = np.histogramdd(_sample, bins=self.bins)
         self.hist = hist + self.hist
 
@@ -55,16 +56,25 @@ class BrokenTrackSim(H5FlowStage):
         ('id', 'u4'),
         ('match', 'u1'),
         ('broken', 'u1'),
-        ('neighbor', 'i4')
+        ('neighbor', 'i4'),
+        ('hit_frac', 'f4'),
+        ('true_endpoint_d', 'f4', (2,)),
+        ('neighbor_sin2theta', 'f4'),
+        ('neighbor_endpoint_d', 'f4'),
+        ('neighbor_missing_length', 'f4'),
+        ('neighbor_overlap', 'f4'),
+        ('neighbor_ddqdx', 'f4')
     ])
 
     default_pdf_bins = [
-        (0.9, 1, 25),
-        (0, 250, 25),
-        (0, 250, 25),
-        (0, 10, 25),
+        (-5, 0, 30),
+        (0, 3, 30),
+        (0, 3, 30),
+        (-2, 3, 30),
+        (-3, 2, 30)
     ]
-    missing_track_segments = 100
+    missing_track_segments = 200
+    truth_hit_frac_cut = 0.8
 
     def __init__(self, **params):
         super(BrokenTrackSim, self).__init__(**params)
@@ -72,7 +82,7 @@ class BrokenTrackSim(H5FlowStage):
         self.path = params.get('path', 'misc/broken_track_sim')
 
         self.generate_2track_joint_pdf = params.get('generate_2track_joint_pdf', True)
-        self.pdf_bins = [np.linspace(*bins) for bins in params.get('pdf_bins',
+        self.pdf_bins = [np.logspace(*bins) for bins in params.get('pdf_bins',
                                                                    self.default_pdf_bins)]
         self.pdf = dict()
         if self.generate_2track_joint_pdf:
@@ -120,7 +130,7 @@ class BrokenTrackSim(H5FlowStage):
         self.reco = d['reco']
 
         self.pixel_x = np.unique(resources['Geometry'].pixel_xy.compress((0,)))
-        self.pixel_y = np.unique(resources['Geometry'].pixel_xy.compress((0,)))
+        self.pixel_y = np.unique(resources['Geometry'].pixel_xy.compress((1,)))
 
     def finish(self, source_name):
         # gather from all processes
@@ -146,84 +156,98 @@ class BrokenTrackSim(H5FlowStage):
         t0 = cache[self.t0_dset_name]
         events = np.expand_dims(cache[source_name], axis=-1)
 
-        if len(np.r_[source_slice]) == 0:
-            return
+        if len(np.r_[source_slice]) != 0:
 
-        d = self.select_random_track(tracks)
-        rand_tracks = d['rand_tracks']
-        i_track = d['i_track']
+            d = self.select_random_track(tracks)
+            rand_tracks = d['rand_tracks']
+            i_track = d['i_track']
 
-        d = self.generate_random_translation(rand_tracks)
-        rand_x = d['rand_x']
-        rand_y = d['rand_y']
+            d = self.generate_random_translation(rand_tracks)
+            rand_x = d['rand_x']
+            rand_y = d['rand_y']
 
-        d = self.apply_translation(hits, rand_x, rand_y)
-        trans_hits = d['trans_hits']
+            d = self.apply_translation(hits, rand_x, rand_y)
+            trans_hits = d['trans_hits']
 
-        track_ids = self.reco.find_tracks(trans_hits, t0)
-        new_tracks = self.reco.calc_tracks(trans_hits, t0, track_ids)
+            track_ids = self.reco.find_tracks(trans_hits, t0)
+            new_tracks = self.reco.calc_tracks(trans_hits, t0, track_ids)
 
-        d = self.find_matching_tracks(new_tracks, rand_tracks, rand_x, rand_y,
-                                      track_ids, hits_track_idx)
-        trans_rand_tracks = d['trans_rand_tracks']
-        match = d['match']
-        broken = d['broken']
-        endpoint_distance_1 = d['endpoint_distance_1']
-        endpoint_distance_2 = d['endpoint_distance_2']
-        broken_track_mask = match & broken
+            d = self.find_matching_tracks(new_tracks, rand_tracks, rand_x, rand_y,
+                                          track_ids, hits_track_idx)
+            trans_rand_tracks = d['trans_rand_tracks']
+            match = d['match']
+            broken = d['broken']
+            endpoint_distance_1 = d['endpoint_distance_1']
+            endpoint_distance_2 = d['endpoint_distance_2']
+            hit_frac = d['hit_frac']
 
-        d = self.find_neighbor(new_tracks, broken_track_mask)
-        neighbor = d['neighbor']
+            d = self.find_neighbor(new_tracks, broken.reshape(new_tracks.shape))
+            neighbor = d['neighbor']
+            d = self.find_neighbor(tracks)
+            orig_neighbor = d['neighbor']
 
-        if self.generate_2track_joint_pdf:
-            track2_costheta = self.calc_2track_costheta(new_tracks,
-                                                   broken_track_mask)
-            track2_costheta_orig = self.calc_2track_costheta(tracks)
-            track2_endpoint_distance = self.calc_2track_endpoint_distance(new_tracks,
-                                                                     broken_track_mask)
-            track2_endpoint_distance_orig = self.calc_2track_endpoint_distance(tracks)
-            track2_missing_length = self.calc_2track_missing_length(new_tracks,
-                                                               broken_track_mask)
-            track2_missing_length_orig = self.calc_2track_missing_length(tracks)
-            track2_overlap = self.calc_2track_overlap(new_tracks, broken_track_mask)
-            track2_overlap_orig = self.calc_2track_overlap(tracks)
+            if self.generate_2track_joint_pdf:
+                track2_sin2theta = self.calc_2track_sin2theta(new_tracks, neighbor)
+                track2_sin2theta_orig = self.calc_2track_sin2theta(tracks, orig_neighbor)
+                track2_endpoint_distance = self.calc_2track_endpoint_distance(new_tracks, neighbor)
+                track2_endpoint_distance_orig = self.calc_2track_endpoint_distance(tracks, orig_neighbor)
+                track2_missing_length = self.calc_2track_missing_length(new_tracks, neighbor)
+                track2_missing_length_orig = self.calc_2track_missing_length(tracks, orig_neighbor)
+                track2_overlap = self.calc_2track_overlap(new_tracks, neighbor)
+                track2_overlap_orig = self.calc_2track_overlap(tracks, orig_neighbor)
+                track2_ddqdx = self.calc_2track_ddqdx(new_tracks, neighbor)
+                track2_ddqdx_orig = self.calc_2track_ddqdx(tracks, orig_neighbor)                
 
-            self.pdf['rereco'].fill(track2_costheta, track2_endpoint_distance,
-                                    track2_missing_length, track2_overlap)
-            self.pdf['origin'].fill(track2_costheta_orig, track2_endpoint_distance_orig,
-                                    track2_missing_length_orig, track2_overlap_orig)
+                self.pdf['rereco'].fill(track2_sin2theta, track2_endpoint_distance,
+                                        track2_missing_length, track2_overlap,
+                                        track2_ddqdx)
+                self.pdf['origin'].fill(track2_sin2theta_orig, track2_endpoint_distance_orig,
+                                        track2_missing_length_orig, track2_overlap_orig,
+                                        track2_ddqdx_orig)
+                
+        else:
+            rand_x = ma.array(np.empty((0,)))
+            new_tracks = ma.array(np.empty((0,), dtype=self.new_track_dtype))
+            match = ma.array(np.empty((0,)))                                  
 
         # save offsets
-        offset_slice = self.data_manager.reserve_data(f'{self.path}/offset', len(rand_x.compressed()))
-        offset_array = np.empty((len(events),), dtype=self.offset_dtype)
+        offset_array = np.empty((len(rand_x.compressed()),), dtype=self.offset_dtype)
+        offset_slice = self.data_manager.reserve_data(f'{self.path}/offset', len(offset_array))
         if len(offset_array):
             offset_array['id'] = np.r_[offset_slice]
             offset_array['dx'] = rand_x.compressed()
             offset_array['dy'] = rand_y.compressed()
             offset_array['i_track'] = i_track.compressed()
-            self.data_manager.write_data(f'{self.path}/offset', offset_array)
+            self.data_manager.write_data(f'{self.path}/offset', offset_slice, offset_array)
 
-            ref = np.c_[np.r_[source_slice][~rand_x.mask], offset_array['id'].compressed()]
+            ref = np.c_[np.r_[source_slice][~rand_x.mask.ravel()], offset_array['id']]
         else:
             ref = np.empty((0,2))
         self.data_manager.write_ref(source_name, f'{self.path}/offset', ref)
             
         # save new tracklets
-        tracks_slice = self.data_manager.reserve_data(f'{self.path}/tracklets', len(new_tracks.compressed()))
+        tracks_slice = self.data_manager.reserve_data(f'{self.path}/tracklets',
+                                                      len(new_tracks['id'].compressed()))
         label_slice = self.data_manager.reserve_data(f'{self.path}/label', len(match.compressed()))
         if tracks_slice.stop - tracks_slice.start:
-            np.place(new_tracks['id'], ~new_tracks['id'].mask, np.r_[tracks_slice])
-            self.data_manager.write_data(f'{self.path}/tracklets', new_tracks.compressed())
+            np.place(new_tracks['id'], ~new_tracks['id'].mask, np.r_[tracks_slice].astype('u4'))
+            self.data_manager.write_data(f'{self.path}/tracklets', tracks_slice, new_tracks[~new_tracks['id'].mask])
 
-            label_array = np.empty((len(match.compressed()),), dtype=self.label_dtype)
+            label_array = np.empty((len(match.compressed()),), dtype=self.new_track_label_dtype)
             label_array['id'] = np.r_[label_slice]
             label_array['match'] = match.compressed()
             label_array['broken'] = broken.compressed()
-            neighbor.fill_value = -1
-            label_array['neighbor'] = neighbor.filled()[~broken.mask]
-            self.data_manager.write_data(f'{self.path}/label', label_array)
+            label_array['neighbor'] = neighbor.flat[~broken.mask.ravel()]
+            label_array['hit_frac'] = hit_frac.compressed()
+            label_array['true_endpoint_d'] = np.c_[endpoint_distance_1.compressed(), endpoint_distance_2.compressed()]
+            label_array['neighbor_sin2theta'] = track2_sin2theta.flat[~broken.mask.ravel()]
+            label_array['neighbor_endpoint_d'] = track2_endpoint_distance.flat[~broken.mask.ravel()]
+            label_array['neighbor_missing_length'] = track2_missing_length.flat[~broken.mask.ravel()]
+            label_array['neighbor_overlap'] = track2_overlap.flat[~broken.mask.ravel()]
+            label_array['neighbor_ddqdx'] = track2_ddqdx.flat[~broken.mask.ravel()]
+            self.data_manager.write_data(f'{self.path}/label', label_slice, label_array)
             
-            ref = np.c_[np.indices(new_tracks.shape)[0][~new_tracks['id'].mask]+source_slice.start, new_tracks.compressed()]
+            ref = np.c_[np.indices(new_tracks.shape)[0][~new_tracks['id'].mask]+source_slice.start, new_tracks['id'].compressed()]
         else:
             ref = np.empty((0,2))
         self.data_manager.write_ref(source_name, f'{self.path}/tracklets', ref)
@@ -256,10 +280,11 @@ class BrokenTrackSim(H5FlowStage):
         # use first valid index for each event
         i_track_sel = np.argmax(~i_track_mask, axis=-1).reshape(-1, 1)
         i_track = np.take_along_axis(i_track, i_track_sel, axis=-1)
+        rand_tracks = np.take_along_axis(tracks, i_track, axis=-1).copy()
 
         return dict(
-            rand_tracks=np.take_along_axis(tracks, i_track, axis=-1),
-            i_track=i_track
+            rand_tracks=rand_tracks,
+            i_track=ma.array(i_track, mask=rand_tracks['id'].mask)
         )
 
     def generate_random_translation(self, rand_tracks):
@@ -320,7 +345,7 @@ class BrokenTrackSim(H5FlowStage):
     def find_matching_tracks(self, new_tracks, rand_tracks, rand_x, rand_y,
                              track_ids, hits_track_idx):
         # (events, hits, 1)
-        rand_track_hits = hits_track_idx == np.expand_dims(rand_tracks['id'], axis=-1)
+        rand_track_hits = hits_track_idx ==  np.expand_dims(rand_tracks['id'], axis=-1)
 
         # (events, 1, new_tracks)
         new_id = np.expand_dims(np.indices(new_tracks.shape)[-1], axis=1)
@@ -331,9 +356,8 @@ class BrokenTrackSim(H5FlowStage):
         # (events, new_tracks)
         frac_new_hits = (np.sum(rand_track_hits & new_track_hits, axis=1)
                           / np.sum(new_track_hits, axis=1))
-        match = np.expand_dims(frac_new_hits > 0.9, axis=-1)
+        match = np.expand_dims(frac_new_hits > self.truth_hit_frac_cut, axis=-1)
 
-        # old method (using start and end points)
         _dxyz = np.concatenate((
             np.expand_dims(rand_x, axis=-1),
             np.expand_dims(rand_y, axis=-1),
@@ -355,7 +379,6 @@ class BrokenTrackSim(H5FlowStage):
 
         # match if closest endpoint within some radius
         endpoint_distance_1 = np.take_along_axis(endpoint_distance, i_endpoint_distance[..., 0:1], axis=-1)
-        #match = (endpoint_distance_1 < self.endpoint_distance_cut)
 
         # id broken tracks
         endpoint_distance_2 = np.take_along_axis(endpoint_distance, i_endpoint_distance[..., 1:2], axis=-1)
@@ -365,6 +388,7 @@ class BrokenTrackSim(H5FlowStage):
             trans_rand_tracks=trans_rand_tracks,
             match=match,
             broken=broken,
+            hit_frac=frac_new_hits,
             endpoint_distance_1=endpoint_distance_1,
             endpoint_distance_2=endpoint_distance_2
         )
@@ -379,6 +403,8 @@ class BrokenTrackSim(H5FlowStage):
 
         '''
         ntracks = tracks.shape[-1]
+        if mask is None:
+            mask = np.ones(tracks.shape, dtype=bool)
         mask = (np.expand_dims(mask, axis=1) & np.expand_dims(mask, axis=2)
                 & ~np.diagflat(np.ones(ntracks, dtype=bool)).reshape(1, ntracks, ntracks)
                 & np.expand_dims(~tracks['id'].mask, axis=1) & np.expand_dims(~tracks['id'].mask, axis=2))
@@ -398,54 +424,48 @@ class BrokenTrackSim(H5FlowStage):
         endpoint_distance = endpoint_distance.min(axis=-1)
         endpoint_distance = ma.array(endpoint_distance, mask=~mask)
         
-        neighbor = ma.argmin(endpoint_distance, axis=-1)
+        neighbor = ma.argmin(endpoint_distance, axis=-1).reshape(tracks.shape)
+        neighbor = ma.array(neighbor, mask=tracks['id'].mask | np.all(~mask, axis=-1))
+        neighbor.fill_value = -1
+        neighbor = ma.array(neighbor.filled(), mask=neighbor.mask)
         return dict(neighbor=neighbor)
 
-    def calc_2track_costheta(self, tracks, mask=None):
-        if mask is not None:
-            _xyz_mask = np.broadcast_to(mask, tracks['start'].shape)
-        else:
-            _xyz_mask = np.ones_like(tracks['start'], dtype=bool)
-        _ntracks = tracks.shape[1]
-        _dxyz = ma.array(tracks['start'] - tracks['end'],
-                         mask=~_xyz_mask | tracks['start'].mask)
-        _dxyz /= np.sqrt(np.sum((_dxyz)**2, axis=-1, keepdims=True))
-        costheta = np.abs(np.sum(np.expand_dims(_dxyz, axis=1) * np.expand_dims(_dxyz, axis=2), axis=-1))
-        # remove i==j entries
-        _mask = costheta.mask | np.diagflat(np.ones(_ntracks, dtype=bool)).reshape(1, _ntracks, _ntracks)
-        return ma.array(costheta, mask=_mask)
+    def calc_2track_sin2theta(self, tracks, neighbor):
+        ntracks = tracks.shape[1]
+        neighbor = neighbor.reshape(tracks.shape + (1,))
+        dxyz = tracks['start'] - tracks['end']
+        dxyz /= np.sqrt(np.sum((dxyz)**2, axis=-1, keepdims=True))
+        dxyz_neighbor = np.take_along_axis(dxyz, neighbor, axis=1)
+        sin2theta = 1 - np.sum(dxyz * dxyz_neighbor, axis=-1)**2
+        mask = (tracks['id'].mask | neighbor.mask.reshape(sin2theta.shape)
+                | (neighbor == -1).reshape(sin2theta.shape))
+        return ma.array(sin2theta, mask=mask)
 
-    def calc_2track_endpoint_distance(self, tracks, mask=None):
-        if mask is not None:
-            _xyz_mask = np.broadcast_to(mask, tracks['start'].shape)
-        else:
-            _xyz_mask = np.ones_like(tracks['start'], dtype=bool)
-        _ntracks = tracks.shape[1]
-        _start1 = ma.array(np.expand_dims(tracks['start'], axis=1),
-                           mask=~_xyz_mask | tracks['start'].mask)
-        _start2 = ma.array(np.expand_dims(tracks['start'], axis=2),
-                           mask=~_xyz_mask | tracks['start'].mask)
-        _end1 = ma.array(np.expand_dims(tracks['end'], axis=1),
-                         mask=~_xyz_mask | tracks['start'].mask)
-        _end2 = ma.array(np.expand_dims(tracks['end'], axis=2),
-                         mask=~_xyz_mask | tracks['start'].mask)
-        _d = ma.concatenate((
-            ma.sum((_start1 - _end2)**2, axis=-1, keepdims=True),
-            ma.sum((_end1 - _end2)**2, axis=-1, keepdims=True),
-            ma.sum((_start1 - _start2)**2, axis=-1, keepdims=True),
-            ma.sum((_end1 - _start2)**2, axis=-1, keepdims=True),
+    def calc_2track_endpoint_distance(self, tracks, neighbor):
+        ntracks = tracks.shape[1]
+        neighbor = neighbor.reshape(tracks.shape + (1,))
+        start1 = tracks['start']
+        start2 = np.take_along_axis(tracks['start'], neighbor, axis=1)
+        end1 = tracks['end']
+        end2 = np.take_along_axis(tracks['end'], neighbor, axis=1)
+        d = ma.concatenate((
+            ma.sum((start1 - end2)**2, axis=-1, keepdims=True),
+            ma.sum((end1 - end2)**2, axis=-1, keepdims=True),
+            ma.sum((start1 - start2)**2, axis=-1, keepdims=True),
+            ma.sum((end1 - start2)**2, axis=-1, keepdims=True),
         ), axis=-1)
-        _d = np.sqrt(_d)
-        distance = ma.amin(_d, axis=-1)
-        # remove i==j entries
-        _mask = distance.mask | np.diagflat(np.ones(_ntracks, dtype=bool)).reshape(1, _ntracks, _ntracks)
-        return ma.array(distance, mask=_mask)
+        d = np.sqrt(d)
+        distance = ma.amin(d, axis=-1)
+        mask = (tracks['id'].mask |
+                neighbor.mask.reshape(distance.shape)
+                | (neighbor == -1).reshape(distance.shape))
+        return ma.array(distance, mask=mask)
 
-    def make_missing_segment(self, starts, ends):
-        start1 = np.expand_dims(starts, axis=1)
-        start2 = np.expand_dims(starts, axis=2)
-        end1 = np.expand_dims(ends, axis=1)
-        end2 = np.expand_dims(ends, axis=2)
+    def make_missing_segment(self, start, end, neighbor):
+        start1 = start
+        start2 = np.take_along_axis(start, neighbor, axis=1)
+        end1 = end
+        end2 = np.take_along_axis(end, neighbor, axis=1)
 
         track_d = np.concatenate((
             np.sum((start1 - end2)**2, axis=-1, keepdims=True),
@@ -453,7 +473,7 @@ class BrokenTrackSim(H5FlowStage):
             np.sum((start1 - start2)**2, axis=-1, keepdims=True),
             np.sum((end1 - start2)**2, axis=-1, keepdims=True),
         ), axis=-1)
-        i_min = np.argsort(track_d, axis=-1)[..., 0:1]
+        i_min = np.expand_dims(np.argmin(track_d, axis=-1), axis=-1)
         missing_track_start = np.select(
             (i_min == 0,
              i_min == 1,
@@ -468,17 +488,11 @@ class BrokenTrackSim(H5FlowStage):
             (end2, end2, start2, start2))
         return missing_track_start, missing_track_end
 
-    def calc_2track_missing_length(self, tracks, mask=None):
+    def calc_2track_missing_length(self, tracks, neighbor):
         # create missing track segment
         _n_steps = self.missing_track_segments
-        if mask is not None:
-            _xyz_mask = np.broadcast_to(mask, tracks['start'].shape)
-        else:
-            _xyz_mask = np.ones_like(tracks['start'].shape, dtype=bool)
-        _ntracks = tracks.shape[1]
-        _start = ma.array(tracks['start'], mask=~_xyz_mask | tracks['start'].mask)
-        _end = ma.array(tracks['end'], mask=~_xyz_mask | tracks['start'].mask)
-        _missing_start, _missing_end = self.make_missing_segment(_start, _end)
+        neighbor = neighbor.reshape(tracks.shape + (1,))
+        _missing_start, _missing_end = self.make_missing_segment(tracks['start'], tracks['end'], neighbor)
         # interpolate
         _missing_x, _dx = np.linspace(_missing_start[..., 0], _missing_end[..., 0], _n_steps, axis=-1, retstep=True)
         _missing_y, _dy = np.linspace(_missing_start[..., 1], _missing_end[..., 1], _n_steps, axis=-1, retstep=True)
@@ -501,46 +515,43 @@ class BrokenTrackSim(H5FlowStage):
                                         _missing_pixel_x.astype(int),
                                         _missing_pixel_y.astype(int)].reshape(_missing_iogroup.shape)
              | (np.abs(_missing_z) < self.cathode_region)).sum(axis=-1))
-        if mask is not None:
-            _mask = (np.expand_dims(~mask, axis=1) | np.expand_dims(~mask, axis=2)
-                     | np.diagflat(np.ones(_ntracks, dtype=bool)).reshape(1, _ntracks, _ntracks, 1)
-                     | np.expand_dims(np.expand_dims(tracks['id'].mask, axis=1) | np.expand_dims(tracks['id'].mask, axis=2), axis=-1))
-        else:
-            _mask = (np.expand_dims(np.expand_dims(tracks['id'].mask, axis=1) | np.expand_dims(tracks['id'].mask, axis=2), axis=-1)
-                     | np.diagflat(np.ones(_ntracks, dtype=bool)).reshape(1, _ntracks, _ntracks, 1))
-        missing_length = ma.array(_missing_length - _hidden_length, mask=_mask)
+        missing_length = _missing_length - _hidden_length
         missing_length = np.clip(missing_length, 0, None)
-        
-        return missing_length
 
-    def calc_2track_overlap(self, tracks, mask=None):
+        mask = (tracks['id'].mask
+                | neighbor.mask.reshape(missing_length.shape)
+                | (neighbor == -1).reshape(missing_length.shape))
+        return ma.array(missing_length, mask=mask)
+
+    def calc_2track_overlap(self, tracks, neighbor):
         _ntracks = tracks.shape[1]
-        if mask is not None:
-            _xyz_mask = np.broadcast_to(mask, tracks['start'].shape)
-        else:
-            _xyz_mask = np.ones_like(tracks['start'], dtype=bool)
-        _track1_min = np.expand_dims(ma.array(np.minimum(tracks['start'],
-                                                         tracks['end']),
-                                              mask=~_xyz_mask), axis=1)
-        _track1_max = np.expand_dims(ma.array(np.maximum(tracks['start'],
-                                                         tracks['end']),
-                                              mask=~_xyz_mask), axis=1)
-        _track2_min = np.expand_dims(ma.array(np.minimum(tracks['start'],
-                                                         tracks['end']),
-                                              mask=~_xyz_mask), axis=2)
-        _track2_max = np.expand_dims(ma.array(np.maximum(tracks['start'],
-                                                         tracks['end']),
-                                              mask=~_xyz_mask), axis=2)
-        overlap = np.minimum(_track2_max - _track1_min, _track1_max
-                             - _track2_min)
-        overlap = np.clip(overlap, 0, None)
-        _mask = (np.broadcast_to(np.diagflat(np.ones(_ntracks, dtype=bool)).reshape(1, _ntracks, _ntracks, 1),
-                                 overlap.shape) | _track1_min.mask | _track2_min.mask)
-        return ma.array(np.sqrt(np.sum(overlap**2, axis=-1)),
-                        mask=np.any(_mask, axis=-1))
+        neighbor = neighbor.reshape(tracks.shape + (1,))
+        _track1_min = np.minimum(tracks['start'], tracks['end'])
+        _track1_max = np.maximum(tracks['start'], tracks['end'])
+        _track2_min = np.take_along_axis(np.minimum(tracks['start'], tracks['end']),
+                                         neighbor, axis=1)
+        _track2_max = np.take_along_axis(np.maximum(tracks['start'], tracks['end']),
+                                         neighbor, axis=1)
 
-    def calc_2track_ddqdx(tracks, mask=None):
-        return
+        overlap = (np.minimum(_track2_max, _track1_max)
+                   - np.maximum(_track2_min, _track1_min))
+        overlap = np.clip(overlap, 0, None)
+        overlap = np.sqrt(np.sum(overlap**2, axis=-1))
+        mask = (tracks['id'].mask
+                | neighbor.mask.reshape(overlap.shape)
+                | (neighbor == -1).reshape(overlap.shape))
+        return ma.array(overlap, mask=mask)
+
+    def calc_2track_ddqdx(self, tracks, neighbor):
+        _ntracks = tracks.shape[1]
+        neighbor = neighbor.reshape(tracks.shape)
+        _track1_dqdx = tracks['q']/tracks['length']
+        _track2_dqdx = np.take_along_axis(tracks['q']/tracks['length'], neighbor, axis=1)
+        ddqdx = np.abs(_track1_dqdx - _track2_dqdx)
+        mask = (tracks['id'].mask
+                | neighbor.mask.reshape(ddqdx.shape)
+                | (neighbor == -1).reshape(ddqdx.shape))
+        return ma.array(ddqdx, mask=mask)
 
     def load_disabled_channels_lut(self):
         '''
