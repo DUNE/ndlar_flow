@@ -1,9 +1,16 @@
 # Performs combined reconstruction, generating t0s, tracklets, ...
 
 flow:
-  source: 'charge/events'
+  #source: 'charge/events'
+  source: events
   stages: [t0_reco, tracklet_reco, broken_track_sim]
   drop: []
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 32
 
 resources:
   - !include h5flow_yamls/resources/units.yaml
@@ -34,7 +41,7 @@ tracklet_reco:
     tracklet_dset_name: 'combined/tracklets'
     hits_dset_name: 'charge/hits'
     t0_dset_name: 'combined/t0'
-    dbscan_eps: 25
+    dbscan_eps: 16
     dbscan_min_samples: 5
     ransac_min_samples: 2
     ransac_residual_threshold: 8
