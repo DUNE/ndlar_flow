@@ -25,6 +25,7 @@ class TrackletReconstruction(H5FlowStage):
          - ``ransac_min_samples``: ``int``, min points to run ransac algorithm
          - ``ransac_residual_threshold``: ``float``, max distance from trial axis
          - ``ransac_max_trials``: ``int``, number of ransac trials per cluster
+         - ``max_iterations``: ``int``, max number of fitting iterations before giving up
 
          Both ``hits_dset_name`` and ``t0_dset_name`` are required in the cache.
 
@@ -56,6 +57,7 @@ class TrackletReconstruction(H5FlowStage):
     default_ransac_min_samples = 2
     default_ransac_residual_threshold = 8
     default_ransac_max_trials = 100
+    default_max_iterations = 100
 
     tracklet_dtype = np.dtype([
         ('id', 'u4'),
@@ -79,6 +81,7 @@ class TrackletReconstruction(H5FlowStage):
         self._ransac_min_samples = params.get('ransac_min_samples', self.default_ransac_min_samples)
         self._ransac_residual_threshold = params.get('ransac_residual_threshold', self.default_ransac_residual_threshold)
         self._ransac_max_trials = params.get('ransac_max_trials', self.default_ransac_max_trials)
+        self.max_iterations = params.get('ransac_max_trials', self.default_max_iterations)
 
         self.pca = dcomp.PCA(n_components=1)
         self.dbscan = cluster.DBSCAN(eps=self._dbscan_eps, min_samples=self._dbscan_min_samples)
@@ -93,7 +96,8 @@ class TrackletReconstruction(H5FlowStage):
                                     dbscan_min_samples=self._dbscan_min_samples,
                                     ransac_min_samples=self._ransac_min_samples,
                                     ransac_residual_threshold=self._ransac_residual_threshold,
-                                    ransac_max_trials=self._ransac_max_trials
+                                    ransac_max_trials=self._ransac_max_trials,
+                                    max_iterations=self.max_iterations
                                     )
 
         self.data_manager.create_dset(self.tracklet_dset_name, self.tracklet_dtype)
@@ -157,7 +161,7 @@ class TrackletReconstruction(H5FlowStage):
         for i in range(hits.shape[0]):
 
             current_track_id = -1
-            while True:
+            for _ in range(self.max_iterations):
                 # dbscan to find clusters
                 track_ids = self._do_dbscan(xyz[i], iter_mask[i])
 
@@ -182,9 +186,6 @@ class TrackletReconstruction(H5FlowStage):
                         if id_ == -1:
                             continue
                         mask = final_track_ids == id_
-
-                        if np.sum(mask) < 2:
-                            continue
 
                         current_track_id += 1
                         track_id[i, mask] = current_track_id
