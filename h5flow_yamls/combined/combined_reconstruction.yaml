@@ -3,7 +3,7 @@
 flow:
   #source: 'charge/events'
   source: events
-  stages: [t0_reco, tracklet_reco, broken_track_sim]
+  stages: [t0_reco, tracklet_reco]
   drop: []
 
 events:
@@ -41,21 +41,8 @@ tracklet_reco:
     tracklet_dset_name: 'combined/tracklets'
     hits_dset_name: 'charge/hits'
     t0_dset_name: 'combined/t0'
-    dbscan_eps: 16
+    dbscan_eps: 25
     dbscan_min_samples: 5
     ransac_min_samples: 2
     ransac_residual_threshold: 8
-    ransac_max_trials: 100
-
-broken_track_sim:
-  classname: BrokenTrackSim
-  requires:
-    - 'combined/t0'
-    - 'charge/hits'
-    - name: 'charge/hits_track_idx'
-      path: ['charge/hits', 'combined/tracklets']
-      index_only: True
-    - 'combined/tracklets'
-  params:
-    generate_2track_joint_pdf: True
-
+    ransac_max_trials: 10
