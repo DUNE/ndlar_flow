@@ -82,6 +82,7 @@ class BrokenTrackSim(H5FlowStage):
         self.path = params.get('path', 'misc/broken_track_sim')
 
         self.generate_2track_joint_pdf = params.get('generate_2track_joint_pdf', True)
+        self.joint_pdf_filename = params.get('joint_pdf_filename','joint_pdf.npz')
         self.pdf_bins = [np.logspace(*bins) for bins in params.get('pdf_bins',
                                                                    self.default_pdf_bins)]
         self.pdf = dict()
@@ -135,19 +136,29 @@ class BrokenTrackSim(H5FlowStage):
     def finish(self, source_name):
         # gather from all processes
         if self.generate_2track_joint_pdf:
-            pdf = self.comm.gather(self.pdf, root=0) if H5FLOW_MPI else [self.pdf]
-
             if self.rank == 0:
                 # merge
                 d = dict()
 
                 for key in self.pdf:
-                    d[key] = np.sum([p[key].hist for p in pdf], axis=0)
-                    d[key + '_bins'] = self.pdf[key].bins
-                    d[key + '_n'] = np.sum([p[key].n for p in pdf], axis=0)
+                    for i in range(self.size):
+                        hist = (self.comm.recv(source=i) 
+                                if H5FLOW_MPI and i != 0 
+                                else self.pdf[key].hist)
+                        d[key] = hist + (d[key] if i != 0 else 0)
+                        d[key + '_bins'] = self.pdf[key].bins
+                        n = (self.comm.recv(source=i)
+                             if H5FLOW_MPI and i != 0
+                             else self.pdf[key].n)
+                        d[key + '_n'] = n + (d[key + '_n'] if i != 0 else 0)
 
                 # save to file
-                np.savez_compressed('joint_pdf.npz', **d)
+                np.savez_compressed(self.joint_pdf_filename, **d)
+                
+            else:
+                for key in self.pdf:
+                    self.comm.send(self.pdf[key].hist, dest=0)
+                    self.comm.send(self.pdf[key].n, dest=0)
 
     def run(self, source_name, source_slice, cache):
         tracks = cache[self.tracks_dset_name]
@@ -354,9 +365,9 @@ class BrokenTrackSim(H5FlowStage):
         new_track_hits = (new_id == np.expand_dims(track_ids, axis=-1))
 
         # (events, new_tracks)
-        frac_new_hits = (np.sum(rand_track_hits & new_track_hits, axis=1)
-                          / np.sum(new_track_hits, axis=1))
-        match = np.expand_dims(frac_new_hits > self.truth_hit_frac_cut, axis=-1)
+        frac_new_hits = np.expand_dims(np.sum(rand_track_hits & new_track_hits, axis=1)
+                          / np.sum(new_track_hits, axis=1), axis=-1)
+        match = frac_new_hits > self.truth_hit_frac_cut
 
         _dxyz = np.concatenate((
             np.expand_dims(rand_x, axis=-1),
@@ -384,18 +395,20 @@ class BrokenTrackSim(H5FlowStage):
         endpoint_distance_2 = np.take_along_axis(endpoint_distance, i_endpoint_distance[..., 1:2], axis=-1)
         broken = (endpoint_distance_2 > self.broken_track_distance_cut) & match
         
+        mask = match.mask | broken.mask | frac_new_hits.mask
+        
         return dict(
             trans_rand_tracks=trans_rand_tracks,
-            match=match,
-            broken=broken,
-            hit_frac=frac_new_hits,
+            match=ma.array(match, mask=mask),
+            broken=ma.array(broken, mask=mask),
+            hit_frac=ma.array(frac_new_hits, mask=mask),
             endpoint_distance_1=endpoint_distance_1,
             endpoint_distance_2=endpoint_distance_2
         )
 
     def find_neighbor(self, tracks, mask=None):
         '''
-        Find neighbor based on endpoint distance:
+        Find neighbor based on endpoint distance and require no overlap:
         
          - ``tracks`` is an (N,M) array of tracks
          - ``mask`` is boolean of same shape as ``tracks``
@@ -422,12 +435,24 @@ class BrokenTrackSim(H5FlowStage):
         ), axis=-1)
         endpoint_distance = ma.sqrt(endpoint_distance)
         endpoint_distance = endpoint_distance.min(axis=-1)
+        
+        _track1_min = ma.minimum(start1[... ,0:2], end1[... ,0:2])
+        _track1_max = ma.maximum(start1[... ,0:2], end1[... ,0:2])
+        _track2_min = ma.minimum(start2[... ,0:2], end2[... ,0:2])
+        _track2_max = ma.maximum(start2[... ,0:2], end2[... ,0:2])
+        overlap = (ma.minimum(_track2_max, _track1_max)
+                   - ma.maximum(_track2_min, _track1_min))
+        overlap[overlap < 0] = 0
+        overlap = ma.sqrt(ma.sum(overlap**2, axis=-1))
+        mask = mask & (overlap == 0)
+        
         endpoint_distance = ma.array(endpoint_distance, mask=~mask)
         
         neighbor = ma.argmin(endpoint_distance, axis=-1).reshape(tracks.shape)
         neighbor = ma.array(neighbor, mask=tracks['id'].mask | np.all(~mask, axis=-1))
         neighbor.fill_value = -1
         neighbor = ma.array(neighbor.filled(), mask=neighbor.mask)
+        neighbor.fill_value = -1
         return dict(neighbor=neighbor)
 
     def calc_2track_sin2theta(self, tracks, neighbor):
@@ -492,19 +517,23 @@ class BrokenTrackSim(H5FlowStage):
         # create missing track segment
         _n_steps = self.missing_track_segments
         neighbor = neighbor.reshape(tracks.shape + (1,))
-        _missing_start, _missing_end = self.make_missing_segment(tracks['start'], tracks['end'], neighbor)
+        _missing_start, _missing_end = self.make_missing_segment(tracks['start'], 
+                                                                 tracks['end'], neighbor)
         # interpolate
-        _missing_x, _dx = np.linspace(_missing_start[..., 0], _missing_end[..., 0], _n_steps, axis=-1, retstep=True)
-        _missing_y, _dy = np.linspace(_missing_start[..., 1], _missing_end[..., 1], _n_steps, axis=-1, retstep=True)
-        _missing_z, _dz = np.linspace(_missing_start[..., 2], _missing_end[..., 2], _n_steps, axis=-1, retstep=True)
+        _missing_x, _dx = np.linspace(_missing_start[..., 0], _missing_end[..., 0], 
+                                      _n_steps, axis=-1, retstep=True)
+        _missing_y, _dy = np.linspace(_missing_start[..., 1], _missing_end[..., 1], 
+                                      _n_steps, axis=-1, retstep=True)
+        _missing_z, _dz = np.linspace(_missing_start[..., 2], _missing_end[..., 2], 
+                                      _n_steps, axis=-1, retstep=True)
         _ds = np.sqrt(_dx**2 + _dy**2 + _dz**2)
         _missing_length = _ds * _n_steps
 
         pixel_pitch = resources['Geometry'].pixel_pitch
-        _ix = np.digitize(_missing_x, self.pixel_x + pixel_pitch / 2) - 1
-        _iy = np.digitize(_missing_y, self.pixel_y + pixel_pitch / 2) - 1
-        _ix[_ix >= len(self.pixel_x)] = 0
-        _iy[_iy >= len(self.pixel_y)] = 0
+        _ix = np.clip(np.digitize(_missing_x, self.pixel_x + pixel_pitch / 2) - 1,
+                      0, len(self.pixel_x)-1)
+        _iy = np.clip(np.digitize(_missing_y, self.pixel_y + pixel_pitch / 2) - 1,
+                      0, len(self.pixel_x)-1)
 
         _missing_pixel_x = self.pixel_x[_ix]
         _missing_pixel_y = self.pixel_y[_iy]
