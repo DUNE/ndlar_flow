@@ -159,8 +159,12 @@ class TrackletReconstruction(H5FlowStage):
         iter_mask = iter_mask & (~hits['id'].mask)
         track_id = np.full(hits.shape, -1, dtype='i8')
         for i in range(hits.shape[0]):
-
+            
+            if not np.any(iter_mask[i]):
+                continue
+                
             current_track_id = -1
+            
             for _ in range(self.max_iterations):
                 # dbscan to find clusters
                 track_ids = self._do_dbscan(xyz[i], iter_mask[i])
@@ -210,7 +214,7 @@ class TrackletReconstruction(H5FlowStage):
         '''
         xyz = self._hit_xyz(hits, t0)
 
-        n_tracks = np.clip(track_ids.max() + 1, 0, np.inf).astype(int) if np.count_nonzero(~track_ids.mask) \
+        n_tracks = np.clip(track_ids.max() + 1, 1, np.inf).astype(int) if np.count_nonzero(~track_ids.mask) \
             else 1
         tracks = np.empty((len(t0), n_tracks), dtype=self.tracklet_dtype)
         tracks_mask = np.ones(tracks.shape, dtype=bool)
@@ -246,14 +250,14 @@ class TrackletReconstruction(H5FlowStage):
 
     def _do_dbscan(self, xyz, mask):
         '''
-            :param xyz: ``shape: (N,3)`` array of 3D positions
+            :param xyz: ``shape: (N,3)`` array of precomputed 3D distances
 
             :param mask: ``shape: (N,)`` boolean array of valid positions (``True == valid``)
 
             :returns: ``shape: (N,)`` array of grouped track ids
         '''
         clustering = self.dbscan.fit(xyz[mask])
-        track_ids = np.zeros(len(mask)) - 1
+        track_ids = np.full(len(mask), -1)
         track_ids[mask] = clustering.labels_
         return track_ids
 
