@@ -1,17 +1,16 @@
 import pytest
 import h5py
-import subprocess
-import os
-import shutil
 
 import h5flow
 
 
 def check_dsets(filename, datasets, check_empty=True):
     with h5py.File(filename, 'r') as f:
-        assert all([d in f for d in datasets]), ('Missing dataset(s)', f.visit(print))
+        assert all([d in f for d in datasets]), ('Missing dataset(s)',
+                                                 f.visit(print))
         if check_empty:
-            assert all([len(f[d]) for d in datasets]), ('Empty dataset(s)', f.visititems(print))
+            assert all([len(f[d]) for d in datasets]), ('Empty dataset(s)',
+                                                        f.visititems(print))
 
 
 @pytest.fixture

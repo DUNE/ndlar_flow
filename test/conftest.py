@@ -1,10 +1,7 @@
 import pytest
-import h5py
 import subprocess
 import os
 import shutil
-
-import h5flow
 
 
 def pytest_configure():
