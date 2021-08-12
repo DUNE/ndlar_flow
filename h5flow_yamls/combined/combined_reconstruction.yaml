@@ -3,7 +3,7 @@
 flow:
   #source: 'charge/events'
   source: events
-  stages: [t0_reco, tracklet_reco]
+  stages: [t0_reco, tracklet_reco, tracklet_merge]
   drop: []
 
 events:
@@ -17,6 +17,7 @@ resources:
   - !include h5flow_yamls/resources/run_data.yaml
   - !include h5flow_yamls/resources/geometry.yaml
   - !include h5flow_yamls/resources/lar_data.yaml
+  - !include h5flow_yamls/resources/disabled_channels.yaml
 
 t0_reco:
   classname: T0Reconstruction # combined/t0_reco.py
@@ -34,9 +35,6 @@ tracklet_reco:
   requires:
     - 'combined/t0'
     - 'charge/hits'
-    - name: 'charge/hits_index'
-      path: 'charge/hits'
-      index_only: True
   params:
     tracklet_dset_name: 'combined/tracklets'
     hits_dset_name: 'charge/hits'
@@ -46,3 +44,20 @@ tracklet_reco:
     ransac_min_samples: 2
     ransac_residual_threshold: 8
     ransac_max_trials: 10
+
+tracklet_merge:
+    classname: TrackletMerger # combined/tracklet_merging.py
+    requires:
+     - 'combined/tracklets'
+     - name: 'combined/track_hits'
+       path: ['combined/tracklets', 'charge/hits']
+     - 'combined/t0'
+    params:
+        merged_dset_name: 'combined/tracklets/merged'
+        t0_dset_name: 'combined/t0'
+        hits_dset_name: 'charge/hits'
+        track_hits_dset_name: 'combined/track_hits'
+        tracks_dset_name: 'combined/tracklets'
+        pdf_filename: 'joint_pdf.npz'
+        pvalue_cut: 0.05
+        max_iterations: 5
