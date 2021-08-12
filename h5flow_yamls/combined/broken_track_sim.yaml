@@ -1,7 +1,6 @@
-# Performs combined reconstruction, generating t0s, tracklets, ...
+# Performs broken track simulation, re-reconstruction randomly translated tracks
 
 flow:
-  #source: 'charge/events'
   source: events
   stages: [broken_track_sim]
   drop: []
@@ -17,6 +16,7 @@ resources:
   - !include h5flow_yamls/resources/run_data.yaml
   - !include h5flow_yamls/resources/geometry.yaml
   - !include h5flow_yamls/resources/lar_data.yaml
+  - !include h5flow_yamls/resources/disabled_channels.yaml
 
 broken_track_sim:
   classname: BrokenTrackSim
@@ -29,4 +29,4 @@ broken_track_sim:
     - 'combined/tracklets'
   params:
     generate_2track_joint_pdf: True
-    joint_pdf_filename: 'joint_pdf-dbscan_eps25_mins5.npz'
+    joint_pdf_filename: 'joint_pdf.npz'

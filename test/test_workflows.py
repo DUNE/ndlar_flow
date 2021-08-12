@@ -115,6 +115,23 @@ def combined_file(charge_assoc_file, geometry_file, tmp_h5_file):
     return tmp_h5_file
 
 
+@pytest.fixture
+def broken_track_sim_file(combined_file, geometry_file, tmp_h5_file):
+    print('Combined reconstruction...')
+    h5flow.run('h5flow_yamls/combined/broken_track_sim.yaml',
+               tmp_h5_file,
+               combined_file,
+               verbose=2)
+
+    check_dsets(tmp_h5_file, (
+        'misc/broken_track_sim/offset/data',
+        'misc/broken_track_sim/label/data',
+        'misc/broken_track_sim/tracklets/data',
+    ))
+
+    return tmp_h5_file
+
+
 # def test_charge_event_building(charge_event_built_file):
 #     pass
 
@@ -136,4 +153,8 @@ def combined_file(charge_assoc_file, geometry_file, tmp_h5_file):
 
 
 def test_chain(combined_file):
+    pass
+
+
+def test_broken_track_sim(broken_track_sim_file):
     pass
