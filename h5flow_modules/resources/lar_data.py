@@ -3,6 +3,9 @@ import logging
 
 from h5flow.core import H5FlowResource, resources
 
+from module0_flow.util.compat import assert_compat_version
+
+
 class LArData(H5FlowResource):
     '''
         Provides helper functions for calculating properties of liquid argon.
@@ -31,13 +34,13 @@ class LArData(H5FlowResource):
                     path: 'lar_info'
 
     '''
-    class_version = '0.0.0'
+    class_version = '0.0.1'
 
     default_path = 'lar_info'
     default_electron_mobility_params = np.array([551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053])
 
     def __init__(self, **params):
-        super(LArData,self).__init__(**params)
+        super(LArData, self).__init__(**params)
 
         self.path = params.get('path', self.default_path)
 
@@ -56,6 +59,8 @@ class LArData(H5FlowResource):
             self.data['class_version'] = self.class_version
             self.data['electron_mobility_params'] = self.electron_mobility_params
             self.data_manager.set_attrs(self.path, **self.data)
+        else:
+            assert_compat_version(self.class_version, self.data['class_version'])
 
         logging.info(f'v_drift: {self.v_drift}')
 
@@ -89,14 +94,14 @@ class LArData(H5FlowResource):
             :returns: electron mobility in mm^2/kV/us
 
         '''
-        a0,a1,a2,a3,a4,a5 = self.electron_mobility_params
+        a0, a1, a2, a3, a4, a5 = self.electron_mobility_params
 
         e = e / (resources['Units'].kV / resources['Units'].cm)
         t = t / (resources['Units'].K)
 
-        num = a0 + a1*e + a2*np.power(e,1.5) + a3*np.power(e,2.5)
-        denom = 1 + (a1/a0)*e + a4*np.power(e,2) + a5*np.power(e,3)
-        temp_corr = np.power(t/89,-1.5)
+        num = a0 + a1 * e + a2 * np.power(e, 1.5) + a3 * np.power(e, 2.5)
+        denom = 1 + (a1 / a0) * e + a4 * np.power(e, 2) + a5 * np.power(e, 3)
+        temp_corr = np.power(t / 89, -1.5)
 
         mu = num / denom * temp_corr
 

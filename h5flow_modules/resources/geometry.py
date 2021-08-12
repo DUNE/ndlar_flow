@@ -5,6 +5,8 @@ import yaml
 from h5flow.core import H5FlowResource, resources
 
 from module0_flow.util.lut import LUT, write_lut, read_lut
+from module0_flow.util.compat import assert_compat_version
+
 
 class Geometry(H5FlowResource):
     class_version = '0.0.0'
@@ -52,6 +54,8 @@ class Geometry(H5FlowResource):
             write_lut(self.data_manager, self.path, self.anode_z, 'anode_z')
             write_lut(self.data_manager, self.path, self.drift_dir, 'drift_dir')
         else:
+            assert_compat_version(self.class_version, self.data['class_version'])
+
             # load geometry from file
             self._pixel_pitch = self.data['pixel_pitch']
             self._pixel_xy = read_lut(self.data_manager, self.path, 'pixel_xy')
