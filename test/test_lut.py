@@ -1,16 +1,20 @@
 import pytest
 import numpy as np
 
-from h5flow_modules.resources.geometry import LUT
+from module0_flow.util.lut import LUT
 
 
 @pytest.fixture(params=[
     ((np.arange(10), np.arange(10) * 10), 'i8', 0, (2,)),
     ((np.arange(10), ), 'i8', 0, (2,)),
-    ((np.arange(10), np.arange(10) * 10), 'i8', 0, (2,)),
+    ((np.arange(10), ), 'i8', 0, (2, 3,)),
     ((np.arange(10), ), 'i8', 0, None),
     ((np.arange(10), ), 'i8', None, None),
+    ((np.arange(10), ), 'i8', None, (2, 3,)),
+    ((np.arange(10), np.arange(10) * 10), 'i8', None, (2, 3,)),
     ((np.arange(10), ), np.dtype([('f0', 'i8'), ('f1', 'f8')]), None, None),
+    ((np.arange(10), ), np.dtype([('f0', 'i8'), ('f1', 'f8')]), None, (2, 3,)),
+    ((np.arange(10), np.arange(10) * 10), np.dtype([('f0', 'i8'), ('f1', 'f8')]), None, (2, 3,)),
 ])
 def lut(request):
     param = request.param
@@ -28,7 +32,7 @@ def lut(request):
 def test_lut_init(lut):
     assert lut[0].dtype == lut[1][1]
     assert np.all(lut[0].min_max_keys == np.array([(min(k), max(k)) for k in lut[1][0]]))
-    assert lut[0].lengths == [max(k) - min(k) + 1 for k in lut[1][0]]
+    assert np.all(lut[0].lengths == np.array([max(k) - min(k) + 1 for k in lut[1][0]]))
     assert lut[0].max_hash == lut[0].hash(*[max(k) for k in lut[1][0]])
     assert np.all(lut[0].default == lut[1][2]) or lut[1][2] is None
 
