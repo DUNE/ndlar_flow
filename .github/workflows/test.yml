@@ -36,7 +36,7 @@ jobs:
         activate-environment: test
         python-version: "3.7"
         use-only-tar-bz2: true
-    - name: install h5flow
+    - name: install h5flow (mpi)
       if: matrix.mpi_enabled == 1
       run: |
         cd ../h5flow
@@ -48,12 +48,12 @@ jobs:
         cd ../h5flow
         conda env update --file environment-nompi.yml
         pip install .
-    - name: install module0_flow
+    - name: install module0_flow (mpi)
       if: matrix.mpi_enabled == 1
       run: |
         conda env update --file env.yaml
         pip install .
-    - name: install module0_flow
+    - name: install module0_flow (no mpi)
       if: matrix.mpi_enabled == 0
       run: |
         conda env update --file env-nompi.yaml
