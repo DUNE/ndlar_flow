@@ -19,7 +19,6 @@ setuptools.setup(name='module0_flow',
                  install_requires=[
                      'h5py~=2.10',
                      'pytest',
-                     'root',
                      'scipy',
                      'scikit-image',
                      'scikit-learn',
