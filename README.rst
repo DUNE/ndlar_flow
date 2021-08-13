@@ -29,6 +29,10 @@ is built off of ``h5flow`` [https://github.com/peter-madigan/h5flow], so you
 will also need to install this in order to run any of the workflows described
 here.
 
+To install::
+
+    pip install .
+
 tips for installing at NERSC
 ----------------------------
 
