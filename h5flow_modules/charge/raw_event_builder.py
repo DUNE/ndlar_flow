@@ -5,6 +5,7 @@ from h5flow import H5FLOW_MPI
 if H5FLOW_MPI:
     from mpi4py import MPI
 
+
 class RawEventBuilder(object):
     '''
         Base class for raw event builder algorithms. Defines the following API
@@ -51,25 +52,26 @@ class RawEventBuilder(object):
             :param attrs: ``list`` of ``str`` specifying attributes to pass between ranks
 
         '''
-        comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
-        size = comm.Get_size()
+        if H5FLOW_MPI:
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+            size = comm.Get_size()
 
-        for attr in attrs:
-            logging.debug(f'get {attr}: {getattr(self,attr).shape}')
+            for attr in attrs:
+                logging.debug(f'get {attr}: {getattr(self,attr).shape}')
 
-        if size < 2:
-            return
-        # rank 1 get stored from rank N-1
-        if rank == size-1:
-            # logging.debug('{}: {} -> {}'.format(attrs,rank,0))
-            d = dict([(attr, getattr(self, attr)) for attr in attrs])
-            comm.send(d, dest=0)
-        # rank i give value to i+1
-        source = rank-1 if rank > 0 else size-1
-        # logging.debug('{}: {} <- {}'.format(attrs,rank,source))
-        for attr,val in comm.recv(source=source).items():
-            setattr(self, attr, val)
+            if size < 2:
+                return
+            # rank 1 get stored from rank N-1
+            if rank == size - 1:
+                # logging.debug('{}: {} -> {}'.format(attrs,rank,0))
+                d = dict([(attr, getattr(self, attr)) for attr in attrs])
+                comm.send(d, dest=0)
+            # rank i give value to i+1
+            source = rank - 1 if rank > 0 else size - 1
+            # logging.debug('{}: {} <- {}'.format(attrs,rank,source))
+            for attr, val in comm.recv(source=source).items():
+                setattr(self, attr, val)
 
     def cross_rank_set_attrs(self, *attrs):
         '''
@@ -81,17 +83,19 @@ class RawEventBuilder(object):
             :param attrs: ``list`` of ``str`` specifying attributes to pass between ranks
 
         '''
-        comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
-        size = comm.Get_size()
+        if H5FLOW_MPI:
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+            size = comm.Get_size()
 
-        if size < 2:
-            return
-        # rank N-1 store value for next iteration
-        if rank != size-1:
-            # logging.debug('{}: {} -> {}'.format(attrs,rank,rank+1))
-            d = dict([(attr, getattr(self, attr)) for attr in attrs])
-            comm.send(d, dest=rank+1)
+            if size < 2:
+                return
+            # rank N-1 store value for next iteration
+            if rank != size - 1:
+                # logging.debug('{}: {} -> {}'.format(attrs,rank,rank+1))
+                d = dict([(attr, getattr(self, attr)) for attr in attrs])
+                comm.send(d, dest=rank + 1)
+
 
 class TimeDeltaRawEventBuilder(RawEventBuilder):
     '''
@@ -118,7 +122,7 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
         self.event_dt = params.get('event_dt', self.default_event_dt)
         self.max_event_dt = params.get('max_event_dt', self.default_max_event_dt)
 
-        self.event_buffer = np.empty((0,)) # keep track of partial events from previous calls
+        self.event_buffer = np.empty((0,))  # keep track of partial events from previous calls
         self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
         self.event_buffer_mc_assn = np.empty((0,))
 
@@ -126,27 +130,27 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
         return dict(
             event_dt=self.event_dt,
             max_event_dt=self.max_event_dt
-            )
+        )
 
     def build_events(self, packets, unix_ts, mc_assn=None):
-        self.cross_rank_get_attrs('event_buffer', 'event_buffer_unix_ts','event_buffer_mc_assn')
+        self.cross_rank_get_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
 
         if len(packets) == 0:
             return ([], []) if mc_assn is None \
                 else ([], [], [])
 
         # sort packets to fix 512 bug
-        packets     = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
+        packets = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
         sorted_idcs = np.argsort(packets, order='timestamp')
-        packets     = packets[sorted_idcs]
-        unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
+        packets = packets[sorted_idcs]
+        unix_ts = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
         if mc_assn is not None:
             mc_assn = np.append(self.event_buffer_mc_assn, unix_ts)[sorted_idcs] if len(self.event_buffer_mc_assn) else mc_assn[sorted_idcs]
 
         # cluster into events by delta t
         packet_dt = packets['timestamp'][1:] - packets['timestamp'][:-1]
-        event_idx     = np.argwhere(np.abs(packet_dt) > self.event_dt).ravel() - 1
-        events        = np.split(packets, event_idx)
+        event_idx = np.argwhere(np.abs(packet_dt) > self.event_dt).ravel() - 1
+        events = np.split(packets, event_idx)
         event_unix_ts = np.split(unix_ts, event_idx)
         if mc_assn is not None:
             event_mc_assn = np.split(mc_assn, event_idx)
@@ -167,30 +171,30 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
         while i < len(events) and len(events[i]) \
                 and events[i]['timestamp'][-1] - events[i]['timestamp'][0] > self.max_event_dt:
             event0, event1, unix_ts0, unix_ts1, mc_assn0, mc_assn1 = self.split_at_timestamp(
-                    events[i]['timestamp'][0] + self.max_event_dt,
-                    events[i],
-                    event_unix_ts[i]
-                ),None,None if mc_assn is None else self.split_at_timestamp(
-                    events[i]['timestamp'][0] + self.max_event_dt,
-                    events[i],
-                    event_unix_ts[i],
-                    mc_assn[i]
-                )
+                events[i]['timestamp'][0] + self.max_event_dt,
+                events[i],
+                event_unix_ts[i]
+            ), None, None if mc_assn is None else self.split_at_timestamp(
+                events[i]['timestamp'][0] + self.max_event_dt,
+                events[i],
+                event_unix_ts[i],
+                mc_assn[i]
+            )
 
             events[i] = event0
-            events.insert(i+1, event1)
+            events.insert(i + 1, event1)
             event_unix_ts[i] = unix_ts0
-            event_unix_ts.insert(i+1, unix_ts1)
+            event_unix_ts.insert(i + 1, unix_ts1)
             if mc_assn is not None:
                 event_mc_assn[i] = mc_assn0
-                event_mc_assn.insert(i+1, mc_assn1)
+                event_mc_assn.insert(i + 1, mc_assn1)
             i += 1
 
         return events, event_unix_ts if mc_assn is None \
             else events, event_unix_ts, event_mc_assn
 
     @staticmethod
-    def split_at_timestamp(timestamp,event,*args):
+    def split_at_timestamp(timestamp, event, *args):
         '''
         Breaks event into two arrays at index where event['timestamp'] > timestamp
         Additional arrays can be specified with kwargs and will be split at the same
@@ -203,10 +207,10 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
         indices = np.argwhere(timestamps > timestamp)
         if len(indices):
             idx = np.min(indices)
-            args.insert(0,event)
+            args.insert(0, event)
             rv = [(arg[:idx], arg[idx:]) for arg in args]
             return tuple(v for vs in rv for v in vs)
-        args.insert(0,event)
+        args.insert(0, event)
         rv = [(arg, np.array([], dtype=arg.dtype)) for arg in args]
         return tuple(v for vs in rv for v in vs)
 
@@ -228,7 +232,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
     '''
     version = '0.0.2'
 
-    default_window = 1820//2
+    default_window = 1820 // 2
     default_threshold = 10
     default_rollover_ticks = 10000000
 
@@ -238,7 +242,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         self.threshold = params.get('threshold', self.default_threshold)
         self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
 
-        self.event_buffer = np.empty((0,)) # keep track of partial events from previous calls
+        self.event_buffer = np.empty((0,))  # keep track of partial events from previous calls
         self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
         self.event_buffer_mc_assn = np.empty((0,))
 
@@ -247,7 +251,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             window=self.window,
             threshold=self.threshold,
             rollover_ticks=self.rollover_ticks,
-            )
+        )
 
     def build_events(self, packets, unix_ts, mc_assn=None):
         # fetch attribute from appropriate process
@@ -263,13 +267,13 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
                 else ([], [], [])
 
         # sort packets to fix 512 bug
-        packets  = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
+        packets = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
 
         # correct for rollovers
         rollover = np.zeros((len(packets),), dtype='i8')
         for io_group in np.unique(packets['io_group']):
             # find rollovers
-            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type']==83)
+            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type'] == 83)
             rollover[mask] = self.rollover_ticks
             # calculate sum of rollovers
             mask = (packets['io_group'] == io_group)
@@ -280,18 +284,18 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
                     & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
                 rollover[mask] -= self.rollover_ticks
 
-        ts = packets['timestamp'].astype('i8')+rollover
+        ts = packets['timestamp'].astype('i8') + rollover
 
         sorted_idcs = np.argsort(ts)
-        ts          = ts[sorted_idcs]
-        packets     = packets[sorted_idcs]
-        unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
+        ts = ts[sorted_idcs]
+        packets = packets[sorted_idcs]
+        unix_ts = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
         if mc_assn is not None:
             mc_assn = np.append(self.event_buffer_mc_assn, mc_assn)[sorted_idcs] if len(self.event_buffer_mc_assn) else mc_assn[sorted_idcs]
 
         # calculate time distance between hits
         min_ts, max_ts = np.min(ts), np.max(ts)
-        bin_edges = np.linspace(min_ts-1, max_ts+1, int((max_ts - min_ts + 2)//self.window))
+        bin_edges = np.linspace(min_ts - 1, max_ts + 1, int((max_ts - min_ts + 2) // self.window))
         hist, bin_edges = np.histogram(ts, bins=bin_edges)
 
         # find high correlation regions
@@ -352,8 +356,8 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
 
         # break up by event
-        event_mask = (ts.reshape(1,-1) > event_start_timestamp.reshape(-1,1)) \
-            & (ts.reshape(1,-1) < event_end_timestamp.reshape(-1,1))
+        event_mask = (ts.reshape(1, -1) > event_start_timestamp.reshape(-1, 1)) \
+            & (ts.reshape(1, -1) < event_end_timestamp.reshape(-1, 1))
         event_idx = np.argmax(event_mask, axis=0)
         event_mask = np.any(event_mask, axis=0)
         event_diff = np.diff(event_idx, axis=-1)
@@ -366,7 +370,5 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         is_event = np.r_[False, event_mask[event_idcs]]
 
         # only return packets from events
-        return zip(*[v for i,v in enumerate(zip(events, event_unix_ts)) if is_event[i]]) if mc_assn is None \
-            else zip(*[v for i,v in enumerate(zip(events, event_unix_ts, event_mc_assn)) if is_event[i]])
-
-
+        return zip(*[v for i, v in enumerate(zip(events, event_unix_ts)) if is_event[i]]) if mc_assn is None \
+            else zip(*[v for i, v in enumerate(zip(events, event_unix_ts, event_mc_assn)) if is_event[i]])

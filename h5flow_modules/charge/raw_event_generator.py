@@ -5,6 +5,7 @@ import h5py
 import logging
 
 from h5flow.core import H5FlowGenerator, resources
+from h5flow import H5FLOW_MPI
 
 try:
     from raw_event_builder import *
@@ -91,7 +92,10 @@ class RawEventGenerator(H5FlowGenerator):
         self.event_builder = globals()[self.event_builder_class](**self.event_builder_config)
 
         # set up input file
-        self.input_fh = h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm)
+        if H5FLOW_MPI:
+            self.input_fh = h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm)
+        else:
+            self.input_fh = h5py.File(self.input_filename, 'r')
         self.packets = self.input_fh['packets']
 
         # set up loop variables

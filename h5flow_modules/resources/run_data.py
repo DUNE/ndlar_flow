@@ -5,6 +5,8 @@ import logging
 import h5py
 
 from h5flow.core import H5FlowResource, resources
+from h5flow import H5FLOW_MPI
+
 
 class RunData(H5FlowResource):
     '''
@@ -56,14 +58,14 @@ class RunData(H5FlowResource):
 
     source_filename_columns = ('charge_filename', 'light_filename')
     required_attr = ('charge_filename', 'light_filename', 'e_field',
-        'light_samples', 'charge_thresholds', 'is_mc', 'crs_ticks', 'lrs_ticks')
+                     'light_samples', 'charge_thresholds', 'is_mc', 'crs_ticks', 'lrs_ticks')
 
     def __init__(self, **params):
-        super(RunData,self).__init__(**params)
+        super(RunData, self).__init__(**params)
 
         self.path = params.get('path', self.default_path)
         self.runlist_file = params.get('runlist_file', self.default_runlist_file)
-        self.defaults = params.get('defaults',dict())
+        self.defaults = params.get('defaults', dict())
 
     def init(self, source_name):
         self.source_name = source_name
@@ -76,7 +78,7 @@ class RunData(H5FlowResource):
             self.data['classname'] = self.classname
             self.data['class_version'] = self.class_version
             self.data['runlist_file'] = self.runlist_file
-            for key,val in self.defaults.items():
+            for key, val in self.defaults.items():
                 self.data[f'{key}_default'] = val
             self.data_manager.set_attrs(self.path, **self.data)
 
@@ -97,20 +99,20 @@ class RunData(H5FlowResource):
 
         try:
             input_filenames.append(self.data_manager.get_attrs(self.source_name)['input_filename'])
-        except (RuntimeError,KeyError):
+        except (RuntimeError, KeyError):
             logging.warning(f'Source dataset {self.source_name} has no input file in metadata stored under \'input_filename\', using {self.input_filename} for RunData lookup')
             input_filenames.append(self.input_filename)
 
         row = dict()
         try:
-            with open(self.runlist_file,'r') as fi:
+            with open(self.runlist_file, 'r') as fi:
                 lines = fi.readlines()
                 column_names = lines[0].strip().split()
                 logging.info(f'Loading from {self.runlist_file}')
                 logging.info(lines[0].strip())
 
                 for line in lines[1:]:
-                    row_data = dict([(n,v) for n,v in zip(column_names, line.strip().split())])
+                    row_data = dict([(n, v) for n, v in zip(column_names, line.strip().split())])
                     if not row_data:
                         continue
                     if any([row_data[key] in f for key in self.source_filename_columns for f in input_filenames]):
@@ -131,13 +133,17 @@ class RunData(H5FlowResource):
             information, and set ``is_mc`` flag.
 
         '''
-        if self.data.get('is_mc',None) is not None:
+        if self.data.get('is_mc', None) is not None:
             # mc info has already exists, return
             return
 
         if self.input_filename[-3:] == '.h5':
-            with h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm) as f:
-                is_mc = 'mc_packets_assn' in f
+            if H5FLOW_MPI:
+                with h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm) as f:
+                    is_mc = 'mc_packets_assn' in f
+            else:
+                with h5py.File(self.input_filename, 'r') as f:
+                    is_mc = 'mc_packets_assn' in f
 
             self.data['is_mc'] = is_mc
         else:
@@ -151,7 +157,7 @@ class RunData(H5FlowResource):
         self._lookup_row_in_runlist()
 
         # fill in from defaults
-        for key,val in self.defaults.items():
+        for key, val in self.defaults.items():
             if key not in self.data:
                 self.data[key] = val
 
