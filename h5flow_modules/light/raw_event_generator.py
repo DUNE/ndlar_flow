@@ -6,6 +6,8 @@ from collections import defaultdict
 import logging
 
 from h5flow.core import H5FlowGenerator, resources
+from h5flow import H5FLOW_MPI
+
 
 class LightEventGenerator(H5FlowGenerator):
     '''
@@ -64,29 +66,31 @@ class LightEventGenerator(H5FlowGenerator):
     default_tai_ns_window = 1000
     default_tai_ns_mod = 1000000000
 
-    buffer_dtype = lambda self : np.dtype([
-        ('event', 'i4'), # event number in source ROOT file
-        ('sn', 'i4'), # adc serial number
-        ('ch', 'u1'), # channel number
-        ('utime_ms', 'u8'), # unix time [ms since epoch]
-        ('tai_ns', 'u8'), # time since PPS [ns]
-        ('wvfm', 'i2', self.n_samples) # sample value
-        ])
-    event_dtype = lambda self : np.dtype([
-        ('id', 'u8'), # unique identifier
-        ('event', 'i4'), # event number in source ROOT file
-        ('sn', 'i4', self.n_adcs), # adc serial number
-        ('ch', 'u1', (self.n_adcs, self.n_channels)), # channel number
-        ('utime_ms', 'u8', (self.n_adcs, self.n_channels)), # unix time [ms since epoch]
-        ('tai_ns', 'u8', (self.n_adcs, self.n_channels)), # time since PPS [ns]
-        ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels)) # boolean, 1 if channel present in event
-        ])
-    wvfm_dtype = lambda self : np.dtype([
-        ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples)) # sample value
-        ])
+    def buffer_dtype(self): return np.dtype([
+        ('event', 'i4'),  # event number in source ROOT file
+        ('sn', 'i4'),  # adc serial number
+        ('ch', 'u1'),  # channel number
+        ('utime_ms', 'u8'),  # unix time [ms since epoch]
+        ('tai_ns', 'u8'),  # time since PPS [ns]
+        ('wvfm', 'i2', self.n_samples)  # sample value
+    ])
+
+    def event_dtype(self): return np.dtype([
+        ('id', 'u8'),  # unique identifier
+        ('event', 'i4'),  # event number in source ROOT file
+        ('sn', 'i4', self.n_adcs),  # adc serial number
+        ('ch', 'u1', (self.n_adcs, self.n_channels)),  # channel number
+        ('utime_ms', 'u8', (self.n_adcs, self.n_channels)),  # unix time [ms since epoch]
+        ('tai_ns', 'u8', (self.n_adcs, self.n_channels)),  # time since PPS [ns]
+        ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels))  # boolean, 1 if channel present in event
+    ])
+
+    def wvfm_dtype(self): return np.dtype([
+        ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples))  # sample value
+    ])
 
     def __init__(self, **params):
-        super(LightEventGenerator,self).__init__(**params)
+        super(LightEventGenerator, self).__init__(**params)
 
         # set up parameters
         self.n_adcs = params.get('n_adcs', self.default_n_adcs)
@@ -107,7 +111,7 @@ class LightEventGenerator(H5FlowGenerator):
         self.entry = self.start_position
 
     def init(self):
-        super(LightEventGenerator,self).init()
+        super(LightEventGenerator, self).init()
 
         if self.data_manager.dset_exists(self.event_dset_name):
             raise RuntimeError(f'{self.event_dset_name} already exists, refusing to append!')
@@ -123,7 +127,7 @@ class LightEventGenerator(H5FlowGenerator):
         self.wvfm_dtype = self.wvfm_dtype()
 
         # set up input data buffers
-        self.data_buffer = defaultdict(list) # serial number : [<buffered wvfm data>]
+        self.data_buffer = defaultdict(list)  # serial number : [<buffered wvfm data>]
         self.event = np.zeros((1,), dtype=self.event_dtype)
         self.wvfms = np.zeros((1,), dtype=self.wvfm_dtype)
         self.event_buffer = list()
@@ -134,29 +138,29 @@ class LightEventGenerator(H5FlowGenerator):
         self.data_manager.create_dset(self.wvfm_dset_name, dtype=self.wvfm_dtype)
         self.data_manager.create_ref(self.event_dset_name, self.wvfm_dset_name)
         self.data_manager.set_attrs(self.event_dset_name,
-            classname=self.classname,
-            class_version=self.class_version,
-            n_adcs=self.n_adcs,
-            n_channels=self.n_channels,
-            n_samples=self.n_samples,
-            chunk_size=self.chunk_size,
-            utime_ms_window=self.utime_ms_window,
-            tai_ns_window=self.tai_ns_window,
-            wvfm_dset_name=self.wvfm_dset_name,
-            start_position=self.start_position,
-            end_position=self.end_position,
-            input_filename=self.input_filename
-            )
+                                    classname=self.classname,
+                                    class_version=self.class_version,
+                                    n_adcs=self.n_adcs,
+                                    n_channels=self.n_channels,
+                                    n_samples=self.n_samples,
+                                    chunk_size=self.chunk_size,
+                                    utime_ms_window=self.utime_ms_window,
+                                    tai_ns_window=self.tai_ns_window,
+                                    wvfm_dset_name=self.wvfm_dset_name,
+                                    start_position=self.start_position,
+                                    end_position=self.end_position,
+                                    input_filename=self.input_filename
+                                    )
 
     def finish(self):
         self.root_file.Close()
 
     def next(self):
-        if self.rank == 0: # only use a single process
+        if self.rank == 0:  # only use a single process
 
             subloop_flag = True
             while (len(self.event_buffer) < self.chunk_size * self.size) and \
-                ((self.entry < self.end_position) or (all([len(buf) for buf in self.data_buffer.values()]))):
+                    ((self.entry < self.end_position) or (all([len(buf) for buf in self.data_buffer.values()]))):
                 # read until we've collected a large enough sample of events
                 # stop when all data buffers are empty or we've reached the end position
                 while (self.entry < self.end_position) and subloop_flag:
@@ -183,14 +187,19 @@ class LightEventGenerator(H5FlowGenerator):
                 self.curr_event = new_event
                 subloop_flag = True
 
-        self.entry = self.comm.bcast(self.entry, root=0)
-        logging.debug(f'entry {self.entry-self.start_position}/{self.end_position-self.start_position} ({round(self.entry-self.start_position/(self.end_position-self.start_position), 3)}) buffers {[(key,len(val)) for key,val in self.data_buffer.items()]}')
+        if H5FLOW_MPI:
+            self.entry = self.comm.bcast(self.entry, root=0)
+            logging.debug(f'entry {self.entry-self.start_position}/{self.end_position-self.start_position} ({round(self.entry-self.start_position/(self.end_position-self.start_position), 3)}) buffers {[(key,len(val)) for key,val in self.data_buffer.items()]}')
 
         # distribute events to processes
         nevents = len(self.event_buffer)
-        scatter_events = [self.event_buffer[nevents//self.size * i:nevents//self.size * (i+1)] for i in range(self.size)]
-        events = self.comm.scatter(scatter_events, root=0)
-        self.event_buffer = self.event_buffer[(nevents//self.size)*self.size:]
+        scatter_events = [self.event_buffer[nevents // self.size * i:nevents // self.size * (i + 1)] for i in range(self.size)]
+        if H5FLOW_MPI:
+            events = self.comm.scatter(scatter_events, root=0)
+        else:
+            events = scatter_events[0]
+
+        self.event_buffer = self.event_buffer[(nevents // self.size) * self.size:]
         nevents = len(events)
 
         if nevents > 0:
@@ -259,8 +268,8 @@ class LightEventGenerator(H5FlowGenerator):
                 event_ms = ma.array(self.event['utime_ms'].ravel(), mask=~valid_mask.ravel()).mean()
                 event_ns = ma.array(self.event['tai_ns'].ravel(), mask=~valid_mask.ravel()).mean() % self.tai_ns_mod
                 match_idcs = np.argwhere(
-                    (np.abs(utime_ms-event_ms) <= self.utime_ms_window) & (np.abs(tai_ns-event_ns) <= self.tai_ns_window)
-                    ).ravel()
+                    (np.abs(utime_ms - event_ms) <= self.utime_ms_window) & (np.abs(tai_ns - event_ns) <= self.tai_ns_window)
+                ).ravel()
 
                 if len(match_idcs):
                     # there's a match (or more), so just grab one of them
@@ -317,5 +326,3 @@ class LightEventGenerator(H5FlowGenerator):
             self.data_buffer[sn[i]] = self.data_buffer[sn[i]][1:]
 
         return event_number
-
-
