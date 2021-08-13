@@ -9,28 +9,26 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     defaults:
       run:
         shell: bash -l {0}
-
+    strategy:
+      matrix:
+        mpi_enabled: [0, 1]
+      fail-fast: false
     steps:
     - name: checkout
       uses: actions/checkout@v2
-
     - name: checkout h5flow
       run: |
         cd ..
         git clone https://github.com/peter-madigan/h5flow.git
-
     - name: conda cache
       uses: actions/cache@v2
       with:
         path: ~/conda_pkgs_dir
         key: ${{ runner.OS }}-conda-${{ hashFiles('**/env*.y*l') }}
-
     - name: setup conda
       uses: conda-incubator/setup-miniconda@v2
       with:
@@ -38,26 +36,35 @@ jobs:
         activate-environment: test
         python-version: "3.7"
         use-only-tar-bz2: true
-
-    - name: install h5flow
+    - name: install h5flow (mpi)
+      if: matrix.mpi_enabled == 1
       run: |
         cd ../h5flow
         conda env update --file environment.yml
-        pip install --no-deps .
-
-    - name: install module0_flow
+        pip install .
+    - name: install h5flow (no mpi)
+      if: matrix.mpi_enabled == 0
+      run: |
+        cd ../h5flow
+        conda env update --file environment-nompi.yml
+        pip install .
+    - name: install module0_flow (mpi)
+      if: matrix.mpi_enabled == 1
       run: |
         conda env update --file env.yaml
-        conda install flake8
-        pip install --no-deps .
-
+        pip install .
+    - name: install module0_flow (no mpi)
+      if: matrix.mpi_enabled == 0
+      run: |
+        conda env update --file env-nompi.yaml
+        pip install .
     - name: lint
       run: |
+        conda install flake8
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-
     - name: test
       run: |
         pytest -s -vv

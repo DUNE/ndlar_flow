@@ -4,7 +4,9 @@ from collections import defaultdict
 import logging
 import h5py
 
-from h5flow.core import H5FlowResource, resources, H5FLOW_MPI
+
+from h5flow.core import H5FlowResource, resources
+from h5flow import H5FLOW_MPI
 
 from module0_flow.util.compat import assert_compat_version
 

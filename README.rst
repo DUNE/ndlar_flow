@@ -23,9 +23,28 @@ To update an existing environment::
 
     conda env update -f env.yaml -n <environment name>
 
-The module0 flow code is built off of ``h5flow``
-[https://github.com/peter-madigan/h5flow], so you will also need to install this
-in order to run any of the workflows described here.
+If MPI is not available, you may use the alternative environment file
+(``env-nompi.yaml``) that does not install parallel-HDF5. The module0 flow code
+is built off of ``h5flow`` [https://github.com/peter-madigan/h5flow], so you
+will also need to install this in order to run any of the workflows described
+here.
+
+To install::
+
+    pip install .
+
+tips for installing at NERSC
+----------------------------
+
+Because CORI uses a special build of MPICH MPI, you will need to follow the
+instructions at [https://docs.nersc.gov/development/languages/python/parallel-python/]
+to install a parallelized version of h5py *before* installing ``h5flow``. Note
+that this environment will then only be usable on the CORI compute nodes.
+
+If you'd like to set up a debugging environment that works on the CORI login
+nodes, install using the ``*-nompi`` environment files. This will not allow you
+to take advantage of the parallelism of ``h5flow``, and so isn't recommended for
+production jobs.
 
 usage
 =====
