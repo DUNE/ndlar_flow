@@ -1,0 +1,16 @@
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.7
+  - h5py[version='~=2.10']
+  - pyyaml
+  - tqdm
+  - pytest
+  - root
+  - scipy
+  - scikit-image
+  - scikit-learn
+  - pip
+  - pip:
+    - h5flow~=0.1
