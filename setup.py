@@ -17,7 +17,7 @@ setuptools.setup(name='module0_flow',
                  packages=setuptools.find_packages(where='.'),
                  python_requires='>=3.7',
                  install_requires=[
-                     'h5py',
+                     'h5py~=2.10',
                      'pytest',
                      'root',
                      'scipy',
