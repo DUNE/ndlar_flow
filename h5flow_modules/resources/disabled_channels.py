@@ -28,7 +28,7 @@ class DisabledChannels(H5FlowResource):
 
         if not self.data:
             # no data stored in file, generate it
-            self._disabled_channel_lut, disabled_xy = self.load_disabled_channels_lut(self.disabled_channels_list, self.missing_asic_list)
+            self._disabled_channel_lut, self._disabled_xy = self.load_disabled_channels_lut(self.disabled_channels_list, self.missing_asic_list)
             self.data['classname'] = self.classname
             self.data['class_version'] = self.class_version
             self.data['disabled_channels_list'] = (self.disabled_channels_list
@@ -37,8 +37,11 @@ class DisabledChannels(H5FlowResource):
             self.data['missing_asic_list'] = (self.missing_asic_list
                                               if self.missing_asic_list is not None
                                               else '')
-            self.data['disabled_xy'] = disabled_xy
-            self.data_manager.set_attrs(self.path, **self.data)
+#             self.data_manager.set_attrs(self.path, **self.data)
+            xy_dtype = np.dtype([('x', self._disabled_xy.dtype), ('y', self._disabled_xy.dtype)])
+            self.data_manager.create_dset(self.path + '/xy', dtype=xy_dtype)
+            sl = self.data_manager.reserve_data(self.path + '/xy', slice(0,len(self._disabled_xy)))
+            self.data_manager.write_data(self.path + '/xy', sl, self._disabled_xy.view(xy_dtype).ravel())
 
             write_lut(self.data_manager, self.path, self.disabled_channel_lut,
                       'lut')
@@ -54,7 +57,7 @@ class DisabledChannels(H5FlowResource):
 
     @property
     def disabled_xy(self):
-        return self.data['disabled_xy']
+        return self._disabled_xy
 
     @property
     def disabled_channel_lut(self):
