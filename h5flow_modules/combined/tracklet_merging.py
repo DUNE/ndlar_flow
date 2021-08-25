@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.ma as ma
+import logging
 
 from h5flow.core import H5FlowStage, resources
 
@@ -22,7 +23,7 @@ class TrackletMerger(H5FlowStage):
                 hits_dset_name: 'charge/hits'
                 tracks_dset_name: 'combined/tracklets'
                 pdf_filename: 'joint_pdf.npz'
-                pvalue_cut: 0.05
+                pvalue_cut: 0.10
                 max_iterations: 5
 
     '''
@@ -30,7 +31,7 @@ class TrackletMerger(H5FlowStage):
 
     default_pdf_filename = 'joint_pdf.npz'
     default_pdf_name = 'rereco'
-    default_pvalue_cut = 0.05
+    default_pvalue_cut = 0.10
     default_max_iterations = 5
 
     default_t0_dset_name = 'combined/t0'
@@ -59,7 +60,7 @@ class TrackletMerger(H5FlowStage):
         self.merged_dset_name = params.get('merged_dset_name', self.default_merged_dset_name)
 
     def init(self, source_name):
-        self.cdf, self.cdf_bins = self.load_cdf(self.pdf_filename, self.pdf_name)
+        self.cdf, self.cdf_bins, self.statistic_bins, self.p_bins = self.load_cdf(self.pdf_filename, self.pdf_name)
 
         self.data_manager.set_attrs(self.merged_dset_name,
                                     classname=self.classname,
@@ -92,64 +93,79 @@ class TrackletMerger(H5FlowStage):
                          | np.expand_dims(tracks['id'].mask, axis=2))
         track_merged = np.broadcast_to(track_merged, tracks.shape + tracks.shape[-1:]).copy()
         track_checked = np.broadcast_to(track_checked, tracks.shape + tracks.shape[-1:]).copy()
+        
+        if len(np.r_[source_slice]):
 
-        # iterative approach
-        for _ in range(self.max_iterations):
-            # find neighboring tracks that have not been checked
-            neighbor = self.find_k_neighbor(tracks, mask=~track_checked)['neighbor']
+            # iterative approach
+            for _ in range(self.max_iterations):
+                # find neighboring tracks that have not been checked
+                neighbor = self.find_k_neighbor(tracks, mask=~track_checked)['neighbor']
 
-            # calculate the p-value for neighbor pair
-            params = [
-                self.calc_2track_sin2theta(tracks, neighbor),
-                self.calc_2track_endpoint_distance(tracks, neighbor),
-                self.calc_2track_missing_length(tracks, neighbor,
-                                                self.missing_track_segments,
-                                                self.pixel_x, self.pixel_y,
-                                                resources['DisabledChannels'].disabled_channel_lut,
-                                                self.cathode_region),
-                self.calc_2track_overlap(tracks, neighbor),
-                self.calc_2track_ddqdx(tracks, neighbor)
-            ]
-            pvalue = np.expand_dims(self.score_neighbor(self.cdf, self.cdf_bins, *params), -1)
-            neighbor = np.expand_dims(neighbor, -1)
+                # calculate the p-value for neighbor pair
+                params = [
+                    self.calc_2track_sin2theta(tracks, neighbor),
+                    self.calc_2track_endpoint_distance(tracks, neighbor),
+                    self.calc_2track_missing_length(tracks, neighbor,
+                                                    self.missing_track_segments,
+                                                    self.pixel_x, self.pixel_y,
+                                                    resources['DisabledChannels'].disabled_channel_lut,
+                                                    self.cathode_region),
+                    self.calc_2track_overlap(tracks, neighbor),
+                    self.calc_2track_ddqdx(tracks, neighbor)
+                ]
+                pvalue = np.expand_dims(self.score_neighbor(self.cdf, self.cdf_bins, self.statistic_bins, self.p_bins, *params), -1)
+                neighbor = np.expand_dims(neighbor, -1)
 
-            # merge tracks that have large p-values
-            should_merge = (((pvalue >= self.pvalue_cut)
-                             | np.take_along_axis(track_merged, neighbor, -1))
-                            & ~neighbor.mask)
-            np.put_along_axis(track_merged, neighbor, should_merge, axis=-1)
-            np.put_along_axis(track_checked, neighbor, True, axis=-1)
+                # merge tracks that have large p-values
+                should_merge = (((pvalue >= self.pvalue_cut)
+                                 | np.take_along_axis(track_merged, neighbor, -1))
+                                & ~neighbor.mask)
+                np.put_along_axis(track_merged, neighbor, should_merge, axis=-1)
+                np.put_along_axis(track_checked, neighbor, True, axis=-1)
 
-            # no need to check both i->j and j->i
-            track_checked = track_checked | np.transpose(track_checked, axes=(0, 2, 1))
+                # no need to check both i->j and j->i
+                track_merged = track_merged | np.transpose(track_merged, axes=(0, 2, 1))
+                track_checked = track_checked | np.transpose(track_checked, axes=(0, 2, 1))
 
-            if np.all(track_checked):
-                break
+                if np.all(track_checked):
+                    break
 
-        # collect valid associations into track groups
-        track_merged = self.create_groups(track_merged)
+            # collect valid associations into track groups
+            track_merged = self.create_groups(track_merged)
 
-        # now, collect the hits from the original tracks into the track groups
-        # get unique track groups, shape: (n_ev, n_grp, n_track)
-        track_grp = np.unique(track_merged, axis=-2)
-        # index by track groups, shape: (n_ev, n_grp, n_track)
-        track_grp_id = np.indices(track_grp.shape)[1]
-        track_grp_id = np.expand_dims(track_grp_id, axis=-1)
-        # cast track hits into a broadcastable shape: (n_ev, 1, n_track, n_hit)
-        track_grp_hits = np.expand_dims(track_hits, axis=1)
-        # broadcast into same shape: (n_ev, n_grp, n_track, n_hit)
-        hit_shape = np.maximum(track_grp_id.shape, track_grp_hits.shape)
-        track_grp_id = np.broadcast_to(track_grp_id, hit_shape)
-        track_grp_hits_mask = np.broadcast_to(track_grp_hits['id'].mask, hit_shape)
-        track_grp_hits = np.broadcast_to(track_grp_hits, hit_shape)
-        # mask and convert to shape: (n_ev, n_grp * n_track * n_hit) [used by track reco calculation]
-        track_grp_hits = ma.array(track_grp_hits.reshape(track_grp.shape[0], -1),
-                                  mask=track_grp_hits_mask)
-        track_grp_id = ma.array(track_grp_id.reshape(track_grp.shape[0], -1),
-                                mask=track_grp_hits_mask)
+            # now, collect the hits from the original tracks into the track groups
+            # get unique track groups, shape: (n_ev, n_grp, n_track)
+            track_merged = np.unique(track_merged, axis=1)
+            track_grp = ma.array(track_merged, mask=(np.diff(track_merged.astype(int), axis=1, prepend=False) == 0) | ~track_merged)
+            # index by track groups, shape: (n_ev, n_grp, n_track)
+            track_grp_id = ma.array(np.indices(track_grp.shape)[1], mask=track_grp.mask)
+            track_grp_id = np.expand_dims(track_grp_id, axis=-1)
+            # cast track hits into a broadcastable shape: (n_ev, 1, n_track, n_hit)
+            track_grp_hits = np.expand_dims(track_hits, axis=1)
 
-        # recalculate track parameters
-        merged_tracks = TrackletReconstruction.calc_tracks(track_grp_hits, t0, track_grp_id)
+            # broadcast into same shape: (n_ev, n_grp, n_track, n_hit)
+            hit_shape = np.maximum(track_grp_id.shape, track_grp_hits.shape)
+            track_grp_hits_mask = np.broadcast_to(track_grp_hits['id'].mask, hit_shape) | track_grp_id.mask
+            track_grp_id = np.broadcast_to(track_grp_id, hit_shape)
+            track_grp_hits = np.broadcast_to(track_grp_hits, hit_shape)
+            # mask and condense: (n_ev, n_hit') [used by track reco calculation]
+            new_shape = track_grp.shape[0:1] + (-1,)
+            track_grp_hits = self.condense_array(track_grp_hits.reshape(new_shape),
+                                                 track_grp_hits_mask.reshape(new_shape),
+                                                 axis=-1)
+            track_grp_id = self.condense_array(track_grp_id.reshape(new_shape),
+                                               track_grp_hits_mask.reshape(new_shape),
+                                               axis=-1)
+            logging.warning(f'track_hits: {track_grp_hits.shape} ({track_grp_hits.nbytes/1024/1024:0.02f}MB)')
+
+            # recalculate track parameters
+            calc_shape = (track_grp_id.shape[0], -1)
+            merged_tracks = TrackletReconstruction.calc_tracks(track_grp_hits.reshape(calc_shape), t0, track_grp_id.reshape(calc_shape))
+        else:
+            merged_tracks = ma.masked_all((0,1), dtype=TrackletReconstruction.tracklet_dtype)
+            track_grp = ma.masked_all((0,1,1), dtype=bool)
+            track_grp_id = ma.masked_all((0,1), dtype=int)
+            track_grp_hits = ma.masked_all((0,1), dtype=track_hits.dtype)
 
         # save to merged track dataset
         n_tracks = np.count_nonzero(~merged_tracks['id'].mask)
@@ -160,25 +176,42 @@ class TrackletMerger(H5FlowStage):
         self.data_manager.write_data(self.merged_dset_name, merged_tracks_slice, merged_tracks[merged_tracks_mask])
 
         # merged -> tracklet ref
-        i_ev, i_grp, i_track = np.where(track_grp & np.expand_dims(~tracks['id'].mask, 1))
+        i_ev, i_grp, i_track = np.where(track_grp & np.expand_dims(~tracks['id'].mask, 1) & ~track_grp.mask)
         ref = np.c_[merged_tracks['id'][i_ev, i_grp].compressed(), tracks['id'][i_ev, i_track].compressed()]
         self.data_manager.write_ref(self.merged_dset_name, self.tracks_dset_name, ref)
 
         # merged -> hit ref
-        hit_mask = (track_grp_id.reshape(merged_tracks.shape + (-1,))
+        hit_mask = (np.expand_dims(track_grp_id, 1)
                     == np.expand_dims(np.indices(merged_tracks.shape)[-1], -1))
         i_ev, i_grp, i_hit = np.where(hit_mask)
-        hit_id = track_grp_hits.reshape(merged_tracks.shape + (-1,))['id']
         ref = np.c_[merged_tracks['id'][i_ev, i_grp].compressed(),
-                    hit_id[i_ev, i_grp, i_hit].compressed()]
+                    track_grp_hits['id'][i_ev, i_hit].compressed()]
         self.data_manager.write_ref(self.merged_dset_name, self.hits_dset_name, ref)
 
         # event -> merged ref
         ev_id = np.broadcast_to(np.expand_dims(np.r_[source_slice], axis=-1), merged_tracks.shape)
         ref = np.c_[ev_id[merged_tracks_mask], merged_tracks['id'][merged_tracks_mask]]
         self.data_manager.write_ref(source_name, self.merged_dset_name, ref)
+        
+    @staticmethod
+    def condense_array(arr, mask, axis=-1):
+        '''
+            Densify a masked array, throwing out invalid values (up to 
+            the size needed to keep the array regular)
+            
+        '''
+        n_valid = np.expand_dims(np.count_nonzero(~mask, axis=axis), axis=axis)
+        
+        new_shape = list(arr.shape)
+        new_shape[axis] = n_valid.max()
+        condensed = np.empty(new_shape, dtype=arr.dtype)
+        idx = np.indices(condensed.shape)[-1]
+        np.place(condensed, idx < n_valid, arr[~mask])
+               
+        return ma.array(condensed, mask = idx >= n_valid)
+        
 
-    @ staticmethod
+    @staticmethod
     def create_groups(mask):
         '''
             Combine masks of ``n x n`` ajacency matrix such that the mask of
@@ -215,8 +248,8 @@ class TrackletMerger(H5FlowStage):
 
         return mask
 
-    @ staticmethod
-    def find_k_neighbor(tracks, k=1, mask=None):
+    @staticmethod
+    def find_k_neighbor(tracks, mask=None, k=1):
         '''
         Find ``k``-th neighbor based on endpoint distance and require no overlap:
 
@@ -230,7 +263,8 @@ class TrackletMerger(H5FlowStage):
             mask = np.ones(tracks.shape + tracks.shape[-1:], dtype=bool)
         mask = (mask
                 & ~np.diagflat(np.ones(ntracks, dtype=bool)).reshape(1, ntracks, ntracks)
-                & np.expand_dims(~tracks['id'].mask, axis=1) & np.expand_dims(~tracks['id'].mask, axis=2))
+                & np.expand_dims(~tracks['id'].mask, axis=1)
+                & np.expand_dims(~tracks['id'].mask, axis=2))
 
         start1 = np.expand_dims(tracks['start'], axis=1)
         start2 = np.expand_dims(tracks['start'], axis=2)
@@ -244,19 +278,17 @@ class TrackletMerger(H5FlowStage):
             ma.sum((end1 - start2)**2, axis=-1, keepdims=True),
         ), axis=-1)
         endpoint_distance = ma.sqrt(endpoint_distance)
-        endpoint_distance = endpoint_distance.min(axis=-1)
 
-        _track1_min = ma.minimum(start1[..., 0:2], end1[..., 0:2])
-        _track1_max = ma.maximum(start1[..., 0:2], end1[..., 0:2])
-        _track2_min = ma.minimum(start2[..., 0:2], end2[..., 0:2])
-        _track2_max = ma.maximum(start2[..., 0:2], end2[..., 0:2])
-        overlap = (ma.minimum(_track2_max, _track1_max)
-                   - ma.maximum(_track2_min, _track1_min))
-        overlap[overlap < 0] = 0
-        overlap = ma.sqrt(ma.sum(overlap**2, axis=-1))
-        mask = mask & (overlap == 0)
-
-        endpoint_distance = ma.array(endpoint_distance, mask=~mask)
+#         _track1_min = ma.minimum(start1[..., 0:2], end1[..., 0:2])
+#         _track1_max = ma.maximum(start1[..., 0:2], end1[..., 0:2])
+#         _track2_min = ma.minimum(start2[..., 0:2], end2[..., 0:2])
+#         _track2_max = ma.maximum(start2[..., 0:2], end2[..., 0:2])
+#         overlap = (ma.minimum(_track2_max, _track1_max)
+#                    - ma.maximum(_track2_min, _track1_min))
+#         overlap[overlap < 0] = 0
+#         overlap = ma.sqrt(ma.sum(overlap**2, axis=-1))
+#         mask = mask & (overlap == 0)
+        endpoint_distance = ma.array(endpoint_distance.min(axis=-1), mask=~mask)
 
         neighbor = ma.argsort(endpoint_distance, axis=-1)[..., k - 1].reshape(tracks.shape)
         neighbor = ma.array(neighbor, mask=tracks['id'].mask | np.all(~mask, axis=-1))
@@ -265,7 +297,7 @@ class TrackletMerger(H5FlowStage):
         neighbor.fill_value = -1
         return dict(neighbor=neighbor)
 
-    @ staticmethod
+    @staticmethod
     def calc_2track_sin2theta(tracks, neighbor):
         ntracks = tracks.shape[1]
         neighbor = neighbor.reshape(tracks.shape + (1,))
@@ -277,7 +309,7 @@ class TrackletMerger(H5FlowStage):
                 | (neighbor == -1).reshape(sin2theta.shape))
         return ma.array(sin2theta, mask=mask)
 
-    @ staticmethod
+    @staticmethod
     def calc_2track_endpoint_distance(tracks, neighbor):
         ntracks = tracks.shape[1]
         neighbor = neighbor.reshape(tracks.shape + (1,))
@@ -298,7 +330,7 @@ class TrackletMerger(H5FlowStage):
                 | (neighbor == -1).reshape(distance.shape))
         return ma.array(distance, mask=mask)
 
-    @ staticmethod
+    @staticmethod
     def make_missing_segment(start, end, neighbor):
         start1 = start
         start2 = np.take_along_axis(start, neighbor, axis=1)
@@ -326,9 +358,10 @@ class TrackletMerger(H5FlowStage):
             (end2, end2, start2, start2))
         return missing_track_start, missing_track_end
 
-    @ staticmethod
+    @staticmethod
     def calc_2track_missing_length(tracks, neighbor, missing_track_segments,
-                                   pixel_x, pixel_y, disabled_channel_lut, cathode_region):
+                                   pixel_x, pixel_y, disabled_channel_lut,
+                                   cathode_region, pixel_pitch=None):
         # create missing track segment
         _n_steps = missing_track_segments
         neighbor = neighbor.reshape(tracks.shape + (1,))
@@ -344,7 +377,7 @@ class TrackletMerger(H5FlowStage):
         _ds = np.sqrt(_dx**2 + _dy**2 + _dz**2)
         _missing_length = _ds * _n_steps
 
-        pixel_pitch = resources['Geometry'].pixel_pitch
+        pixel_pitch = pixel_pitch if pixel_pitch is not None else resources['Geometry'].pixel_pitch
         _ix = np.clip(np.digitize(_missing_x, pixel_x + pixel_pitch / 2) - 1,
                       0, len(pixel_x) - 1)
         _iy = np.clip(np.digitize(_missing_y, pixel_y + pixel_pitch / 2) - 1,
@@ -367,7 +400,7 @@ class TrackletMerger(H5FlowStage):
                 | (neighbor == -1).reshape(missing_length.shape))
         return ma.array(missing_length, mask=mask)
 
-    @ staticmethod
+    @staticmethod
     def calc_2track_overlap(tracks, neighbor):
         _ntracks = tracks.shape[1]
         neighbor = neighbor.reshape(tracks.shape + (1,))
@@ -387,7 +420,7 @@ class TrackletMerger(H5FlowStage):
                 | (neighbor == -1).reshape(overlap.shape))
         return ma.array(overlap, mask=mask)
 
-    @ staticmethod
+    @staticmethod
     def calc_2track_ddqdx(tracks, neighbor):
         _ntracks = tracks.shape[1]
         neighbor = neighbor.reshape(tracks.shape)
@@ -399,7 +432,7 @@ class TrackletMerger(H5FlowStage):
                 | (neighbor == -1).reshape(ddqdx.shape))
         return ma.array(ddqdx, mask=mask)
 
-    @ staticmethod
+    @staticmethod
     def load_cdf(filename, key):
         '''
             Load the N-D pdf histogram from an .npz file. Loads and normalizes
@@ -418,23 +451,37 @@ class TrackletMerger(H5FlowStage):
 
         norm = np.sum(pdf[key])
         cdf = pdf[key] / norm
-        bins = pdf[key + '_bins']
+        cdf_bins = pdf[key + '_bins']
 
         # integrate from higher bins -> lower bins
         cdf = np.flip(cdf)
-        cdf = np.cumsum(cdf).reshape(pdf[key].shape)
+        for axis in range(cdf.ndim):
+            cdf = np.cumsum(cdf, axis=axis)
         cdf = np.flip(cdf)
+        
+        idx = np.where(pdf[key])
+        weights = pdf[key][idx].flatten()
+        
+        statistic_bins = np.r_[0, np.geomspace(np.min(cdf[cdf>0]), 1, 100)]
+        statistic, statistic_bins = np.histogram(cdf[idx].flatten(),
+                                                 bins=statistic_bins, weights=weights)
+        p_bins = 1 - np.cumsum(statistic[::-1])[::-1] / np.sum(statistic)
+        
 
-        return cdf, bins
+        return cdf, cdf_bins, statistic_bins, p_bins
 
-    @ staticmethod
-    def score_neighbor(cdf, bins, *params):
+    @staticmethod
+    def score_neighbor(cdf, cdf_bins, statistic_bins, p_bins, *params):
         '''
             Calculates a p-value based on a binned, multi-dimensional CDF
 
-            :param cdf: normalized CDF, ``shape: (Nbins,)*D``
+            :param cdf: normalized CDF, ``shape: (N,)*D``
 
-            :param bins: bin edge for each parameter, ``shape: (D, Nbins+1)``
+            :param cdf_bins: bin edge for each parameter, ``shape: (D, N+1)``
+            
+            :param statistic_bins: bins for CDF statistic range 0-1, ``shape: (n,)``
+            
+            :param p_bins: bins for p value range 0-1, ``shape: (n,)``
 
             :param *params: array of parameters to use to calculate p-value, requires ``D`` parameters in the same sequence as listed in the bins, each with the same shape
 
@@ -442,5 +489,7 @@ class TrackletMerger(H5FlowStage):
 
         '''
         i_bin = [np.clip(np.digitize(np.clip(p, b[0], b[-1]), b) - 1,
-                         0, len(b) - 2) for b, p in zip(bins, params)]
-        return cdf[tuple(i_bin)]
+                         0, len(b) - 2) for b, p in zip(cdf_bins, params)]
+        statistic = cdf[tuple(i_bin)]
+        pvalue = p_bins[np.clip(np.digitize(statistic, statistic_bins), 0, len(statistic_bins) - 2)]
+        return pvalue

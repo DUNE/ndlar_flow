@@ -171,7 +171,7 @@ class BrokenTrackSim(H5FlowStage):
             endpoint_distance_2 = d['endpoint_distance_2']
             hit_frac = d['hit_frac']
 
-            d = TrackletMerger.find_k_neighbor(new_tracks, broken.reshape(new_tracks.shape))
+            d = TrackletMerger.find_k_neighbor(new_tracks, broken.reshape(new_tracks.shape + (1,)) & broken.reshape(new_tracks.shape[:-1] + (1, -1)))
             neighbor = d['neighbor']
             d = TrackletMerger.find_k_neighbor(tracks)
             orig_neighbor = d['neighbor']
@@ -181,8 +181,8 @@ class BrokenTrackSim(H5FlowStage):
                 track2_sin2theta_orig = TrackletMerger.calc_2track_sin2theta(tracks, orig_neighbor)
                 track2_endpoint_distance = TrackletMerger.calc_2track_endpoint_distance(new_tracks, neighbor)
                 track2_endpoint_distance_orig = TrackletMerger.calc_2track_endpoint_distance(tracks, orig_neighbor)
-                track2_missing_length = TrackletMerger.calc_2track_missing_length(new_tracks, neighbor, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
-                track2_missing_length_orig = TrackletMerger.calc_2track_missing_length(tracks, orig_neighbor, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
+                track2_missing_length = TrackletMerger.calc_2track_missing_length(new_tracks, neighbor, TrackletMerger.missing_track_segments, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
+                track2_missing_length_orig = TrackletMerger.calc_2track_missing_length(tracks, orig_neighbor, TrackletMerger.missing_track_segments, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
                 track2_overlap = TrackletMerger.calc_2track_overlap(new_tracks, neighbor)
                 track2_overlap_orig = TrackletMerger.calc_2track_overlap(tracks, orig_neighbor)
                 track2_ddqdx = TrackletMerger.calc_2track_ddqdx(new_tracks, neighbor)
