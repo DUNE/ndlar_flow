@@ -99,6 +99,8 @@ class T0Reconstruction(H5FlowStage):
                 t0_array['ts'][ext_trig_mask] = ext_trigs['ts'].min(axis=-1)[ext_trig_mask] - 2
                 t0_array['ts_err'][ext_trig_mask] = 1 / np.sqrt(12)  # uniform 1 tick
                 t0_array['type'][ext_trig_mask] = self.t0_type['EXT_TRIG']
+            else:
+                ext_trig_mask = np.zeros(events.shape, dtype=bool)
 
             # if light hits present, use rising edge of largest signal, type == LIGHT_MATCHED
             if light_hits is not None:
@@ -124,6 +126,8 @@ class T0Reconstruction(H5FlowStage):
                 t0_array['ts'][light_matched_mask] = ts[light_matched_mask]
                 t0_array['ts_err'][light_matched_mask] = ts_err[light_matched_mask]
                 t0_array['type'][light_matched_mask] = self.t0_type['LIGHT_MATCHED']
+            else:
+                light_matched_mask = np.zeros(events.shape, dtype=bool)
 
             # if no external trigger, use start timestamp, type == NONE
             none_mask = ~(ext_trig_mask | light_matched_mask)
