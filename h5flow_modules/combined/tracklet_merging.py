@@ -93,7 +93,7 @@ class TrackletMerger(H5FlowStage):
                          | np.expand_dims(tracks['id'].mask, axis=2))
         track_merged = np.broadcast_to(track_merged, tracks.shape + tracks.shape[-1:]).copy()
         track_checked = np.broadcast_to(track_checked, tracks.shape + tracks.shape[-1:]).copy()
-        
+
         if len(np.r_[source_slice]):
 
             # iterative approach
@@ -104,7 +104,7 @@ class TrackletMerger(H5FlowStage):
                 # calculate the p-value for neighbor pair
                 params = [
                     self.calc_2track_sin2theta(tracks, neighbor),
-                    self.calc_2track_endpoint_distance(tracks, neighbor),
+                    self.calc_2track_transverse_endpoint_d(tracks, neighbor),
                     self.calc_2track_missing_length(tracks, neighbor,
                                                     self.missing_track_segments,
                                                     self.pixel_x, self.pixel_y,
@@ -162,10 +162,10 @@ class TrackletMerger(H5FlowStage):
             calc_shape = (track_grp_id.shape[0], -1)
             merged_tracks = TrackletReconstruction.calc_tracks(track_grp_hits.reshape(calc_shape), t0, track_grp_id.reshape(calc_shape))
         else:
-            merged_tracks = ma.masked_all((0,1), dtype=TrackletReconstruction.tracklet_dtype)
-            track_grp = ma.masked_all((0,1,1), dtype=bool)
-            track_grp_id = ma.masked_all((0,1), dtype=int)
-            track_grp_hits = ma.masked_all((0,1), dtype=track_hits.dtype)
+            merged_tracks = ma.masked_all((0, 1), dtype=TrackletReconstruction.tracklet_dtype)
+            track_grp = ma.masked_all((0, 1, 1), dtype=bool)
+            track_grp_id = ma.masked_all((0, 1), dtype=int)
+            track_grp_hits = ma.masked_all((0, 1), dtype=track_hits.dtype)
 
         # save to merged track dataset
         n_tracks = np.count_nonzero(~merged_tracks['id'].mask)
@@ -192,24 +192,23 @@ class TrackletMerger(H5FlowStage):
         ev_id = np.broadcast_to(np.expand_dims(np.r_[source_slice], axis=-1), merged_tracks.shape)
         ref = np.c_[ev_id[merged_tracks_mask], merged_tracks['id'][merged_tracks_mask]]
         self.data_manager.write_ref(source_name, self.merged_dset_name, ref)
-        
+
     @staticmethod
     def condense_array(arr, mask, axis=-1):
         '''
-            Densify a masked array, throwing out invalid values (up to 
+            Densify a masked array, throwing out invalid values (up to
             the size needed to keep the array regular)
-            
+
         '''
         n_valid = np.expand_dims(np.count_nonzero(~mask, axis=axis), axis=axis)
-        
+
         new_shape = list(arr.shape)
         new_shape[axis] = n_valid.max()
         condensed = np.empty(new_shape, dtype=arr.dtype)
         idx = np.indices(condensed.shape)[-1]
         np.place(condensed, idx < n_valid, arr[~mask])
-               
-        return ma.array(condensed, mask = idx >= n_valid)
-        
+
+        return ma.array(condensed, mask=idx >= n_valid)
 
     @staticmethod
     def create_groups(mask):
@@ -310,7 +309,7 @@ class TrackletMerger(H5FlowStage):
         return ma.array(sin2theta, mask=mask)
 
     @staticmethod
-    def calc_2track_endpoint_distance(tracks, neighbor):
+    def calc_2track_transverse_endpoint_d(tracks, neighbor):
         ntracks = tracks.shape[1]
         neighbor = neighbor.reshape(tracks.shape + (1,))
         start1 = tracks['start']
@@ -318,17 +317,27 @@ class TrackletMerger(H5FlowStage):
         end1 = tracks['end']
         end2 = np.take_along_axis(tracks['end'], neighbor, axis=1)
         d = ma.concatenate((
-            ma.sum((start1 - end2)**2, axis=-1, keepdims=True),
-            ma.sum((end1 - end2)**2, axis=-1, keepdims=True),
-            ma.sum((start1 - start2)**2, axis=-1, keepdims=True),
-            ma.sum((end1 - start2)**2, axis=-1, keepdims=True),
+            np.expand_dims(start1 - end2, axis=-1),
+            np.expand_dims(end1 - end2, axis=-1),
+            np.expand_dims(start1 - start2, axis=-1),
+            np.expand_dims(end1 - start2, axis=-1)
         ), axis=-1)
-        d = np.sqrt(d)
-        distance = ma.amin(d, axis=-1)
+        print('d', d.shape)
+        i_min = np.expand_dims(ma.argmin(np.sqrt(ma.sum(d * d, axis=-2)), axis=-1), axis=-1)
+        print('i_min', i_min.shape)
+        d = np.take_along_axis(d, i_min, axis=-1)
+        print('d', d.shape)
+
+        # transverse d
+        track_d = tracks['end'] - tracks['start']
+        track_d /= ma.sqrt(ma.sum(track_d**2, axis=-1, keepdims=True))
+        t_d = np.abs(ma.sum(d * track_d, axis=-1))
+        print('t_d', t_d.shape)
+
         mask = (tracks['id'].mask |
                 neighbor.mask.reshape(distance.shape)
                 | (neighbor == -1).reshape(distance.shape))
-        return ma.array(distance, mask=mask)
+        return ma.array(t_d, mask=mask)
 
     @staticmethod
     def make_missing_segment(start, end, neighbor):
@@ -458,15 +467,14 @@ class TrackletMerger(H5FlowStage):
         for axis in range(cdf.ndim):
             cdf = np.cumsum(cdf, axis=axis)
         cdf = np.flip(cdf)
-        
+
         idx = np.where(pdf[key])
         weights = pdf[key][idx].flatten()
-        
-        statistic_bins = np.r_[0, np.geomspace(np.min(cdf[cdf>0]), 1, 100)]
+
+        statistic_bins = np.r_[0, np.geomspace(np.min(cdf[cdf > 0]), 1, 100)]
         statistic, statistic_bins = np.histogram(cdf[idx].flatten(),
                                                  bins=statistic_bins, weights=weights)
         p_bins = 1 - np.cumsum(statistic[::-1])[::-1] / np.sum(statistic)
-        
 
         return cdf, cdf_bins, statistic_bins, p_bins
 
@@ -478,9 +486,9 @@ class TrackletMerger(H5FlowStage):
             :param cdf: normalized CDF, ``shape: (N,)*D``
 
             :param cdf_bins: bin edge for each parameter, ``shape: (D, N+1)``
-            
+
             :param statistic_bins: bins for CDF statistic range 0-1, ``shape: (n,)``
-            
+
             :param p_bins: bins for p value range 0-1, ``shape: (n,)``
 
             :param *params: array of parameters to use to calculate p-value, requires ``D`` parameters in the same sequence as listed in the bins, each with the same shape

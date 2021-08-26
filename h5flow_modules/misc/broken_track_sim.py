@@ -58,10 +58,11 @@ class BrokenTrackSim(H5FlowStage):
         ('hit_frac', 'f4'),
         ('true_endpoint_d', 'f4', (2,)),
         ('neighbor_sin2theta', 'f4'),
-        ('neighbor_endpoint_d', 'f4'),
+        # ('neighbor_endpoint_d', 'f4'),
+        ('neighbor_transverse_endpoint_d', 'f4'),
         ('neighbor_missing_length', 'f4'),
         ('neighbor_overlap', 'f4'),
-        ('neighbor_ddqdx', 'f4')
+        ('neighbor_ddqdx', 'f4'),
     ])
 
     default_pdf_bins = [
@@ -179,8 +180,10 @@ class BrokenTrackSim(H5FlowStage):
             if self.generate_2track_joint_pdf:
                 track2_sin2theta = TrackletMerger.calc_2track_sin2theta(new_tracks, neighbor)
                 track2_sin2theta_orig = TrackletMerger.calc_2track_sin2theta(tracks, orig_neighbor)
-                track2_endpoint_distance = TrackletMerger.calc_2track_endpoint_distance(new_tracks, neighbor)
-                track2_endpoint_distance_orig = TrackletMerger.calc_2track_endpoint_distance(tracks, orig_neighbor)
+                # track2_endpoint_distance = TrackletMerger.calc_2track_endpoint_distance(new_tracks, neighbor)
+                # track2_endpoint_distance_orig = TrackletMerger.calc_2track_endpoint_distance(tracks, orig_neighbor)
+                track2_transverse_endpoint_d = TrackletMerger.calc_2track_transverse_endpoint_d(new_tracks, neighbor)
+                track2_transverse_endpoint_d_orig = TrackletMerger.calc_2track_transverse_endpoint_d(tracks, orig_neighbor)
                 track2_missing_length = TrackletMerger.calc_2track_missing_length(new_tracks, neighbor, TrackletMerger.missing_track_segments, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
                 track2_missing_length_orig = TrackletMerger.calc_2track_missing_length(tracks, orig_neighbor, TrackletMerger.missing_track_segments, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
                 track2_overlap = TrackletMerger.calc_2track_overlap(new_tracks, neighbor)
@@ -188,10 +191,10 @@ class BrokenTrackSim(H5FlowStage):
                 track2_ddqdx = TrackletMerger.calc_2track_ddqdx(new_tracks, neighbor)
                 track2_ddqdx_orig = TrackletMerger.calc_2track_ddqdx(tracks, orig_neighbor)
 
-                self.pdf['rereco'].fill(track2_sin2theta, track2_endpoint_distance,
+                self.pdf['rereco'].fill(track2_sin2theta, track2_transverse_endpoint_d,
                                         track2_missing_length, track2_overlap,
                                         track2_ddqdx)
-                self.pdf['origin'].fill(track2_sin2theta_orig, track2_endpoint_distance_orig,
+                self.pdf['origin'].fill(track2_sin2theta_orig, track2_transverse_endpoint_d_orig,
                                         track2_missing_length_orig, track2_overlap_orig,
                                         track2_ddqdx_orig)
 
@@ -231,7 +234,7 @@ class BrokenTrackSim(H5FlowStage):
             label_array['hit_frac'] = hit_frac.compressed()
             label_array['true_endpoint_d'] = np.c_[endpoint_distance_1.compressed(), endpoint_distance_2.compressed()]
             label_array['neighbor_sin2theta'] = track2_sin2theta.flat[~broken.mask.ravel()]
-            label_array['neighbor_endpoint_d'] = track2_endpoint_distance.flat[~broken.mask.ravel()]
+            label_array['neighbor_transverse_endpoint_d'] = track2_transverse_endpoint_d.flat[~broken.mask.ravel()]
             label_array['neighbor_missing_length'] = track2_missing_length.flat[~broken.mask.ravel()]
             label_array['neighbor_overlap'] = track2_overlap.flat[~broken.mask.ravel()]
             label_array['neighbor_ddqdx'] = track2_ddqdx.flat[~broken.mask.ravel()]
