@@ -175,10 +175,6 @@ class TrackletMerger(H5FlowStage):
                 np.put_along_axis(track_merged, neighbor, should_merge, axis=-1)
                 np.put_along_axis(track_checked, neighbor, True, axis=-1)
 
-                # no need to check both i->j and j->i
-                track_merged = track_merged | np.transpose(track_merged, axes=(0, 2, 1))
-                track_checked = track_checked | np.transpose(track_checked, axes=(0, 2, 1))
-
                 if np.all(track_checked):
                     break
 
