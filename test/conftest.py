@@ -30,8 +30,7 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
         if src is None or not os.path.exists(os.path.join(src, file)):
             # copy from url
             print(f'{url} -> {file}')
-            subprocess.run(['curl', '-f', '-O', url], check=True)
-            os.replace(file, os.path.join(dest, file))
+            subprocess.run(['curl', '-f', '-o', os.path.join(dest, file), url], check=True)
         else:
             # copy from cache
             print(f'{src}/{file} -> {file}')
