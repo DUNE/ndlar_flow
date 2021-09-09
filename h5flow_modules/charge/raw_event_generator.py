@@ -252,7 +252,7 @@ class RawEventGenerator(H5FlowGenerator):
         packet_buffer['timestamp'] = packet_buffer['timestamp'].astype(int) % (2**31)  # ignore 32nd bit from pacman triggers
         self.last_unix_ts = unix_ts[-1] if len(unix_ts) else self.last_unix_ts
 
-        if self.sync_noise_cut_enabled:
+        if self.sync_noise_cut_enabled and not self.is_mc:
             # remove all packets that occur before the cut
             sync_noise_mask = (packet_buffer['timestamp'] > self.sync_noise_cut[0]) & (packet_buffer['timestamp'] < self.sync_noise_cut[1])
             packet_buffer = packet_buffer[sync_noise_mask]
