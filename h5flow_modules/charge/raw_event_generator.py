@@ -58,7 +58,7 @@ class RawEventGenerator(H5FlowGenerator):
             unix_ts     u8, unix timestamp of event [s since epoch]
 
     '''
-    class_version = '0.1.0'
+    class_version = '0.1.1'
 
     default_buffer_size = 38400
     default_nhit_cut = 100
