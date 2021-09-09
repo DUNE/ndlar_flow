@@ -52,7 +52,7 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
 
 @pytest.fixture(params=[
     'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/dataRuns/packetData/datalog_2021_04_04_00_41_40_CEST.h5',
-    'https://portal.nersc.gov/project/dune/data/Module0/simulation/larndsim/datalog.edep.all.h5'
+    'https://portal.nersc.gov/project/dune/data/Module0/simulation/stopping_muons/stopping_muons.test.h5'
 ])
 def charge_source_file(pytestconfig, tmp_path_factory, request):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory, request.param))
