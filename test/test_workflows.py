@@ -119,7 +119,7 @@ def combined_file(charge_assoc_file, geometry_file, tmp_h5_file,
 @pytest.fixture
 def broken_track_sim_file(combined_file, geometry_file, tmp_h5_file,
                           disabled_channels_list_file, missing_asic_list_file):
-    print('Combined reconstruction...')
+    print('Broken track simulation...')
     h5flow.run('h5flow_yamls/combined/broken_track_sim.yaml',
                tmp_h5_file,
                combined_file,
