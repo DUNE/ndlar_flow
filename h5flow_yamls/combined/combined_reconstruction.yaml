@@ -60,4 +60,4 @@ tracklet_merge:
         tracks_dset_name: 'combined/tracklets'
         pdf_filename: 'joint_pdf.npz'
         pvalue_cut: 0.05
-        max_iterations: 5
+        max_neighbors: 5

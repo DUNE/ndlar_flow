@@ -109,8 +109,8 @@ class TrackletMerger(H5FlowStage):
 
     def init(self, source_name):
         self.r, self.r_bins, self.statistic_bins, self.p_bins = (
-            self.load_r_value(self.pdf_filename, self.pdf_sig_name,
-                              self.pdf_bkg_name))
+            self.load_r_values(self.pdf_filename, self.pdf_sig_name,
+                               self.pdf_bkg_name))
 
         self.data_manager.set_attrs(self.merged_dset_name,
                                     classname=self.classname,
@@ -149,7 +149,7 @@ class TrackletMerger(H5FlowStage):
         if len(np.r_[source_slice]):
 
             # iterative approach
-            for _ in range(self.max_iterations):
+            for _ in range(self.max_neighbors):
                 # find neighboring tracks that have not been checked
                 neighbor = self.find_k_neighbor(tracks, mask=~track_checked)['neighbor']
 
@@ -199,11 +199,9 @@ class TrackletMerger(H5FlowStage):
             # mask and condense: (n_ev, n_hit') [used by track reco calculation]
             new_shape = track_grp.shape[0:1] + (-1,)
             track_grp_hits = self.condense_array(track_grp_hits.reshape(new_shape),
-                                                 track_grp_hits_mask.reshape(new_shape),
-                                                 axis=-1)
+                                                 track_grp_hits_mask.reshape(new_shape))
             track_grp_id = self.condense_array(track_grp_id.reshape(new_shape),
-                                               track_grp_hits_mask.reshape(new_shape),
-                                               axis=-1)
+                                               track_grp_hits_mask.reshape(new_shape))
             logging.warning(f'track_hits: {track_grp_hits.shape} ({track_grp_hits.nbytes/1024/1024:0.02f}MB)')
 
             # recalculate track parameters
