@@ -61,7 +61,8 @@ class RunData(H5FlowResource):
 
     source_filename_columns = ('charge_filename', 'light_filename')
     required_attr = ('charge_filename', 'light_filename', 'e_field',
-                     'light_samples', 'charge_thresholds', 'is_mc', 'crs_ticks', 'lrs_ticks')
+                     'light_samples', 'charge_thresholds', 'is_mc', 'crs_ticks',
+                     'lrs_ticks')
 
     def __init__(self, **params):
         super(RunData, self).__init__(**params)
@@ -72,11 +73,10 @@ class RunData(H5FlowResource):
 
     def init(self, source_name):
         self.source_name = source_name
-        self.data_manager.set_attrs(self.path)
-        self.data = dict(self.data_manager.get_attrs(self.path))
-
-        if not len(self.data.keys()):
+        if not self.data_manager.attr_exists(self.path, 'classname'):
             # run data does not exist, get it from input run list file
+            self.data = dict()
+
             self._update_data()
             self.data['classname'] = self.classname
             self.data['class_version'] = self.class_version
@@ -85,6 +85,7 @@ class RunData(H5FlowResource):
                 self.data[f'{key}_default'] = val
             self.data_manager.set_attrs(self.path, **self.data)
         else:
+            self.data = dict(self.data_manager.get_attrs(self.path))
             assert_compat_version(self.class_version, self.data['class_version'])
 
         for attr in self.required_attr:
