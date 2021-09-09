@@ -101,7 +101,8 @@ def charge_assoc_file(charge_reco_file, light_reco_file, tmp_h5_file):
 
 
 @pytest.fixture
-def combined_file(charge_assoc_file, geometry_file, tmp_h5_file):
+def combined_file(charge_assoc_file, geometry_file, tmp_h5_file,
+                  disabled_channels_list_file, missing_asic_list_file):
     print('Combined reconstruction...')
     h5flow.run('h5flow_yamls/combined/combined_reconstruction.yaml',
                tmp_h5_file,
@@ -116,7 +117,8 @@ def combined_file(charge_assoc_file, geometry_file, tmp_h5_file):
 
 
 @pytest.fixture
-def broken_track_sim_file(combined_file, geometry_file, tmp_h5_file):
+def broken_track_sim_file(combined_file, geometry_file, tmp_h5_file,
+                          disabled_channels_list_file, missing_asic_list_file):
     print('Combined reconstruction...')
     h5flow.run('h5flow_yamls/combined/broken_track_sim.yaml',
                tmp_h5_file,

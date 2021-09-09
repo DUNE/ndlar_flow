@@ -95,6 +95,20 @@ def runlist_file(pytestconfig, tmp_path_factory):
 
 
 @pytest.fixture
+def disabled_channels_list_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/badChannelLists/selftrigger_masked/module0-run1-selftrigger-disabled-list.json'
+                                     ))
+
+
+@pytest.fixture
+def missing_asic_list_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/badChannelLists/module0-run1-network-absent-ASICs.json'
+                                     ))
+
+
+@pytest.fixture
 def light_noise_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      'https://portal.nersc.gov/project/dune/data/Module0-Run2/LRS/LED/rwf_20210624_094156.fwvfm.noise_power.npz'
