@@ -58,7 +58,6 @@ class BrokenTrackSim(H5FlowStage):
         ('hit_frac', 'f4'),
         ('true_endpoint_d', 'f4', (2,)),
         ('neighbor_sin2theta', 'f4'),
-        # ('neighbor_endpoint_d', 'f4'),
         ('neighbor_transverse_endpoint_d', 'f4'),
         ('neighbor_missing_length', 'f4'),
         ('neighbor_overlap', 'f4'),
@@ -172,8 +171,7 @@ class BrokenTrackSim(H5FlowStage):
             endpoint_distance_2 = d['endpoint_distance_2']
             hit_frac = d['hit_frac']
 
-            d = TrackletMerger.find_k_neighbor(new_tracks)
-#             , broken.reshape(new_tracks.shape + (1,)) & broken.reshape(new_tracks.shape[:-1] + (1, -1)))
+            d = TrackletMerger.find_k_neighbor(new_tracks, broken.reshape(new_tracks.shape + (1,)) & broken.reshape(new_tracks.shape[:-1] + (1, -1)))
             neighbor = d['neighbor']
             d = TrackletMerger.find_k_neighbor(tracks)
             orig_neighbor = d['neighbor']
@@ -181,8 +179,6 @@ class BrokenTrackSim(H5FlowStage):
             if self.generate_2track_joint_pdf:
                 track2_sin2theta = TrackletMerger.calc_2track_sin2theta(new_tracks, neighbor)
                 track2_sin2theta_orig = TrackletMerger.calc_2track_sin2theta(tracks, orig_neighbor)
-                # track2_endpoint_distance = TrackletMerger.calc_2track_endpoint_distance(new_tracks, neighbor)
-                # track2_endpoint_distance_orig = TrackletMerger.calc_2track_endpoint_distance(tracks, orig_neighbor)
                 track2_transverse_endpoint_d = TrackletMerger.calc_2track_transverse_endpoint_d(new_tracks, neighbor)
                 track2_transverse_endpoint_d_orig = TrackletMerger.calc_2track_transverse_endpoint_d(tracks, orig_neighbor)
                 track2_missing_length = TrackletMerger.calc_2track_missing_length(new_tracks, neighbor, TrackletMerger.missing_track_segments, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
@@ -191,7 +187,7 @@ class BrokenTrackSim(H5FlowStage):
                 track2_overlap_orig = TrackletMerger.calc_2track_overlap(tracks, orig_neighbor)
                 track2_ddqdx = TrackletMerger.calc_2track_ddqdx(new_tracks, neighbor)
                 track2_ddqdx_orig = TrackletMerger.calc_2track_ddqdx(tracks, orig_neighbor)
-                
+
                 rereco_mask = (np.squeeze(broken) & np.take_along_axis(np.squeeze(broken), neighbor, axis=1))
 
                 self.pdf['rereco'].fill(track2_sin2theta[rereco_mask], track2_transverse_endpoint_d[rereco_mask],
