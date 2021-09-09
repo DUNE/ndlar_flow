@@ -103,7 +103,7 @@ def disabled_channels_list_file(pytestconfig, tmp_path_factory):
 @pytest.fixture
 def missing_asic_list_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
-                                     'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/badChannelLists/module0-run1-network-absent-ASICs.json'
+                                     'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/badChannelLists/module0-network-absent-ASICs.json'
                                      ))
 
 
