@@ -108,6 +108,13 @@ def missing_asic_list_file(pytestconfig, tmp_path_factory):
 
 
 @pytest.fixture
+def track_merging_pdf_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/joint_pdf.npz'
+                                     ))
+
+
+@pytest.fixture
 def light_noise_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      'https://portal.nersc.gov/project/dune/data/Module0-Run2/LRS/LED/rwf_20210624_094156.fwvfm.noise_power.npz'
