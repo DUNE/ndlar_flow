@@ -242,7 +242,7 @@ class TrackletMerger(H5FlowStage):
         self.data_manager.write_ref(source_name, self.merged_dset_name, ref)
 
     @staticmethod
-    def condense_array(arr, mask, axis=-1):
+    def condense_array(arr, mask):
         '''
             Densify a masked array on last axis, throwing out invalid values
             (up to the size needed to keep the array regular). E.g.::
