@@ -172,7 +172,8 @@ class BrokenTrackSim(H5FlowStage):
             endpoint_distance_2 = d['endpoint_distance_2']
             hit_frac = d['hit_frac']
 
-            d = TrackletMerger.find_k_neighbor(new_tracks, broken.reshape(new_tracks.shape + (1,)) & broken.reshape(new_tracks.shape[:-1] + (1, -1)))
+            d = TrackletMerger.find_k_neighbor(new_tracks)
+#             , broken.reshape(new_tracks.shape + (1,)) & broken.reshape(new_tracks.shape[:-1] + (1, -1)))
             neighbor = d['neighbor']
             d = TrackletMerger.find_k_neighbor(tracks)
             orig_neighbor = d['neighbor']
@@ -190,10 +191,12 @@ class BrokenTrackSim(H5FlowStage):
                 track2_overlap_orig = TrackletMerger.calc_2track_overlap(tracks, orig_neighbor)
                 track2_ddqdx = TrackletMerger.calc_2track_ddqdx(new_tracks, neighbor)
                 track2_ddqdx_orig = TrackletMerger.calc_2track_ddqdx(tracks, orig_neighbor)
+                
+                rereco_mask = (np.squeeze(broken) & np.take_along_axis(np.squeeze(broken), neighbor, axis=1))
 
-                self.pdf['rereco'].fill(track2_sin2theta, track2_transverse_endpoint_d,
-                                        track2_missing_length, track2_overlap,
-                                        track2_ddqdx)
+                self.pdf['rereco'].fill(track2_sin2theta[rereco_mask], track2_transverse_endpoint_d[rereco_mask],
+                                        track2_missing_length[rereco_mask], track2_overlap[rereco_mask],
+                                        track2_ddqdx[rereco_mask])
                 self.pdf['origin'].fill(track2_sin2theta_orig, track2_transverse_endpoint_d_orig,
                                         track2_missing_length_orig, track2_overlap_orig,
                                         track2_ddqdx_orig)
