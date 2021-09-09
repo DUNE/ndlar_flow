@@ -30,9 +30,10 @@ class TrackletMerger(H5FlowStage):
     class_version = '0.0.0'
 
     default_pdf_filename = 'joint_pdf.npz'
-    default_pdf_name = 'rereco'
+    default_pdf_sig_name = 'rereco'
+    default_pdf_bkg_name = 'origin'
     default_pvalue_cut = 0.10
-    default_max_iterations = 5
+    default_max_neighbors = 5
 
     default_t0_dset_name = 'combined/t0'
     default_hits_dset_name = 'charge/hits'
@@ -49,9 +50,10 @@ class TrackletMerger(H5FlowStage):
         super(TrackletMerger, self).__init__(**params)
 
         self.pdf_filename = params.get('pdf_filename', self.default_pdf_filename)
-        self.pdf_name = params.get('pdf_name', self.default_pdf_name)
+        self.pdf_sig_name = params.get('pdf_sig_name', self.default_pdf_sig_name)
+        self.pdf_bkg_name = params.get('pdf_bkg_name', self.default_pdf_bkg_name)
         self.pvalue_cut = params.get('pvalue_cut', self.default_pvalue_cut)
-        self.max_iterations = params.get('max_iterations', self.default_max_iterations)
+        self.max_neighbors = params.get('max_neighbors', self.default_max_neighbors)
 
         self.t0_dset_name = params.get('t0_dset_name', self.default_t0_dset_name)
         self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
@@ -60,7 +62,9 @@ class TrackletMerger(H5FlowStage):
         self.merged_dset_name = params.get('merged_dset_name', self.default_merged_dset_name)
 
     def init(self, source_name):
-        self.cdf, self.cdf_bins, self.statistic_bins, self.p_bins = self.load_cdf(self.pdf_filename, self.pdf_name)
+        self.r, self.r_bins, self.statistic_bins, self.p_bins = (
+            self.load_r_value(self.pdf_filename, self.pdf_sig_name,
+                              self.pdf_bkg_name))
 
         self.data_manager.set_attrs(self.merged_dset_name,
                                     classname=self.classname,
@@ -68,9 +72,11 @@ class TrackletMerger(H5FlowStage):
                                     hits_dset=self.hits_dset_name,
                                     t0_dset=self.t0_dset_name,
                                     tracks_dset=self.tracks_dset_name,
-                                    max_iterations=self.max_iterations,
+                                    max_neighbors=self.max_neighbors,
                                     pvalue_cut=self.pvalue_cut,
-                                    pdf_filename=self.pdf_filename
+                                    pdf_filename=self.pdf_filename,
+                                    pdf_sig_name=self.pdf_sig_name,
+                                    pdf_bkg_name=self.pdf_bkg_name
                                     )
 
         self.data_manager.create_dset(self.merged_dset_name, self.merged_dtype)
@@ -86,7 +92,7 @@ class TrackletMerger(H5FlowStage):
         track_hits = cache[self.track_hits_dset_name]
         tracks = cache[self.tracks_dset_name]
 
-        # ajacency matrix to represent if tracks should be merged or not
+        # ajacency matrix to represent if tracks should be merged or not (True == to merge)
         track_merged = np.expand_dims(np.diagflat(np.ones(tracks.shape[-1], dtype=bool)), axis=0)
         track_checked = (track_merged.copy()
                          | np.expand_dims(tracks['id'].mask, axis=1)
@@ -113,7 +119,7 @@ class TrackletMerger(H5FlowStage):
                     self.calc_2track_overlap(tracks, neighbor),
                     self.calc_2track_ddqdx(tracks, neighbor)
                 ]
-                pvalue = np.expand_dims(self.score_neighbor(self.cdf, self.cdf_bins, self.statistic_bins, self.p_bins, *params), -1)
+                pvalue = np.expand_dims(self.score_neighbor(self.r, self.r_bins, self.statistic_bins, self.p_bins, *params), -1)
                 neighbor = np.expand_dims(neighbor, -1)
 
                 # merge tracks that have large p-values
@@ -198,8 +204,22 @@ class TrackletMerger(H5FlowStage):
         '''
             Densify a masked array, throwing out invalid values (up to
             the size needed to keep the array regular)
+            Densify a masked array on last axis, throwing out invalid values
+            (up to the size needed to keep the array regular). E.g.::
+
+                mask = [[False, True, True],
+                        [False, False, True],
+                        [True, False, True]]
+
+            will condense a 3x3 array to shape: ``(3, 2)`` and produce a final
+            mask of::
+
+                new_mask = [[False, True],
+                            [False, False],
+                            [False, True]]
 
         '''
+        axis = -1
         n_valid = np.expand_dims(np.count_nonzero(~mask, axis=axis), axis=axis)
 
         new_shape = list(arr.shape)
@@ -277,16 +297,6 @@ class TrackletMerger(H5FlowStage):
             ma.sum((end1 - start2)**2, axis=-1, keepdims=True),
         ), axis=-1)
         endpoint_distance = ma.sqrt(endpoint_distance)
-
-#         _track1_min = ma.minimum(start1[..., 0:2], end1[..., 0:2])
-#         _track1_max = ma.maximum(start1[..., 0:2], end1[..., 0:2])
-#         _track2_min = ma.minimum(start2[..., 0:2], end2[..., 0:2])
-#         _track2_max = ma.maximum(start2[..., 0:2], end2[..., 0:2])
-#         overlap = (ma.minimum(_track2_max, _track1_max)
-#                    - ma.maximum(_track2_min, _track1_min))
-#         overlap[overlap < 0] = 0
-#         overlap = ma.sqrt(ma.sum(overlap**2, axis=-1))
-#         mask = mask & (overlap == 0)
         endpoint_distance = ma.array(endpoint_distance.min(axis=-1), mask=~mask)
 
         neighbor = ma.argsort(endpoint_distance, axis=-1)[..., k - 1].reshape(tracks.shape)
@@ -440,52 +450,53 @@ class TrackletMerger(H5FlowStage):
         return ma.array(ddqdx, mask=mask)
 
     @staticmethod
-    def load_cdf(filename, key):
+    def load_r_values(filename, sig_key, bkg_key):
         '''
             Load the N-D pdf histogram from an .npz file. Loads and normalizes
-            the histogram stored under ``{key}`` with bins stored under
-            ``{key}_bins`` to create a PDF. The CDF is then generated by
-            integrating from bin ``N -> i``, where N is the largest bin.
+            the histograms stored under ``{sig_key}`` and ``{bkg_key}`` with
+            bins stored under ``{key}_bins`` to create a PDF. The likelihood
+            ratio (``R``) is then calculated and converted to a normalized
+            value between 0-1 (``r``) with the following transformation::
+
+                r = 1 - e^(-R)
+
+            Bins with 0 entries are assigned an ``R``-value of 0.
 
             :param filename: path to .npz file with arrays
 
-            :param key: name of histogram in .npz file
+            :param sig_key: name of "signal" histogram in .npz file
 
-            :returns: ``tuple`` of CDF (``shape: (N0, N1, ...)``) and CDF bins in each dimension (``shape: (D, Ni)``)
+            :param bkg_key: name of "background" histogram in .npz file
+
+            :returns: ``tuple`` of r histogram (``shape: (N0, N1, ...)``), r bins in each dimension (``shape: (D, Ni)``), an array possible r values (``shape: (1001,)``, and corresponding p-values (``shape: (1001,)``)
 
         '''
         pdf = dict(np.load(filename, allow_pickle=True))
 
-        norm = np.sum(pdf[key])
-        cdf = 1 - np.exp(-(pdf[key] / norm) / (pdf['origin'] / np.sum(pdf['origin'] + 1e-15)))
-        cdf_bins = pdf[key + '_bins']
+        norm = np.sum(pdf[sig_key])
+        r = 1 - np.exp(-(pdf[sig_key] / norm) / (pdf[bkg_key] / np.sum(pdf[bkg_key]) + 1e-15))
+        r_bins = pdf[sig_key + '_bins']
 
-        # integrate from higher bins -> lower bins
-#         cdf = np.flip(cdf)
-#         for axis in range(cdf.ndim):
-#             cdf = np.cumsum(cdf, axis=axis)
-#         cdf = np.flip(cdf)
+        idx = np.where(pdf[sig_key])
+        weights = pdf[sig_key][idx].flatten()
 
-        idx = np.where(pdf[key])
-        weights = pdf[key][idx].flatten()
-
-        statistic_bins = np.r_[0, np.geomspace(np.min(cdf[cdf > 0]), 1, 1000)]
-        statistic, statistic_bins = np.histogram(cdf[idx].flatten(),
+        statistic_bins = np.r_[0, np.geomspace(np.min(r[r > 0]), 1, 1000)]
+        statistic, statistic_bins = np.histogram(r[idx].flatten(),
                                                  bins=statistic_bins, weights=weights)
         p_bins = 1 - np.cumsum(statistic[::-1])[::-1] / np.sum(statistic)
 
-        return cdf, cdf_bins, statistic_bins, p_bins
+        return r, r_bins, statistic_bins, p_bins
 
     @staticmethod
-    def score_neighbor(cdf, cdf_bins, statistic_bins, p_bins, *params):
+    def score_neighbor(r, r_bins, statistic_bins, p_bins, *params):
         '''
             Calculates a p-value based on a binned, multi-dimensional CDF
 
-            :param cdf: normalized CDF, ``shape: (N,)*D``
+            :param r: normalized CDF, ``shape: (N,)*D``
 
-            :param cdf_bins: bin edge for each parameter, ``shape: (D, N+1)``
+            :param r_bins: bin edge for each parameter, ``shape: (D, N+1)``
 
-            :param statistic_bins: bins for CDF statistic range 0-1, ``shape: (n,)``
+            :param statistic_bins: bins for statistic, range 0-1, ``shape: (n,)``
 
             :param p_bins: bins for p value range 0-1, ``shape: (n,)``
 
@@ -495,7 +506,7 @@ class TrackletMerger(H5FlowStage):
 
         '''
         i_bin = [np.clip(np.digitize(np.clip(p, b[0], b[-1]), b) - 1,
-                         0, len(b) - 2) for b, p in zip(cdf_bins, params)]
-        statistic = cdf[tuple(i_bin)]
+                         0, len(b) - 2) for b, p in zip(r_bins, params)]
+        statistic = r[tuple(i_bin)]
         pvalue = p_bins[np.clip(np.digitize(statistic, statistic_bins), 0, len(statistic_bins) - 2)]
         return pvalue
