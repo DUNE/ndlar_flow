@@ -25,11 +25,11 @@ class TrackletReconstruction(H5FlowStage):
          - ``ransac_max_trials``: ``int``, number of ransac trials per cluster
          - ``max_iterations``: ``int``, max number of fitting iterations before giving up
 
-         Both ``hits_dset_name`` and ``t0_dset_name`` are required in the cache.
+        Both ``hits_dset_name`` and ``t0_dset_name`` are required in the cache.
 
-         Requires Geometry, RunData, and Units resource in workflow.
+        Requires Geometry, RunData, and Units resource in workflow.
 
-         ``tracklets`` datatype::
+        ``tracklets`` datatype::
 
             id          u4,     unique identifier
             theta       f8,     track inclination w.r.t anode

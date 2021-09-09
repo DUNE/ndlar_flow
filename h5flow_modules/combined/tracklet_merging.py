@@ -9,22 +9,68 @@ from module0_flow.combined.tracklet_reco import TrackletReconstruction
 
 class TrackletMerger(H5FlowStage):
     '''
-    Example config::
+        Merges existing tracks with neighbors based on a multi-dimensional
+        likelihood ratio metric. The observables used in the likelihood
+        estimation are:
 
-        track_merge:
-            classname: TrackletMerger
-            requires:
-             - 'combined/tracklets'
-             - 'charge/hits'
-             - 'combined/t0'
-            params:
-                merged_dset_name: 'combined/tracklets/merged'
-                t0_dset_name: 'combined/t0'
-                hits_dset_name: 'charge/hits'
-                tracks_dset_name: 'combined/tracklets'
-                pdf_filename: 'joint_pdf.npz'
-                pvalue_cut: 0.10
-                max_iterations: 5
+         - ``sin^2(theta)``: angle between the two track segments
+         - transverse distance: maximum transverse displacement of track from the axis of the first track [mm]
+         - missing length: length of line segment between closer two endpoints that crosses active pixels [mm]
+         - overlap: quadrature sum of 1D overlap of tracks in x, y, and z [mm]
+         - delta-dQ/dx: difference in raw dQ/dx [mV]
+
+        Requires an input histogram .npz file consisting of 4 arrays:
+
+         - ``'{sig}'``: an array of shape: ``(N0, N1, ... N4)`` representing the number of signal events in each bin of the 5 observables
+         - ``'{sig}_bins'``: an array of 5 arrays each with shape: ``Ni+1`` representing the bin edges
+         - ``'{bkg}'``: an array of shape: ``(N0, N1, ... N4)`` representing the number of background events in each bin of the 5 observables
+
+        The selection is performed by normalizing the input histograms to a PDF,
+        calculating the ``signal/background`` likelihood ratio, and rescaling
+        to a normalized metric between 0 and 1. The p-value (or inefficiency)
+        of this metric is calculated based on the signal histogram. The
+        track merging selection cut is applied on this p-value, e.g. a
+        ``pvalue_cut = 0.05`` will result in a 95% selection efficiency for
+        merging neighboring tracks (at least for the sample used to generate
+        the input histograms).
+
+        Parameters:
+         - ``pdf_filename``: ``str``, path to .npz file containing multi-dimensional pdf (more details above)
+         - ``pdf_sig_name``: ``str``, name of array in .npz file containing the "signal" histogram
+         - ``pdf_bkg_name``: ``str``, name of array in .npz file containing the "background" histogram
+         - ``pvalue_cut``: ``float``, p-value/inefficiency used as cut for likelihood ratio
+         - ``max_neighbors``: ``int``, number of neighbor tracks to attempt merge procedure
+         - ``hits_dset_name``: ``str``, path to input charge hits dataset
+         - ``t0_dset_name``: ``str``, path to input t0 dataset
+         - ``hits_dset_name``: ``str``, path to input charge hits dataset
+         - ``track_hits_dset_name``: ``str``, path to input track-referred charge hits dataset
+         - ``tracks_dset_name``: ``str``, path to input track dataset
+         - ``merged_dset_name``: ``str``, path to output track dataset
+
+        All of ``hits_dset_name``, ``t0_dset_name``, ``track_hits_dset_name``,
+        and ``tracks_dset_name`` are required in the cache.
+
+        Requires both Geometry and DisabledChannels resources in workflow.
+
+        ``merged`` datatype is the same as the
+        ``TrackletReconstruction.tracklet_dtype``.
+
+        Example config::
+
+            track_merge:
+                classname: TrackletMerger
+                requires:
+                 - 'combined/tracklets'
+                 - 'charge/hits'
+                 - 'combined/t0'
+                params:
+                    merged_dset_name: 'combined/tracklets/merged'
+                    t0_dset_name: 'combined/t0'
+                    hits_dset_name: 'charge/hits'
+                    tracks_dset_name: 'combined/tracklets'
+                    pdf_filename: 'joint_pdf.npz'
+                    pvalue_cut: 0.10
+                    max_neighbors: 5
 
     '''
     class_version = '0.0.0'
@@ -202,8 +248,6 @@ class TrackletMerger(H5FlowStage):
     @staticmethod
     def condense_array(arr, mask, axis=-1):
         '''
-            Densify a masked array, throwing out invalid values (up to
-            the size needed to keep the array regular)
             Densify a masked array on last axis, throwing out invalid values
             (up to the size needed to keep the array regular). E.g.::
 
@@ -237,16 +281,30 @@ class TrackletMerger(H5FlowStage):
             row i is equal to the ``OR`` of the rows that can be reached from
             ``i``. E.g.::
 
-                arr = [[1,0,1], [0,1,0], [0,0,1]]
+                arr = [[1,0,1],
+                       [0,1,0],
+                       [0,0,1]]
                 new_arr = create_groups(arr)
-                new_arr # [[1,0,1], [0,1,0], [1,0,1]]
+                new_arr # [[1,0,1],
+                           [0,1,0],
+                           [1,0,1]]
+
+            and::
+
+                arr = [[0,1,0],
+                       [0,0,1],
+                       [1,1,0]]
+                new_arr = create_groups(arr)
+                new_arr # [[0,0,1],
+                           [0,1,0],
+                           [0,1,1]]
 
             :param mask: ajacency matrix (``shape: (..., n, n)``)
 
             :returns: updated ajacency matrix (``shape: (..., n, n)``)
         '''
 
-        # get index of masks (starting with true values)
+        # get index of masks (starting with True values)
         i_mask = np.argsort(mask, axis=-1)[..., ::-1]
         step = 0
         while (step < i_mask.shape[-1]):
@@ -270,11 +328,11 @@ class TrackletMerger(H5FlowStage):
     @staticmethod
     def find_k_neighbor(tracks, mask=None, k=1):
         '''
-        Find ``k``-th neighbor based on endpoint distance and require no overlap:
+            Find ``k``-th neighbor based on endpoint distance and require no overlap:
 
-         - ``tracks`` is an (N,M) array of tracks
-         - ``mask`` is boolean of same shape as ``tracks``
-         - ``mask`` true indicates a valid track to search for neighbors
+             - ``tracks`` is an (N,M) array of tracks
+             - ``mask`` is boolean of same shape as ``tracks``
+             - ``mask`` true indicates a valid track to search for neighbors
 
         '''
         ntracks = tracks.shape[-1]

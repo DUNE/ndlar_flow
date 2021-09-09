@@ -25,18 +25,58 @@ class JointPDF(object):
 
 class BrokenTrackSim(H5FlowStage):
     '''
-    Example config::
+        Generates a realistic broken track distribution by randomly translating
+        reconstructed track hits and removing hits that cross disabled sections
+        of the anode plane.
 
-        broken_track_sim:
-            classname: BrokenTrackSim
-            requires:
-             - 'combined/tracklets'
-             - 'charge/hits'
-             - 'combined/t0'
-            params:
-                path: 'misc/broken_track_sim'
-                rand_track_length_cut: 100 # mm
+        The algorithm is:
 
+         1. select a random "source" track within the event passing a length selection cut
+         2. translate the random track in x,y such that the track is still contained
+         3. mask off hits that fall on disabled channels
+         4. re-run track reconstruction on new hit distribution
+         5. label new tracks as broken according the overlap of the new track hits with the old source track and the distance of their endpoints
+
+        Parameters:
+         - ``path``: ``str``, path to output datasets within HDF5 file
+         - ``generate_2track_joint_pdf``: ``bool``, flag to generate an output .npz file that can be used by the the track merging reconstruction
+         - ``joint_pdf_filename``: ``str``, path of output .npz file (if generated)
+         - ``pdf_bins``: ``list`` of ``list``, bin description for each parameter in output pdf, each formatted as ``(log10(min), log10(max), nbins)``
+         - ``rand_track_length_cut``: ``float``, track length cut for source track [mm]
+         - ``broken_track_distance_cut``: ``float``, cut on the distance of the 2nd-closest new track endpoint from the closest source endpoint to label a track as broken
+
+         - ``tracks_dset_name``: ``str``, path to input tracks dataset
+         - ``t0_dset_name``: ``str``, path to input t0 dataset
+         - ``hits_dset_name``: ``str``, path to input charge hits dataset
+
+        All of ``tracks_dset_name``, ``hits_dset_name``, and ``t0_dset_name``
+        are required in the cache.
+
+        Requires Geometry and DisabledChannels resources in workflow.
+
+        ``offset`` datatype (1:1 with event)::
+
+            id          u4,     unique identifier
+            dx          f8,     x translation applied to event
+            dy          f8,     y translation applied to event
+            i_track     i8,     index of track within event used as source
+
+        ``label`` datatype (1:1 with new track dataset)::
+
+            id                              u4,     unique identifier
+            match                           u1,     1 if new track is matched to the source track
+            broken                          u1,     1 if new track is broken
+            neighbor                        i4,     index of neighboring track
+            hit_frac                        f4,     fraction of hits that came from source track
+            true_endpoint_d                 f4(2,), minimum distance endpoints to source track endpoints
+            neighbor_sin2theta              f4,     sin2theta of track and its neighbor
+            neighbor_transverse_endpoint_d  f4,     transverse endpoint distance of track to its neighbor
+            neighbor_missing_length         f4,     missing length of track to its neighbor
+            neighbor_overlap                f4,     overlap of track and its neighbor
+            neighbor_ddqdx                  f4,     delta-dQ/dx of track and its neighbor
+
+        The new ``tracklets`` dataset datatype is the same as
+        ``TrackletReconstruction.tracklet_dtype``.
 
     '''
     class_version = '0.0.0'
