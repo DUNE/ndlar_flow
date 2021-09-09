@@ -4,8 +4,11 @@ from collections import defaultdict
 import logging
 import h5py
 
+
 from h5flow.core import H5FlowResource, resources
 from h5flow import H5FLOW_MPI
+
+from module0_flow.util.compat import assert_compat_version
 
 
 class RunData(H5FlowResource):
@@ -51,7 +54,7 @@ class RunData(H5FlowResource):
         ``e_field`` run list file units are V/cm.
 
     '''
-    class_version = '0.1.0'
+    class_version = '0.1.1'
 
     default_path = 'run_info'
     default_runlist_file = 'runlist.txt'
@@ -81,6 +84,8 @@ class RunData(H5FlowResource):
             for key, val in self.defaults.items():
                 self.data[f'{key}_default'] = val
             self.data_manager.set_attrs(self.path, **self.data)
+        else:
+            assert_compat_version(self.class_version, self.data['class_version'])
 
         for attr in self.required_attr:
             logging.info(f'{attr}: {getattr(self,attr)}')

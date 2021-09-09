@@ -4,6 +4,9 @@ import yaml
 
 from h5flow.core import H5FlowResource, resources
 
+from module0_flow.util.lut import LUT, write_lut, read_lut
+from module0_flow.util.compat import assert_compat_version
+
 
 class Geometry(H5FlowResource):
     class_version = '0.0.0'
@@ -46,30 +49,23 @@ class Geometry(H5FlowResource):
                                         pixel_pitch=self.pixel_pitch,
                                         crs_geometry_file=self.crs_geometry_file
                                         )
-            self.write_lut('pixel_xy', self.pixel_xy)
-            self.write_lut('tile_id', self.tile_id)
-            self.write_lut('anode_z', self.anode_z)
-            self.write_lut('drift_dir', self.drift_dir)
+            write_lut(self.data_manager, self.path, self.pixel_xy, 'pixel_xy')
+            write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
+            write_lut(self.data_manager, self.path, self.anode_z, 'anode_z')
+            write_lut(self.data_manager, self.path, self.drift_dir, 'drift_dir')
         else:
+            assert_compat_version(self.class_version, self.data['class_version'])
+
             # load geometry from file
             self._pixel_pitch = self.data['pixel_pitch']
-            self._pixel_xy = self.read_lut('pixel_xy')
-            self._tile_id = self.read_lut('tile_id')
-            self._anode_z = self.read_lut('anode_z')
-            self._drift_dir = self.read_lut('drift_dir')
+            self._pixel_xy = read_lut(self.data_manager, self.path, 'pixel_xy')
+            self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
+            self._anode_z = read_lut(self.data_manager, self.path, 'anode_z')
+            self._drift_dir = read_lut(self.data_manager, self.path, 'drift_dir')
 
-    def write_lut(self, name, lut):
-        lut_meta, lut_arr = lut.to_array()
-        self.data_manager.create_dset(self.path + '/' + name, dtype=lut_arr.dtype)
-        self.data_manager.reserve_data(self.path + '/' + name, slice(0, len(lut_arr)))
-        self.data_manager.write_data(self.path + '/' + name, slice(0, len(lut_arr)), lut_arr)
-        self.data_manager.set_attrs(self.path + '/' + name, meta=lut_meta)
-        self.data_manager.set_attrs(self.path, **{name + '_table': self.path + '/' + name})
-
-    def read_lut(self, name):
-        lut_arr = self.data_manager.get_dset(self.path + '/' + name)
-        lut_meta = self.data_manager.get_attrs(self.path + '/' + name)['meta']
-        return LUT.from_array(lut_meta, lut_arr)
+        lut_size = (self.pixel_xy.nbytes + self.tile_id.nbytes
+                    + self.anode_z.nbytes + self.drift_dir.nbytes)
+        logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
 
     @property
     def pixel_pitch(self):
@@ -230,164 +226,3 @@ class Geometry(H5FlowResource):
                     tpc_centers[tile_indeces[tile][1]][1]
 
                 self._pixel_xy[([io_group], [io_channel], [chip], [channel])] = np.array([x, y])
-
-
-class LUT(object):
-    '''
-        Creates a lookup table that can be used to quickly access data based
-        on tuples of integers. Works best if keys are contiguous within
-        each position of the tuple. E.g.::
-
-            key0 = [0,1,2]
-            key1 = [30,31,32]
-
-        is 10x more efficient than::
-
-            key0 = [10,20,30]
-            key1 = [300,310,320]
-
-        Initialize with tuples of min and max values for each of the used key
-        values::
-
-            key0 = [0,1,2,3]
-            key1 = [5,6,7,8]
-            shape = (2,)
-            dtype = 'f8'
-            lut = LUT(dtype, (min(key0), max(key0)), (min(key1), max(key1)), shape=shape)
-
-        Data can then be stored in the table using a tuple of key arrays::
-
-            lut[(key0,key1)] = np.array([[0,0],[1,1],[2,2],[3,3]])
-
-        and accessed::
-
-            lut[(key0,key1)] # np.array([[0,0],[1,1],[2,2],[3,3]])
-
-        A default value should be set for keys that are not found in the table::
-
-            lut.default = np.array([-1,-1])
-            lut[([0],[0])] # np.array([-1,-1])
-
-    '''
-
-    def __init__(self, dtype, *min_max_keys, default=None, shape=None):
-        self.dtype = dtype
-        self.min_max_keys = np.array(min_max_keys, dtype='i8')
-        self.lengths = [max_ - min_ + 1 for min_, max_ in self.min_max_keys]
-        self.max_hash = int(self._hash(*[max_ for min_, max_ in min_max_keys]))
-        shape = (self.max_hash + 1,) + shape if shape else (self.max_hash + 1,)
-        self._data = np.empty(shape, dtype=self.dtype)
-        self._filled = np.zeros_like(self._data, dtype=bool)
-        if default is not None:
-            self.default = default
-
-    def __repr__(self):
-        str_ = 'LUT('
-        str_ += repr(self.dtype)
-        for min_max in self.min_max_keys:
-            str_ += ', ' + repr(min_max)
-        str_ += f', default={repr(self.default)}'
-        str_ += f', shape={repr(self._data.shape[1:])}'
-        str_ += ')'
-        return str_
-
-    def __eq__(self, other):
-        self_arr = self.to_array()
-        other_arr = other.to_array()
-        return all(self_arr[0].ravel() == other_arr[0].ravel()) and \
-            all(self_arr[1].ravel() == other_arr[1].ravel())
-
-    @staticmethod
-    def from_array(meta_arr, data_arr):
-        min_max_keys = meta_arr[0]['min_max_keys']
-        default = meta_arr[0]['default']
-        data = data_arr['data']
-        filled = data_arr['filled']
-
-        lut = LUT(data.dtype, *min_max_keys, shape=data.shape[1:])
-        # initialization order is important here!
-        lut._data = data
-        lut._filled = filled
-        lut.default = default
-
-        return lut
-
-    def to_array(self):
-        dtype_meta = np.dtype([
-            ('min_max_keys', 'i8', (len(self.min_max_keys), 2)),
-            ('default', self.dtype, self._data.shape[1:])
-        ])
-        dtype_data = np.dtype([
-            ('data', self.dtype, self._data.shape[1:]),
-            ('filled', self._filled.dtype, self._filled.shape[1:])
-        ])
-        meta_arr = np.empty((1,), dtype=dtype_meta)
-        meta_arr['min_max_keys'] = self.min_max_keys
-        meta_arr['default'] = self.default
-
-        data_arr = np.empty(self._data.shape[0], dtype=dtype_data)
-        data_arr['data'] = self._data
-        data_arr['filled'] = self._filled
-
-        return meta_arr, data_arr
-
-    def _hash(self, *keys):
-        val = 1 + np.array(keys[0]).astype('i8') - self.min_max_keys[0][0]
-        for i, key in enumerate(keys[1:]):
-            val += (np.array(key).astype('i8') - self.min_max_keys[i + 1][0]) * np.prod(self.lengths[:i + 1])
-        return val.astype(int).ravel()
-
-    def hash(self, *keys):
-        '''
-            Generate a hash index from arrays of key values
-
-            :param *keys: arrays of each key value, ``shape: (N,)``
-
-            :returns: array of hash index, ``shape: (N,)``
-        '''
-        val = self._hash(*keys)
-        val[val < 0] = 0
-        val[val > self.max_hash] = 0
-        return val
-
-    @property
-    def default(self):
-        '''
-            Default value to return if key not found in table. Datatype is
-            same as lookup table
-        '''
-        return self._data[0]  # position 0 is reserved for the default value
-
-    @default.setter
-    def default(self, val):
-        if isinstance(val, np.number):
-            new_default = val
-        else:
-            new_default = np.broadcast_to(np.expand_dims(val, axis=0),
-                                          self._data.shape)[~self._filled]
-
-        self._data[~self._filled] = new_default
-
-    def clear(self, *keys):
-        '''
-            Remove stored value for specified keys
-
-            :param *keys: arrays of key values, ``shape: (N,)``
-        '''
-        idx = self.hash(*keys)
-        self._data[idx] = self.default
-        self._filled[idx] = False
-
-    def __getitem__(self, keys):
-        return self._data[self.hash(*keys)]
-
-    def __setitem__(self, keys, val):
-        idx = self.hash(*keys)
-        default = self.default
-
-        self._data[idx] = val
-        self._filled[idx] = True
-
-        if np.any(self._filled[0]):
-            i = np.where(idx == 0)[0]
-            raise RuntimeError(f'invalid key tried to overwrite default: {[np.array(key)[i] for key in keys]}, value={np.array(val)[i]}')

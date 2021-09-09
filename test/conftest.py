@@ -1,10 +1,7 @@
 import pytest
-import h5py
 import subprocess
 import os
 import shutil
-
-import h5flow
 
 
 def pytest_configure():
@@ -33,8 +30,7 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
         if src is None or not os.path.exists(os.path.join(src, file)):
             # copy from url
             print(f'{url} -> {file}')
-            subprocess.run(['curl', '-f', '-O', url], check=True)
-            os.replace(file, os.path.join(dest, file))
+            subprocess.run(['curl', '-f', '-o', os.path.join(dest, file), url], check=True)
         else:
             # copy from cache
             print(f'{src}/{file} -> {file}')
@@ -94,6 +90,27 @@ def larpix_pedestal_config_file(pytestconfig, tmp_path_factory):
 def runlist_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      'https://portal.nersc.gov/project/dune/data/Module0/runlist.txt'
+                                     ))
+
+
+@pytest.fixture
+def disabled_channels_list_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/badChannelLists/selftrigger_masked/module0-run1-selftrigger-disabled-list.json'
+                                     ))
+
+
+@pytest.fixture
+def missing_asic_list_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/badChannelLists/module0-network-absent-ASICs.json'
+                                     ))
+
+
+@pytest.fixture
+def track_merging_pdf_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/joint_pdf.npz'
                                      ))
 
 

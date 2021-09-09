@@ -1,0 +1,5 @@
+classname: DisabledChannels
+params:
+  path: 'disabled_channels'
+  disabled_channels_list: 'module0-run1-selftrigger-disabled-list.json'
+  missing_asic_list: 'module0-network-absent-ASICs.json'
