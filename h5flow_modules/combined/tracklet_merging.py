@@ -322,21 +322,19 @@ class TrackletMerger(H5FlowStage):
             np.expand_dims(start1 - start2, axis=-1),
             np.expand_dims(end1 - start2, axis=-1)
         ), axis=-1)
-        print('d', d.shape)
-        i_min = np.expand_dims(ma.argmin(np.sqrt(ma.sum(d * d, axis=-2)), axis=-1), axis=-1)
-        print('i_min', i_min.shape)
-        d = np.take_along_axis(d, i_min, axis=-1)
-        print('d', d.shape)
+        i_max = np.expand_dims(ma.argmin(np.sqrt(ma.sum(d * d, axis=-2, keepdims=True)), axis=-1), axis=-1)
+        d = np.squeeze(np.take_along_axis(d, i_max, axis=-1))
 
         # transverse d
         track_d = tracks['end'] - tracks['start']
         track_d /= ma.sqrt(ma.sum(track_d**2, axis=-1, keepdims=True))
-        t_d = np.abs(ma.sum(d * track_d, axis=-1))
-        print('t_d', t_d.shape)
+        l_d = np.abs(ma.sum(d * track_d, axis=-1))
+        l = np.sqrt(ma.sum(d * d, axis=-1))
+        t_d = np.sqrt(l**2 - l_d**2)
 
         mask = (tracks['id'].mask |
-                neighbor.mask.reshape(distance.shape)
-                | (neighbor == -1).reshape(distance.shape))
+                neighbor.mask.reshape(t_d.shape)
+                | (neighbor == -1).reshape(t_d.shape))
         return ma.array(t_d, mask=mask)
 
     @staticmethod
@@ -459,19 +457,19 @@ class TrackletMerger(H5FlowStage):
         pdf = dict(np.load(filename, allow_pickle=True))
 
         norm = np.sum(pdf[key])
-        cdf = pdf[key] / norm
+        cdf = 1 - np.exp(-(pdf[key] / norm) / (pdf['origin'] / np.sum(pdf['origin'] + 1e-15)))
         cdf_bins = pdf[key + '_bins']
 
         # integrate from higher bins -> lower bins
-        cdf = np.flip(cdf)
-        for axis in range(cdf.ndim):
-            cdf = np.cumsum(cdf, axis=axis)
-        cdf = np.flip(cdf)
+#         cdf = np.flip(cdf)
+#         for axis in range(cdf.ndim):
+#             cdf = np.cumsum(cdf, axis=axis)
+#         cdf = np.flip(cdf)
 
         idx = np.where(pdf[key])
         weights = pdf[key][idx].flatten()
 
-        statistic_bins = np.r_[0, np.geomspace(np.min(cdf[cdf > 0]), 1, 100)]
+        statistic_bins = np.r_[0, np.geomspace(np.min(cdf[cdf > 0]), 1, 1000)]
         statistic, statistic_bins = np.histogram(cdf[idx].flatten(),
                                                  bins=statistic_bins, weights=weights)
         p_bins = 1 - np.cumsum(statistic[::-1])[::-1] / np.sum(statistic)
