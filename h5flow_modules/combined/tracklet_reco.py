@@ -81,7 +81,7 @@ class TrackletReconstruction(H5FlowStage):
         self._ransac_min_samples = params.get('ransac_min_samples', self.default_ransac_min_samples)
         self._ransac_residual_threshold = params.get('ransac_residual_threshold', self.default_ransac_residual_threshold)
         self._ransac_max_trials = params.get('ransac_max_trials', self.default_ransac_max_trials)
-        self.max_iterations = params.get('ransac_max_trials', self.default_max_iterations)
+        self.max_iterations = params.get('max_iterations', self.default_max_iterations)
 
         self.dbscan = cluster.DBSCAN(eps=self._dbscan_eps, min_samples=self._dbscan_min_samples)
 
