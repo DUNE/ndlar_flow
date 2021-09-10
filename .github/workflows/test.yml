@@ -9,13 +9,14 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash -l {0}
     strategy:
       matrix:
         mpi_enabled: [0, 1]
+        os: [ubuntu-latest, macos-latest]
       fail-fast: false
     steps:
     - name: checkout
