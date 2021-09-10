@@ -104,6 +104,8 @@ class RunData(H5FlowResource):
         input_filenames = list()
 
         try:
+            if not self.data_manager.attr_exists(self.source_name, 'input_filename'):
+                raise RuntimeError
             input_filenames.append(self.data_manager.get_attrs(self.source_name)['input_filename'])
         except (RuntimeError, KeyError):
             logging.warning(f'Source dataset {self.source_name} has no input file in metadata stored under \'input_filename\', using {self.input_filename} for RunData lookup')
