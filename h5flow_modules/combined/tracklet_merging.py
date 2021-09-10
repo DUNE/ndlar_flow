@@ -1,6 +1,5 @@
 import numpy as np
 import numpy.ma as ma
-import logging
 
 from h5flow.core import H5FlowStage, resources
 
@@ -202,7 +201,6 @@ class TrackletMerger(H5FlowStage):
                                                  track_grp_hits_mask.reshape(new_shape))
             track_grp_id = self.condense_array(track_grp_id.reshape(new_shape),
                                                track_grp_hits_mask.reshape(new_shape))
-            logging.warning(f'track_hits: {track_grp_hits.shape} ({track_grp_hits.nbytes/1024/1024:0.02f}MB)')
 
             # recalculate track parameters
             calc_shape = (track_grp_id.shape[0], -1)
