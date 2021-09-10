@@ -10,6 +10,8 @@ def pytest_configure():
 
 @pytest.fixture
 def tmp_h5_file():
+    if os.path.exists('test.h5'):
+        os.remove('test.h5')
     yield 'test.h5'
     if os.path.exists('test.h5'):
         os.remove('test.h5')
@@ -25,20 +27,21 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
     except FileExistsError:
         dest = os.path.join(tmp_path_factory.getbasetemp(), 'module0_flow')
 
+    # check if file exists in current cache
     if not os.path.exists(os.path.join(dest, file)):
-        print(f'Saving to cache {dest}...')
         if src is None or not os.path.exists(os.path.join(src, file)):
             # copy from url
-            print(f'{url} -> {file}')
+            print(f'Downloading {file} from {url}...')
             subprocess.run(['curl', '-f', '-o', os.path.join(dest, file), url], check=True)
         else:
-            # copy from cache
-            print(f'{src}/{file} -> {file}')
+            # copy from old cache
+            print(f'Copying {file} from existing cache {os.path.join(src, file)}...')
             shutil.copy(os.path.join(src, file), os.path.join(dest, file))
+        print(f'Saved to current cache @ {os.path.join(dest, file)}')
 
         pytestconfig.cache.set(f'cached_{url}', str(dest))
 
-    # copy file to cwd
+    # copy file from current cache to cwd
     if os.path.exists(file):
         os.remove(file)
     shutil.copy(os.path.join(dest, file), './')
@@ -51,25 +54,28 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
 
 
 @pytest.fixture(params=[
-    'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/dataRuns/packetData/datalog_2021_04_04_00_41_40_CEST.h5',
-    'https://portal.nersc.gov/project/dune/data/Module0/simulation/larndsim/datalog.edep.all.h5'
+    'data',
+    'sim'
 ])
 def charge_source_file(pytestconfig, tmp_path_factory, request):
-    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory, request.param))
+    charge_source_file_url_lookup = {
+        'data': 'https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/dataRuns/packetData/datalog_2021_04_04_00_41_40_CEST.h5',
+        'sim': 'https://portal.nersc.gov/project/dune/data/Module0/simulation/stopping_muons/stopping_muons.test.h5'
+    }
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     charge_source_file_url_lookup[request.param]))
 
 
-@pytest.fixture(params=[
-    'https://portal.nersc.gov/project/dune/data/Module0/LRS/Converted/rwf_20210404_004206.data.root'
-])
-def light_source_file(pytestconfig, tmp_path_factory, request):
-    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory, request.param))
+@pytest.fixture
+def light_source_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/LRS/Converted/rwf_20210404_004206.data.root'))
 
 
-@pytest.fixture(params=[
-    'https://portal.nersc.gov/project/dune/data/Module0/multi_tile_layout-2.2.16.yaml'
-])
-def geometry_file(pytestconfig, tmp_path_factory, request):
-    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory, request.param))
+@pytest.fixture
+def geometry_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/multi_tile_layout-2.2.16.yaml'))
 
 
 @pytest.fixture
