@@ -103,11 +103,13 @@ class RunData(H5FlowResource):
         '''
         input_filenames = list()
 
+        # check for existing input file info
         try:
             if not self.data_manager.attr_exists(self.source_name, 'input_filename'):
                 raise RuntimeError
             input_filenames.append(self.data_manager.get_attrs(self.source_name)['input_filename'])
         except (RuntimeError, KeyError):
+            # otherwise use current input file
             logging.warning(f'Source dataset {self.source_name} has no input file in metadata stored under \'input_filename\', using {self.input_filename} for RunData lookup')
             input_filenames.append(self.input_filename)
 
@@ -134,6 +136,12 @@ class RunData(H5FlowResource):
             logging.warning(f'Failed to load {self.runlist_file}: {e}')
 
         self.data.update(row)
+
+        # convert data types that might be incorrect
+        if 'e_field' in self.data:
+            self.data['e_field'] = float(self.data['e_field']) * (resources['Units'].V / resources['Units'].cm)
+        if 'light_samples' in self.data:
+            self.data['light_samples'] = int(self.data['light_samples'])
 
     def _lookup_mc_info(self):
         '''
@@ -171,10 +179,6 @@ class RunData(H5FlowResource):
 
         for key in self.required_attr:
             assert key in self.data, f'missing {key} from RunData'
-
-        # convert data types that might be incorrect
-        self.data['e_field'] = float(self.data['e_field']) * (resources['Units'].V / resources['Units'].cm)
-        self.data['light_samples'] = int(self.data['light_samples'])
 
     @property
     def charge_filename(self):
