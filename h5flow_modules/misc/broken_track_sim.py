@@ -1,8 +1,8 @@
 import numpy as np
 import numpy.ma as ma
 
-import module0_flow.combined.tracklet_reco as tracklet_reco
-from module0_flow.combined.tracklet_merging import TrackletMerger
+import module0_flow.reco.combined.tracklet_reco as tracklet_reco
+from module0_flow.reco.combined.tracklet_merging import TrackletMerger
 
 from h5flow.core import H5FlowStage, resources, H5FLOW_MPI
 
