@@ -136,6 +136,22 @@ def broken_track_sim_file(combined_file, geometry_file, tmp_h5_file,
     return tmp_h5_file
 
 
+@pytest.fixture
+def stopping_muon_analysis_file(combined_file, geometry_file, tmp_h5_file):
+    print('Stopping muon analysis...')
+    h5flow.run('h5flow_yamls/analysis/stopping_muons.yaml',
+               tmp_h5_file,
+               combined_file,
+               verbose=2)
+
+    check_dsets(tmp_h5_file, (
+        'analysis/stopping_muons/event_sel_reco/data',
+        'analysis/stopping_muons/track_sel_reco/data'
+    ))
+
+    return tmp_h5_file
+
+
 # def test_charge_event_building(charge_event_built_file):
 #     pass
 
@@ -161,4 +177,8 @@ def test_chain(combined_file):
 
 
 def test_broken_track_sim(broken_track_sim_file):
+    pass
+
+
+def test_stopping_muon_analysis(stopping_muon_analysis_file):
     pass

@@ -1,0 +1,25 @@
+# Performs stopping muon and michel event selections
+
+flow:
+  source: events
+  stages: [stopping_muon_sel]
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 32
+
+resources:
+  - !include h5flow_yamls/resources/run_data.yaml
+  - !include h5flow_yamls/resources/geometry.yaml
+
+stopping_muon_sel:
+  classname: StoppingMuonSelection # analysis/stopping_muon_selection.py
+  requires:
+    - 'combined/tracklets/merged'
+  params:
+    merged_dset_name: 'combined/tracklets/merged'
+    mc_trajectory_path: ['combined/tracklets/merged', 'charge/hits',
+      'charge/packets', 'mc_truth/tracks', 'mc_truth/trajectories']
+    fid_cut: 25

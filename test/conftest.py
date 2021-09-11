@@ -10,8 +10,6 @@ def pytest_configure():
 
 @pytest.fixture
 def tmp_h5_file():
-    if os.path.exists('test.h5'):
-        os.remove('test.h5')
     yield 'test.h5'
     if os.path.exists('test.h5'):
         os.remove('test.h5')
