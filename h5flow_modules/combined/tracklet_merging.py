@@ -1,7 +1,6 @@
 import numpy as np
 import numpy.ma as ma
 from scipy import ndimage
-from sklearn.neighbors import KNeighborsRegressor
 
 from h5flow.core import H5FlowStage, resources
 
