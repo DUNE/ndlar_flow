@@ -120,7 +120,8 @@ class BrokenTrackSim(H5FlowStage):
         self.path = params.get('path', 'misc/broken_track_sim')
 
         self.generate_2track_joint_pdf = params.get('generate_2track_joint_pdf', True)
-        self.joint_pdf_filename = params.get('joint_pdf_filename', 'joint_pdf.npz')
+        self.joint_pdf_filename = params.get('joint_pdf_filename',
+                                             f'joint_pdf-{self.class_version.replace('.','_')}.npz')
         self.pdf_bins = [np.logspace(*bins) for bins in params.get('pdf_bins',
                                                                    self.default_pdf_bins)]
         self.pdf = dict()

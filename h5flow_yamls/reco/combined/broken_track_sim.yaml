@@ -29,4 +29,3 @@ broken_track_sim:
     - 'combined/tracklets'
   params:
     generate_2track_joint_pdf: True
-    joint_pdf_filename: 'joint_pdf.npz'
