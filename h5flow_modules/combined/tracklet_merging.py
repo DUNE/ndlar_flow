@@ -74,7 +74,7 @@ class TrackletMerger(H5FlowStage):
                     max_neighbors: 5
 
     '''
-    class_version = '0.0.0'
+    class_version = '1.0.0'
 
     default_pdf_filename = 'joint_pdf.npz'
     default_pdf_sig_name = 'rereco'
