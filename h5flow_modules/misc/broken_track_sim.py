@@ -105,11 +105,11 @@ class BrokenTrackSim(H5FlowStage):
     ])
 
     default_pdf_bins = [
-        (-5, 0, 30),
-        (0, 3, 30),
+        (-4, 0, 30),
+        (-1, 0, 30),
         (0, 3, 30),
         (-2, 3, 30),
-        (-3, 2, 30)
+        (-5, 0, 30)
     ]
     missing_track_segments = 200
     truth_hit_frac_cut = 0.8
