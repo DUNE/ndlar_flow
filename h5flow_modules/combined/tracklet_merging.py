@@ -156,15 +156,15 @@ class TrackletMerger(H5FlowStage):
 
                 # calculate the p-value for neighbor pair
                 params = [
-                    self.calc_2track_sin2theta(tracks, neighbor),
-                    self.calc_2track_transverse_endpoint_d(tracks, neighbor),
+                    self.calc_2track_deflection_angle(tracks, neighbor),
+                    self.calc_2track_transverse_sintheta(tracks, neighbor),
                     self.calc_2track_missing_length(tracks, neighbor,
                                                     self.missing_track_segments,
                                                     self.pixel_x, self.pixel_y,
                                                     resources['DisabledChannels'].disabled_channel_lut,
                                                     self.cathode_region),
                     self.calc_2track_overlap(tracks, neighbor),
-                    self.calc_2track_ddqdx(tracks, neighbor)
+                    self.calc_2track_sin2theta(tracks, neighbor)
                 ]
                 pvalue = np.expand_dims(self.score_neighbor(self.r, self.r_bins, self.statistic_bins, self.p_bins, *params), -1)
                 neighbor = np.expand_dims(neighbor, -1)
@@ -399,7 +399,7 @@ class TrackletMerger(H5FlowStage):
         return s0, s1
 
     @staticmethod
-    def calc_2track_sin2theta(tracks, neighbor):
+    def calc_2track_deflection_angle(tracks, neighbor):
         ntracks = tracks.shape[1]
         neighbor = neighbor.reshape(tracks.shape + (1,))
 
@@ -426,24 +426,15 @@ class TrackletMerger(H5FlowStage):
         ang1 = np.sum((neighbor_far - poca) * (poca - start), axis=-1)
         ang1 /= np.linalg.norm((neighbor_far - poca), axis=-1) + 1e-15
         ang1 /= np.linalg.norm((poca - start), axis=-1) + 1e-15
-        ang1 = np.arccos(np.clip(ang1,-1,1))
+        ang1 = np.arccos(np.clip(ang1, -1, 1))
 
         mask = (tracks['id'].mask | neighbor.mask.reshape(ang1.shape)
                 | (neighbor == -1).reshape(ang1.shape))
 
         return ma.array(ang1 / np.pi, mask=mask)
-        ntracks = tracks.shape[1]
-        neighbor = neighbor.reshape(tracks.shape + (1,))
-        dxyz = tracks['start'] - tracks['end']
-        dxyz /= np.sqrt(np.sum((dxyz)**2, axis=-1, keepdims=True))
-        dxyz_neighbor = np.take_along_axis(dxyz, neighbor, axis=1)
-        sin2theta = 1 - np.sum(dxyz * dxyz_neighbor, axis=-1)**2
-        mask = (tracks['id'].mask | neighbor.mask.reshape(sin2theta.shape)
-                | (neighbor == -1).reshape(sin2theta.shape))
-        return ma.array(sin2theta, mask=mask)
 
     @staticmethod
-    def calc_2track_transverse_endpoint_d(tracks, neighbor):
+    def calc_2track_transverse_sintheta(tracks, neighbor):
         ntracks = tracks.shape[1]
         neighbor = neighbor.reshape(tracks.shape + (1,))
         start1 = tracks['start']
@@ -562,7 +553,7 @@ class TrackletMerger(H5FlowStage):
         return ma.array(overlap, mask=mask)
 
     @staticmethod
-    def calc_2track_ddqdx(tracks, neighbor):
+    def calc_2track_sin2theta(tracks, neighbor):
         ntracks = tracks.shape[1]
         neighbor = neighbor.reshape(tracks.shape + (1,))
         dxyz = tracks['start'] - tracks['end']
@@ -572,15 +563,6 @@ class TrackletMerger(H5FlowStage):
         mask = (tracks['id'].mask | neighbor.mask.reshape(sin2theta.shape)
                 | (neighbor == -1).reshape(sin2theta.shape))
         return ma.array(sin2theta, mask=mask)
-        _ntracks = tracks.shape[1]
-        neighbor = neighbor.reshape(tracks.shape)
-        _track1_dqdx = tracks['q'] / tracks['length']
-        _track2_dqdx = np.take_along_axis(tracks['q'] / tracks['length'], neighbor, axis=1)
-        ddqdx = np.abs(_track1_dqdx - _track2_dqdx)
-        mask = (tracks['id'].mask
-                | neighbor.mask.reshape(ddqdx.shape)
-                | (neighbor == -1).reshape(ddqdx.shape))
-        return ma.array(ddqdx, mask=mask)
 
     @staticmethod
     def load_r_values(filename, sig_key, bkg_key):
@@ -607,8 +589,8 @@ class TrackletMerger(H5FlowStage):
         pdf = dict(np.load(filename, allow_pickle=True))
 
         ndimage.gaussian_filter(pdf[sig_key], 1.5, output=pdf[sig_key], mode='nearest')
-        ndimage.gaussian_filter(pdf[bkg_key], 1.5, output=pdf[bkg_key], mode='nearest')        
-        
+        ndimage.gaussian_filter(pdf[bkg_key], 1.5, output=pdf[bkg_key], mode='nearest')
+
         sig_norm = np.sum(pdf[sig_key])
         bkg_norm = np.sum(pdf[bkg_key])
         r = 1 - np.exp(-(pdf[sig_key] / sig_norm) / (pdf[bkg_key] / bkg_norm))

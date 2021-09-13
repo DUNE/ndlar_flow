@@ -69,11 +69,11 @@ class BrokenTrackSim(H5FlowStage):
             neighbor                        i4,     index of neighboring track
             hit_frac                        f4,     fraction of hits that came from source track
             true_endpoint_d                 f4(2,), minimum distance endpoints to source track endpoints
-            neighbor_sin2theta              f4,     sin2theta of track and its neighbor
-            neighbor_transverse_endpoint_d  f4,     transverse endpoint distance of track to its neighbor
+            neighbor_deflection_angle       f4,     deflection angle of track and its neighbor
+            neighbor_transverse_sintheta    f4,     transverse endpoint angle of track to its neighbor
             neighbor_missing_length         f4,     missing length of track to its neighbor
             neighbor_overlap                f4,     overlap of track and its neighbor
-            neighbor_ddqdx                  f4,     delta-dQ/dx of track and its neighbor
+            neighbor_sin2theta              f4,     angle of track and its neighbor
 
         The new ``tracklets`` dataset datatype is the same as
         ``TrackletReconstruction.tracklet_dtype``.
@@ -97,11 +97,11 @@ class BrokenTrackSim(H5FlowStage):
         ('neighbor', 'i4'),
         ('hit_frac', 'f4'),
         ('true_endpoint_d', 'f4', (2,)),
-        ('neighbor_sin2theta', 'f4'),
-        ('neighbor_transverse_endpoint_d', 'f4'),
+        ('neighbor_deflection_angle', 'f4'),
+        ('neighbor_transverse_sintheta', 'f4'),
         ('neighbor_missing_length', 'f4'),
         ('neighbor_overlap', 'f4'),
-        ('neighbor_ddqdx', 'f4'),
+        ('neighbor_sin2theta', 'f4'),
     ])
 
     default_pdf_bins = [
@@ -217,25 +217,25 @@ class BrokenTrackSim(H5FlowStage):
             orig_neighbor = d['neighbor']
 
             if self.generate_2track_joint_pdf:
-                track2_sin2theta = TrackletMerger.calc_2track_sin2theta(new_tracks, neighbor)
-                track2_sin2theta_orig = TrackletMerger.calc_2track_sin2theta(tracks, orig_neighbor)
-                track2_transverse_endpoint_d = TrackletMerger.calc_2track_transverse_endpoint_d(new_tracks, neighbor)
-                track2_transverse_endpoint_d_orig = TrackletMerger.calc_2track_transverse_endpoint_d(tracks, orig_neighbor)
+                track2_deflection_angle = TrackletMerger.calc_2track_deflection_angle(new_tracks, neighbor)
+                track2_deflection_angle_orig = TrackletMerger.calc_2track_deflection_angle(tracks, orig_neighbor)
+                track2_transverse_sintheta = TrackletMerger.calc_2track_transverse_sintheta(new_tracks, neighbor)
+                track2_transverse_sintheta_orig = TrackletMerger.calc_2track_transverse_sintheta(tracks, orig_neighbor)
                 track2_missing_length = TrackletMerger.calc_2track_missing_length(new_tracks, neighbor, TrackletMerger.missing_track_segments, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
                 track2_missing_length_orig = TrackletMerger.calc_2track_missing_length(tracks, orig_neighbor, TrackletMerger.missing_track_segments, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
                 track2_overlap = TrackletMerger.calc_2track_overlap(new_tracks, neighbor)
                 track2_overlap_orig = TrackletMerger.calc_2track_overlap(tracks, orig_neighbor)
-                track2_ddqdx = TrackletMerger.calc_2track_ddqdx(new_tracks, neighbor)
-                track2_ddqdx_orig = TrackletMerger.calc_2track_ddqdx(tracks, orig_neighbor)
+                track2_sin2theta = TrackletMerger.calc_2track_sin2theta(new_tracks, neighbor)
+                track2_sin2theta_orig = TrackletMerger.calc_2track_sin2theta(tracks, orig_neighbor)
 
                 rereco_mask = (np.squeeze(broken) & np.take_along_axis(np.squeeze(broken), neighbor, axis=1))
 
-                self.pdf['rereco'].fill(track2_sin2theta[rereco_mask], track2_transverse_endpoint_d[rereco_mask],
+                self.pdf['rereco'].fill(track2_deflection_angle[rereco_mask], track2_transverse_sintheta[rereco_mask],
                                         track2_missing_length[rereco_mask], track2_overlap[rereco_mask],
-                                        track2_ddqdx[rereco_mask])
-                self.pdf['origin'].fill(track2_sin2theta_orig, track2_transverse_endpoint_d_orig,
+                                        track2_sin2theta[rereco_mask])
+                self.pdf['origin'].fill(track2_deflection_angle_orig, track2_transverse_sintheta_orig,
                                         track2_missing_length_orig, track2_overlap_orig,
-                                        track2_ddqdx_orig)
+                                        track2_sin2theta_orig)
 
         else:
             rand_x = ma.array(np.empty((0,)))
@@ -272,11 +272,11 @@ class BrokenTrackSim(H5FlowStage):
             label_array['neighbor'] = neighbor.flat[~broken.mask.ravel()]
             label_array['hit_frac'] = hit_frac.compressed()
             label_array['true_endpoint_d'] = np.c_[endpoint_distance_1.compressed(), endpoint_distance_2.compressed()]
-            label_array['neighbor_sin2theta'] = track2_sin2theta.flat[~broken.mask.ravel()]
-            label_array['neighbor_transverse_endpoint_d'] = track2_transverse_endpoint_d.flat[~broken.mask.ravel()]
+            label_array['neighbor_deflection_angle'] = track2_deflection_angle.flat[~broken.mask.ravel()]
+            label_array['neighbor_transverse_sintheta'] = track2_transverse_sintheta.flat[~broken.mask.ravel()]
             label_array['neighbor_missing_length'] = track2_missing_length.flat[~broken.mask.ravel()]
             label_array['neighbor_overlap'] = track2_overlap.flat[~broken.mask.ravel()]
-            label_array['neighbor_ddqdx'] = track2_ddqdx.flat[~broken.mask.ravel()]
+            label_array['neighbor_sin2theta'] = track2_sin2theta.flat[~broken.mask.ravel()]
             self.data_manager.write_data(f'{self.path}/label', label_slice, label_array)
 
             ref = np.c_[np.indices(new_tracks.shape)[0][~new_tracks['id'].mask] + source_slice.start, new_tracks['id'].compressed()]
