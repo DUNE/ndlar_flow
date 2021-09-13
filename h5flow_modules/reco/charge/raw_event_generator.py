@@ -58,7 +58,7 @@ class RawEventGenerator(H5FlowGenerator):
             unix_ts     u8, unix timestamp of event [s since epoch]
 
     '''
-    class_version = '0.2.0'
+    class_version = '0.2.2'
 
     default_buffer_size = 38400
     default_nhit_cut = 100
@@ -186,15 +186,16 @@ class RawEventGenerator(H5FlowGenerator):
             )
             ev_traj_end = len(self.mc_trajectories['eventID']) - ev_traj_end
             ev_track_end = len(self.mc_tracks['eventID']) - ev_track_end
+            traj = self.mc_trajectories['trackID'][:]
+            tracks = self.mc_tracks['trackID'][:]
             for i, (ev, traj_start, traj_end, track_start, track_end) in enumerate(
                     zip(evs, ev_traj_start, ev_traj_end, ev_track_start, ev_track_end)):
-                traj_block = np.expand_dims(
-                    self.mc_trajectories[traj_start:traj_end][['trackID', 'eventID']],
-                    -1)
-                track_block = np.expand_dims(
-                    self.mc_tracks[track_start:track_end][['trackID', 'eventID']],
-                    0)
+                traj_block = np.expand_dims(traj[traj_start:traj_end], -1)
+                track_block = np.expand_dims(tracks[track_start:track_end], 0)
                 ref = np.c_[np.where(traj_block == track_block)]
+                ref[:, 0] += traj_start
+                ref[:, 1] += track_start
+                sub_ref = ref[(len(ref) // self.size) * self.rank:(len(ref) // self.size) * (self.rank + 1)]
                 self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, ref)
 
         # if self.is_mc:

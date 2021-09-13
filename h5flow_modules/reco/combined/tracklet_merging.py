@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.ma as ma
+from scipy import ndimage
 
 from h5flow.core import H5FlowStage, resources
 
@@ -73,7 +74,7 @@ class TrackletMerger(H5FlowStage):
                     max_neighbors: 5
 
     '''
-    class_version = '0.0.0'
+    class_version = '1.0.0'
 
     default_pdf_filename = 'joint_pdf.npz'
     default_pdf_sig_name = 'rereco'
@@ -155,15 +156,15 @@ class TrackletMerger(H5FlowStage):
 
                 # calculate the p-value for neighbor pair
                 params = [
-                    self.calc_2track_sin2theta(tracks, neighbor),
-                    self.calc_2track_transverse_endpoint_d(tracks, neighbor),
+                    self.calc_2track_deflection_angle(tracks, neighbor),
+                    self.calc_2track_transverse_sintheta(tracks, neighbor),
                     self.calc_2track_missing_length(tracks, neighbor,
                                                     self.missing_track_segments,
                                                     self.pixel_x, self.pixel_y,
                                                     resources['DisabledChannels'].disabled_channel_lut,
                                                     self.cathode_region),
                     self.calc_2track_overlap(tracks, neighbor),
-                    self.calc_2track_ddqdx(tracks, neighbor)
+                    self.calc_2track_sin2theta(tracks, neighbor)
                 ]
                 pvalue = np.expand_dims(self.score_neighbor(self.r, self.r_bins, self.statistic_bins, self.p_bins, *params), -1)
                 neighbor = np.expand_dims(neighbor, -1)
@@ -329,19 +330,82 @@ class TrackletMerger(H5FlowStage):
         return dict(neighbor=neighbor)
 
     @staticmethod
-    def calc_2track_sin2theta(tracks, neighbor):
-        ntracks = tracks.shape[1]
-        neighbor = neighbor.reshape(tracks.shape + (1,))
-        dxyz = tracks['start'] - tracks['end']
-        dxyz /= np.sqrt(np.sum((dxyz)**2, axis=-1, keepdims=True))
-        dxyz_neighbor = np.take_along_axis(dxyz, neighbor, axis=1)
-        sin2theta = 1 - np.sum(dxyz * dxyz_neighbor, axis=-1)**2
-        mask = (tracks['id'].mask | neighbor.mask.reshape(sin2theta.shape)
-                | (neighbor == -1).reshape(sin2theta.shape))
-        return ma.array(sin2theta, mask=mask)
+    def poca(start_xyz0, end_xyz0, start_xyz1, end_xyz1):
+        '''
+            Finds the scale factor to point of closest approach of two lines
+            each defined by 2 3D points. The scale factor is a number between 0
+            and 1 representing the position along the line. To extract the
+            3D point of closest approach on each line::
+
+                s0, s1 = poca(start0, end0, start1, end1) # shape: (N, 1)
+                poca0 = (1 - s0) * start0 + s0 * end0 # shape: (N, 3)
+                poca1 = (1 - s1) * start1 + s1 * end1
+
+            :param {start, end}_xyz(i): start/end point of line i, ``shape: (N, 3)``
+
+            :returns: ``tuple`` of line segment 0 and 1, ``shape: (N,1)``
+        '''
+        d = start_xyz0 - start_xyz1
+        v0, v1 = (end_xyz0 - start_xyz0, end_xyz1 - start_xyz1)
+        l0, l1 = np.linalg.norm(v0, axis=-1, keepdims=True), np.linalg.norm(v1, axis=-1, keepdims=True)
+        v0 /= l0
+        v1 /= l1
+        v_dp = np.sum(v0 * v1, axis=-1, keepdims=True)
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            s0 = (-np.sum(d * v0, axis=-1, keepdims=True)
+                  + np.sum(d * v1, axis=-1, keepdims=True) * v_dp) / (1 - v_dp**2)
+            s1 = (np.sum(d * v1, axis=-1, keepdims=True)
+                  - np.sum(d * v0, axis=-1, keepdims=True) * v_dp) / (1 - v_dp**2)
+
+            s0 /= l0
+            s1 /= l1
+
+        invalid_mask0 = ~np.isfinite(s0) | np.isnan(s0)
+        invalid_mask1 = ~np.isfinite(s1) | np.isnan(s1)
+
+        s0[invalid_mask0] = 0.5
+        s1[invalid_mask1] = 0.5
+
+        return s0, s1
 
     @staticmethod
-    def calc_2track_transverse_endpoint_d(tracks, neighbor):
+    def calc_2track_deflection_angle(tracks, neighbor):
+        ntracks = tracks.shape[1]
+        neighbor = neighbor.reshape(tracks.shape + (1,))
+
+        # arrange track endpoints assuming traveling downward
+        start = np.where(tracks['start'][..., 1:2] > tracks['end'][..., 1:2],
+                         tracks['start'], tracks['end'])
+        end = np.where(tracks['start'][..., 1:2] <= tracks['end'][..., 1:2],
+                       tracks['start'], tracks['end'])
+        neighbor_start = np.take_along_axis(start, neighbor, axis=1)
+        neighbor_end = np.take_along_axis(end, neighbor, axis=1)
+
+        # find nearest point on track segments
+        s, neighbor_s = TrackletMerger.poca(start, end, neighbor_start, neighbor_end)
+        s, neighbor_s = np.clip(s, 0, 1), np.clip(neighbor_s, 0, 1)
+
+        poca = ((1 - s) * start + s * end + (1 - neighbor_s) * neighbor_start
+                + neighbor_s * neighbor_end) / 2
+
+        # calculate deflection angle to farthest point on neighbor
+        neighbor_far = np.where(
+            np.linalg.norm(poca - neighbor_start, axis=-1, keepdims=True)
+            > np.linalg.norm(poca - neighbor_end, axis=-1, keepdims=True),
+            neighbor_start, neighbor_end)
+        ang1 = np.sum((neighbor_far - poca) * (poca - start), axis=-1)
+        ang1 /= np.linalg.norm((neighbor_far - poca), axis=-1) + 1e-15
+        ang1 /= np.linalg.norm((poca - start), axis=-1) + 1e-15
+        ang1 = np.arccos(np.clip(ang1, -1, 1))
+
+        mask = (tracks['id'].mask | neighbor.mask.reshape(ang1.shape)
+                | (neighbor == -1).reshape(ang1.shape))
+
+        return ma.array(ang1 / np.pi, mask=mask)
+
+    @staticmethod
+    def calc_2track_transverse_sintheta(tracks, neighbor):
         ntracks = tracks.shape[1]
         neighbor = neighbor.reshape(tracks.shape + (1,))
         start1 = tracks['start']
@@ -362,7 +426,7 @@ class TrackletMerger(H5FlowStage):
         track_d /= ma.sqrt(ma.sum(track_d**2, axis=-1, keepdims=True))
         l_d = np.abs(ma.sum(d * track_d, axis=-1))
         l = np.sqrt(ma.sum(d * d, axis=-1))
-        t_d = np.sqrt(l**2 - l_d**2)
+        t_d = np.sqrt(l**2 - l_d**2) / l
 
         mask = (tracks['id'].mask |
                 neighbor.mask.reshape(t_d.shape)
@@ -460,16 +524,16 @@ class TrackletMerger(H5FlowStage):
         return ma.array(overlap, mask=mask)
 
     @staticmethod
-    def calc_2track_ddqdx(tracks, neighbor):
-        _ntracks = tracks.shape[1]
-        neighbor = neighbor.reshape(tracks.shape)
-        _track1_dqdx = tracks['q'] / tracks['length']
-        _track2_dqdx = np.take_along_axis(tracks['q'] / tracks['length'], neighbor, axis=1)
-        ddqdx = np.abs(_track1_dqdx - _track2_dqdx)
-        mask = (tracks['id'].mask
-                | neighbor.mask.reshape(ddqdx.shape)
-                | (neighbor == -1).reshape(ddqdx.shape))
-        return ma.array(ddqdx, mask=mask)
+    def calc_2track_sin2theta(tracks, neighbor):
+        ntracks = tracks.shape[1]
+        neighbor = neighbor.reshape(tracks.shape + (1,))
+        dxyz = tracks['start'] - tracks['end']
+        dxyz /= np.sqrt(np.sum((dxyz)**2, axis=-1, keepdims=True))
+        dxyz_neighbor = np.take_along_axis(dxyz, neighbor, axis=1)
+        sin2theta = 1 - np.sum(dxyz * dxyz_neighbor, axis=-1)**2
+        mask = (tracks['id'].mask | neighbor.mask.reshape(sin2theta.shape)
+                | (neighbor == -1).reshape(sin2theta.shape))
+        return ma.array(sin2theta, mask=mask)
 
     @staticmethod
     def load_r_values(filename, sig_key, bkg_key):
@@ -495,8 +559,18 @@ class TrackletMerger(H5FlowStage):
         '''
         pdf = dict(np.load(filename, allow_pickle=True))
 
-        norm = np.sum(pdf[sig_key])
-        r = 1 - np.exp(-(pdf[sig_key] / norm) / (pdf[bkg_key] / np.sum(pdf[bkg_key]) + 1e-15))
+        ndimage.gaussian_filter(pdf[sig_key], 1.5, output=pdf[sig_key], mode='nearest')
+        ndimage.gaussian_filter(pdf[bkg_key], 1.5, output=pdf[bkg_key], mode='nearest')
+
+        sig_norm = np.sum(pdf[sig_key])
+        bkg_norm = np.sum(pdf[bkg_key])
+        r = 1 - np.exp(-(pdf[sig_key] / sig_norm) / (pdf[bkg_key] / bkg_norm))
+        r_inf_mask = (pdf[bkg_key] == 0) & (pdf[sig_key] > 0)
+        r[r_inf_mask] = 1
+        r_zero_mask = (pdf[sig_key] == 0) & (pdf[bkg_key] > 0)
+        r[r_zero_mask] = 0
+        r_undef_mask = (pdf[sig_key] == 0) & (pdf[bkg_key] == 0)
+        r[r_undef_mask] = 0.5
         r_bins = pdf[sig_key + '_bins']
 
         idx = np.where(pdf[sig_key])
