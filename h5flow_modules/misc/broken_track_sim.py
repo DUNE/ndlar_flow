@@ -79,7 +79,7 @@ class BrokenTrackSim(H5FlowStage):
         ``TrackletReconstruction.tracklet_dtype``.
 
     '''
-    class_version = '0.0.0'
+    class_version = '1.0.0'
 
     offset_dtype = np.dtype([
         ('id', 'u4'),
