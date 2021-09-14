@@ -4,22 +4,25 @@ flow:
   source: events
   stages: [stopping_muon_sel]
 
+resources:
+  - !include h5flow_yamls/resources/run_data.yaml
+  - !include h5flow_yamls/resources/geometry.yaml
+
 events:
   classname: H5FlowDatasetLoopGenerator
   dset_name: 'charge/events'
   params:
     chunk_size: 32
 
-resources:
-  - !include h5flow_yamls/resources/run_data.yaml
-  - !include h5flow_yamls/resources/geometry.yaml
-
 stopping_muon_sel:
   classname: StoppingMuonSelection # analysis/stopping_muon_selection.py
   requires:
     - 'combined/tracklets/merged'
+    - 'combined/t0'
   params:
+    t0_dset_name: 'combined/t0'
     merged_dset_name: 'combined/tracklets/merged'
     mc_trajectory_path: ['combined/tracklets/merged', 'charge/hits',
       'charge/packets', 'mc_truth/tracks', 'mc_truth/trajectories']
-    fid_cut: 25
+    fid_cut: 35.2 # mm
+    cathode_fid_cut: 20 # mm
