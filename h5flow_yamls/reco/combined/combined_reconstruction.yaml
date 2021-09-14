@@ -23,11 +23,11 @@ t0_reco:
   classname: T0Reconstruction # combined/t0_reco.py
   requires:
     - 'charge/ext_trigs'
-    - name: 'light/hits'
-      path: ['light/events', 'light/hits']
+    # - name: 'light/hits'
+    #   path: ['light/events', 'light/hits']
   params:
     t0_dset_name: 'combined/t0'
-    light_hits_dset_name: 'light/hits'
+    # light_hits_dset_name: 'light/hits'
     ext_trigs_dset_name: 'charge/ext_trigs'
 
 tracklet_reco:
