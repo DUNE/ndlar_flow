@@ -161,12 +161,16 @@ class RawEventGenerator(H5FlowGenerator):
 
             # copy datasets from source file
             self.data_manager.create_dset(self.mc_tracks_dset_name, dtype=self.mc_tracks_dtype)
-            track_sl = self.data_manager.reserve_data(self.mc_tracks_dset_name, len(self.mc_tracks))
-            self.data_manager.write_data(self.mc_tracks_dset_name, track_sl, self.mc_tracks)
+            ntracks = len(self.mc_tracks)
+            track_sl = slice(ntracks//self.size*self.rank, min(ntracks, ntracks//self.size*(self.rank+1)))
+            self.data_manager.reserve_data(self.mc_tracks_dset_name, track_sl)
+            self.data_manager.write_data(self.mc_tracks_dset_name, track_sl, self.mc_tracks[track_sl])
 
             self.data_manager.create_dset(self.mc_trajectories_dset_name, dtype=self.mc_trajectories.dtype)
-            traj_sl = self.data_manager.reserve_data(self.mc_trajectories_dset_name, len(self.mc_trajectories))
-            self.data_manager.write_data(self.mc_trajectories_dset_name, traj_sl, self.mc_trajectories)
+            ntraj = len(self.mc_trajectories)
+            traj_sl = slice(ntraj//self.size*self.rank, min(ntraj, ntraj//self.size*(self.rank+1)))
+            self.data_manager.reserve_data(self.mc_trajectories_dset_name, traj_sl)
+            self.data_manager.write_data(self.mc_trajectories_dset_name, traj_sl, self.mc_trajectories[traj_sl])
 
             # set up references
             self.data_manager.create_ref(self.packets_dset_name, self.mc_tracks_dset_name)
@@ -174,25 +178,25 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.create_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name)
 
             # create references between trajectories and tracks
+            traj_evid = self.mc_trajectories['eventID'][:]
+            tracks_evid = self.mc_tracks['eventID'][:]
             evs, ev_traj_start, ev_track_start = np.intersect1d(
-                self.mc_trajectories['eventID'],
-                self.mc_tracks['eventID'],
-                return_indices=True
-            )
+                traj_evid, tracks_evid, return_indices=True)
             evs, ev_traj_end, ev_track_end = np.intersect1d(
-                self.mc_trajectories['eventID'][::-1],
-                self.mc_tracks['eventID'][::-1],
-                return_indices=True
-            )
+                traj_evid[::-1], tracks_evid[::-1], return_indices=True)
             ev_traj_end = len(self.mc_trajectories['eventID']) - ev_traj_end
             ev_track_end = len(self.mc_tracks['eventID']) - ev_track_end
-            traj = self.mc_trajectories['trackID'][:]
-            tracks = self.mc_tracks['trackID'][:]
+            
+            traj_trackid = self.mc_trajectories['trackID'][:]
+            tracks_trackid = self.mc_tracks['trackID'][:]
             for i, (ev, traj_start, traj_end, track_start, track_end) in enumerate(
                     zip(evs, ev_traj_start, ev_traj_end, ev_track_start, ev_track_end)):
-                traj_block = np.expand_dims(traj[traj_start:traj_end], -1)
-                track_block = np.expand_dims(tracks[track_start:track_end], 0)
-                ref = np.c_[np.where(traj_block == track_block)]
+                traj_trackid_block = np.expand_dims(traj_trackid[traj_start:traj_end], -1)
+                track_trackid_block = np.expand_dims(tracks_trackid[track_start:track_end], 0)
+                traj_evid_block = np.expand_dims(traj_evid[traj_start:traj_end], -1)
+                track_evid_block = np.expand_dims(tracks_evid[track_start:track_end], 0)
+                ref = np.argwhere((traj_trackid_block == track_trackid_block) &
+                                  (traj_evid_block == track_evid_block))
                 ref[:, 0] += traj_start
                 ref[:, 1] += track_start
                 sub_ref = ref[(len(ref) // self.size) * self.rank:(len(ref) // self.size) * (self.rank + 1)]
