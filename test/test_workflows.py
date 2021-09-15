@@ -190,13 +190,13 @@ def stopping_muon_analysis_file(combined_file, geometry_file, tmp_h5_file):
 #     pass
 
 
-def test_chain(combined_file):
-    pass
+# def test_combined(combined_file):
+#     pass
 
 
 def test_broken_track_sim(broken_track_sim_file):
     pass
 
 
-def test_stopping_muon_analysis(stopping_muon_analysis_file):
+def test_chain(stopping_muon_analysis_file):
     pass
