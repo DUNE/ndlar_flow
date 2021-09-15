@@ -385,6 +385,10 @@ class TrackletReconstruction(H5FlowStage):
         centroid = np.mean(xyz[mask], axis=0)
         pca = dcomp.PCA(n_components=1).fit(xyz[mask] - centroid)
         axis = pca.components_[0] / np.linalg.norm(pca.components_[0])
+
+        # break degenerate pca axis direction by fixing y component to be negative
+        if axis[1] > 0:
+            axis = -axis
         return centroid, axis
 
     @staticmethod
