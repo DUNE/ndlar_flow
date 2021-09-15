@@ -325,7 +325,7 @@ class TrackletReconstruction(H5FlowStage):
 
             :param xyz: ``shape: (N, 3)`` array of 3D positions
 
-            :returns: ``shape: (npts, 3)`` array of piecewise-linear approximate positions
+            :returns: ``shape: (npts, 3)`` array of piecewise-linear approximation
         '''
         # project hits onto PCA axis
         s = np.sum((xyz - centroid[np.newaxis, :]) * axis[np.newaxis, :],
@@ -339,11 +339,14 @@ class TrackletReconstruction(H5FlowStage):
 
         traj[0] = TrackletReconstruction.local_mean(xyz, xyz[start_pt], dx)
         traj[1:] = TrackletReconstruction.local_mean(xyz, xyz[end_pt], dx)
+        traj_s[0] = s[start_pt]
+        traj_s[1:] = s[end_pt]
 
         for i in range(1, npts - 1):
             # calculate residuals
-            dt, d = TrackletReconstruction.trajectory_residual(xyz, traj)
+            dt, d = TrackletReconstruction.trajectory_residual(xyz, traj)  # (M, N)
 
+            # use smallest residual per point
             i_res_min = np.expand_dims(np.argmin(dt, axis=0), axis=0)  # (1, N)
             res = np.take_along_axis(dt, i_res_min, axis=0)  # (1, N)
             node_d = np.take_along_axis(d, i_res_min, axis=0)  # (1, N)
@@ -353,12 +356,14 @@ class TrackletReconstruction(H5FlowStage):
             max_pt = ma.argmax(ma.array(res, mask=mask), axis=1)  # (1,)
 
             # update trajectory
-            traj[i] = TrackletReconstruction.local_mean(xyz, xyz[max_pt], dx)
-            traj_s[i] = s[max_pt]
+            new_pt = TrackletReconstruction.local_mean(xyz, xyz[max_pt].ravel(), dx)  # (3,)
+            new_s = np.sum((new_pt - centroid) * axis, axis=-1)  # (1,)
+            traj[i] = new_pt
+            traj_s[i] = new_s
 
             order = np.argsort(traj_s, axis=0)  # (M, 1)
-            traj = np.take_along_axis(traj, order, axis=0)
-            traj_s = np.take_along_axis(traj_s, order, axis=0)
+            traj[:] = np.take_along_axis(traj, order, axis=0)
+            traj_s[:] = np.take_along_axis(traj_s, order, axis=0)
 
         return traj
 
@@ -425,7 +430,9 @@ class TrackletReconstruction(H5FlowStage):
         d0 = np.expand_dims(xyz, axis=0) - np.expand_dims(traj[:-1], axis=1)  # (1, N, 3) - (npts-1, 1, 3)
         d1 = np.expand_dims(xyz, axis=0) - np.expand_dims(traj[1:], axis=1)
         n = np.expand_dims(np.diff(traj, axis=0), axis=1)  # (npts-1, 1, 3)
-        n /= np.linalg.norm(n, axis=-1, keepdims=True)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            n /= np.linalg.norm(n, axis=-1, keepdims=True)
+        n[np.isnan(n) | np.isfinite(n)] = 0
         dt = d0 - ma.sum(d0 * n, axis=-1, keepdims=True) * n  # (npts-1, N, 3) - (npts-1, N, 1) * (1, 1, 3)
         dt = np.linalg.norm(dt, axis=-1)  # (npts-1, N)
         d = np.minimum(np.linalg.norm(d0, axis=-1), np.linalg.norm(d1, axis=-1))  # (npts-1, N)
