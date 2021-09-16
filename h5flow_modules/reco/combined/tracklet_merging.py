@@ -184,6 +184,11 @@ class TrackletMerger(H5FlowStage):
                     break
 
             # collect valid associations into track groups
+            axes = np.arange(track_merged.ndim).astype(int)
+            new_axes = axes.copy()
+            new_axes[-1] = axes[-2]
+            new_axes[-2] = axes[-1]
+            track_merged = track_merged | np.transpose(track_merged, axes=new_axes)
             track_merged = self.create_groups(track_merged)
 
             # now, collect the hits from the original tracks into the track groups
@@ -259,7 +264,7 @@ class TrackletMerger(H5FlowStage):
                 new_arr = create_groups(arr)
                 new_arr # [[1,0,1],
                            [0,1,0],
-                           [1,0,1]]
+                           [0,0,1]]
 
             and::
 
@@ -275,6 +280,7 @@ class TrackletMerger(H5FlowStage):
 
             :returns: updated ajacency matrix (``shape: (..., n, n)``)
         '''
+        new_mask = np.zeros_like(mask)
 
         # get index of masks (starting with True values)
         i_mask = np.argsort(mask, axis=-1)[..., ::-1]
@@ -291,11 +297,11 @@ class TrackletMerger(H5FlowStage):
             if not np.any(other_matched):
                 break
 
-            # combine with current track
-            mask = (mask | (other_mask & other_matched))
+            # combine with current track(s)
+            new_mask[:] = (new_mask | (other_mask & other_matched))
             step += 1
 
-        return mask
+        return new_mask
 
     @staticmethod
     def find_k_neighbor(tracks, mask=None, k=1):
@@ -394,7 +400,7 @@ class TrackletMerger(H5FlowStage):
 
             :param tracks1: track dtype of shape: ``(..., M,)``
 
-            :returns: start and end points of closest trajectory segments and point of closest approach, shape: ``(..., M, 3)``
+            :returns: start and end points of closest trajectory segments and points of closest approach, shape: ``(..., M, 3)``
 
         '''
         start0 = tracks0['trajectory'][..., :-1, :]  # (N, M, n0-1, 3)
@@ -443,15 +449,17 @@ class TrackletMerger(H5FlowStage):
         end1 = end1.reshape(tracks1.shape + (3,))
         poca = poca.reshape(tracks0.shape + (3,))
 
-        return start0, end0, start1, end1, poca
+        return (start0, end0, start1, end1, (1 - s0) * start0 + s0 * end0,
+                (1 - s1) * start1 + s1 * end1)
 
-    @staticmethod
+    @ staticmethod
     def calc_2track_deflection_angle(tracks, neighbor):
         ntracks = tracks.shape[1]
         neighbor_tracks = np.take_along_axis(tracks, neighbor, axis=1)
 
-        start, end, neighbor_start, neighbor_end, poca = TrackletMerger.closest_trajectories(
-            tracks, neighbor_tracks)
+        start, end, neighbor_start, neighbor_end, poca, neighbor_poca = (
+            TrackletMerger.closest_trajectories(tracks, neighbor_tracks))
+        poca = (poca + neighbor_poca) / 2
 
         # calculate deflection angle to farthest point on neighboring segment
         neighbor_far = np.where(
@@ -468,12 +476,12 @@ class TrackletMerger(H5FlowStage):
 
         return ma.array(ang1 / np.pi, mask=mask)
 
-    @staticmethod
+    @ staticmethod
     def calc_2track_transverse_sin2theta(tracks, neighbor):
         ntracks = tracks.shape[1]
         neighbor_tracks = np.take_along_axis(tracks, neighbor, axis=-1)
 
-        start1, end1, start2, end2, _ = TrackletMerger.closest_trajectories(
+        start1, end1, start2, end2, _, _ = TrackletMerger.closest_trajectories(
             tracks, neighbor_tracks)
 
         d = ma.concatenate((
@@ -502,7 +510,7 @@ class TrackletMerger(H5FlowStage):
                 | (neighbor == -1).reshape(t_d.shape))
         return ma.array(t_d, mask=mask)
 
-    @staticmethod
+    @ staticmethod
     def make_missing_segment(start1, end1, start2, end2):
         track_d = np.concatenate((
             np.sum((start1 - end2)**2, axis=-1, keepdims=True),
@@ -525,18 +533,19 @@ class TrackletMerger(H5FlowStage):
             (end2, end2, start2, start2))
         return missing_track_start, missing_track_end
 
-    @staticmethod
+    @ staticmethod
     def calc_2track_missing_length(tracks, neighbor, missing_track_segments,
                                    pixel_x, pixel_y, disabled_channel_lut,
                                    cathode_region, pixel_pitch=None):
         # create missing track segment
         _n_steps = missing_track_segments
         neighbor_tracks = np.take_along_axis(tracks, neighbor, axis=-1)
-        start1, end1, start2, end2, _ = TrackletMerger.closest_trajectories(
+        start1, end1, start2, end2, poca1, poca2 = TrackletMerger.closest_trajectories(
             tracks, neighbor_tracks)
 
-        _missing_start, _missing_end = TrackletMerger.make_missing_segment(
-            start1, end1, start2, end2)
+        # _missing_start, _missing_end = TrackletMerger.make_missing_segment(
+        #     start1, end1, start2, end2)
+        _missing_start, _missing_end = poca1, poca2
 
         # interpolate
         _missing_x, _dx = np.linspace(_missing_start[..., 0], _missing_end[..., 0],
@@ -571,7 +580,7 @@ class TrackletMerger(H5FlowStage):
                 | (neighbor == -1).reshape(missing_length.shape))
         return ma.array(missing_length, mask=mask)
 
-    @staticmethod
+    @ staticmethod
     def calc_2track_overlap(tracks, neighbor):
         _ntracks = tracks.shape[1]
         neighbor = neighbor.reshape(tracks.shape + (1,))
@@ -591,11 +600,11 @@ class TrackletMerger(H5FlowStage):
                 | (neighbor == -1).reshape(overlap.shape))
         return ma.array(overlap, mask=mask)
 
-    @staticmethod
+    @ staticmethod
     def calc_2track_sin2theta(tracks, neighbor):
         ntracks = tracks.shape[1]
         neighbor_tracks = np.take_along_axis(tracks, neighbor, axis=-1)
-        start1, end1, start2, end2, _ = TrackletMerger.closest_trajectories(
+        start1, end1, start2, end2, _, _ = TrackletMerger.closest_trajectories(
             tracks, neighbor_tracks)
         dxyz = end1 - start1
         mask = np.all(dxyz == 0, axis=-1)
@@ -611,7 +620,7 @@ class TrackletMerger(H5FlowStage):
                 | (neighbor == -1).reshape(sin2theta.shape))
         return ma.array(sin2theta, mask=mask)
 
-    @staticmethod
+    @ staticmethod
     def load_r_values(filename, sig_key, bkg_key):
         '''
             Load the N-D pdf histogram from an .npz file. Loads and normalizes
@@ -659,7 +668,7 @@ class TrackletMerger(H5FlowStage):
 
         return r, r_bins, statistic_bins, p_bins
 
-    @staticmethod
+    @ staticmethod
     def score_neighbor(r, r_bins, statistic_bins, p_bins, *params):
         '''
             Calculates a p-value based on a binned, multi-dimensional PDF
