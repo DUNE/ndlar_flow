@@ -388,10 +388,13 @@ class TrackletMerger(H5FlowStage):
 
             # handle parallel segments
             parallel_mask = (v_dp == 1)[..., 0]
-            s0[parallel_mask] = 0.5
-            p0 = (1 - s0) * start_xyz0 + s0 * (end_xyz0)
-            s1[parallel_mask] = ((p0 - start_xyz1) - np.sum((p0 - start_xyz1)
-                                                            * v1, axis=-1, keepdims=True) * v1)[parallel_mask]
+            if np.any(parallel_mask):
+                s0[parallel_mask] = 0.5
+                p0 = (1 - s0) * start_xyz0 + s0 * (end_xyz0)
+                s1[parallel_mask] = ((p0 - start_xyz1) - np.sum((p0 - start_xyz1)
+                                                                * v1, axis=-1,
+                                                                keepdims=True)
+                                     * v1)[parallel_mask]
 
         mask0 = np.broadcast_to(np.any(orig_mask0, axis=-1, keepdims=True),
                                 s0.shape)
