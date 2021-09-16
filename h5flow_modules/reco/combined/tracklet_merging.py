@@ -360,8 +360,10 @@ class TrackletMerger(H5FlowStage):
         '''
         orig_mask0 = start_xyz0.mask | end_xyz0.mask
         orig_mask1 = start_xyz1.mask | end_xyz1.mask
+        orig_mask0, orig_mask1 = np.broadcast_arrays(orig_mask0, orig_mask1)
         start_xyz0, end_xyz0, start_xyz1, end_xyz1 = np.broadcast_arrays(
             start_xyz0, end_xyz0, start_xyz1, end_xyz1)
+        
         d = start_xyz0 - start_xyz1
         v0, v1 = (end_xyz0 - start_xyz0, end_xyz1 - start_xyz1)
         l0, l1 = (np.linalg.norm(v0, axis=-1, keepdims=True),
@@ -398,10 +400,8 @@ class TrackletMerger(H5FlowStage):
                 s1[parallel_mask] = np.sum((p0 + d) * v1 / l1, axis=-1,
                                            keepdims=True)[parallel_mask]
 
-        mask0 = np.broadcast_to(np.any(orig_mask0, axis=-1, keepdims=True),
-                                s0.shape)
-        mask1 = np.broadcast_to(np.any(orig_mask1, axis=-1, keepdims=True),
-                                s1.shape)
+        mask0 = np.any(orig_mask0, axis=-1, keepdims=True)
+        mask1 = np.any(orig_mask1, axis=-1, keepdims=True)
         s0 = ma.array(s0, mask=mask0)
         s1 = ma.array(s1, mask=mask1)
         return s0, s1
@@ -435,10 +435,11 @@ class TrackletMerger(H5FlowStage):
         poca0 = (1 - s0) * start0 + s0 * end0
         poca1 = (1 - s1) * start1 + s1 * end1
         poca_d = np.linalg.norm(poca0 - poca1, axis=-1)
+
         # remove segments with 0 length
-        mask = ((np.linalg.norm(end0 - start0, axis=-1) == 0) |
-                (np.linalg.norm(end1 - start1, axis=-1) == 0))
-        poca_d = ma.array(poca_d, mask=mask | s0.mask[..., 0] | s1.mask[..., 0])
+        mask = ((np.linalg.norm(end0 - start0, axis=-1) == 0)
+                | (np.linalg.norm(end1 - start1, axis=-1) == 0))
+        poca_d[mask] = poca_d.max() 
 
         # minimize point of closest approach
         min_poca_d0 = np.expand_dims(ma.argmin(poca_d, axis=-1), -1)  # (n, M, n0-1, 1)
