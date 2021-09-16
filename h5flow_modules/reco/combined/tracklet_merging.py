@@ -440,7 +440,7 @@ class TrackletMerger(H5FlowStage):
         start0 = start0.reshape(tracks0.shape + (3,))
         end0 = end0.reshape(tracks0.shape + (3,))
         start1 = start1.reshape(tracks1.shape + (3,))
-        end1 = end0.reshape(tracks1.shape + (3,))
+        end1 = end1.reshape(tracks1.shape + (3,))
         poca = poca.reshape(tracks0.shape + (3,))
 
         return start0, end0, start1, end1, poca
