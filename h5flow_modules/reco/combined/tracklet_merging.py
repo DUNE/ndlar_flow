@@ -387,7 +387,7 @@ class TrackletMerger(H5FlowStage):
             s1[l1 == 0] = 0.5
 
             # handle parallel segments
-            parallel_mask = v_dp == 1
+            parallel_mask = (v_dp == 1)[..., 0]
             s0[parallel_mask] = 0.5
             p0 = (1 - s0) * start_xyz0 + s0 * (end_xyz0)
             s1[parallel_mask] = ((p0 - start_xyz1) - np.sum((p0 - start_xyz1)
