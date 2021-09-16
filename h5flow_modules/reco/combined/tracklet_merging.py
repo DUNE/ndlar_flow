@@ -603,6 +603,8 @@ class TrackletMerger(H5FlowStage):
         dxyz /= np.sqrt(np.sum((dxyz)**2, axis=-1, keepdims=True))
 
         dxyz_neighbor = end2 - start2
+        mask = np.all(dxyz_neighbor == 0, axis=-1)
+        dxyz_neighbor[mask] = (neighbor_tracks['end'] - neighbor_tracks['start'])[mask]
         dxyz_neighbor /= np.sqrt(np.sum((dxyz_neighbor)**2, axis=-1, keepdims=True))
         sin2theta = 1 - np.sum(dxyz * dxyz_neighbor, axis=-1)**2
         mask = (tracks['id'].mask | neighbor.mask.reshape(sin2theta.shape)
