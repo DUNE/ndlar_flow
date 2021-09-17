@@ -74,7 +74,7 @@ class TrackletMerger(H5FlowStage):
                     max_neighbors: 5
 
     '''
-    class_version = '1.0.0'
+    class_version = '2.0.0'
 
     default_pdf_filename = 'joint_pdf-1_0_0.npz'
     default_pdf_sig_name = 'rereco'
@@ -126,6 +126,10 @@ class TrackletMerger(H5FlowStage):
                                     pdf_bkg_name=self.pdf_bkg_name
                                     )
 
+        self.trajectory_pts = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_pts']
+        self.trajectory_dx = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_dx']
+
+        self.merged_dtype = TrackletMerger.merged_dtype(self.trajectory_pts)
         self.data_manager.create_dset(self.merged_dset_name, self.merged_dtype)
         self.data_manager.create_ref(self.merged_dset_name, self.hits_dset_name)
         self.data_manager.create_ref(self.merged_dset_name, self.tracks_dset_name)
@@ -157,7 +161,7 @@ class TrackletMerger(H5FlowStage):
                 # calculate the p-value for neighbor pair
                 params = [
                     self.calc_2track_deflection_angle(tracks, neighbor),
-                    self.calc_2track_transverse_sintheta(tracks, neighbor),
+                    self.calc_2track_transverse_sin2theta(tracks, neighbor),
                     self.calc_2track_missing_length(tracks, neighbor,
                                                     self.missing_track_segments,
                                                     self.pixel_x, self.pixel_y,
@@ -180,6 +184,11 @@ class TrackletMerger(H5FlowStage):
                     break
 
             # collect valid associations into track groups
+            axes = np.arange(track_merged.ndim).astype(int)
+            new_axes = axes.copy()
+            new_axes[-1] = axes[-2]
+            new_axes[-2] = axes[-1]
+            track_merged = track_merged | np.transpose(track_merged, axes=new_axes)
             track_merged = self.create_groups(track_merged)
 
             # now, collect the hits from the original tracks into the track groups
@@ -206,9 +215,12 @@ class TrackletMerger(H5FlowStage):
 
             # recalculate track parameters
             calc_shape = (track_grp_id.shape[0], -1)
-            merged_tracks = TrackletReconstruction.calc_tracks(track_grp_hits.reshape(calc_shape), t0, track_grp_id.reshape(calc_shape))
+            merged_tracks = TrackletReconstruction.calc_tracks(
+                track_grp_hits.reshape(calc_shape), t0,
+                track_grp_id.reshape(calc_shape), self.trajectory_pts,
+                self.trajectory_dx)
         else:
-            merged_tracks = ma.masked_all((0, 1), dtype=TrackletReconstruction.tracklet_dtype)
+            merged_tracks = ma.masked_all((0, 1), dtype=self.merged_dtype)
             track_grp = ma.masked_all((0, 1, 1), dtype=bool)
             track_grp_id = ma.masked_all((0, 1), dtype=int)
             track_grp_hits = ma.masked_all((0, 1), dtype=track_hits.dtype)
@@ -252,7 +264,7 @@ class TrackletMerger(H5FlowStage):
                 new_arr = create_groups(arr)
                 new_arr # [[1,0,1],
                            [0,1,0],
-                           [1,0,1]]
+                           [0,0,1]]
 
             and::
 
@@ -268,6 +280,7 @@ class TrackletMerger(H5FlowStage):
 
             :returns: updated ajacency matrix (``shape: (..., n, n)``)
         '''
+        new_mask = np.zeros_like(mask)
 
         # get index of masks (starting with True values)
         i_mask = np.argsort(mask, axis=-1)[..., ::-1]
@@ -284,11 +297,11 @@ class TrackletMerger(H5FlowStage):
             if not np.any(other_matched):
                 break
 
-            # combine with current track
-            mask = (mask | (other_mask & other_matched))
+            # combine with current track(s)
+            new_mask[:] = (new_mask | (other_mask & other_matched))
             step += 1
 
-        return mask
+        return new_mask
 
     @staticmethod
     def find_k_neighbor(tracks, mask=None, k=1):
@@ -341,15 +354,25 @@ class TrackletMerger(H5FlowStage):
                 poca0 = (1 - s0) * start0 + s0 * end0 # shape: (N, 3)
                 poca1 = (1 - s1) * start1 + s1 * end1
 
-            :param {start, end}_xyz(i): start/end point of line i, ``shape: (N, 3)``
+            :param {start, end}_xyz(i): start/end point of line i, ``shape: (..., N, 3)``
 
-            :returns: ``tuple`` of line segment 0 and 1, ``shape: (N,1)``
+            :returns: ``tuple`` of line segment 0 and 1, ``shape: (..., N, 1)``
         '''
+        orig_mask0 = start_xyz0.mask | end_xyz0.mask
+        orig_mask1 = start_xyz1.mask | end_xyz1.mask
+        orig_mask0, orig_mask1 = np.broadcast_arrays(orig_mask0, orig_mask1)
+        start_xyz0, end_xyz0, start_xyz1, end_xyz1 = np.broadcast_arrays(
+            start_xyz0, end_xyz0, start_xyz1, end_xyz1)
+        
         d = start_xyz0 - start_xyz1
         v0, v1 = (end_xyz0 - start_xyz0, end_xyz1 - start_xyz1)
-        l0, l1 = np.linalg.norm(v0, axis=-1, keepdims=True), np.linalg.norm(v1, axis=-1, keepdims=True)
-        v0 /= l0
-        v1 /= l1
+        l0, l1 = (np.linalg.norm(v0, axis=-1, keepdims=True),
+                  np.linalg.norm(v1, axis=-1, keepdims=True))
+        with np.errstate(divide='ignore', invalid='ignore'):
+            v0 /= l0
+            v1 /= l1
+        v0[(l0 == 0)[..., 0]] = 0
+        v1[(l1 == 0)[..., 0]] = 0
         v_dp = np.sum(v0 * v1, axis=-1, keepdims=True)
 
         with np.errstate(divide='ignore', invalid='ignore'):
@@ -361,35 +384,99 @@ class TrackletMerger(H5FlowStage):
             s0 /= l0
             s1 /= l1
 
-        invalid_mask0 = ~np.isfinite(s0) | np.isnan(s0)
-        invalid_mask1 = ~np.isfinite(s1) | np.isnan(s1)
+            # handle 0 length line segment
+            s0[l0 == 0] = 0.5
+            s1[l1 == 0] = 0.5
 
-        s0[invalid_mask0] = 0.5
-        s1[invalid_mask1] = 0.5
+            # handle parallel segments
+            parallel_mask = (v_dp == 1)[..., 0]
+            if np.any(parallel_mask):
+                # fix point on first segment to 0.5
+                s0[parallel_mask] = 0.5
+                # calculate closest point on other segment
+                p0 = (1 - s0) * start_xyz0 + s0 * (end_xyz0)
+                d = (start_xyz1 - p0) - v1 * np.sum((start_xyz1 - p0) * v1,
+                                                    axis=-1, keepdims=True)
+                s1[parallel_mask] = np.sum((p0 + d) * v1 / l1, axis=-1,
+                                           keepdims=True)[parallel_mask]
 
+        mask0 = np.any(orig_mask0, axis=-1, keepdims=True)
+        mask1 = np.any(orig_mask1, axis=-1, keepdims=True)
+        s0 = ma.array(s0, mask=mask0)
+        s1 = ma.array(s1, mask=mask1)
         return s0, s1
+
+    @staticmethod
+    def closest_trajectories(tracks0, tracks1):
+        '''
+            :param tracks0: track dtype of shape: ``(..., M,)``
+
+            :param tracks1: track dtype of shape: ``(..., M,)``
+
+            :returns: start and end points of closest trajectory segments and points of closest approach, shape: ``(..., M, 3)``
+
+        '''
+        start0 = tracks0['trajectory'][..., :-1, :]  # (N, M, n0-1, 3)
+        end0 = tracks0['trajectory'][..., 1:, :]  # (N, M, n0-1, 3)
+        start1 = tracks1['trajectory'][..., :-1, :]  # (N, M, n1-1, 3)
+        end1 = tracks1['trajectory'][..., 1:, :]  # (N, M, n1-1, 3)
+
+        # reshape -> (N, M, n0-1, 1, 3) and (N, M, 1, n1-1, 3)
+        start0 = np.expand_dims(start0, -2)
+        end0 = np.expand_dims(end0, -2)
+        start1 = np.expand_dims(start1, -3)
+        end1 = np.expand_dims(end1, -3)
+
+        # find point of closest approach
+        s0, s1 = TrackletMerger.poca(start0, end0, start1, end1)
+        s0 = np.clip(s0, 0, 1)
+        s1 = np.clip(s1, 0, 1)
+
+        poca0 = (1 - s0) * start0 + s0 * end0
+        poca1 = (1 - s1) * start1 + s1 * end1
+        poca_d = np.linalg.norm(poca0 - poca1, axis=-1)
+
+        # remove segments with 0 length
+        mask = ((np.linalg.norm(end0 - start0, axis=-1) == 0)
+                | (np.linalg.norm(end1 - start1, axis=-1) == 0))
+        poca_d[mask] = poca_d.max() 
+
+        # minimize point of closest approach
+        min_poca_d0 = np.expand_dims(ma.argmin(poca_d, axis=-1), -1)  # (n, M, n0-1, 1)
+        poca0 = np.take_along_axis(poca0, np.expand_dims(min_poca_d0, -1), -2)  # (n, M, n0-1, 1, 3)
+        poca1 = np.take_along_axis(poca1, np.expand_dims(min_poca_d0, -1), -2)  # (n, M, n0-1, 1, 3)
+        poca_d = np.take_along_axis(poca_d, min_poca_d0, -1)  # (n, M, n0-1, 1)
+
+        min_poca_d1 = np.expand_dims(ma.argmin(poca_d, axis=-2), -2)  # (n, M, 1, 1)
+        poca0 = np.take_along_axis(poca0, np.expand_dims(min_poca_d1, -1), -3)  # (n, M, 1, 1, 3)
+        poca1 = np.take_along_axis(poca1, np.expand_dims(min_poca_d1, -1), -3)  # (n, M, 1, 1, 3)
+        poca_d = np.take_along_axis(poca_d, min_poca_d1, -2)  # (n, M, 1, 1)
+        min_poca_d0 = np.take_along_axis(min_poca_d0, min_poca_d1, -2)  # (n, M, 1, 1)
+
+        start0 = np.take_along_axis(start0, np.expand_dims(min_poca_d1, -1), -3)  # (n, M, 1, 1, 3)
+        end0 = np.take_along_axis(end0, np.expand_dims(min_poca_d1, -1), -3)  # (n, M, 1, 1, 3)
+        start1 = np.take_along_axis(start1, np.expand_dims(min_poca_d0, -1), -2)  # (n, M, 1, 1, 3)
+        end1 = np.take_along_axis(end1, np.expand_dims(min_poca_d0, -1), -2)  # (n, M, 1, 1, 3)
+
+        start0 = start0.reshape(tracks0.shape + (3,))
+        end0 = end0.reshape(tracks0.shape + (3,))
+        start1 = start1.reshape(tracks1.shape + (3,))
+        end1 = end1.reshape(tracks1.shape + (3,))
+        poca0 = poca0.reshape(tracks0.shape + (3,))
+        poca1 = poca1.reshape(tracks1.shape + (3,))
+
+        return (start0, end0, start1, end1, poca0, poca1)
 
     @staticmethod
     def calc_2track_deflection_angle(tracks, neighbor):
         ntracks = tracks.shape[1]
-        neighbor = neighbor.reshape(tracks.shape + (1,))
+        neighbor_tracks = np.take_along_axis(tracks, neighbor, axis=1)
 
-        # arrange track endpoints assuming traveling downward
-        start = np.where(tracks['start'][..., 1:2] > tracks['end'][..., 1:2],
-                         tracks['start'], tracks['end'])
-        end = np.where(tracks['start'][..., 1:2] <= tracks['end'][..., 1:2],
-                       tracks['start'], tracks['end'])
-        neighbor_start = np.take_along_axis(start, neighbor, axis=1)
-        neighbor_end = np.take_along_axis(end, neighbor, axis=1)
+        start, end, neighbor_start, neighbor_end, poca, neighbor_poca = (
+            TrackletMerger.closest_trajectories(tracks, neighbor_tracks))
+        poca = (poca + neighbor_poca) / 2
 
-        # find nearest point on track segments
-        s, neighbor_s = TrackletMerger.poca(start, end, neighbor_start, neighbor_end)
-        s, neighbor_s = np.clip(s, 0, 1), np.clip(neighbor_s, 0, 1)
-
-        poca = ((1 - s) * start + s * end + (1 - neighbor_s) * neighbor_start
-                + neighbor_s * neighbor_end) / 2
-
-        # calculate deflection angle to farthest point on neighbor
+        # calculate deflection angle to farthest point on neighboring segment
         neighbor_far = np.where(
             np.linalg.norm(poca - neighbor_start, axis=-1, keepdims=True)
             > np.linalg.norm(poca - neighbor_end, axis=-1, keepdims=True),
@@ -405,28 +492,33 @@ class TrackletMerger(H5FlowStage):
         return ma.array(ang1 / np.pi, mask=mask)
 
     @staticmethod
-    def calc_2track_transverse_sintheta(tracks, neighbor):
+    def calc_2track_transverse_sin2theta(tracks, neighbor):
         ntracks = tracks.shape[1]
-        neighbor = neighbor.reshape(tracks.shape + (1,))
-        start1 = tracks['start']
-        start2 = np.take_along_axis(tracks['start'], neighbor, axis=1)
-        end1 = tracks['end']
-        end2 = np.take_along_axis(tracks['end'], neighbor, axis=1)
+        neighbor_tracks = np.take_along_axis(tracks, neighbor, axis=-1)
+
+        start1, end1, start2, end2, _, _ = TrackletMerger.closest_trajectories(
+            tracks, neighbor_tracks)
+
         d = ma.concatenate((
             np.expand_dims(start1 - end2, axis=-1),
             np.expand_dims(end1 - end2, axis=-1),
             np.expand_dims(start1 - start2, axis=-1),
             np.expand_dims(end1 - start2, axis=-1)
         ), axis=-1)
-        i_max = np.expand_dims(ma.argmin(np.sqrt(ma.sum(d * d, axis=-2, keepdims=True)), axis=-1), axis=-1)
-        d = np.squeeze(np.take_along_axis(d, i_max, axis=-1))
+        i_max = np.expand_dims(ma.argmax(np.sqrt(ma.sum(d * d, axis=-2, keepdims=True)), axis=-1), axis=-1)
+        d = np.take_along_axis(d, i_max, axis=-1)[..., 0]
+        d_norm = ma.sqrt(ma.sum(d**2, axis=-1, keepdims=True))
+        d_norm[d_norm == 0] = 1
+        d /= d_norm
 
         # transverse d
-        track_d = tracks['end'] - tracks['start']
+        track_d = end1 - start1
+        track_d_mask = np.all(track_d == 0, axis=-1)
+        track_d[track_d_mask] = (tracks['end'] - tracks['start'])[track_d_mask]
         track_d /= ma.sqrt(ma.sum(track_d**2, axis=-1, keepdims=True))
         l_d = np.abs(ma.sum(d * track_d, axis=-1))
         l = np.sqrt(ma.sum(d * d, axis=-1))
-        t_d = np.sqrt(l**2 - l_d**2) / l
+        t_d = np.clip(l**2 - l_d**2, 0, 1)
 
         mask = (tracks['id'].mask |
                 neighbor.mask.reshape(t_d.shape)
@@ -434,12 +526,7 @@ class TrackletMerger(H5FlowStage):
         return ma.array(t_d, mask=mask)
 
     @staticmethod
-    def make_missing_segment(start, end, neighbor):
-        start1 = start
-        start2 = np.take_along_axis(start, neighbor, axis=1)
-        end1 = end
-        end2 = np.take_along_axis(end, neighbor, axis=1)
-
+    def make_missing_segment(start1, end1, start2, end2):
         track_d = np.concatenate((
             np.sum((start1 - end2)**2, axis=-1, keepdims=True),
             np.sum((end1 - end2)**2, axis=-1, keepdims=True),
@@ -467,9 +554,14 @@ class TrackletMerger(H5FlowStage):
                                    cathode_region, pixel_pitch=None):
         # create missing track segment
         _n_steps = missing_track_segments
-        neighbor = neighbor.reshape(tracks.shape + (1,))
-        _missing_start, _missing_end = TrackletMerger.make_missing_segment(tracks['start'],
-                                                                           tracks['end'], neighbor)
+        neighbor_tracks = np.take_along_axis(tracks, neighbor, axis=-1)
+        start1, end1, start2, end2, poca1, poca2 = TrackletMerger.closest_trajectories(
+            tracks, neighbor_tracks)
+
+        # _missing_start, _missing_end = TrackletMerger.make_missing_segment(
+        #     start1, end1, start2, end2)
+        _missing_start, _missing_end = poca1, poca2
+
         # interpolate
         _missing_x, _dx = np.linspace(_missing_start[..., 0], _missing_end[..., 0],
                                       _n_steps, axis=-1, retstep=True)
@@ -526,10 +618,18 @@ class TrackletMerger(H5FlowStage):
     @staticmethod
     def calc_2track_sin2theta(tracks, neighbor):
         ntracks = tracks.shape[1]
-        neighbor = neighbor.reshape(tracks.shape + (1,))
-        dxyz = tracks['start'] - tracks['end']
+        neighbor_tracks = np.take_along_axis(tracks, neighbor, axis=-1)
+        start1, end1, start2, end2, _, _ = TrackletMerger.closest_trajectories(
+            tracks, neighbor_tracks)
+        dxyz = end1 - start1
+        mask = np.all(dxyz == 0, axis=-1)
+        dxyz[mask] = (tracks['end'] - tracks['start'])[mask]
         dxyz /= np.sqrt(np.sum((dxyz)**2, axis=-1, keepdims=True))
-        dxyz_neighbor = np.take_along_axis(dxyz, neighbor, axis=1)
+
+        dxyz_neighbor = end2 - start2
+        mask = np.all(dxyz_neighbor == 0, axis=-1)
+        dxyz_neighbor[mask] = (neighbor_tracks['end'] - neighbor_tracks['start'])[mask]
+        dxyz_neighbor /= np.sqrt(np.sum((dxyz_neighbor)**2, axis=-1, keepdims=True))
         sin2theta = 1 - np.sum(dxyz * dxyz_neighbor, axis=-1)**2
         mask = (tracks['id'].mask | neighbor.mask.reshape(sin2theta.shape)
                 | (neighbor == -1).reshape(sin2theta.shape))
@@ -586,9 +686,9 @@ class TrackletMerger(H5FlowStage):
     @staticmethod
     def score_neighbor(r, r_bins, statistic_bins, p_bins, *params):
         '''
-            Calculates a p-value based on a binned, multi-dimensional CDF
+            Calculates a p-value based on a binned, multi-dimensional PDF
 
-            :param r: normalized CDF, ``shape: (N,)*D``
+            :param r: likelihood ratio, ``shape: (N,)*D``
 
             :param r_bins: bin edge for each parameter, ``shape: (D, N+1)``
 

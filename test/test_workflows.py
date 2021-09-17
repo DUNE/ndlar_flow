@@ -119,12 +119,30 @@ def combined_file(charge_assoc_file, geometry_file, tmp_h5_file,
 
 
 @pytest.fixture
-def broken_track_sim_file(combined_file, geometry_file, tmp_h5_file,
+def combined_file_no_light(charge_reco_file, geometry_file, tmp_h5_file,
+                           disabled_channels_list_file, missing_asic_list_file,
+                           track_merging_pdf_file):
+    print('Combined reconstruction...')
+    h5flow.run('h5flow_yamls/reco/combined/combined_reconstruction.yaml',
+               tmp_h5_file,
+               charge_reco_file,
+               verbose=2,
+               end_position=64)
+
+    check_dsets(tmp_h5_file, (
+        'combined/t0/data',
+    ))
+
+    return tmp_h5_file
+
+
+@pytest.fixture
+def broken_track_sim_file(combined_file_no_light, geometry_file, tmp_h5_file,
                           disabled_channels_list_file, missing_asic_list_file):
     print('Broken track simulation...')
     h5flow.run('h5flow_yamls/reco/combined/broken_track_sim.yaml',
                tmp_h5_file,
-               combined_file,
+               combined_file_no_light,
                verbose=2)
 
     check_dsets(tmp_h5_file, (
@@ -172,13 +190,13 @@ def stopping_muon_analysis_file(combined_file, geometry_file, tmp_h5_file):
 #     pass
 
 
-def test_chain(combined_file):
-    pass
+# def test_combined(combined_file):
+#     pass
 
 
 def test_broken_track_sim(broken_track_sim_file):
     pass
 
 
-def test_stopping_muon_analysis(stopping_muon_analysis_file):
+def test_chain(stopping_muon_analysis_file):
     pass
