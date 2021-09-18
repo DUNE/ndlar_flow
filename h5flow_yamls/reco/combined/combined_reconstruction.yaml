@@ -58,6 +58,6 @@ tracklet_merge:
         hits_dset_name: 'charge/hits'
         track_hits_dset_name: 'combined/track_hits'
         tracks_dset_name: 'combined/tracklets'
-        pdf_filename: 'joint_pdf-1_0_0.npz'
+        pdf_filename: 'joint_pdf-2_0_0.npz'
         pvalue_cut: 0.05
         max_neighbors: 5
