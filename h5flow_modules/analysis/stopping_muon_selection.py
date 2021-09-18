@@ -35,12 +35,9 @@ class StoppingMuonSelection(H5FlowStage):
     default_path = 'analysis/stopping_muons'
 
     event_sel_dset_name = 'event_sel_reco'
-    track_sel_dset_name = 'track_sel_reco'
     event_sel_truth_dset_name = 'event_sel_truth'
-    track_sel_truth_dset_name = 'track_sel_truth'
 
-    event_sel_dtype = np.dtype([('sel', 'u1')])
-    track_sel_dtype = np.dtype([('sel', 'u1')])
+    event_sel_dtype = np.dtype([('sel', 'u1'), ('seed_pt', 'f8', (3,))])
 
     def __init__(self, **params):
         super(StoppingMuonSelection, self).__init__(**params)
@@ -70,13 +67,9 @@ class StoppingMuonSelection(H5FlowStage):
                                     )
         self.data_manager.create_dset(f'{self.path}/{self.event_sel_dset_name}',
                                       self.event_sel_dtype)
-        self.data_manager.create_dset(f'{self.path}/{self.track_sel_dset_name}',
-                                      self.track_sel_dtype)
         if self.is_mc:
             self.data_manager.create_dset(f'{self.path}/{self.event_sel_truth_dset_name}',
                                           self.event_sel_dtype)
-            self.data_manager.create_dset(f'{self.path}/{self.track_sel_truth_dset_name}',
-                                          self.track_sel_dtype)
 
         self.create_regions()
         self.data_manager.set_attrs(self.path, regions=np.array(self.regions))
@@ -148,13 +141,13 @@ class StoppingMuonSelection(H5FlowStage):
         t0 = cache[self.t0_dset_name].reshape(cache[source_name].shape)
 
         # find all tracks that end in the fiducial volume
-        is_stopping = (self.contained(tracks.ravel()['start'],
-                                      tracks.ravel()['end'])
-                       & (tracks.ravel()['length'] > self.length_cut))
-        is_throughgoing = (self.through_going(tracks.ravel()['start'],
-                                              tracks.ravel()['end']))
-        is_downward = self.downward(tracks.ravel()['start'],
-                                    tracks.ravel()['end'])
+        track_start = tracks.ravel()['trajectory'][...,0,:]
+        track_stop = tracks.ravel()['trajectory'][...,-1,:]
+        track_length = tracks.ravel()['length']
+        is_stopping = (self.contained(track_start, track_stop)
+                       & (track_length > self.length_cut))
+        is_throughgoing = self.through_going(track_start, track_stop)
+        is_downward = self.downward(track_start, track_stop)
         is_stopping = is_stopping.reshape(tracks.shape)
         is_throughgoing = is_throughgoing.reshape(tracks.shape)
         is_downward = is_downward.reshape(tracks.shape)
@@ -195,45 +188,42 @@ class StoppingMuonSelection(H5FlowStage):
                              & (t0['type'] != 0)
                              & (ma.sum(is_throughgoing, axis=-1) == 0)
                              & (ma.sum(is_stopping & is_downward, axis=-1) == 1))
+        seed_pt = np.where(np.expand_dims(self.in_fid(track_start), axis=-1),
+                           track_stop, track_start).reshape(tracks.shape + (3,))
+        seed_pt = np.take_along_axis(seed_pt, np.argmax(is_stopping, axis=-1)[...,np.newaxis,np.newaxis],
+                                     axis=-2)
 
         if self.is_mc:
             # define true stopping events as events with at least 1 muon that ends in fid.
             event_is_true_stopping = ma.sum(is_muon & is_true_stopping, axis=-1) >= 1
+            true_seed_pt = np.where(np.expand_dims(self.in_fid(xyz_start), axis=-1),
+                                    xyz_end, xyz_start).reshape(tracks.shape + (3,))
+            true_seed_pt = np.take_along_axis(true_seed_pt,
+                                              np.argmax(is_true_stopping, axis=-1)[...,np.newaxis,np.newaxis],
+                                              axis=-2)
 
         # prep arrays to write to file
         event_sel = np.zeros(len(tracks), dtype=self.event_sel_dtype)
-        track_sel = np.zeros(len(tracks['id'].compressed()), dtype=self.track_sel_dtype)
         event_sel['sel'] = event_is_stopping
-        track_sel['sel'] = is_stopping.compressed()
+        event_sel['seed_pt'] = seed_pt.reshape(event_sel['seed_pt'].shape)
+        
         if self.is_mc:
             event_true_sel = np.zeros(len(tracks), dtype=self.event_sel_dtype)
-            track_true_sel = np.zeros(len(tracks['id'].compressed()), dtype=self.track_sel_dtype)
             event_true_sel['sel'] = event_is_true_stopping
-            track_true_sel['sel'] = (is_true_stopping[~tracks['id'].mask].ravel()
-                                     & is_muon[~tracks['id'].mask].ravel())
+            event_true_sel['seed_pt'] = true_seed_pt.reshape(event_true_sel['seed_pt'].shape)
 
         # reserve data space
         event_sel_slice = self.data_manager.reserve_data(
             f'{self.path}/{self.event_sel_dset_name}', len(event_sel))
-        track_sel_slice = self.data_manager.reserve_data(
-            f'{self.path}/{self.track_sel_dset_name}', len(track_sel))
         if self.is_mc:
             event_sel_truth_slice = self.data_manager.reserve_data(
                 f'{self.path}/{self.event_sel_truth_dset_name}',
                 len(event_true_sel))
-            track_sel_truth_slice = self.data_manager.reserve_data(
-                f'{self.path}/{self.track_sel_truth_dset_name}',
-                len(track_true_sel))
 
         # write
         self.data_manager.write_data(f'{self.path}/{self.event_sel_dset_name}',
                                      event_sel_slice, event_sel)
-        self.data_manager.write_data(f'{self.path}/{self.track_sel_dset_name}',
-                                     track_sel_slice, track_sel)
         if self.is_mc:
             self.data_manager.write_data(
                 f'{self.path}/{self.event_sel_truth_dset_name}',
                 event_sel_truth_slice, event_true_sel)
-            self.data_manager.write_data(
-                f'{self.path}/{self.track_sel_truth_dset_name}',
-                track_sel_truth_slice, track_true_sel)
