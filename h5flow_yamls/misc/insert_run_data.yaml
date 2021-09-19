@@ -6,6 +6,5 @@ flow:
   # source: 'light/events' # uncomment for light files
 
 resources:
-  - !include h5flow_yamls/resources/units.yaml
   - !include h5flow_yamls/resources/run_data.yaml
   - !include h5flow_yamls/resources/lar_data.yaml

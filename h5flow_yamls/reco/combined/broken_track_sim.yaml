@@ -12,7 +12,6 @@ events:
     chunk_size: 32
 
 resources:
-  - !include h5flow_yamls/resources/units.yaml
   - !include h5flow_yamls/resources/run_data.yaml
   - !include h5flow_yamls/resources/geometry.yaml
   - !include h5flow_yamls/resources/lar_data.yaml

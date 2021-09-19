@@ -5,6 +5,8 @@ import scipy.interpolate
 
 from h5flow.core import H5FlowStage, resources
 
+import module0_flow.util.units as units
+
 
 class WaveformHitFinder(H5FlowStage):
     '''
@@ -116,7 +118,7 @@ class WaveformHitFinder(H5FlowStage):
 
         # get convert sample rate to ns
         self.sample_rate = (resources['RunData'].lrs_ticks
-                            / resources['Units'].ns)
+                            / units.ns)
 
         # get waveform shape information
         self.nadc = wvfm_dset.dtype['samples'].shape[0]

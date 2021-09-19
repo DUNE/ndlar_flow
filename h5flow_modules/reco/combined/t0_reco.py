@@ -2,6 +2,8 @@ import numpy as np
 
 from h5flow.core import H5FlowStage, resources
 
+import module0_flow.util.units as units
+
 
 class T0Reconstruction(H5FlowStage):
     '''
@@ -109,9 +111,9 @@ class T0Reconstruction(H5FlowStage):
                       + light_hits['rising_spline'])
                 ts_err = light_hits['rising_err_spline']
 
-                ts = ts * (resources['Units'].ns
+                ts = ts * (units.ns
                            / resources['RunData'].crs_ticks)  # ns -> crs ticks
-                ts_err = ts_err * (resources['Units'].ns
+                ts_err = ts_err * (units.ns
                                    / resources['RunData'].crs_ticks)  # ns -> crs ticks
 
                 ts = ts.reshape(events.shape + (-1,))

@@ -4,6 +4,7 @@ import logging
 from h5flow.core import H5FlowResource, resources
 
 from module0_flow.util.compat import assert_compat_version
+import module0_flow.util.units as units
 
 
 class LArData(H5FlowResource):
@@ -11,7 +12,7 @@ class LArData(H5FlowResource):
         Provides helper functions for calculating properties of liquid argon.
         Values will be saved and/or loaded from metadata within the output file.
 
-        Requires both ``Units`` and ``RunData`` resources within workflow.
+        Requires ``RunData`` resource within workflow.
 
         Parameters:
          - ``path``: ``str``, path to stored lar data within file
@@ -96,8 +97,8 @@ class LArData(H5FlowResource):
         '''
         a0, a1, a2, a3, a4, a5 = self.electron_mobility_params
 
-        e = e / (resources['Units'].kV / resources['Units'].cm)
-        t = t / (resources['Units'].K)
+        e = e / (units.kV / units.cm)
+        t = t / (units.K)
 
         num = a0 + a1 * e + a2 * np.power(e, 1.5) + a3 * np.power(e, 2.5)
         denom = 1 + (a1 / a0) * e + a4 * np.power(e, 2) + a5 * np.power(e, 3)
@@ -105,6 +106,6 @@ class LArData(H5FlowResource):
 
         mu = num / denom * temp_corr
 
-        mu = mu * ((resources['Units'].cm**2) / resources['Units'].V / resources['Units'].s)
+        mu = mu * ((units.cm**2) / units.V / units.s)
 
         return mu

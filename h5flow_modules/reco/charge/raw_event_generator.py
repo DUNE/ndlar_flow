@@ -7,10 +7,8 @@ import logging
 from h5flow.core import H5FlowGenerator, resources
 from h5flow import H5FLOW_MPI
 
-try:
-    from raw_event_builder import *
-except:
-    from .raw_event_builder import *
+from module0_flow.reco.charge.raw_event_builder import *
+import module0_flow.util.units as units
 
 
 class RawEventGenerator(H5FlowGenerator):
@@ -162,13 +160,13 @@ class RawEventGenerator(H5FlowGenerator):
             # copy datasets from source file
             self.data_manager.create_dset(self.mc_tracks_dset_name, dtype=self.mc_tracks_dtype)
             ntracks = len(self.mc_tracks)
-            track_sl = slice(ntracks//self.size*self.rank, min(ntracks, ntracks//self.size*(self.rank+1)))
+            track_sl = slice(ntracks // self.size * self.rank, min(ntracks, ntracks // self.size * (self.rank + 1)))
             self.data_manager.reserve_data(self.mc_tracks_dset_name, track_sl)
             self.data_manager.write_data(self.mc_tracks_dset_name, track_sl, self.mc_tracks[track_sl])
 
             self.data_manager.create_dset(self.mc_trajectories_dset_name, dtype=self.mc_trajectories.dtype)
             ntraj = len(self.mc_trajectories)
-            traj_sl = slice(ntraj//self.size*self.rank, min(ntraj, ntraj//self.size*(self.rank+1)))
+            traj_sl = slice(ntraj // self.size * self.rank, min(ntraj, ntraj // self.size * (self.rank + 1)))
             self.data_manager.reserve_data(self.mc_trajectories_dset_name, traj_sl)
             self.data_manager.write_data(self.mc_trajectories_dset_name, traj_sl, self.mc_trajectories[traj_sl])
 
@@ -186,7 +184,7 @@ class RawEventGenerator(H5FlowGenerator):
                 traj_evid[::-1], tracks_evid[::-1], return_indices=True)
             ev_traj_end = len(self.mc_trajectories['eventID']) - ev_traj_end
             ev_track_end = len(self.mc_tracks['eventID']) - ev_track_end
-            
+
             traj_trackid = self.mc_trajectories['trackID'][:]
             tracks_trackid = self.mc_tracks['trackID'][:]
             for i, (ev, traj_start, traj_end, track_start, track_end) in enumerate(
@@ -205,7 +203,7 @@ class RawEventGenerator(H5FlowGenerator):
         # if self.is_mc:
         #     # copy meta-data from input file
         #     resources['LArData'].data['v_drift'] = self.input_fh['configs'].attrs['vdrift'] * \
-        #         (resources['Units'].cm / resources['Units'].us)
+        #         (units.cm / units.us)
 
         # get first timestamp packet from file, without loading the full dataset
         self.last_unix_ts = np.empty((0,), dtype=self.packets_dtype)
