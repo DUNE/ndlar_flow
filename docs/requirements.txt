@@ -1,0 +1,9 @@
+h5py>=2.10
+pytest
+scipy
+scikit-image
+scikit-learn
+yaml
+recommonmark
+sphinx_rtd_theme
+.

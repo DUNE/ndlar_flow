@@ -4,7 +4,7 @@ Combined CRS+LRS modules
 T0 reconstruction module
 ------------------------
 
-.. automodule:: h5flow_modules.combined.t0_reco
+.. automodule:: module0_flow.reco.combined.t0_reco
    :undoc-members:
    :members:
    :show-inheritance:
@@ -12,7 +12,15 @@ T0 reconstruction module
 Tracklet reconstruction module
 ------------------------------
 
-.. automodule:: h5flow_modules.combined.tracklet_reco
+.. automodule:: module0_flow.reco.combined.tracklet_reco
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
+Tracklet merging module
+-----------------------
+
+.. automodule:: module0_flow.reco.combined.tracklet_merging
    :undoc-members:
    :members:
    :show-inheritance:

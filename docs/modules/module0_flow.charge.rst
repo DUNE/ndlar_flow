@@ -4,7 +4,7 @@ Charge readout system (CRS) modules
 CRS raw event generator module
 ------------------------------
 
-.. automodule:: h5flow_modules.charge.raw_event_generator
+.. automodule:: module0_flow.reco.charge.raw_event_generator
    :undoc-members:
    :members:
    :show-inheritance:
@@ -12,7 +12,7 @@ CRS raw event generator module
 Raw event builder algorithms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: h5flow_modules.charge.raw_event_builder
+.. automodule:: module0_flow.reco.charge.raw_event_builder
    :undoc-members:
    :members:
    :show-inheritance:
@@ -20,7 +20,7 @@ Raw event builder algorithms
 CRS timestamp corrector module
 ------------------------------
 
-.. automodule:: h5flow_modules.charge.timestamp_corrector
+.. automodule:: module0_flow.reco.charge.timestamp_corrector
    :undoc-members:
    :members:
    :show-inheritance:
@@ -28,7 +28,7 @@ CRS timestamp corrector module
 CRS hit builder module
 ----------------------
 
-.. automodule:: h5flow_modules.charge.hit_builder
+.. automodule:: module0_flow.reco.charge.hit_builder
    :undoc-members:
    :members:
    :show-inheritance:
@@ -36,7 +36,7 @@ CRS hit builder module
 CRS external trigger finder module
 ----------------------------------
 
-.. automodule:: h5flow_modules.charge.external_trigger_finder
+.. automodule:: module0_flow.reco.charge.external_trigger_finder
    :undoc-members:
    :members:
    :show-inheritance:
@@ -44,7 +44,7 @@ CRS external trigger finder module
 CRS event builder module
 ------------------------
 
-.. automodule:: h5flow_modules.charge.event_builder
+.. automodule:: module0_flow.reco.charge.event_builder
    :undoc-members:
    :members:
    :show-inheritance:
@@ -53,7 +53,7 @@ CRS event builder module
 CRS-to-LRS matching module
 --------------------------
 
-.. automodule:: h5flow_modules.charge.charge2light
+.. automodule:: module0_flow.reco.charge.charge2light
    :undoc-members:
    :members:
    :show-inheritance:

@@ -4,7 +4,7 @@ Light readout system (LRS) modules
 LRS raw event generator module
 ------------------------------
 
-.. automodule:: h5flow_modules.light.raw_event_generator
+.. automodule:: module0_flow.reco.light.raw_event_generator
    :undoc-members:
    :members:
    :show-inheritance:
@@ -12,7 +12,7 @@ LRS raw event generator module
 LRS waveform noise filter module
 --------------------------------
 
-.. automodule:: h5flow_modules.light.wvfm_noise_filter
+.. automodule:: module0_flow.reco.light.wvfm_noise_filter
    :undoc-members:
    :members:
    :show-inheritance:
@@ -20,7 +20,7 @@ LRS waveform noise filter module
 LRS waveform deconvolution module
 ---------------------------------
 
-.. automodule:: h5flow_modules.light.wvfm_deconv
+.. automodule:: module0_flow.reco.light.wvfm_deconv
    :undoc-members:
    :members:
    :show-inheritance:
@@ -28,7 +28,7 @@ LRS waveform deconvolution module
 LRS waveform hit finding module
 -------------------------------
 
-.. automodule:: h5flow_modules.light.hit_finder
+.. automodule:: module0_flow.reco.light.hit_finder
    :undoc-members:
    :members:
    :show-inheritance:
@@ -36,7 +36,7 @@ LRS waveform hit finding module
 LRS waveform summary module
 ---------------------------
 
-.. automodule:: h5flow_modules.light.wvfm_summary
+.. automodule:: module0_flow.reco.light.wvfm_summary
    :undoc-members:
    :members:
    :show-inheritance:

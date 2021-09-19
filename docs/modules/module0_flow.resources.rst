@@ -1,18 +1,10 @@
 Module 0 global resources
 =========================
 
-Units
------
-
-.. automodule:: h5flow_modules.resources.units
-   :undoc-members:
-   :members:
-   :show-inheritance:
-
 Run data
 --------
 
-.. automodule:: h5flow_modules.resources.run_data
+.. automodule:: module0_flow.resources.run_data
    :undoc-members:
    :members:
    :show-inheritance:
@@ -20,7 +12,15 @@ Run data
 LAr data
 --------
 
-.. automodule:: h5flow_modules.resources.lar_data
+.. automodule:: module0_flow.resources.lar_data
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
+Particle data
+-------------
+
+.. automodule:: module0_flow.resources.particle_data
    :undoc-members:
    :members:
    :show-inheritance:
