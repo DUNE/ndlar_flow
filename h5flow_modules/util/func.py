@@ -4,11 +4,11 @@ import numpy.ma as ma
 
 def mode(arr):
     '''
-        Finds the mode of elements along the last dimension
+        Finds the most common element along the last dimension
 
-        :param arr: array ``shape: (..., Ni)``
+        :param arr: array ``shape: (..., N)``
 
-        :returns: array ``shape: (..., 1)``, filled with mode of values along last axis
+        :returns: array ``shape: (..., 1)``
     '''
     orig_shape = arr.shape
     unique_val = np.expand_dims(np.unique(arr.ravel()), axis=0)
@@ -39,10 +39,11 @@ def condense_array(arr, mask):
                         [False, False],
                         [False, True]]
 
-        A mask value of ``True`` is considered to be invalid. Note that this
-        operation does not have an inverse.
+        Note that this operation does not have an inverse.
 
         :param arr: array ``shape: (..., N, M)``
+
+        :param mask: boolean array ``shape: (..., N, M)``, ``True == invalid``
 
         :returns: array ``shape: (..., N,)``
 
