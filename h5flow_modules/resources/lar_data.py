@@ -20,6 +20,9 @@ class LArData(H5FlowResource):
 
         Provides:
          - ``v_drift``: electron drift velocity in mm/us
+         - ``ionization_w``: ionization W-value
+         - ``density``: LAr density
+         - ``ionization_recombination(dedx)``: helper function for calculating recombination factor
 
         Example usage::
 
@@ -35,7 +38,7 @@ class LArData(H5FlowResource):
                     path: 'lar_info'
 
     '''
-    class_version = '0.0.1'
+    class_version = '0.1.0'
 
     default_path = 'lar_info'
     default_electron_mobility_params = np.array([551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053])
@@ -56,6 +59,8 @@ class LArData(H5FlowResource):
         if not self.data:
             # no data stored in file, generate it
             self.v_drift
+            self.density
+            self.ionization_w
             self.data['classname'] = self.classname
             self.data['class_version'] = self.class_version
             self.data['electron_mobility_params'] = self.electron_mobility_params
@@ -64,6 +69,47 @@ class LArData(H5FlowResource):
             assert_compat_version(self.class_version, self.data['class_version'])
 
         logging.info(f'v_drift: {self.v_drift}')
+        logging.info(f'density: {self.density}')
+
+    @property
+    def ionization_w(self):
+        ''' Ionization W-value in LAr in keV/e-. Fixed value of 0.0236 '''
+        if 'ionization_w' in self.data:
+            return self.data['ionization_w']
+
+        self.data['ionization_w'] = 23.6 * units.eV / units.e
+        return self.ionization_w
+
+    def ionization_recombination(self, dedx):
+        '''
+            Calculate recombination factor using Birks Model with parameters:
+
+             - ``A = 0.8``
+             - ``K = 0.0486`` (units = g/(MeV cm^2) kV/cm)
+
+        '''
+        A = 0.8
+        K = (0.0486 * units.kV * units.g / units.MeV / (units.cm)**3)
+        eps = resources['RunData'].e_field * self.density
+
+        return A / (1 + K / eps * dedx)
+
+    @property
+    def A(self):
+        return 18
+
+    @property
+    def Z(self):
+        return 39.948
+
+    @property
+    def density(self):
+        ''' Liquid argon density in g/mm^3. Fixed value of 0.0013962 '''
+        if 'density' in self.data:
+            return self.data['density']
+
+        self.data['density'] = 0.0013962
+        return self.density
 
     @property
     def v_drift(self):
@@ -77,7 +123,7 @@ class LArData(H5FlowResource):
         # calculate drift velocity
         self.data['v_drift'] = self.electron_mobility(e_field) * e_field
 
-        return self.data['v_drift']
+        return self.v_drift
 
     def electron_mobility(self, e, t=87.17):
         '''
