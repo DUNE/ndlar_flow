@@ -506,7 +506,7 @@ class StoppingMuonSelection(H5FlowStage):
         if self.is_mc:
             event_true_sel = np.zeros(len(tracks), dtype=self.event_sel_dtype)
             event_true_sel['sel'] = event_is_true_stopping
-            event_true_sel['stop_pt'] = true_stop_pt.reshape(event_true_sel['seed_pt'].shape)
+            event_true_sel['stop_pt'] = true_stop_pt.reshape(event_true_sel['stop_pt'].shape)
 
         # reserve data space
         event_sel_slice = self.data_manager.reserve_data(
