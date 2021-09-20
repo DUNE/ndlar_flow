@@ -475,6 +475,10 @@ class StoppingMuonSelection(H5FlowStage):
         proton_likelihood[dn == 0] = -1
         mip_likelihood[dn == 0] = -1
 
+        muon_likelihood = ma.masked_values(muon_likelihood, -1)
+        proton_likelihood = ma.masked_values(proton_likelihood, -1)
+        mip_likelihood = ma.masked_values(mip_likelihood, -1)
+
         # select stopping muons
         event_is_stopping_muon = (event_is_stopping
                                   & (np.sum(np.log(muon_likelihood) - np.log(proton_likelihood), axis=-1) > 0)
