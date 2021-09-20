@@ -459,16 +459,21 @@ class StoppingMuonSelection(H5FlowStage):
                                                            mask=event_is_stopping,
                                                            dx=self.profile_dx,
                                                            max_range=self.profile_max_range)
+
         profile_dqdx = dq / self.profile_dx
+        profile_dqdx[dn <= 0] = -1
+        profile_dqdx = ma.masked_where(dn <= 0, profile_dqdx)
+
         profile_rr = ((np.expand_dims(np.argmax(profile_dqdx, axis=-1), axis=-1)
                        - np.indices(profile_dqdx.shape)[-1] + 0.5) * self.profile_dx)
+        profile_rr = ma.masked_where(dn <= 0, profile_rr)
 
-        muon_likelihood = self.profile_likelihood(profile_rr, profile_dqdx,
+        muon_likelihood = self.profile_likelihood(profile_rr.data, profile_dqdx.data,
                                                   self.muon_range_table)
-        proton_likelihood = self.profile_likelihood(profile_rr, profile_dqdx,
+        proton_likelihood = self.profile_likelihood(profile_rr.data, profile_dqdx.data,
                                                     self.proton_range_table)
-        mip_likelihood = self.profile_likelihood(np.clip(profile_rr, 1500, 1500),
-                                                 profile_dqdx,
+        mip_likelihood = self.profile_likelihood(np.clip(profile_rr.data, 1500, 1500),
+                                                 profile_dqdx.data,
                                                  self.muon_range_table)
         # mask invalid values
         muon_likelihood[dn == 0] = -1
