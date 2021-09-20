@@ -164,7 +164,7 @@ def stopping_muon_analysis_file(combined_file, geometry_file, tmp_h5_file):
 
     check_dsets(tmp_h5_file, (
         'analysis/stopping_muons/event_sel_reco/data',
-        'analysis/stopping_muons/track_sel_reco/data'
+        'analysis/stopping_muons/event_profile/data'
     ))
 
     return tmp_h5_file

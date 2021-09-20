@@ -45,7 +45,7 @@ class ParticleData(H5FlowResource):
 
     default_path = 'particle_info'
     default_muon_range_table_path = 'PDG_muon_range_table_Ar.txt'
-    default_proton_range_table_path = 'PDG_proton_range_table_Ar.txt'
+    default_proton_range_table_path = 'NIST_proton_range_table_Ar.txt'
 
     _K = 0.307075 * units.MeV / (units.cm)**2
 
@@ -76,16 +76,13 @@ class ParticleData(H5FlowResource):
         self.proton_range_table_path = params.get('proton_range_table_path',
                                                   self.default_proton_range_table_path)
 
-    def init(self):
-        # create group (if not present)
-        self.data_manager.set_attrs(self.path)
-        # load data (if present)
-        self.data = dict(self.data_manager.get_attrs(self.path))
-
-        if not self.data:
+    def init(self, source_name):
+        if not self.data_manager.attr_exists(self.path, 'classname'):
             # no data stored in file, generate it
             muon_table = self.load_pdg_range_table(self.muon_range_table_path)
             proton_table = self.load_nist_range_table(self.proton_range_table_path)
+
+            self.data = dict()
 
             # appropriate units from tables
             self.data['muon_range'] = muon_table['range'] * units.cm
@@ -103,7 +100,9 @@ class ParticleData(H5FlowResource):
             self.data['class_version'] = self.class_version
             self.data_manager.set_attrs(self.path, **self.data)
         else:
+            # data exists, check version compatibility
             assert_compat_version(self.class_version, self.data['class_version'])
+            self.data = dict(self.data_manager.get_attrs(self.path))
 
     @property
     def muon_range_table(self):
@@ -131,9 +130,9 @@ class ParticleData(H5FlowResource):
         p = np.sqrt(e**2 - mass**2)
         beta = p / e
 
-        Z = self.resources['LArData'].Z
-        A = self.resources['LArData'].A
-        ksi = self._K / 2 * (Z / A) * self.resources['LArData'].density / beta**2
+        Z = resources['LArData'].Z
+        A = resources['LArData'].A
+        ksi = self._K / 2 * (Z / A) * resources['LArData'].density / beta**2
 
         return (4 * ksi / 3.59)
 
@@ -144,9 +143,9 @@ class ParticleData(H5FlowResource):
         beta = p / e
         gamma = e / mass
 
-        Z = self.resources['LArData'].Z
-        A = self.resources['LArData'].A
-        ksi = self._K / 2 * (Z / A) * self.resources['LArData'].density / beta**2
+        Z = resources['LArData'].Z
+        A = resources['LArData'].A
+        ksi = self._K / 2 * (Z / A) * resources['LArData'].density / beta**2
         I = 188.0 * units.eV
 
         t0 = np.log(2 * self.e_mass * (beta * gamma)**2 / I)
@@ -157,7 +156,7 @@ class ParticleData(H5FlowResource):
 
     @staticmethod
     def _delta(betagamma):
-        ''' values from PDG LAr data '''
+        #: values from PDG LAr data
         a = 0.1956
         x0 = 0.2
         x1 = 3.0
@@ -179,7 +178,7 @@ class ParticleData(H5FlowResource):
             :returns: ``dict`` with keys ``range``, ``t``, ``dedx``
 
         '''
-        with open(_path, 'r') as fi:
+        with open(path, 'r') as fi:
             _data = fi.readlines()[15:]
             _r = np.empty(len(_data))
             _ke = np.empty(len(_data))
@@ -208,7 +207,7 @@ class ParticleData(H5FlowResource):
             :returns: ``dict`` with keys ``range``, ``t``, ``dedx``
 
         '''
-        with open(_path, 'r') as fi:
+        with open(path, 'r') as fi:
             _data = fi.readlines()[10:]
             _r = np.empty(len(_data))
             _ke = np.empty(len(_data))
