@@ -131,7 +131,7 @@ class StoppingMuonSelection(H5FlowStage):
                                          proton_range=self.proton_range_table['range'],
                                          muon_range=self.muon_range_table['range'])
 
-    def create_dqdx_profile_templates():
+    def create_dqdx_profile_templates(self):
         # create range tables used for dQ/dx profile discrimination
         self.muon_range_table = deepcopy(resources['ParticleData'].muon_range_table)
         self.proton_range_table = deepcopy(resources['ParticleData'].proton_range_table)
@@ -170,7 +170,7 @@ class StoppingMuonSelection(H5FlowStage):
         self.apply_position_resolution(self.muon_range_table, noise=noise)
         self.apply_position_resolution(self.proton_range_table, noise=noise)
 
-    def apply_position_resolution(range_table, noise=0):
+    def apply_position_resolution(self, range_table, noise=0):
         ''' Update the range table ``dqdx`` and ``dqdx_width`` by smearing the range values by a gaussian ``profile_dx`` '''
         # interpolate dQ/dx MPV and width to apply a gaussian smear
         interpolation_pts, dx = np.linspace(-500, 2000, 10 * int(2500 / self.profile_dx),
