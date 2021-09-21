@@ -36,6 +36,7 @@ class StoppingMuonSelection(H5FlowStage):
     default_profile_dx = 20  # mm
     default_profile_max_range = 1600  # mm
     default_larpix_gain = 250  # e/mV
+    default_larpix_noise = 1000 # e
     default_hits_dset_name = 'charge/hits'
     default_merged_dset_name = 'combined/tracklets/merged'
     default_t0_dset_name = 'combined/t0'
@@ -73,6 +74,7 @@ class StoppingMuonSelection(H5FlowStage):
         self.cathode_fid_cut = params.get('cathode_fid_cut', self.default_cathode_fid_cut)
         self.length_cut = params.get('length_cut', self.default_length_cut)
         self.larpix_gain = params.get('larpix_gain', self.default_larpix_gain)
+        self.larpix_noise = params.get('larpix_noise', self.default_larpix_noise)
         self.profile_dx = params.get('profile_dx', self.default_profile_dx)
         self.profile_max_range = params.get('profile_max_range',
                                             self.default_profile_max_range)
@@ -123,15 +125,15 @@ class StoppingMuonSelection(H5FlowStage):
 
         # convert mean dE/dx entries to MPV dE/dx
         self.muon_range_table['dedx_mpv'] = resources['ParticleData'].landau_peak(
-            self.muon_range_table['t'], resources['ParticleData'].mu_mass)
+            self.muon_range_table['t'], resources['ParticleData'].mu_mass, self.profile_dx) / self.profile_dx
         self.proton_range_table['dedx_mpv'] = resources['ParticleData'].landau_peak(
-            self.proton_range_table['t'], resources['ParticleData'].p_mass)
-
+            self.proton_range_table['t'], resources['ParticleData'].p_mass, self.profile_dx) / self.profile_dx
+        
         # calculate recombination correction
         muon_r = resources['LArData'].ionization_recombination(
-            self.muon_range_table['dedx_mpv'])
+            self.muon_range_table['dedx'])
         proton_r = resources['LArData'].ionization_recombination(
-            self.proton_range_table['dedx_mpv'])
+            self.proton_range_table['dedx'])
         w = resources['LArData'].ionization_w
 
         self.muon_range_table['dqdx'] = (muon_r * self.muon_range_table['dedx_mpv']
@@ -140,10 +142,19 @@ class StoppingMuonSelection(H5FlowStage):
                                            / w)
         self.muon_range_table['dqdx_width'] = (
             muon_r / w * resources['ParticleData'].landau_width(self.muon_range_table['t'],
-                                                                resources['ParticleData'].mu_mass))
+                                                                resources['ParticleData'].mu_mass, self.profile_dx) / self.profile_dx)
         self.proton_range_table['dqdx_width'] = (
             proton_r / w * resources['ParticleData'].landau_width(self.proton_range_table['t'],
-                                                                  resources['ParticleData'].p_mass))
+                                                                  resources['ParticleData'].p_mass, self.profile_dx) / self.profile_dx)
+        noise = self.larpix_noise * np.sqrt(self.profile_dx / resources['Geometry'].pixel_pitch) / resources['Geometry'].pixel_pitch
+        self.muon_range_table['dqdx_width'] = np.sqrt(noise**2 + self.muon_range_table['dqdx_width']**2)
+        self.proton_range_table['dqdx_width'] = np.sqrt(noise**2 + self.proton_range_table['dqdx_width']**2)
+        
+        self.data_manager.set_attrs(self.path, proton_dqdx=self.proton_range_table['dqdx'], muon_dqdx=self.muon_range_table['dqdx'],
+                                    proton_dqdx_width=self.proton_range_table['dqdx_width'], muon_dqdx_width=self.muon_range_table['dqdx_width'],
+                                    proton_dedx=self.proton_range_table['dedx_mpv'], muon_dedx=self.muon_range_table['dedx_mpv'],
+                                    proton_range=self.proton_range_table['range'], muon_range=self.muon_range_table['range'])
+                                    
 
     def create_regions(self):
         x = resources['Geometry'].pixel_xy.compress((0,))
@@ -228,7 +239,8 @@ class StoppingMuonSelection(H5FlowStage):
         interp_dqdx = interp(np.clip(profile_rr, min_range, max_range))
         interp_dqdx_width = interp_width(np.clip(profile_rr, min_range, max_range))
 
-        return stats.moyal.pdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
+#         return stats.moyal.pdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
+        return stats.norm.pdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
 
     @staticmethod
     def profiled_dqdx(tracks, seed_pt, hit_xyz, hit_q, dx, max_range, mask=None):
@@ -361,11 +373,11 @@ class StoppingMuonSelection(H5FlowStage):
 
         end_pt = np.take_along_axis(pos, np.argmax(dq, axis=-1)[..., np.newaxis, np.newaxis], axis=-2)
 
-        r_dq = np.empty((orig_len,) + dq.shape[1:])
-        r_dn = np.empty((orig_len,) + dn.shape[1:])
-        r_start_pt = np.empty((orig_len,) + start_pt.shape[1:])
-        r_end_pt = np.empty((orig_len,) + end_pt.shape[1:])
-        r_pos = np.empty((orig_len,) + pos.shape[1:])
+        r_dq = np.zeros((orig_len,) + dq.shape[1:])
+        r_dn = np.zeros((orig_len,) + dn.shape[1:])
+        r_start_pt = np.zeros((orig_len,) + start_pt.shape[1:])
+        r_end_pt = np.zeros((orig_len,) + end_pt.shape[1:])
+        r_pos = np.zeros((orig_len,) + pos.shape[1:])
 
         np.place(r_dq, np.broadcast_to(mask[..., np.newaxis], r_dq.shape), dq)
         np.place(r_dn, np.broadcast_to(mask[..., np.newaxis], r_dn.shape), dn)
@@ -467,7 +479,7 @@ class StoppingMuonSelection(H5FlowStage):
         profile_rr = ((np.expand_dims(np.argmax(profile_dqdx, axis=-1), axis=-1)
                        - np.indices(profile_dqdx.shape)[-1] + 0.5) * self.profile_dx)
         profile_rr = ma.masked_where(dn <= 0, profile_rr)
-
+        
         muon_likelihood = self.profile_likelihood(profile_rr.data, profile_dqdx.data,
                                                   self.muon_range_table)
         proton_likelihood = self.profile_likelihood(profile_rr.data, profile_dqdx.data,
@@ -476,9 +488,9 @@ class StoppingMuonSelection(H5FlowStage):
                                                  profile_dqdx.data,
                                                  self.muon_range_table)
         # mask invalid values
-        muon_likelihood[dn == 0] = -1
-        proton_likelihood[dn == 0] = -1
-        mip_likelihood[dn == 0] = -1
+        muon_likelihood[(dn == 0) | (profile_rr <= 0)] = -1
+        proton_likelihood[(dn == 0) | (profile_rr <= 0)] = -1
+        mip_likelihood[(dn == 0) | (profile_rr <= 0)] = -1
 
         muon_likelihood = ma.masked_values(muon_likelihood, -1)
         proton_likelihood = ma.masked_values(proton_likelihood, -1)

@@ -47,7 +47,7 @@ class ParticleData(H5FlowResource):
     default_muon_range_table_path = 'PDG_muon_range_table_Ar.txt'
     default_proton_range_table_path = 'NIST_proton_range_table_Ar.txt'
 
-    _K = 0.307075 * units.MeV / (units.cm)**2
+    _K = 0.307075 * units.MeV * (units.cm)**2
 
     #: electron mass
     e_mass = 510.9989461 * units.keV
@@ -85,15 +85,17 @@ class ParticleData(H5FlowResource):
             self.data = dict()
 
             # appropriate units from tables
-            self.data['muon_range'] = muon_table['range'] * units.cm
+            self.data['muon_range'] = (muon_table['range'] * units.g / (units.cm)**2
+                                       / resources['LArData'].density)
             self.data['muon_t'] = muon_table['t'] * units.MeV
-            self.data['muon_dedx'] = (muon_table['dedx'] * units.g
-                                      * units.MeV / units.cm
+            self.data['muon_dedx'] = (muon_table['dedx'] / units.g
+                                      * units.MeV * units.cm**2
                                       * resources['LArData'].density)
-            self.data['proton_range'] = proton_table['range'] * units.cm
+            self.data['proton_range'] = (proton_table['range'] * units.g / (units.cm)**2
+                                         / resources['LArData'].density)
             self.data['proton_t'] = proton_table['t'] * units.MeV
-            self.data['proton_dedx'] = (proton_table['dedx'] * units.g
-                                        * units.MeV / units.cm
+            self.data['proton_dedx'] = (proton_table['dedx'] / units.g
+                                        * units.MeV * units.cm**2
                                         * resources['LArData'].density)
 
             self.data['classname'] = self.classname
@@ -124,35 +126,39 @@ class ParticleData(H5FlowResource):
         return dict(range=self.data['proton_range'], t=self.data['proton_t'],
                     dedx=self.data['proton_dedx'])
 
-    def landau_width(self, t, mass):
+    def landau_width(self, t, mass, dx):
         ''' Moyal scale factor for Landau dE/dx width in LAr '''
         e = t + mass
         p = np.sqrt(e**2 - mass**2)
         beta = p / e
 
-        Z = resources['LArData'].Z
-        A = resources['LArData'].A
-        ksi = self._K / 2 * (Z / A) * resources['LArData'].density / beta**2
+        ksi = self._ksi(dx, beta)
 
-        return (4 * ksi / 3.59)
+        rv = (4 * ksi / 3.59)
+        return rv
 
-    def landau_peak(self, t, mass):
+    def landau_peak(self, t, mass, dx):
         ''' Moyal peak location for Landau dE/dx distribution in LAr '''
         e = t + mass
         p = np.sqrt(e**2 - mass**2)
         beta = p / e
         gamma = e / mass
 
-        Z = resources['LArData'].Z
-        A = resources['LArData'].A
-        ksi = self._K / 2 * (Z / A) * resources['LArData'].density / beta**2
+        ksi = self._ksi(dx, beta)
         I = 188.0 * units.eV
 
-        t0 = np.log(2 * self.e_mass * (beta * gamma)**2 / I)
+        t0 = np.log(2 * self.e_mass * beta**2 * gamma**2 / I)
         t1 = np.log(ksi / I)
-        t2 = 0.200 - beta**2 + self._delta(beta * gamma)
+        t2 = 0.200 - beta**2 - self._delta(beta * gamma)
 
-        return ksi * (t0 + t1 + t2)
+        rv = ksi * (t0 + t1 + t2)
+        return rv
+    
+    def _ksi(self, x, beta):
+        Z = resources['LArData'].Z
+        A = resources['LArData'].A
+        ksi = (self._K / 2) * (Z / A) * (resources['LArData'].density * x) / (beta**2)
+        return ksi
 
     @staticmethod
     def _delta(betagamma):
@@ -162,11 +168,12 @@ class ParticleData(H5FlowResource):
         x1 = 3.0
         cbar = 5.2146
         k = 3.00
+        x = np.log10(betagamma)
 
-        return (betagamma < x0) * (
-            (betagamma < x1) * (2 * np.log(10) * betagamma - cbar + a * (x1 - betagamma)**k)
-            + (betagamma > x1) * (2 * np.log(10) * betagamma - cbar))
-
+        return (x < x0) * (
+            (x < x1) * (2 * np.log(10) * x - cbar + a * (x1 - x)**k)
+            + (x > x1) * (2 * np.log(10) * x - cbar))
+        
     @staticmethod
     def load_nist_range_table(path):
         '''

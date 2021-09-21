@@ -92,15 +92,16 @@ class LArData(H5FlowResource):
         K = (0.0486 * units.kV * units.g / units.MeV / (units.cm)**3)
         eps = resources['RunData'].e_field * self.density
 
-        return A / (1 + K / eps * dedx)
+        rv = A / (1 + (K / eps) * dedx)
+        return rv
 
     @property
     def A(self):
-        return 18
+        return 39.948
 
     @property
     def Z(self):
-        return 39.948
+        return 18
 
     @property
     def density(self):
@@ -108,7 +109,7 @@ class LArData(H5FlowResource):
         if 'density' in self.data:
             return self.data['density']
 
-        self.data['density'] = 0.0013962
+        self.data['density'] = 1.3962 * units.g / (units.cm)**3
         return self.density
 
     @property
