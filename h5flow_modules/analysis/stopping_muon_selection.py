@@ -3,6 +3,7 @@ import numpy.ma as ma
 import logging
 from scipy.interpolate import interp1d
 import scipy.stats as stats
+import scipy.ndimage as ndimage
 from copy import deepcopy
 
 from h5flow.core import H5FlowStage, resources
@@ -121,15 +122,15 @@ class StoppingMuonSelection(H5FlowStage):
         self.data_manager.set_attrs(self.path, regions=np.array(self.regions))
 
         self.create_dqdx_profile_templates()
-        self.self.data_manager.set_attrs(self.path,
-                                         proton_dqdx=self.proton_range_table['dqdx'],
-                                         muon_dqdx=self.muon_range_table['dqdx'],
-                                         proton_dqdx_width=self.proton_range_table['dqdx_width'],
-                                         muon_dqdx_width=self.muon_range_table['dqdx_width'],
-                                         proton_dedx=self.proton_range_table['dedx_mpv'],
-                                         muon_dedx=self.muon_range_table['dedx_mpv'],
-                                         proton_range=self.proton_range_table['range'],
-                                         muon_range=self.muon_range_table['range'])
+        self.data_manager.set_attrs(self.path,
+                                    proton_dqdx=self.proton_range_table['dqdx'],
+                                    muon_dqdx=self.muon_range_table['dqdx'],
+                                    proton_dqdx_width=self.proton_range_table['dqdx_width'],
+                                    muon_dqdx_width=self.muon_range_table['dqdx_width'],
+                                    proton_dedx=self.proton_range_table['dedx_mpv'],
+                                    muon_dedx=self.muon_range_table['dedx_mpv'],
+                                    proton_range=self.proton_range_table['range'],
+                                    muon_range=self.muon_range_table['range'])
 
     def create_dqdx_profile_templates(self):
         # create range tables used for dQ/dx profile discrimination
@@ -146,16 +147,13 @@ class StoppingMuonSelection(H5FlowStage):
 
         # calculate recombination correction
         muon_r = resources['LArData'].ionization_recombination(
-            self.muon_range_table['dedx'])
+            self.muon_range_table['dedx_mpv'])
         proton_r = resources['LArData'].ionization_recombination(
-            self.proton_range_table['dedx'])
+            self.proton_range_table['dedx_mpv'])
         w = resources['LArData'].ionization_w
 
-        # calculate nominal dQ/dx MPV and width
-        self.muon_range_table['dqdx'] = (muon_r * self.muon_range_table['dedx_mpv']
-                                         / w)
-        self.proton_range_table['dqdx'] = (proton_r * self.proton_range_table['dedx_mpv']
-                                           / w)
+        self.muon_range_table['dqdx'] = (muon_r * self.muon_range_table['dedx_mpv'] / w)
+        self.proton_range_table['dqdx'] = (proton_r * self.proton_range_table['dedx_mpv'] / w)
         self.muon_range_table['dqdx_width'] = (
             muon_r / w * resources['ParticleData'].landau_width(self.muon_range_table['t'],
                                                                 resources['ParticleData'].mu_mass,
@@ -180,31 +178,33 @@ class StoppingMuonSelection(H5FlowStage):
         rr = np.r_[-5000, 0, range_table['range']]
         dqdx = np.r_[0, 0, range_table['dqdx']]
         dqdx_width = np.r_[0, 0, range_table['dqdx_width']]
-        interp_rr = interp.interp1d(rr, dqdx)
-        dqdx = interp_rr_proton(interpolation_pts)
+        interp_rr = interp1d(rr, dqdx)
+        dqdx = interp_rr(interpolation_pts)
         # apply a position resolution smearing
-        dqdx = ndimage.gaussian_filter(dqdx, self.profile_dx / dx, mode='nearest')
+        dqdx_smear = ndimage.uniform_filter(dqdx, int(self.profile_dx / dx), mode='nearest')
 
         # interpolate width
-        interp_rr_width = interp.interp1d(rr, dqdx_width)
-        dqdx_width = interp_rr_proton_width(interpolation_pts)
+        interp_rr_width = interp1d(rr, dqdx_width)
+        dqdx_width = interp_rr_width(interpolation_pts)
         # combine position resolution, intrinsic width, and noise contributions
         dqdx_width = np.sqrt(
-            ndimage.gaussian_filter(np.abs(ndimage.convolve(dqdx, [-1, 1], mode='nearest')), self.profile_dx / dx, mode='nearest')**2
+            ndimage.uniform_filter(np.abs(ndimage.convolve(dqdx * dx, [-1, 1], mode='nearest')), int(self.profile_dx / dx), mode='nearest')**2
             + dqdx_width**2
             + noise**2)
 
         # re-align to max
-        high_val_align = np.argmax(dqdx + dqdx_width)
-        high_val_interp = interp.interp1d(interpolation_pts - dx * high_val_align,
-                                          dqdx + dqdx_width)
-        low_val_align = np.argmax(dqdx - dqdx_width)
-        low_val_interp = interp.interp1d(interpolation_pts - dx * low_val_align,
-                                         dqdx - dqdx_width)
+        high_val_align = interpolation_pts[np.argmax(dqdx_smear + dqdx_width)]
+        high_val_interp = interp1d(interpolation_pts - high_val_align,
+                                          dqdx_smear + dqdx_width)
+        low_val_align = interpolation_pts[np.argmax(dqdx_smear - dqdx_width)]
+        low_val_interp = interp1d(interpolation_pts - low_val_align,
+                                         dqdx_smear - dqdx_width)
 
         # set values
-        range_table['dqdx'] = 0.5 * (high_val_interp(rr[2:]) + low_val_interp(rr[2:]))
-        range_table['dqdx_width'] = 0.5 * (high_val_interp(rr[2:]) - low_val_interp(rr[2:]))
+        _min, _max = (max(np.min(interpolation_pts - dx * low_val_align), np.min(interpolation_pts - dx * high_val_align)),
+                      min(np.max(interpolation_pts - dx * low_val_align), np.max(interpolation_pts - dx * high_val_align)))
+        range_table['dqdx'] = 0.5 * (high_val_interp(np.clip(rr[2:], _min, _max)) + low_val_interp(np.clip(rr[2:], _min, _max)))
+        range_table['dqdx_width'] = 0.5 * (high_val_interp(np.clip(rr[2:], _min, _max)) - low_val_interp(np.clip(rr[2:], _min, _max)))
 
     def create_regions(self):
         x = resources['Geometry'].pixel_xy.compress((0,))
@@ -289,8 +289,9 @@ class StoppingMuonSelection(H5FlowStage):
         interp_dqdx = interp(np.clip(profile_rr, min_range, max_range))
         interp_dqdx_width = interp_width(np.clip(profile_rr, min_range, max_range))
 
-        return stats.moyal.logpdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
-        return stats.norm.logpdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
+        return -np.abs(profile_dqdx - interp_dqdx) / interp_dqdx_width * np.log(interp_dqdx_width / 2)
+#         return stats.moyal.logpdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
+#         return stats.norm.logpdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
 
     @staticmethod
     def profiled_dqdx(tracks, seed_pt, hit_xyz, hit_q, dx, max_range, mask=None):
@@ -521,13 +522,14 @@ class StoppingMuonSelection(H5FlowStage):
                                                            mask=event_is_stopping,
                                                            dx=self.profile_dx,
                                                            max_range=self.profile_max_range)
+        pos_in_fid = self.in_fid(pos.reshape(-1,3)).reshape(dn.shape)
 
         profile_dqdx = dq / self.profile_dx
         profile_dqdx[dn <= 0] = -1
-        profile_dqdx = ma.masked_where((dn <= 0) | ~(self.in_fid(pos)), profile_dqdx)
+        profile_dqdx = ma.masked_where((dn <= 0) | ~(pos_in_fid), profile_dqdx)
 
         profile_rr = ((np.expand_dims(np.argmax(profile_dqdx, axis=-1), axis=-1)
-                       - np.indices(profile_dqdx.shape)[-1] + 0.5) * self.profile_dx)
+                       - np.indices(profile_dqdx.shape)[-1]) * self.profile_dx)
         profile_rr = ma.masked_where(dn <= 0, profile_rr)
 
         muon_likelihood = self.profile_likelihood(profile_rr.data, profile_dqdx.data,

@@ -30,3 +30,4 @@ stopping_muon_sel:
       'charge/packets', 'mc_truth/tracks', 'mc_truth/trajectories']
     fid_cut: 35.2 # mm
     cathode_fid_cut: 20 # mm
+    profile_dx: 22 # mm
