@@ -60,6 +60,7 @@ class StoppingMuonSelection(H5FlowStage):
             ('seed_pt', 'f8', (3,)),
             ('profile_rr', 'f8', (profile_bins,)),
             ('profile_dqdx', 'f8', (profile_bins,)),
+            ('profile_n', 'i8', (profile_bins,)),
             ('profile_pos', 'f8', (profile_bins, 3)),
             ('muon_likelihood', 'f8', (profile_bins,)),
             ('proton_likelihood', 'f8', (profile_bins,)),
@@ -325,7 +326,7 @@ class StoppingMuonSelection(H5FlowStage):
 
             :param hit_q: masked array, shape: (..., n)
 
-            :returns: masked array, shape: (..., m)
+            :returns: ``tuple`` of masked arrays, shape: (..., m). ``dq``, ``dn``, ``start_pt``, ``end_pt``, ``pos``
         '''
         orig_len = len(tracks)
         if mask is not None:
@@ -564,6 +565,7 @@ class StoppingMuonSelection(H5FlowStage):
         event_profile['seed_pt'] = start_pt.reshape(event_profile['seed_pt'].shape)
         event_profile['profile_rr'] = profile_rr
         event_profile['profile_dqdx'] = profile_dqdx
+        event_profile['profile_n'] = dn
         event_profile['profile_pos'] = pos
         event_profile['muon_likelihood'] = muon_likelihood
         event_profile['proton_likelihood'] = proton_likelihood
