@@ -524,12 +524,12 @@ class StoppingMuonSelection(H5FlowStage):
 
         profile_dqdx = dq / self.profile_dx
         profile_dqdx[dn <= 0] = -1
-        profile_dqdx = ma.masked_where(dn <= 0, profile_dqdx)
+        profile_dqdx = ma.masked_where((dn <= 0) | ~(self.in_fid(pos)), profile_dqdx)
 
         profile_rr = ((np.expand_dims(np.argmax(profile_dqdx, axis=-1), axis=-1)
                        - np.indices(profile_dqdx.shape)[-1] + 0.5) * self.profile_dx)
         profile_rr = ma.masked_where(dn <= 0, profile_rr)
-        
+
         muon_likelihood = self.profile_likelihood(profile_rr.data, profile_dqdx.data,
                                                   self.muon_range_table)
         proton_likelihood = self.profile_likelihood(profile_rr.data, profile_dqdx.data,
