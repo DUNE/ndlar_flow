@@ -11,16 +11,19 @@ def mode(arr):
         :returns: array ``shape: (..., 1)``
     '''
     orig_shape = arr.shape
-    unique_val = np.expand_dims(np.unique(arr.ravel()), axis=0)
+    unique_val = np.unique(arr.ravel())
     arr = arr.reshape(-1, orig_shape[-1])
 
     count = np.zeros((len(arr), len(unique_val)))
     for j in range(len(unique_val)):
-        count[..., j] = np.count_nonzero(arr == unique_val[..., j:j + 1], axis=-1)
+        count[..., j] = np.sum(arr == unique_val[j], axis=-1)
 
-    mode = np.take_along_axis(unique_val, np.expand_dims(np.argmax(count, axis=-1), axis=-1), axis=-1)
+    mode = np.take_along_axis(unique_val, np.argmax(count, axis=-1), axis=-1)
 
-    return mode.reshape(orig_shape[:-1] + (1,))
+    new_shape = orig_shape[:-1] + (1,)
+    if isinstance(arr, ma.MaskedArray):
+        return ma.array(mode.reshape(new_shape), mask=np.all(arr.mask, axis=-1).reshape(new_shape))
+    return mode.reshape(new_shape)
 
 
 def condense_array(arr, mask):
@@ -45,7 +48,7 @@ def condense_array(arr, mask):
 
         :param mask: boolean array ``shape: (..., N, M)``, ``True == invalid``
 
-        :returns: array ``shape: (..., N,)``
+        :returns: array ``shape: (..., N, m)``
 
     '''
     axis = -1
