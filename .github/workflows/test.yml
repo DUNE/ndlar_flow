@@ -39,6 +39,9 @@ jobs:
         use-only-tar-bz2: true
     - name: install h5flow (mpi)
       if: matrix.mpi_enabled == 1
+      env:
+        CC: mpicc
+        HDF5_MPI: "ON"
       run: |
         cd ../h5flow
         conda env update --file environment.yml
