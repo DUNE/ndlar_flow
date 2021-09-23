@@ -589,9 +589,9 @@ class StoppingMuonSelection(H5FlowStage):
             event_true_sel = np.zeros(len(tracks), dtype=self.event_sel_dtype)
             event_true_sel['sel'] = event_is_true_stopping
             event_true_sel['stop'] = ma.sum(is_true_stopping, axis=-1) >= 1
-            event_true_sel['muon_loglikelihood_sum'] = is_muon
-            event_true_sel['proton_loglikelihood_sum'] = is_proton
-            event_true_sel['mip_likelihood'] = is_muon & ~event_is_true_stopping
+            event_true_sel['muon_loglikelihood_sum'] = ma.sum(is_muon & is_true_stopping, axis=-1) >= 1
+            event_true_sel['proton_loglikelihood_sum'] = ma.sum(is_proton & is_true_stopping, axis=-1) >= 1
+            event_true_sel['mip_likelihood'] = ma.sum(is_muon & ~is_true_stopping, axis=-1) >= 1
             event_true_sel['stop_pt'] = true_stop_pt.reshape(event_true_sel['stop_pt'].shape)
 
         # reserve data space
