@@ -352,7 +352,7 @@ class StoppingMuonSelection(H5FlowStage):
         s = 0
         bins = np.linspace(0, max_range, dq.shape[-1])
         for _ in range(tracks.shape[-1]):
-            logging.debug(_, 'remaining trajectories:', np.sum(track_mask))
+            
             # find seed trajectory
             traj = np.take_along_axis(tracks, seed_track, axis=-1)['trajectory'].copy()
 
@@ -367,7 +367,7 @@ class StoppingMuonSelection(H5FlowStage):
             # get trajectory displacement vectors
             traj_start = traj[..., :-1, :]
             traj_end = traj[..., 1:, :]
-            traj_dx = traj[..., 1:, :] - traj_start
+            traj_dx = traj_end - traj_start
             traj_length = np.linalg.norm(traj_dx, axis=-1, keepdims=True)
             traj_length = np.clip(traj_length, 1e-15, None)
             traj_n = traj_dx / traj_length
@@ -384,7 +384,9 @@ class StoppingMuonSelection(H5FlowStage):
                 ma.array(hit_td, mask=~(hit_on_traj | hit_near_traj_pt)),
                 axis=-1), axis=-1)
             hit_min_td = np.take_along_axis(hit_td, itraj_min_td, axis=-1)
-            traj_hit_mask = (hit_min_td < dx)[..., 0] & hit_mask
+            traj_hit_mask = ((hit_min_td < dx)[..., 0] & hit_mask 
+                             & (np.any(hit_on_traj, axis=-1) | np.any(hit_near_traj_pt, axis=-1)))
+            hit_mask = hit_mask & ~traj_hit_mask # remove from next iteration
             # (N, nhit)
 
             # project hits onto track
@@ -522,11 +524,12 @@ class StoppingMuonSelection(H5FlowStage):
                                                            mask=event_is_stopping,
                                                            dx=self.profile_dx,
                                                            max_range=self.profile_max_range)
-        pos_in_fid = self.in_fid(pos.reshape(-1,3)).reshape(dn.shape)
+#         pos_in_fid = self.in_fid(pos.reshape(-1,3)).reshape(dn.shape)
 
         profile_dqdx = dq / self.profile_dx
         profile_dqdx[dn <= 0] = -1
-        profile_dqdx = ma.masked_where((dn <= 0) | ~(pos_in_fid), profile_dqdx)
+        profile_dqdx = ma.masked_where((dn <= 0),# | ~(pos_in_fid), 
+                                       profile_dqdx)
 
         profile_rr = ((np.expand_dims(np.argmax(profile_dqdx, axis=-1), axis=-1)
                        - np.indices(profile_dqdx.shape)[-1]) * self.profile_dx)
