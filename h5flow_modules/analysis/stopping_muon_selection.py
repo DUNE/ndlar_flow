@@ -4,6 +4,7 @@ import logging
 from scipy.interpolate import interp1d
 import scipy.stats as stats
 import scipy.ndimage as ndimage
+import scipy.optimize as optimize
 from copy import deepcopy
 
 from h5flow.core import H5FlowStage, resources
@@ -38,7 +39,8 @@ class StoppingMuonSelection(H5FlowStage):
     default_profile_max_range = 1600  # mm
     default_larpix_gain = 250  # e/mV
     default_larpix_noise = 0  # e
-    default_lifetime = 3e3 # us
+    default_lifetime = 2.2e3 # us
+    default_profile_search_dx = 50 # mm
     default_curvature_rr_correction = 22.6647 / 22
     default_density_dx_correction_params = [0.78497819,  -3.41826874, 198.93022888]
     default_hits_dset_name = 'charge/hits'
@@ -56,9 +58,9 @@ class StoppingMuonSelection(H5FlowStage):
 
     event_sel_dtype = np.dtype([('sel', 'u1'),
                                 ('stop', 'u1'),
-                                ('muon_loglikelihood_sum', 'f8'),
-                                ('proton_loglikelihood_sum', 'f8'),
-                                ('mip_loglikelihood_sum', 'f8'),
+                                ('muon_loglikelihood_mean', 'f8'),
+                                ('proton_loglikelihood_mean', 'f8'),
+                                ('mip_loglikelihood_mean', 'f8'),
                                 ('stop_pt', 'f8', (3,))])
 
     @staticmethod
@@ -71,9 +73,9 @@ class StoppingMuonSelection(H5FlowStage):
             ('profile_n', 'i8', (profile_bins,)),
             ('profile_dx', 'f8', (profile_bins,)),
             ('profile_pos', 'f8', (profile_bins, 3)),
-            ('muon_likelihood', 'f8', (profile_bins,)),
-            ('proton_likelihood', 'f8', (profile_bins,)),
-            ('mip_likelihood', 'f8', (profile_bins,)),
+            ('muon_likelihood', 'f8', (profile_bins,2)),
+            ('proton_likelihood', 'f8', (profile_bins,2)),
+            ('mip_likelihood', 'f8', (profile_bins,2)),
         ])
 
     def __init__(self, **params):
@@ -87,6 +89,7 @@ class StoppingMuonSelection(H5FlowStage):
         self.larpix_noise = params.get('larpix_noise', self.default_larpix_noise)
         self.lifetime = params.get('lifetime', self.default_lifetime)
         self.profile_dx = params.get('profile_dx', self.default_profile_dx)
+        self.profile_search_dx = params.get('profile_search_dx', self.default_profile_search_dx)
         self.profile_max_range = params.get('profile_max_range',
                                             self.default_profile_max_range)
         self.curvature_rr_correction = params.get('curvature_rr_correction',
@@ -118,6 +121,7 @@ class StoppingMuonSelection(H5FlowStage):
                                     fid_cut=self.fid_cut,
                                     length_cut=self.length_cut,
                                     profile_dx=self.profile_dx,
+                                    profile_search_dx=self.profile_search_dx,
                                     profile_max_range=self.profile_max_range,
                                     curvature_rr_correction=self.curvature_rr_correction,
                                     density_dx_correction_params=self.density_dx_correction_params,
@@ -148,11 +152,41 @@ class StoppingMuonSelection(H5FlowStage):
                                     muon_range=self.muon_range_table['range'],
                                     proton_recom=self.proton_range_table['recomb'],
                                     muon_recom=self.muon_range_table['recomb'])
+        
+    def finish(self, source_name):
+        sel_dset_name = f'{self.path}/{self.event_sel_dset_name}'
+        
+        total = len(self.data_manager.get_dset(sel_dset_name))
+        nstopping = np.sum(self.data_manager.get_dset(sel_dset_name)['stop'])
+        nselected = np.sum(self.data_manager.get_dset(sel_dset_name)['sel'])
+        print(f'Stopping: {nstopping} / {total} ({nstopping/total:0.03f})')
+        print(f'Selected: {nselected} / {total} ({nselected/total:0.03f})')
+        
+        if self.is_mc:
+            sel_truth_dset_name = f'{self.path}/{self.event_sel_truth_dset_name}'
+            true_stopping = np.sum(self.data_manager.get_dset(sel_truth_dset_name)['stop'])
+            true_stopping_muon = np.sum(self.data_manager.get_dset(sel_truth_dset_name)['sel'])
+            print(f'True stopping: {true_stopping} / {total} ({true_stopping/total:0.03f})')
+            print(f'True stopping muons: {true_stopping_muon} / {total} ({true_stopping_muon/total:0.03f})')
+            
+            correct = np.sum(self.data_manager.get_dset(sel_truth_dset_name)['sel'] &
+                             self.data_manager.get_dset(sel_dset_name)['sel'])
+            
+            print(f'Purity: {correct} / {nselected} ({correct/nselected:0.03f})')
+            print(f'Efficiency: {correct} / {true_stopping_muon} ({correct/true_stopping_muon:0.03f})')
 
     def create_dqdx_profile_templates(self):
         # create range tables used for dQ/dx profile discrimination
-        self.muon_range_table = deepcopy(resources['ParticleData'].muon_range_table)
-        self.proton_range_table = deepcopy(resources['ParticleData'].proton_range_table)
+        self.muon_range_table = dict()
+        self.proton_range_table = dict()
+        
+        # only consider reasonable range values
+        muon_mask = resources['ParticleData'].muon_range_table['range'] > 0.1
+        for key,val in deepcopy(resources['ParticleData'].muon_range_table).items():
+            self.muon_range_table[key] = val[muon_mask]
+        proton_mask = resources['ParticleData'].proton_range_table['range'] > 0.1
+        for key,val in deepcopy(resources['ParticleData'].proton_range_table).items():
+            self.proton_range_table[key] = val[proton_mask]
 
         # convert mean dE/dx entries to MPV dE/dx
         self.muon_range_table['dedx_mpv'] = resources['ParticleData'].landau_peak(
@@ -183,6 +217,13 @@ class StoppingMuonSelection(H5FlowStage):
                                                                   self.profile_dx) / self.profile_dx)
         noise = (self.larpix_noise * np.sqrt(self.profile_dx / resources['Geometry'].pixel_pitch)
                  / resources['Geometry'].pixel_pitch)
+        
+        self.muon_range_table['mcs_angle'] = resources['ParticleData'].mcs_angle(self.muon_range_table['t'],
+                                                                  resources['ParticleData'].mu_mass,
+                                                                  self.profile_dx)
+        self.proton_range_table['mcs_angle'] = resources['ParticleData'].mcs_angle(self.proton_range_table['t'],
+                                                                  resources['ParticleData'].p_mass,
+                                                                  self.profile_dx)
 
         # self.apply_position_resolution(self.muon_range_table, noise=noise)
         # self.apply_position_resolution(self.proton_range_table, noise=noise)
@@ -200,8 +241,8 @@ class StoppingMuonSelection(H5FlowStage):
         interp_rr = interp1d(rr, dqdx)
         dqdx = interp_rr(interpolation_pts)
         # apply a position resolution smearing
-#         dqdx_smear = ndimage.uniform_filter(dqdx, int(self.profile_dx / dx), mode='nearest')
-        dqdx_smear = ndimage.uniform_filter(dqdx, 1, mode='nearest')
+        dqdx_smear = ndimage.uniform_filter(dqdx, int(self.profile_dx / dx), mode='nearest')
+#         dqdx_smear = ndimage.uniform_filter(dqdx, 1, mode='nearest')
 
         # interpolate width
         interp_rr_width = interp1d(rr, dqdx_width)
@@ -220,6 +261,7 @@ class StoppingMuonSelection(H5FlowStage):
         low_val_align = interpolation_pts[np.argmax(dqdx_smear - dqdx_width)]
         low_val_interp = interp1d(interpolation_pts - low_val_align,
                                   dqdx_smear - dqdx_width)
+        high_val_interp, low_val_interp = (np.maximum(high_val_interp, low_val_interp), np.minimum(high_val_interp, low_val_interp))
 
         # set values
         _min, _max = (max(np.min(interpolation_pts - dx * low_val_align), np.min(interpolation_pts - dx * high_val_align)),
@@ -282,12 +324,12 @@ class StoppingMuonSelection(H5FlowStage):
     
     @staticmethod
     def density_dx_correction(rr, *params):
+        rr = np.clip(rr, 0, None)
         rv = params[0] * np.exp(-rr / params[2]) + params[1]
-        rv[rr <= 0] = params[0] + params[1]
         return rv
 
     @staticmethod
-    def profile_likelihood(profile_rr, profile_dqdx, range_table):
+    def profile_likelihood(profile_rr, profile_dqdx, profile_pos, range_table, type=''):
         '''
             Calculates the likelihood of a given dqdx v. residual range profile
             using a Moyal-distribution approximation.
@@ -302,23 +344,53 @@ class StoppingMuonSelection(H5FlowStage):
             :param profile_rr: residual range ``shape: (..., n)``
 
             :param profile_dqdx: dqdx ``shape: (..., n)``
+            
+            :param profile_pos: bin position ``shape: (..., n, 3)``
 
             :param range_table: ``dict``, see above.
+            
+            :param type: likelihood pdf name, one of ``'abs_exp'``, ``'moyal'``, ``'gaus'``
 
             :returns: likelihood ``shape: (..., n)``
 
         '''
         interp = interp1d(range_table['range'], range_table['dqdx'])
         interp_width = interp1d(range_table['range'], range_table['dqdx_width'])
+        interp_angle_width = interp1d(range_table['range'], range_table['mcs_angle'])
         min_range = np.min(range_table['range'])
         max_range = np.max(range_table['range'])
 
         interp_dqdx = interp(np.clip(profile_rr, min_range, max_range))
+        interp_dqdx[profile_rr < min_range] = 0
         interp_dqdx_width = interp_width(np.clip(profile_rr, min_range, max_range))
-
-#         return -np.abs(profile_dqdx - interp_dqdx) / interp_dqdx_width * np.log(interp_dqdx_width / 2)
-        return stats.moyal.logpdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
-#         return stats.norm.logpdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
+        interp_angle_width = interp_angle_width(np.clip(profile_rr, min_range, max_range))
+        
+        # calculate dQ/dx log-likelihood
+        if type == 'abs_exp':
+            dqdx_term = -np.abs(profile_dqdx - interp_dqdx) / interp_dqdx_width * np.log(interp_dqdx_width / 2)
+        elif type == 'moyal':
+            dqdx_term = stats.moyal.logpdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
+        elif type == 'gaus':
+            dqdx_term = stats.norm.logpdf(profile_dqdx, loc=interp_dqdx, scale=interp_dqdx_width)
+        else:
+            dqdx_term = np.zeros_like(profile_dqdx)
+            
+        # calculate MCS log-likelihood
+        d = profile_pos[...,1:,:] - profile_pos[...,:-1,:]
+        d = d * ((np.linalg.norm(profile_pos[...,1:,:], axis=-1, keepdims=True) > 0) *
+                 (np.linalg.norm(profile_pos[...,:-1,:], axis=-1, keepdims=True) > 0))
+        angle = np.zeros_like(profile_dqdx)
+        norm = np.linalg.norm(d[...,1:,:], axis=-1) * np.linalg.norm(d[...,:-1,:], axis=-1)
+        angle[...,1:-1] = np.maximum(np.sum(d[...,1:,:] * d[...,:-1,:], axis=-1), 1e-15) / np.maximum(norm, 1e-15)
+        angle[...,1:-1] = np.arccos(angle[...,1:-1])
+        
+        angle_term = stats.norm.logpdf(angle, loc=0, scale=interp_angle_width) + np.log(2)
+        angle_term[...,0] = 0 # skip first and last bins
+        angle_term[...,-1] = 0
+        angle_term[(np.array(profile_dqdx) <= 0)] = 0 # remove empty bins
+        np.put_along_axis(angle_term, np.argmin(np.abs(profile_rr), axis=-1)[...,np.newaxis], -np.log(2*np.pi), axis=-1)
+        
+        return dqdx_term, angle_term
     
     @staticmethod
     def pixel_intersection(pt, n, pixel, pixel_pitch, mask=None):
@@ -372,7 +444,7 @@ class StoppingMuonSelection(H5FlowStage):
         return ma.array(s_min, mask=new_mask), ma.array(s_max, mask=new_mask)
 
     @staticmethod
-    def profiled_dqdx(tracks, seed_pt, hit_xyz, hit_q, dx, max_range, pixel_pitch, mask=None):
+    def profiled_dqdx(tracks, seed_pt, hit_xyz, hit_q, dx, max_range, search_dx, pixel_pitch, mask=None):
         '''
             Generate dQ/dx profile. Algorithm is the following:
 
@@ -406,6 +478,8 @@ class StoppingMuonSelection(H5FlowStage):
             :param hit_q: masked array, shape: (..., n)
             
             :param dx: float, bin size
+            
+            :param search_dx: float, distance to look for next track
             
             :param max_range: float, maximum bin
             
@@ -515,7 +589,7 @@ class StoppingMuonSelection(H5FlowStage):
             s = s + np.sum(traj_length[..., 0], axis=-1)[..., np.newaxis]
             seed_pt = traj[..., -1, :].copy()
             traj_distance = np.sqrt(ma.sum((tracks['trajectory'] - np.expand_dims(seed_pt, axis=-2))**2, axis=-1))
-            traj_mask = np.any((traj_distance < dx) & track_mask[...,np.newaxis], axis=-1)
+            traj_mask = np.any((traj_distance < search_dx) & track_mask[...,np.newaxis], axis=-1)
             seed_track = np.expand_dims(np.argmax(traj_mask, axis=-1), axis=-1)
             
             iter_mask[:] = False
@@ -542,6 +616,17 @@ class StoppingMuonSelection(H5FlowStage):
         np.place(r_pos, np.broadcast_to(mask[..., np.newaxis, np.newaxis], r_pos.shape), pos)
 
         return r_dq, r_dn, r_ds, r_start_pt, r_end_pt, r_pos
+
+    @staticmethod
+    def mean_neg_loglikelihood(r0, range_table, profile_n, profile_dqdx, profile_rr, profile_pos):
+        profile_rr = profile_rr - r0
+        profile_rr, profile_n, profile_dqdx = np.broadcast_arrays(profile_rr, profile_n, profile_dqdx)
+        pt_likelihood_dqdx, pt_likelihood_mcs = StoppingMuonSelection.profile_likelihood(
+            profile_rr, profile_dqdx, profile_pos, range_table, type='gaus')
+        pt_likelihood_mcs = ma.masked_where((profile_n <= 0), pt_likelihood_mcs)
+        pt_likelihood_dqdx = ma.masked_where((profile_n <= 0) & (profile_rr <= 0), pt_likelihood_dqdx)
+        mean_likelihood = -pt_likelihood_dqdx.mean(axis=-1) - pt_likelihood_mcs.mean(axis=-1)
+        return mean_likelihood
 
     def load_track_trajectories(self, source_name, source_slice, path):
         chain = list(zip([source_name] + path[:-1], path))
@@ -627,11 +712,12 @@ class StoppingMuonSelection(H5FlowStage):
                                                            hit_q,
                                                            mask=event_is_stopping,
                                                            dx=self.profile_dx,
+                                                           search_dx=self.profile_search_dx,
                                                            max_range=self.profile_max_range,
                                                            pixel_pitch=resources['Geometry'].pixel_pitch)
 
         profile_dqdx = dq / ma.maximum(ds, 1e-15) * (dn > 0)
-        profile_dqdx[dn <= 0] = -1
+        profile_dqdx[dn <= 0] = 0
         profile_dqdx = ma.masked_where((dn <= 0), profile_dqdx)
 
         profile_rr = ((np.expand_dims(np.argmax(profile_dqdx, axis=-1), axis=-1)
@@ -639,26 +725,65 @@ class StoppingMuonSelection(H5FlowStage):
         profile_rr = ma.masked_where(dn <= 0, profile_rr)
         # apply a curvature correction
         profile_rr = profile_rr * self.curvature_rr_correction
+
+        profile_n = ma.masked_where(dn <= 0, dn)
         
         # apply a hit density correction
         profile_dqdx = profile_dqdx * ds / ma.maximum(ds - self.density_dx_correction(profile_rr, *self.density_dx_correction_params), 1e-15) * (dn > 0)
 
-        muon_likelihood = self.profile_likelihood(profile_rr.data, profile_dqdx.data,
-                                                  self.muon_range_table)
-        proton_likelihood = self.profile_likelihood(profile_rr.data, profile_dqdx.data,
-                                                    self.proton_range_table)
-        mip_likelihood = self.profile_likelihood(np.clip(profile_rr.data, 1500, 1500),
-                                                 profile_dqdx.data,
-                                                 self.muon_range_table)
-        # mask invalid values
-        muon_likelihood = ma.masked_where((dn == 0) | (profile_rr <= 0), muon_likelihood)
-        proton_likelihood = ma.masked_where((dn == 0) | (profile_rr <= 0), proton_likelihood)
-        mip_likelihood = ma.masked_where((dn == 0), mip_likelihood)
+        muon_r0 = np.zeros(profile_dqdx.shape[:-1])
+        proton_r0 = np.zeros(profile_dqdx.shape[:-1])    
+        for i in range(muon_r0.shape[0]):
+            if np.any(~profile_n.mask[i] & (profile_n > 0) & ~profile_rr.mask[i] & ~profile_dqdx.mask[i]):
+                rr_range = -np.max(profile_rr[i]) - self.profile_search_dx, -np.min(profile_rr[i]) + self.profile_search_dx
+                rr_offset = np.expand_dims(np.linspace(rr_range[0], rr_range[1], 2*int(np.diff(rr_range)/self.profile_dx)), axis=-1)
+
+                muon_likelihood = self.mean_neg_loglikelihood(
+                    rr_offset, self.muon_range_table, profile_n[i], profile_dqdx[i], profile_rr[i], pos[i][np.newaxis,...])
+                muon_r0[i] = rr_offset[np.argmin(muon_likelihood, axis=0)]
+                
+                proton_likelihood = self.mean_neg_loglikelihood(
+                    rr_offset, self.proton_range_table, profile_n[i], profile_dqdx[i], profile_rr[i], pos[i][np.newaxis,...])
+                proton_r0[i] = rr_offset[np.argmin(proton_likelihood, axis=0)]
+
+        
+        # calculate likelihood scores
+        muon_likelihood_dqdx, muon_likelihood_mcs = self.profile_likelihood(
+            (profile_rr - muon_r0[...,np.newaxis]).filled(-9999), profile_dqdx, pos,
+                                                  self.muon_range_table, type='gaus')
+        proton_likelihood_dqdx, proton_likelihood_mcs = self.profile_likelihood(
+            (profile_rr - proton_r0[...,np.newaxis]).filled(-9999), profile_dqdx, pos,
+                                                    self.proton_range_table, type='gaus')
+        mip_likelihood_dqdx, mip_likelihood_mcs = self.profile_likelihood(
+            np.clip(profile_rr, 1500, 1500).filled(1500),
+                                                 profile_dqdx, pos,
+                                                 self.muon_range_table, type='gaus')
+
+        muon_likelihood_mcs = ma.masked_where((dn == 0), muon_likelihood_mcs)
+        proton_likelihood_mcs = ma.masked_where((dn == 0), proton_likelihood_mcs)
+        mip_likelihood_mcs = ma.masked_where((dn == 0), mip_likelihood_mcs)
+        muon_likelihood_dqdx = ma.masked_where((dn == 0) & (profile_rr - muon_r0[...,np.newaxis] > 0), muon_likelihood_dqdx)
+        proton_likelihood_dqdx = ma.masked_where((dn == 0) & (profile_rr - proton_r0[...,np.newaxis] > 0), proton_likelihood_dqdx)
+        mip_likelihood_dqdx = ma.masked_where((dn == 0), mip_likelihood_dqdx)
+        
+        profile_rr = profile_rr - muon_r0[...,np.newaxis]
+        i_stop = np.argmin(np.abs(profile_rr), axis=-1)[...,np.newaxis,np.newaxis]
+#         stop_dir = np.take_along_axis(pos, i_stop-1, axis=-2) - np.take_along_axis(pos, i_stop-2, axis=-2)
+#         stop_dir /= np.maximum(np.linalg.norm(stop_dir, axis=-1, keepdims=True), 1e-15)
+        end_pt = np.take_along_axis(pos, i_stop, axis=-2) 
+#                   - stop_dir * muon_r0[...,np.newaxis,np.newaxis])
+        
 
         # select stopping muons
         event_is_stopping_muon = (event_is_stopping
-                                  & (np.sum(muon_likelihood - proton_likelihood, axis=-1) > 0)
-                                  & (np.sum(muon_likelihood - mip_likelihood, axis=-1) > 0))
+                                  & (np.mean(muon_likelihood_dqdx, axis=-1) 
+                                     + np.mean(muon_likelihood_mcs, axis=-1) 
+                                     - np.mean(proton_likelihood_dqdx, axis=-1)
+                                     - np.mean(proton_likelihood_mcs, axis=-1) > 0)
+                                  & (np.mean(muon_likelihood_dqdx, axis=-1) 
+                                     + np.mean(muon_likelihood_mcs, axis=-1) 
+                                     - np.mean(mip_likelihood_dqdx, axis=-1)
+                                     - np.mean(mip_likelihood_mcs, axis=-1) > 0))
 
         if self.is_mc:
             # define true stopping events as events with at least 1 muon that ends in fid.
@@ -673,9 +798,9 @@ class StoppingMuonSelection(H5FlowStage):
         event_sel = np.zeros(len(tracks), dtype=self.event_sel_dtype)
         event_sel['sel'] = event_is_stopping_muon
         event_sel['stop'] = event_is_stopping
-        event_sel['muon_loglikelihood_sum'] = np.sum(muon_likelihood, axis=-1)
-        event_sel['proton_loglikelihood_sum'] = np.sum(proton_likelihood, axis=-1)
-        event_sel['mip_loglikelihood_sum'] = np.sum(mip_likelihood, axis=-1)
+        event_sel['muon_loglikelihood_mean'] = np.mean(muon_likelihood_mcs, axis=-1) + np.mean(muon_likelihood_dqdx, axis=-1)
+        event_sel['proton_loglikelihood_mean'] = np.mean(proton_likelihood_mcs, axis=-1) + np.mean(proton_likelihood_dqdx, axis=-1)
+        event_sel['mip_loglikelihood_mean'] = np.mean(mip_likelihood_mcs, axis=-1) + np.mean(mip_likelihood_dqdx, axis=-1)
         event_sel['stop_pt'] = end_pt.reshape(event_sel['stop_pt'].shape)
 
         event_profile = np.zeros(len(tracks), dtype=self.event_profile_dtype)
@@ -685,17 +810,20 @@ class StoppingMuonSelection(H5FlowStage):
         event_profile['profile_n'] = dn
         event_profile['profile_dx'] = ds
         event_profile['profile_pos'] = pos
-        event_profile['muon_likelihood'] = muon_likelihood
-        event_profile['proton_likelihood'] = proton_likelihood
-        event_profile['mip_likelihood'] = mip_likelihood
+        event_profile['muon_likelihood'][...,0] = muon_likelihood_dqdx
+        event_profile['proton_likelihood'][...,0] = proton_likelihood_dqdx
+        event_profile['mip_likelihood'][...,0] = mip_likelihood_dqdx
+        event_profile['muon_likelihood'][...,1] = muon_likelihood_mcs
+        event_profile['proton_likelihood'][...,1] = proton_likelihood_mcs
+        event_profile['mip_likelihood'][...,1] = mip_likelihood_mcs
 
         if self.is_mc:
             event_true_sel = np.zeros(len(tracks), dtype=self.event_sel_dtype)
             event_true_sel['sel'] = event_is_true_stopping
             event_true_sel['stop'] = ma.sum(is_true_stopping, axis=-1) >= 1
-            event_true_sel['muon_loglikelihood_sum'] = ma.sum(is_muon & is_true_stopping, axis=-1) >= 1
-            event_true_sel['proton_loglikelihood_sum'] = ma.sum(is_proton & is_true_stopping, axis=-1) >= 1
-            event_true_sel['mip_loglikelihood_sum'] = ma.sum(is_muon & ~is_true_stopping, axis=-1) >= 1
+            event_true_sel['muon_loglikelihood_mean'] = ma.sum(is_muon & is_true_stopping, axis=-1) >= 1
+            event_true_sel['proton_loglikelihood_mean'] = ma.sum(is_proton & is_true_stopping, axis=-1) >= 1
+            event_true_sel['mip_loglikelihood_mean'] = ma.sum(is_muon & ~is_true_stopping, axis=-1) >= 1
             event_true_sel['stop_pt'] = true_stop_pt.reshape(event_true_sel['stop_pt'].shape)
 
         # reserve data space
