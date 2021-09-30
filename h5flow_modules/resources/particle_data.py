@@ -154,6 +154,18 @@ class ParticleData(H5FlowResource):
         rv = ksi * (t0 + t1 + t2)
         return rv
     
+    def mcs_angle(self, t, mass, dx):
+        ''' Multiple coulomb scattering characteristic angle '''
+        e = t + mass
+        p = np.sqrt(e**2 - mass**2)
+        beta = p / e
+        gamma = e / mass
+        
+        x = dx/resources['LArData'].radiation_length # radiation lengths
+        f = (1 + 0.088 * np.log10(x/beta**2))
+        theta0 = (13.6 * units.MeV) / (beta * p) * np.sqrt(x) * f
+        return theta0
+    
     def _ksi(self, x, beta):
         Z = resources['LArData'].Z
         A = resources['LArData'].A

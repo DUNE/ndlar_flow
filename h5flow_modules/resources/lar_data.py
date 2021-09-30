@@ -97,11 +97,18 @@ class LArData(H5FlowResource):
 
     @property
     def A(self):
+        ''' Fixed value of 39.948 '''
         return 39.948
 
     @property
     def Z(self):
+        ''' Fixed value of 18 '''
         return 18
+    
+    @property
+    def radiation_length(self):
+        ''' 19.55 g cm^-2 / density'''
+        return 19.55 * units.g / (units.cm)**2 / self.density
 
     @property
     def density(self):
@@ -109,7 +116,8 @@ class LArData(H5FlowResource):
         if 'density' in self.data:
             return self.data['density']
 
-        self.data['density'] = 1.3962 * units.g / (units.cm)**3
+        #self.data['density'] = 1.3962 * units.g / (units.cm)**3
+        self.data['density'] = 1.38 * units.g / (units.cm)**3        
         return self.density
 
     @property
