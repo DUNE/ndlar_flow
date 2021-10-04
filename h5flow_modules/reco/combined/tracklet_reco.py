@@ -24,6 +24,7 @@ class TrackletReconstruction(H5FlowStage):
          - ``ransac_residual_threshold``: ``float``, max distance from trial axis
          - ``ransac_max_trials``: ``int``, number of ransac trials per cluster
          - ``max_iterations``: ``int``, max number of fitting iterations before giving up
+         - ``max_nhit``: ``int``, skip track fitting on events with greater number of hits, ``None`` to apply no cut
 
         Both ``hits_dset_name`` and ``t0_dset_name`` are required in the cache.
 
@@ -65,6 +66,7 @@ class TrackletReconstruction(H5FlowStage):
     default_max_iterations = 100
     default_trajectory_pts = 5
     default_trajectory_dx = 10
+    default_max_nhit = 500
 
     @staticmethod
     def tracklet_dtype(npts=default_trajectory_pts):
@@ -96,6 +98,7 @@ class TrackletReconstruction(H5FlowStage):
         self._ransac_residual_threshold = params.get('ransac_residual_threshold', self.default_ransac_residual_threshold)
         self._ransac_max_trials = params.get('ransac_max_trials', self.default_ransac_max_trials)
         self.max_iterations = params.get('max_iterations', self.default_max_iterations)
+        self.max_nhit = params.get('max_nhit', self.default_max_nhit)
 
         self.trajectory_pts = params.get('trajectory_pts', self.default_trajectory_pts)
         self.trajectory_dx = params.get('trajectory_dx', self.default_trajectory_dx)
@@ -115,6 +118,7 @@ class TrackletReconstruction(H5FlowStage):
                                     ransac_residual_threshold=self._ransac_residual_threshold,
                                     ransac_max_trials=self._ransac_max_trials,
                                     max_iterations=self.max_iterations,
+                                    max_nhit=self.max_nhit,
                                     trajectory_pts=self.trajectory_pts,
                                     trajectory_dx=self.trajectory_dx
                                     )
@@ -124,9 +128,11 @@ class TrackletReconstruction(H5FlowStage):
         self.data_manager.create_ref(source_name, self.tracklet_dset_name)
 
     def run(self, source_name, source_slice, cache):
-        events = cache[source_name]                         # shape: (N,)
-        t0 = cache[self.t0_dset_name]                       # shape: (N,1)
-        hits = cache[self.hits_dset_name]                   # shape: (N,M)
+        events = cache[source_name]       # shape: (N,)
+        t0 = cache[self.t0_dset_name]     # shape: (N,1)
+        hits = cache[self.hits_dset_name] # shape: (N,M)
+        if self.max_nhit is not None:
+            hits = ma.array(hits, mask=(events['nhit'][...,np.newaxis] > self.max_nhit) | hits['id'].mask)
 
         track_ids = self.find_tracks(hits, t0)
         tracks = self.calc_tracks(hits, t0, track_ids, self.trajectory_pts,
@@ -249,7 +255,7 @@ class TrackletReconstruction(H5FlowStage):
                         & (~hits['id'].mask[i]))
                 if np.count_nonzero(mask) < 2:
                     continue
-
+                    
                 # PCA on central hits
                 centroid, axis = cls.do_pca(xyz[i], mask)
                 r_min, r_max = cls.projected_limits(
