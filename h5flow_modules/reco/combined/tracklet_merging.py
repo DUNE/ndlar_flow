@@ -176,7 +176,8 @@ class TrackletMerger(H5FlowStage):
                 # merge tracks that have large p-values
                 should_merge = (((pvalue >= self.pvalue_cut)
                                  | np.take_along_axis(track_merged, neighbor, -1))
-                                & ~neighbor.mask)
+                                & ~neighbor.mask
+                                & ~tracks['id'][..., np.newaxis])
                 np.put_along_axis(track_merged, neighbor, should_merge, axis=-1)
                 np.put_along_axis(track_checked, neighbor, True, axis=-1)
 
@@ -194,25 +195,33 @@ class TrackletMerger(H5FlowStage):
             # now, collect the hits from the original tracks into the track groups
             # get unique track groups, shape: (n_ev, n_grp, n_track)
             track_merged = np.unique(track_merged, axis=1)
-            track_grp = ma.array(track_merged, mask=(np.diff(track_merged.astype(int), axis=1, prepend=False) == 0) | ~track_merged)
-            # index by track groups, shape: (n_ev, n_grp, n_track)
-            track_grp_id = ma.array(np.indices(track_grp.shape)[1], mask=track_grp.mask)
-            track_grp_id = np.expand_dims(track_grp_id, axis=-1)
-            # cast track hits into a broadcastable shape: (n_ev, 1, n_track, n_hit)
-            track_grp_hits = np.expand_dims(track_hits, axis=1)
-
-            # broadcast into same shape: (n_ev, n_grp, n_track, n_hit)
-            hit_shape = np.maximum(track_grp_id.shape, track_grp_hits.shape)
-            track_grp_hits_mask = np.broadcast_to(track_grp_hits['id'].mask, hit_shape) | track_grp_id.mask
-            track_grp_id = np.broadcast_to(track_grp_id, hit_shape)
-            track_grp_hits = np.broadcast_to(track_grp_hits, hit_shape)
-            # mask and condense: (n_ev, n_hit') [used by track reco calculation]
+            track_merged_mask = np.ones(track_merged.shape, dtype=bool)
+            for ev in range(track_merged.shape[0]):
+                _, index = np.unique(track_merged[ev], axis=0, return_index=True)
+                track_merged_mask[ev, index] = False
+            track_grp = ma.array(track_merged, mask=track_merged_mask | ~track_merged)
+            track_grp_nhit = np.sum(np.expand_dims(tracks['nhit'], axis=1) * track_grp, axis=-1).filled(0)
+            
+            track_grp_hits_shape = track_grp.shape[:-1] + (np.max(track_grp_nhit),)
+            # (n_ev, n_grp, n_hit')
+            track_grp_hits = np.zeros(track_grp_hits_shape, dtype=track_hits.dtype)
+            track_grp_id = np.zeros(track_grp_hits_shape, dtype=int)
+            track_grp_hits_mask = np.ones(track_grp_hits_shape, dtype=bool)
+            for grp_idx in range(track_grp_hits_shape[-2]):
+                mask = np.indices(track_grp_hits[:,grp_idx].shape)[-1] < track_grp_nhit[:,grp_idx,np.newaxis]
+                
+                hit_mask = ~track_hits[track_grp[:,grp_idx].filled(False)]['id'].mask
+                np.place(track_grp_hits[:,grp_idx], mask, track_hits[track_grp[:,grp_idx].filled(0)][hit_mask])
+                np.place(track_grp_id[:,grp_idx], mask, grp_idx)
+                np.place(track_grp_hits_mask[:,grp_idx], mask, False)
+                
+            track_grp_hits = ma.array(track_grp_hits, mask=track_grp_hits_mask)
+            track_grp_id = ma.array(track_grp_id, mask=track_grp_hits_mask)
+            
             new_shape = track_grp.shape[0:1] + (-1,)
-            track_grp_hits = condense_array(track_grp_hits.reshape(new_shape),
-                                            track_grp_hits_mask.reshape(new_shape))
-            track_grp_id = condense_array(track_grp_id.reshape(new_shape),
-                                          track_grp_hits_mask.reshape(new_shape))
-
+            track_grp_hits = track_grp_hits.reshape(new_shape)
+            track_grp_id = track_grp_id.reshape(new_shape)
+            
             # recalculate track parameters
             calc_shape = (track_grp_id.shape[0], -1)
             merged_tracks = TrackletReconstruction.calc_tracks(
@@ -256,7 +265,7 @@ class TrackletMerger(H5FlowStage):
         '''
             Combine masks of ``n x n`` ajacency matrix such that the mask of
             row i is equal to the ``OR`` of the rows that can be reached from
-            ``i``. E.g.::
+            ``i`` and the rows that can reach ``i``. E.g.::
 
                 arr = [[1,0,1],
                        [0,1,0],
@@ -264,7 +273,7 @@ class TrackletMerger(H5FlowStage):
                 new_arr = create_groups(arr)
                 new_arr # [[1,0,1],
                            [0,1,0],
-                           [0,0,1]]
+                           [1,0,1]]
 
             and::
 
@@ -272,8 +281,8 @@ class TrackletMerger(H5FlowStage):
                        [0,0,1],
                        [1,1,0]]
                 new_arr = create_groups(arr)
-                new_arr # [[0,0,1],
-                           [0,1,0],
+                new_arr # [[1,1,1],
+                           [1,1,1],
                            [0,1,1]]
 
             :param mask: ajacency matrix (``shape: (..., n, n)``)
@@ -283,25 +292,28 @@ class TrackletMerger(H5FlowStage):
         new_mask = np.zeros_like(mask)
 
         # get index of masks (starting with True values)
-        i_mask = np.argsort(mask, axis=-1)[..., ::-1]
+        i_mask = np.indices(mask.shape)[-1]
+        j_mask = np.indices(mask.shape)[-2]
         step = 0
         while (step < i_mask.shape[-1]):
             # step through indices
             # get other index (shape: (..., n, 1))
-            j_mask = np.expand_dims(i_mask[..., step], axis=-1)
+            ii_mask = np.expand_dims(i_mask[..., step], axis=-1)
+            jj_mask = np.expand_dims(j_mask[..., step], axis=-1)
             # get other mask (shape: (..., n, n))
-            other_mask = np.take_along_axis(mask, j_mask, -2)
+            other_mask = np.take_along_axis(mask, ii_mask, -2)
             # get other matched to current (shape: (..., n, 1))
-            other_matched = np.take_along_axis(mask, j_mask, -1)
-
-            if not np.any(other_matched):
-                break
+            other_matched = np.take_along_axis(mask, ii_mask, -1)
+            # get self matched to current (shape: (..., n, 1))
+            self_matched = np.take_along_axis(other_mask, jj_mask, -1)
 
             # combine with current track(s)
-            new_mask[:] = (new_mask | (other_mask & other_matched))
+            new_mask[:] = (new_mask | (other_mask & other_matched) | (other_mask & self_matched))
             step += 1
-
-        return new_mask
+            
+        if np.all(new_mask == mask):
+            return new_mask
+        return TrackletMerger.create_groups(new_mask)
 
     @staticmethod
     def find_k_neighbor(tracks, mask=None, k=1):
