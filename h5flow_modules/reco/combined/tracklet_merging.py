@@ -401,15 +401,18 @@ class TrackletMerger(H5FlowStage):
             s1[l1 == 0] = 0.5
 
             # handle parallel segments
-            parallel_mask = (v_dp == 1)[..., 0]
+            parallel_mask = (1 - v_dp**2 == 0)[..., 0]
             if np.any(parallel_mask):
-                # fix point on first segment to 0.5
-                s0[parallel_mask] = 0.5
-                # calculate closest point on other segment
-                p0 = (1 - s0) * start_xyz0 + s0 * (end_xyz0)
-                d = (start_xyz1 - p0) - v1 * np.sum((start_xyz1 - p0) * v1,
+                # grab mean position
+                p = (start_xyz0 + end_xyz0 + start_xyz1 + end_xyz1)/4
+                # calculate perpendicular points on other segments
+                d0 = (start_xyz0 - p) - v0 * np.sum((start_xyz0 - p) * v0,
                                                     axis=-1, keepdims=True)
-                s1[parallel_mask] = np.sum((p0 + d) * v1 / l1, axis=-1,
+                s0[parallel_mask] = np.sum((p + d0) * v0 / l0, axis=-1,
+                                           keepdims=True)[parallel_mask]
+                d1 = (start_xyz1 - p) - v1 * np.sum((start_xyz1 - p) * v1,
+                                                    axis=-1, keepdims=True)
+                s1[parallel_mask] = np.sum((p + d1) * v1 / l1, axis=-1,
                                            keepdims=True)[parallel_mask]
 
         mask0 = np.any(orig_mask0, axis=-1, keepdims=True)
@@ -447,6 +450,7 @@ class TrackletMerger(H5FlowStage):
         poca0 = (1 - s0) * start0 + s0 * end0
         poca1 = (1 - s1) * start1 + s1 * end1
         poca_d = np.linalg.norm(poca0 - poca1, axis=-1)
+        poca_d = ma.array(poca_d, mask=s0.mask[...,0] | s1.mask[...,0])
 
         # remove segments with 0 length
         mask = ((np.linalg.norm(end0 - start0, axis=-1) == 0)
@@ -477,6 +481,14 @@ class TrackletMerger(H5FlowStage):
         poca0 = poca0.reshape(tracks0.shape + (3,))
         poca1 = poca1.reshape(tracks1.shape + (3,))
 
+        mask = start0.mask | end0.mask | start1.mask | end1.mask | poca0.mask | poca1.mask
+        start0.mask[mask] = True
+        end0.mask[mask] = True
+        start1.mask[mask] = True
+        end1.mask[mask] = True
+        poca0.mask[mask] = True
+        poca1.mask[mask] = True
+        
         return (start0, end0, start1, end1, poca0, poca1)
 
     @staticmethod
@@ -486,6 +498,8 @@ class TrackletMerger(H5FlowStage):
 
         start, end, neighbor_start, neighbor_end, poca, neighbor_poca = (
             TrackletMerger.closest_trajectories(tracks, neighbor_tracks))
+
+        orig_mask = poca.mask.copy() | neighbor_poca.mask.copy()
         poca = (poca + neighbor_poca) / 2
 
         # calculate deflection angle to farthest point on neighboring segment
@@ -500,7 +514,6 @@ class TrackletMerger(H5FlowStage):
 
         mask = (tracks['id'].mask | neighbor.mask.reshape(ang1.shape)
                 | (neighbor == -1).reshape(ang1.shape))
-
         return ma.array(ang1 / np.pi, mask=mask)
 
     @staticmethod
