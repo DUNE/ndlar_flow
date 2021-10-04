@@ -1,4 +1,4 @@
-# Performs stopping muon and michel event selections
+# Performs stopping muon and michel event selections (on simulation)
 
 flow:
   source: events
@@ -9,6 +9,7 @@ resources:
   - !include h5flow_yamls/resources/lar_data.yaml
   - !include h5flow_yamls/resources/geometry.yaml
   - !include h5flow_yamls/resources/particle_data.yaml
+  - !include h5flow_yamls/resources/disabled_channels.yaml
 
 events:
   classname: H5FlowDatasetLoopGenerator
@@ -26,8 +27,9 @@ stopping_muon_sel:
     hits_dset_name: 'charge/hits'
     t0_dset_name: 'combined/t0'
     merged_dset_name: 'combined/tracklets/merged'
-    mc_trajectory_path: ['combined/tracklets/merged', 'charge/hits',
-      'charge/packets', 'mc_truth/tracks', 'mc_truth/trajectories']
-    fid_cut: 35.2 # mm
+    fid_cut: 20 # mm
     cathode_fid_cut: 20 # mm
     profile_dx: 22 # mm
+    curvature_rr_correction: 1.02409
+    density_dx_correction_params: [0.72977481, -2.97174862, 23.26715334]
+    
