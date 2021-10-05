@@ -5,7 +5,7 @@ Welcome to module0_flow's documentation!
    :maxdepth: 3
    :caption: Contents:
 
-   modules/h5flow_modules
+   modules/module0_flow
 
 Indices and tables
 ==================

@@ -10,8 +10,6 @@ def pytest_configure():
 
 @pytest.fixture
 def tmp_h5_file():
-    if os.path.exists('test.h5'):
-        os.remove('test.h5')
     yield 'test.h5'
     if os.path.exists('test.h5'):
         os.remove('test.h5')
@@ -116,7 +114,21 @@ def missing_asic_list_file(pytestconfig, tmp_path_factory):
 @pytest.fixture
 def track_merging_pdf_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
-                                     'https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/joint_pdf.npz'
+                                     'https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/joint_pdf-2_0_1.npz'
+                                     ))
+
+
+@pytest.fixture
+def proton_range_table(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/NIST_proton_range_table_Ar.txt'
+                                     ))
+
+
+@pytest.fixture
+def muon_range_table(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/PDG_muon_range_table_Ar.txt'
                                      ))
 
 

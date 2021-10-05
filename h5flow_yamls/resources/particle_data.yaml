@@ -1,0 +1,5 @@
+classname: ParticleData
+params:
+  path: 'particle_info'
+  muon_range_table_path: 'PDG_muon_range_table_Ar.txt'
+  proton_range_table_path: 'NIST_proton_range_table_Ar.txt'

@@ -26,7 +26,7 @@ class LUT(object):
             key0 = [0,1,2]
             key1 = [30,31,32]
 
-        is 10x more efficient than::
+        is 10x more memory efficient than::
 
             key0 = [10,20,30]
             key1 = [300,310,320]

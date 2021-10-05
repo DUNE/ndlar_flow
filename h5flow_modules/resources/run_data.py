@@ -5,10 +5,11 @@ import logging
 import h5py
 
 
-from h5flow.core import H5FlowResource, resources
+from h5flow.core import H5FlowResource
 from h5flow import H5FLOW_MPI
 
 from module0_flow.util.compat import assert_compat_version
+import module0_flow.util.units as units
 
 
 class RunData(H5FlowResource):
@@ -21,8 +22,6 @@ class RunData(H5FlowResource):
          - ``light_nsamples``: light system number of samples
          - ``charge_threshold``: charge system global thresholds (either ``high`` or ``medm``)
          - ``is_mc``: boolean flag, ``True`` if file was produced by simulation
-
-        Requires ``Units`` resource in workflow.
 
         Parameters:
          - ``path``: ``str``, path to run data within file
@@ -139,7 +138,7 @@ class RunData(H5FlowResource):
 
         # convert data types that might be incorrect
         if 'e_field' in self.data:
-            self.data['e_field'] = float(self.data['e_field']) * (resources['Units'].V / resources['Units'].cm)
+            self.data['e_field'] = float(self.data['e_field']) * (units.V / units.cm)
         if 'light_samples' in self.data:
             self.data['light_samples'] = int(self.data['light_samples'])
 

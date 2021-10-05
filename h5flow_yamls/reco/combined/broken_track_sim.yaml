@@ -1,0 +1,30 @@
+# Performs broken track simulation, re-reconstruction randomly translated tracks
+
+flow:
+  source: events
+  stages: [broken_track_sim]
+  drop: []
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 32
+
+resources:
+  - !include h5flow_yamls/resources/run_data.yaml
+  - !include h5flow_yamls/resources/geometry.yaml
+  - !include h5flow_yamls/resources/lar_data.yaml
+  - !include h5flow_yamls/resources/disabled_channels.yaml
+
+broken_track_sim:
+  classname: BrokenTrackSim
+  requires:
+    - 'combined/t0'
+    - 'charge/hits'
+    - name: 'charge/hits_track_idx'
+      path: ['charge/hits', 'combined/tracklets']
+      index_only: True
+    - 'combined/tracklets'
+  params:
+    generate_2track_joint_pdf: True

@@ -1,8 +1,8 @@
 import numpy as np
 import numpy.ma as ma
 
-import module0_flow.combined.tracklet_reco as tracklet_reco
-from module0_flow.combined.tracklet_merging import TrackletMerger
+import module0_flow.reco.combined.tracklet_reco as tracklet_reco
+from module0_flow.reco.combined.tracklet_merging import TrackletMerger
 
 from h5flow.core import H5FlowStage, resources, H5FLOW_MPI
 
@@ -70,7 +70,7 @@ class BrokenTrackSim(H5FlowStage):
             hit_frac                        f4,     fraction of hits that came from source track
             true_endpoint_d                 f4(2,), minimum distance endpoints to source track endpoints
             neighbor_deflection_angle       f4,     deflection angle of track and its neighbor
-            neighbor_transverse_sintheta    f4,     transverse endpoint angle of track to its neighbor
+            neighbor_transverse_sin2theta   f4,     transverse endpoint angle of track to its neighbor
             neighbor_missing_length         f4,     missing length of track to its neighbor
             neighbor_overlap                f4,     overlap of track and its neighbor
             neighbor_sin2theta              f4,     angle of track and its neighbor
@@ -79,7 +79,7 @@ class BrokenTrackSim(H5FlowStage):
         ``TrackletReconstruction.tracklet_dtype``.
 
     '''
-    class_version = '1.0.0'
+    class_version = '2.0.1'
 
     offset_dtype = np.dtype([
         ('id', 'u4'),
@@ -98,7 +98,7 @@ class BrokenTrackSim(H5FlowStage):
         ('hit_frac', 'f4'),
         ('true_endpoint_d', 'f4', (2,)),
         ('neighbor_deflection_angle', 'f4'),
-        ('neighbor_transverse_sintheta', 'f4'),
+        ('neighbor_transverse_sin2theta', 'f4'),
         ('neighbor_missing_length', 'f4'),
         ('neighbor_overlap', 'f4'),
         ('neighbor_sin2theta', 'f4'),
@@ -106,7 +106,7 @@ class BrokenTrackSim(H5FlowStage):
 
     default_pdf_bins = [
         (-4, 0, 30),
-        (-1, 0, 30),
+        (-5, 0, 30),
         (0, 3, 30),
         (-2, 3, 30),
         (-5, 0, 30)
@@ -120,7 +120,8 @@ class BrokenTrackSim(H5FlowStage):
         self.path = params.get('path', 'misc/broken_track_sim')
 
         self.generate_2track_joint_pdf = params.get('generate_2track_joint_pdf', True)
-        self.joint_pdf_filename = params.get('joint_pdf_filename', 'joint_pdf.npz')
+        self.joint_pdf_filename = params.get('joint_pdf_filename',
+                                             f'joint_pdf-{self.class_version.replace(".","_")}.npz')
         self.pdf_bins = [np.logspace(*bins) for bins in params.get('pdf_bins',
                                                                    self.default_pdf_bins)]
         self.pdf = dict()
@@ -136,6 +137,10 @@ class BrokenTrackSim(H5FlowStage):
         self.t0_dset_name = params.get('t0_dset_name', 'combined/t0')
 
     def init(self, source_name):
+        self.trajectory_pts = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_pts']
+        self.trajectory_dx = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_dx']
+        self.new_track_dtype = BrokenTrackSim.new_track_dtype(self.trajectory_pts)
+
         self.data_manager.create_dset(f'{self.path}/offset',
                                       dtype=self.offset_dtype)
         self.data_manager.create_dset(f'{self.path}/label',
@@ -200,7 +205,9 @@ class BrokenTrackSim(H5FlowStage):
             trans_hits = d['trans_hits']
 
             track_ids = self.reco.find_tracks(trans_hits, t0)
-            new_tracks = self.reco.calc_tracks(trans_hits, t0, track_ids)
+            new_tracks = self.reco.calc_tracks(trans_hits, t0, track_ids,
+                                               self.trajectory_pts,
+                                               self.trajectory_dx)
 
             d = self.find_matching_tracks(new_tracks, rand_tracks, rand_x, rand_y,
                                           track_ids, hits_track_idx)
@@ -219,8 +226,8 @@ class BrokenTrackSim(H5FlowStage):
             if self.generate_2track_joint_pdf:
                 track2_deflection_angle = TrackletMerger.calc_2track_deflection_angle(new_tracks, neighbor)
                 track2_deflection_angle_orig = TrackletMerger.calc_2track_deflection_angle(tracks, orig_neighbor)
-                track2_transverse_sintheta = TrackletMerger.calc_2track_transverse_sintheta(new_tracks, neighbor)
-                track2_transverse_sintheta_orig = TrackletMerger.calc_2track_transverse_sintheta(tracks, orig_neighbor)
+                track2_transverse_sin2theta = TrackletMerger.calc_2track_transverse_sin2theta(new_tracks, neighbor)
+                track2_transverse_sin2theta_orig = TrackletMerger.calc_2track_transverse_sin2theta(tracks, orig_neighbor)
                 track2_missing_length = TrackletMerger.calc_2track_missing_length(new_tracks, neighbor, TrackletMerger.missing_track_segments, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
                 track2_missing_length_orig = TrackletMerger.calc_2track_missing_length(tracks, orig_neighbor, TrackletMerger.missing_track_segments, self.pixel_x, self.pixel_y, resources['DisabledChannels'].disabled_channel_lut, TrackletMerger.cathode_region)
                 track2_overlap = TrackletMerger.calc_2track_overlap(new_tracks, neighbor)
@@ -228,12 +235,12 @@ class BrokenTrackSim(H5FlowStage):
                 track2_sin2theta = TrackletMerger.calc_2track_sin2theta(new_tracks, neighbor)
                 track2_sin2theta_orig = TrackletMerger.calc_2track_sin2theta(tracks, orig_neighbor)
 
-                rereco_mask = (np.squeeze(broken) & np.take_along_axis(np.squeeze(broken), neighbor, axis=1))
+                rereco_mask = (broken[..., 0] & np.take_along_axis(broken[..., 0], neighbor, axis=1))
 
-                self.pdf['rereco'].fill(track2_deflection_angle[rereco_mask], track2_transverse_sintheta[rereco_mask],
+                self.pdf['rereco'].fill(track2_deflection_angle[rereco_mask], track2_transverse_sin2theta[rereco_mask],
                                         track2_missing_length[rereco_mask], track2_overlap[rereco_mask],
                                         track2_sin2theta[rereco_mask])
-                self.pdf['origin'].fill(track2_deflection_angle_orig, track2_transverse_sintheta_orig,
+                self.pdf['origin'].fill(track2_deflection_angle_orig, track2_transverse_sin2theta_orig,
                                         track2_missing_length_orig, track2_overlap_orig,
                                         track2_sin2theta_orig)
 
@@ -273,7 +280,7 @@ class BrokenTrackSim(H5FlowStage):
             label_array['hit_frac'] = hit_frac.compressed()
             label_array['true_endpoint_d'] = np.c_[endpoint_distance_1.compressed(), endpoint_distance_2.compressed()]
             label_array['neighbor_deflection_angle'] = track2_deflection_angle.flat[~broken.mask.ravel()]
-            label_array['neighbor_transverse_sintheta'] = track2_transverse_sintheta.flat[~broken.mask.ravel()]
+            label_array['neighbor_transverse_sin2theta'] = track2_transverse_sin2theta.flat[~broken.mask.ravel()]
             label_array['neighbor_missing_length'] = track2_missing_length.flat[~broken.mask.ravel()]
             label_array['neighbor_overlap'] = track2_overlap.flat[~broken.mask.ravel()]
             label_array['neighbor_sin2theta'] = track2_sin2theta.flat[~broken.mask.ravel()]
