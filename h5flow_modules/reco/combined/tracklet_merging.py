@@ -74,9 +74,9 @@ class TrackletMerger(H5FlowStage):
                     max_neighbors: 5
 
     '''
-    class_version = '2.0.0'
+    class_version = '2.0.1'
 
-    default_pdf_filename = 'joint_pdf-1_0_0.npz'
+    default_pdf_filename = 'joint_pdf-2_0_1.npz'
     default_pdf_sig_name = 'rereco'
     default_pdf_bkg_name = 'origin'
     default_pvalue_cut = 0.10
@@ -607,13 +607,12 @@ class TrackletMerger(H5FlowStage):
         _missing_pixel_y = pixel_y[_iy]
         _missing_iogroup = (np.sign(_missing_z) / 2 + 1.5).astype(int)
 
-        _hidden_length = (
+        _hidden_length = _ds * (
             (disabled_channel_lut[_missing_iogroup,
                                   _missing_pixel_x.astype(int),
                                   _missing_pixel_y.astype(int)].reshape(_missing_iogroup.shape)
              | (np.abs(_missing_z) < cathode_region)).sum(axis=-1))
         missing_length = _missing_length - _hidden_length
-        missing_length = np.clip(missing_length, 0, None)
 
         mask = (tracks['id'].mask
                 | neighbor.mask.reshape(missing_length.shape)

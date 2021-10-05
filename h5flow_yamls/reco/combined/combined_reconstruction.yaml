@@ -1,7 +1,6 @@
 # Performs combined reconstruction, generating t0s, tracklets, ...
 
 flow:
-  #source: 'charge/events'
   source: events
   stages: [t0_reco, tracklet_reco, tracklet_merge]
   drop: []
@@ -22,11 +21,8 @@ t0_reco:
   classname: T0Reconstruction # combined/t0_reco.py
   requires:
     - 'charge/ext_trigs'
-    # - name: 'light/hits'
-    #   path: ['light/events', 'light/hits']
   params:
     t0_dset_name: 'combined/t0'
-    # light_hits_dset_name: 'light/hits'
     ext_trigs_dset_name: 'charge/ext_trigs'
 
 tracklet_reco:
@@ -58,6 +54,6 @@ tracklet_merge:
         hits_dset_name: 'charge/hits'
         track_hits_dset_name: 'combined/track_hits'
         tracks_dset_name: 'combined/tracklets'
-        pdf_filename: 'joint_pdf-2_0_0.npz'
+        pdf_filename: 'joint_pdf-2_0_1.npz'
         pvalue_cut: 0.05
         max_neighbors: 5

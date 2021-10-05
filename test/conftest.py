@@ -114,7 +114,7 @@ def missing_asic_list_file(pytestconfig, tmp_path_factory):
 @pytest.fixture
 def track_merging_pdf_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
-                                     'https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/joint_pdf-2_0_0.npz'
+                                     'https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/joint_pdf-2_0_1.npz'
                                      ))
 
 
