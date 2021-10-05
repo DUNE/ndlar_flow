@@ -18,7 +18,6 @@ class JointPDF(object):
                                   if not isinstance(v, ma.MaskedArray)
                                   else np.clip(v.compressed(), self.bins[i][0], self.bins[i][-1]), axis=-1)
                    for i, v in enumerate(val)]
-        print([s.shape for s in _sample])
         _sample = np.concatenate(_sample, axis=-1)
         hist, _ = np.histogramdd(_sample, bins=self.bins)
         self.hist = hist + self.hist
