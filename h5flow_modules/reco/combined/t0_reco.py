@@ -23,7 +23,7 @@ class T0Reconstruction(H5FlowStage):
          Both ``light_hits_dset_name`` and ``ext_trigs_dset_name`` are required
          in the cache, if enabled.
 
-         Requires RunData and Units resource in workflow.
+         Requires RunData resource in workflow.
 
          ``t0`` datatype::
 

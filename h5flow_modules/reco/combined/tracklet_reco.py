@@ -16,8 +16,8 @@ class TrackletReconstruction(H5FlowStage):
 
         Parameters:
          - ``tracklet_dset_name``: ``str``, path to output dataset
-         - ``t0_dset_name``: ``str``, path to input t0 dataset
          - ``hits_dset_name``: ``str``, path to input charge hits dataset
+         - ``hit_drift_dset_name``: ``str``, path to charge hits drift data
          - ``dbscan_eps``: ``float``, dbscan epsilon parameter
          - ``dbscan_min_samples``: ``int``, dbscan min neighbor points to consider as "core" point
          - ``ransac_min_samples``: ``int``, min points to run ransac algorithm
@@ -26,7 +26,7 @@ class TrackletReconstruction(H5FlowStage):
          - ``max_iterations``: ``int``, max number of fitting iterations before giving up
          - ``max_nhit``: ``int``, skip track fitting on events with greater number of hits, ``None`` to apply no cut
 
-        Both ``hits_dset_name`` and ``t0_dset_name`` are required in the cache.
+        Both ``hits_dset_name`` and ``hits_drift_dset_name`` are required in the cache.
 
         Requires Geometry, RunData, and Units resource in workflow.
 
@@ -52,11 +52,11 @@ class TrackletReconstruction(H5FlowStage):
             dn                  i8(trajectory_pts-1,)       nhit along track displacement
 
     '''
-    class_version = '0.1.0'
+    class_version = '1.0.0'
 
     default_tracklet_dset_name = 'combined/tracklets'
     default_hits_dset_name = 'charge/hits'
-    default_t0_dset_name = 'combined/t0'
+    default_hit_drift_dset_name = 'combined/hit_drift'
 
     default_dbscan_eps = 25
     default_dbscan_min_samples = 5
@@ -90,7 +90,7 @@ class TrackletReconstruction(H5FlowStage):
 
         self.tracklet_dset_name = params.get('tracklet_dset_name', self.default_tracklet_dset_name)
         self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
-        self.t0_dset_name = params.get('t0_dset_name', self.default_t0_dset_name)
+        self.hit_drift_dset_name = params.get('hit_drift_dset_name', self.default_hit_drift_dset_name)
 
         self._dbscan_eps = params.get('dbscan_eps', self.default_dbscan_eps)
         self._dbscan_min_samples = params.get('dbscan_min_samples', self.default_dbscan_min_samples)
@@ -111,7 +111,7 @@ class TrackletReconstruction(H5FlowStage):
                                     classname=self.classname,
                                     class_version=self.class_version,
                                     hits_dset=self.hits_dset_name,
-                                    t0_dset=self.t0_dset_name,
+                                    hit_drift_dset=self.hit_drift_dset_name,
                                     dbscan_eps=self._dbscan_eps,
                                     dbscan_min_samples=self._dbscan_min_samples,
                                     ransac_min_samples=self._ransac_min_samples,
@@ -128,14 +128,17 @@ class TrackletReconstruction(H5FlowStage):
         self.data_manager.create_ref(source_name, self.tracklet_dset_name)
 
     def run(self, source_name, source_slice, cache):
-        events = cache[source_name]       # shape: (N,)
-        t0 = cache[self.t0_dset_name]     # shape: (N,1)
-        hits = cache[self.hits_dset_name] # shape: (N,M)
+        events = cache[source_name]                         # shape: (N,)
+        hits = cache[self.hits_dset_name]                   # shape: (N,M)
+        hit_drift = cache[self.hit_drift_dset_name]         # shape: (N,M,1)
+        print(hit_drift.dtype)
+        hit_drift = hit_drift.reshape(hits.shape)
         if self.max_nhit is not None:
-            hits = ma.array(hits, mask=(events['nhit'][...,np.newaxis] > self.max_nhit) | hits['id'].mask)
+            hits = ma.array(hits, mask=(events['nhit'][..., np.newaxis] > self.max_nhit) | hits['id'].mask)
+            hit_drift = ma.array(hit_drift, mask=(events['nhit'][..., np.newaxis] > self.max_nhit) | hits['id'].mask)
 
-        track_ids = self.find_tracks(hits, t0)
-        tracks = self.calc_tracks(hits, t0, track_ids, self.trajectory_pts,
+        track_ids = self.find_tracks(hits, hit_drift['z'])
+        tracks = self.calc_tracks(hits, hit_drift['z'], track_ids, self.trajectory_pts,
                                   self.trajectory_dx)
         n_tracks = np.count_nonzero(~tracks['id'].mask)
         tracks_mask = ~tracks['id'].mask
@@ -156,30 +159,25 @@ class TrackletReconstruction(H5FlowStage):
         self.data_manager.write_ref(source_name, self.tracklet_dset_name, ref)
 
     @staticmethod
-    def hit_xyz(hits, t0):
-        drift_t = hits['ts'] - t0['ts']
-        drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks)
-
-        z = resources['Geometry'].get_z_coordinate(hits['iogroup'], hits['iochannel'], drift_d)
-
+    def hit_xyz(hits, hit_z):
         xyz = np.concatenate((
             np.expand_dims(hits['px'], axis=-1),
             np.expand_dims(hits['py'], axis=-1),
-            np.expand_dims(z, axis=-1),
+            np.expand_dims(hit_z, axis=-1),
         ), axis=-1)
         return xyz
 
-    def find_tracks(self, hits, t0):
+    def find_tracks(self, hits, hit_z):
         '''
             Extract tracks from a given hits array
 
             :param hits: masked array ``shape: (N, n)``
 
-            :param t0: masked array ``shape: (N, 1)``
+            :param hit_z: masked array ``shape: (N, n)``
 
             :returns: mask array ``shape: (N, n)`` of track ids for each hit, a value of -1 means no track is associated with the hit
         '''
-        xyz = self.hit_xyz(hits, t0)
+        xyz = self.hit_xyz(hits, hit_z)
 
         iter_mask = np.ones(hits.shape, dtype=bool)
         iter_mask = iter_mask & (~hits['id'].mask)
@@ -227,13 +225,13 @@ class TrackletReconstruction(H5FlowStage):
         return ma.array(track_id, mask=hits['id'].mask)
 
     @classmethod
-    def calc_tracks(cls, hits, t0, track_ids, trajectory_pts, trajectory_dx):
+    def calc_tracks(cls, hits, hit_z, track_ids, trajectory_pts, trajectory_dx):
         '''
-            Calculate track parameters from hits and t0
+            Calculate track parameters from hits
 
             :param hits: masked array, ``shape: (N,M)``
 
-            :param t0: masked array, ``shape: (N,1)``
+            :param hit_z: masked array, ``shape: (N,M)``
 
             :param track_ids: masked array, ``shape: (N,M)``
 
@@ -243,11 +241,11 @@ class TrackletReconstruction(H5FlowStage):
 
             :returns: masked array, ``shape: (N,m)``
         '''
-        xyz = cls.hit_xyz(hits, t0)
+        xyz = cls.hit_xyz(hits, hit_z)
 
         n_tracks = np.clip(track_ids.max() + 1, 1, np.inf).astype(int) if np.count_nonzero(~track_ids.mask) \
             else 1
-        tracks = np.empty((len(t0), n_tracks), dtype=cls.tracklet_dtype(trajectory_pts))
+        tracks = np.empty((len(hits), n_tracks), dtype=cls.tracklet_dtype(trajectory_pts))
         tracks_mask = np.ones(tracks.shape, dtype=bool)
         for i in range(tracks.shape[0]):
             for j in range(tracks.shape[1]):
@@ -255,7 +253,7 @@ class TrackletReconstruction(H5FlowStage):
                         & (~hits['id'].mask[i]))
                 if np.count_nonzero(mask) < 2:
                     continue
-                    
+
                 # PCA on central hits
                 centroid, axis = cls.do_pca(xyz[i], mask)
                 r_min, r_max = cls.projected_limits(
@@ -264,7 +262,9 @@ class TrackletReconstruction(H5FlowStage):
                 xyp = cls.xyp(axis, centroid)
 
                 # run trajectory approximation algo
-                traj = cls.trajectory_approx(centroid, axis, xyz[i][mask], npts=trajectory_pts, dx=trajectory_dx)  # (npts, 3)
+                traj = cls.trajectory_approx(centroid, axis, xyz[i][mask],
+                                             npts=trajectory_pts, dx=trajectory_dx,
+                                             weights=hits[i][mask]['q'])  # (npts, 3)
                 dt, d = cls.trajectory_residual(xyz[i][mask], traj)  # (npts-1, N)
                 min_edge_mask = d != np.min(d, axis=0, keepdims=True)  # (npts-1, N)
                 edge_q = ma.sum(ma.array(
@@ -323,7 +323,7 @@ class TrackletReconstruction(H5FlowStage):
         return inliers
 
     @staticmethod
-    def trajectory_approx(centroid, axis, xyz, npts, dx):
+    def trajectory_approx(centroid, axis, xyz, npts, dx, weights=None):
         '''
             :param centroid: ``shape: (3,)`` pre-calculated centroid of 3D positions
 
@@ -343,8 +343,8 @@ class TrackletReconstruction(H5FlowStage):
         start_pt = np.argmin(s, axis=0)
         end_pt = np.argmax(s, axis=0)
 
-        traj[0] = TrackletReconstruction.local_mean(xyz, xyz[start_pt], dx)
-        traj[1:] = TrackletReconstruction.local_mean(xyz, xyz[end_pt], dx)
+        traj[0] = TrackletReconstruction.local_mean(xyz, xyz[start_pt], dx, weights=weights)
+        traj[1:] = TrackletReconstruction.local_mean(xyz, xyz[end_pt], dx, weights=weights)
         traj_s[0] = s[start_pt]
         traj_s[1:] = s[end_pt]
 
@@ -362,7 +362,7 @@ class TrackletReconstruction(H5FlowStage):
             max_pt = ma.argmax(ma.array(res, mask=mask), axis=1)  # (1,)
 
             # update trajectory
-            new_pt = TrackletReconstruction.local_mean(xyz, xyz[max_pt].ravel(), dx)  # (3,)
+            new_pt = TrackletReconstruction.local_mean(xyz, xyz[max_pt].ravel(), dx, weights=weights)  # (3,)
             new_s = np.sum((new_pt - centroid) * axis, axis=-1)  # (1,)
             traj[i] = new_pt
             traj_s[i] = new_s
@@ -374,13 +374,15 @@ class TrackletReconstruction(H5FlowStage):
         return traj
 
     @staticmethod
-    def local_mean(xyz, pt, dx):
+    def local_mean(xyz, pt, dx, weights=None):
         '''
             :param xyz: ``shape: (N, 3)``
 
             :param pt: ``shape: (3,)``
 
             :param dx: ``float`` radius to include in mean
+
+            :param weights: ``shape: (N,)`` relative weights for each pt, ``None`` applies same weights
 
             :returns: ``shape: (M, 3)``
         '''
@@ -389,7 +391,8 @@ class TrackletReconstruction(H5FlowStage):
         d = np.linalg.norm(r, axis=-1, keepdims=True)  # (N,1)
 
         mask = np.broadcast_to(d > dx, r.shape)  # (N,3)
-        traj = ma.mean(ma.array(np.expand_dims(xyz, axis=1), mask=mask), axis=0)  # (3,)
+        traj = ma.average(ma.array(np.expand_dims(xyz, axis=1), mask=mask),
+                          axis=0, weights=weights)  # (3,)
         return traj
 
     @staticmethod
