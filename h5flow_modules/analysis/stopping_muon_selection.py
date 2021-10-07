@@ -408,10 +408,14 @@ class StoppingMuonSelection(H5FlowStage):
         # calculate MCS log-likelihood
         # pack profile pts
         valid_mask = (profile_dqdx > 0)
+        any_valid = np.any(valid_mask)
         npts = np.sum(valid_mask, axis=-1, keepdims=True)
-        max_npts = np.max(npts)
-
-        packed_pos = np.zeros(valid_mask.shape[:-1] + (max_npts, 3))
+        if any_valid:
+            max_npts = npts.max()
+        else:
+            max_npts = 0
+        
+        packed_pos = np.zeros(valid_mask.shape[:-1] + (max_npts,3))
         packed_dqdx = np.zeros(valid_mask.shape[:-1] + (max_npts,))
         packed_rr = np.zeros(valid_mask.shape[:-1] + (max_npts,))
         place_mask = np.indices(packed_pos.shape)[-2] < npts[..., np.newaxis]
@@ -432,12 +436,12 @@ class StoppingMuonSelection(H5FlowStage):
 
         angle_term = stats.norm.logpdf(angle, loc=0, scale=interp_angle_width) + np.log(2)
 #         angle_term = -np.abs(angle) / np.pi
-        if np.any(valid_mask):
-            np.put_along_axis(angle_term, np.argmin(np.abs(packed_rr), axis=-1)[..., np.newaxis], -np.log(2 * np.pi), axis=-1)
-            angle_term[..., 0] = 0  # skip first and last bins
-            angle_term[..., -1] = 0
-            angle_term[(packed_dqdx <= 0)] = 0  # remove empty bins
-
+        if any_valid:
+            np.put_along_axis(angle_term, np.argmin(np.abs(packed_rr), axis=-1)[...,np.newaxis], -np.log(2*np.pi), axis=-1)
+            angle_term[...,0] = 0 # skip first and last bins
+            angle_term[...,-1] = 0
+            angle_term[(packed_dqdx <= 0)] = 0 # remove empty bins
+        
         # and now unpack profile pts
         rv_angle_term = np.zeros(valid_mask.shape)
         np.place(rv_angle_term, valid_mask, angle_term[place_mask])
@@ -793,30 +797,39 @@ class StoppingMuonSelection(H5FlowStage):
             # lookup the track's true trajectory
             track_traj = self.load_track_trajectories(source_name, source_slice,
                                                       self.mc_trajectory_path)
-            track_traj = track_traj.reshape(tracks.shape[0:1] + (-1,))
-            track_traj = condense_array(track_traj, track_traj['trackID'].mask)
 
-            i_primary_traj = np.argmin(track_traj['trackID'], axis=-1)
-            track_true_traj = np.take_along_axis(track_traj, i_primary_traj[..., np.newaxis], axis=-1)
-            track_true_traj = track_true_traj.reshape(-1)
+            if track_traj.shape[0]:
+                track_traj = track_traj.reshape(tracks.shape[0:1] + (-1,))
+                track_traj = condense_array(track_traj, track_traj['trackID'].mask)
 
-            # find if trajectory ends in the fiducial volume
-            true_xyz_start = track_true_traj['xyz_start'].copy()
-            true_xyz_end = track_true_traj['xyz_end'].copy()
-            # FIXME: coordinates are weird between sim and data
-            true_xyz_start[:, 1] += 218.236
-            true_xyz_end[:, 1] += 218.236
-            new_x_start = true_xyz_start[:, 2].copy()
-            new_x_end = true_xyz_end[:, 2].copy()
-            new_z_start = true_xyz_start[:, 0].copy()
-            new_z_end = true_xyz_end[:, 0].copy()
-            true_xyz_start[:, 0] = new_x_start
-            true_xyz_start[:, 2] = new_z_start
-            true_xyz_end[:, 0] = new_x_end
-            true_xyz_end[:, 2] = new_z_end
-            is_muon = ma.abs(track_true_traj['pdgId']) == 13
-            is_proton = track_true_traj['pdgId'] == 2212
-            is_true_stopping = self.contained(true_xyz_start, true_xyz_end)
+                i_primary_traj = np.argmin(track_traj['trackID'], axis=-1)
+                track_true_traj = np.take_along_axis(track_traj, i_primary_traj[...,np.newaxis], axis=-1)
+                track_true_traj = track_true_traj.reshape(-1)
+
+                # find if trajectory ends in the fiducial volume
+                true_xyz_start = track_true_traj['xyz_start'].copy()
+                true_xyz_end = track_true_traj['xyz_end'].copy()
+                # FIXME: coordinates are weird between sim and data
+                true_xyz_start[:, 1] += 218.236
+                true_xyz_end[:, 1] += 218.236
+                new_x_start = true_xyz_start[:, 2].copy()
+                new_x_end = true_xyz_end[:, 2].copy()
+                new_z_start = true_xyz_start[:, 0].copy()
+                new_z_end = true_xyz_end[:, 0].copy()
+                true_xyz_start[:, 0] = new_x_start
+                true_xyz_start[:, 2] = new_z_start
+                true_xyz_end[:, 0] = new_x_end
+                true_xyz_end[:, 2] = new_z_end
+                is_muon = ma.abs(track_true_traj['pdgId']) == 13
+                is_proton = track_true_traj['pdgId'] == 2212
+                is_true_stopping = self.contained(true_xyz_start, true_xyz_end)
+            else:
+                track_true_traj = np.empty(tracks.shape[0], dtype=track_traj.dtype)
+                is_muon = np.zeros(track_true_traj.shape, dtype=bool)
+                is_proton = np.zeros(track_true_traj.shape, dtype=bool)
+                is_true_stopping = np.zeros(track_true_traj.shape, dtype=bool)
+                true_xyz_start = track_true_traj['xyz_start']
+                true_xyz_end = track_true_traj['xyz_end']
 
         # define a stopping event as one with exclusively 1 track that ends in fid.
         event_is_stopping = ((ma.sum(is_stopping, axis=-1) == 1)
@@ -924,7 +937,7 @@ class StoppingMuonSelection(H5FlowStage):
                                      - np.mean(mip_likelihood_dqdx, axis=-1)
                                      - np.mean(mip_likelihood_mcs, axis=-1) * 0 > self.muon_classifier_cut))
 
-        if self.is_mc:
+        if self.is_mc and len(is_muon):
             # define true stopping events as events with at least 1 muon that ends in fid.
             event_is_true_stopping = is_muon & is_true_stopping
             true_stop_pt = np.where(np.expand_dims(self.in_fid(true_xyz_start), axis=-1),
@@ -932,37 +945,41 @@ class StoppingMuonSelection(H5FlowStage):
 
         # prep arrays to write to file
         event_sel = np.zeros(len(tracks), dtype=self.event_sel_dtype)
-        event_sel['sel'] = event_is_stopping_muon
-        event_sel['stop'] = event_is_stopping & end_pt_in_fid
-        event_sel['muon_loglikelihood_mean'] = np.mean(muon_likelihood_mcs, axis=-1) * 0 + np.mean(muon_likelihood_dqdx, axis=-1)
-        event_sel['proton_loglikelihood_mean'] = np.mean(proton_likelihood_mcs, axis=-1) * 0 + np.mean(proton_likelihood_dqdx, axis=-1)
-        event_sel['mip_loglikelihood_mean'] = np.mean(mip_likelihood_mcs, axis=-1) * 0 + np.mean(mip_likelihood_dqdx, axis=-1)
-        event_sel['stop_pt'] = end_pt.reshape(event_sel['stop_pt'].shape)
-        event_sel['remaining_e'] = e
-        event_sel['d_to_edge'] = ma.sum(is_stopping * d_to_edge, axis=-1)
+
+        if len(event_sel):
+            event_sel['sel'] = event_is_stopping_muon
+            event_sel['stop'] = event_is_stopping & end_pt_in_fid
+            event_sel['muon_loglikelihood_mean'] = np.mean(muon_likelihood_mcs, axis=-1)*0 + np.mean(muon_likelihood_dqdx, axis=-1)
+            event_sel['proton_loglikelihood_mean'] = np.mean(proton_likelihood_mcs, axis=-1)*0 + np.mean(proton_likelihood_dqdx, axis=-1)
+            event_sel['mip_loglikelihood_mean'] = np.mean(mip_likelihood_mcs, axis=-1)*0 + np.mean(mip_likelihood_dqdx, axis=-1)
+            event_sel['stop_pt'] = end_pt.reshape(event_sel['stop_pt'].shape)
+            event_sel['remaining_e'] = e
+            event_sel['d_to_edge'] = ma.sum(is_stopping * d_to_edge, axis=-1)
 
         event_profile = np.zeros(len(tracks), dtype=self.event_profile_dtype)
-        event_profile['seed_pt'] = start_pt.reshape(event_profile['seed_pt'].shape)
-        event_profile['profile_rr'] = profile_rr
-        event_profile['profile_dqdx'] = profile_dqdx
-        event_profile['profile_n'] = dn
-        event_profile['profile_dx'] = ds
-        event_profile['profile_pos'] = pos
-        event_profile['muon_likelihood'][..., 0] = muon_likelihood_dqdx
-        event_profile['proton_likelihood'][..., 0] = proton_likelihood_dqdx
-        event_profile['mip_likelihood'][..., 0] = mip_likelihood_dqdx
-        event_profile['muon_likelihood'][..., 1] = muon_likelihood_mcs
-        event_profile['proton_likelihood'][..., 1] = proton_likelihood_mcs
-        event_profile['mip_likelihood'][..., 1] = mip_likelihood_mcs
+        if len(event_profile):
+            event_profile['seed_pt'] = start_pt.reshape(event_profile['seed_pt'].shape)
+            event_profile['profile_rr'] = profile_rr
+            event_profile['profile_dqdx'] = profile_dqdx
+            event_profile['profile_n'] = dn
+            event_profile['profile_dx'] = ds
+            event_profile['profile_pos'] = pos
+            event_profile['muon_likelihood'][...,0] = muon_likelihood_dqdx
+            event_profile['proton_likelihood'][...,0] = proton_likelihood_dqdx
+            event_profile['mip_likelihood'][...,0] = mip_likelihood_dqdx
+            event_profile['muon_likelihood'][...,1] = muon_likelihood_mcs
+            event_profile['proton_likelihood'][...,1] = proton_likelihood_mcs
+            event_profile['mip_likelihood'][...,1] = mip_likelihood_mcs
 
         if self.is_mc:
             event_true_sel = np.zeros(len(tracks), dtype=self.event_sel_dtype)
-            event_true_sel['sel'] = event_is_true_stopping
-            event_true_sel['stop'] = is_true_stopping
-            event_true_sel['muon_loglikelihood_mean'] = ma.sum(is_muon & is_true_stopping, axis=-1) >= 1
-            event_true_sel['proton_loglikelihood_mean'] = ma.sum(is_proton & is_true_stopping, axis=-1) >= 1
-            event_true_sel['mip_loglikelihood_mean'] = ma.sum(is_muon & ~is_true_stopping, axis=-1) >= 1
-            event_true_sel['stop_pt'] = true_stop_pt.reshape(event_true_sel['stop_pt'].shape)
+            if len(event_true_sel):
+                event_true_sel['sel'] = event_is_true_stopping
+                event_true_sel['stop'] = is_true_stopping
+                event_true_sel['muon_loglikelihood_mean'] = ma.sum(is_muon & is_true_stopping, axis=-1) >= 1
+                event_true_sel['proton_loglikelihood_mean'] = ma.sum(is_proton & is_true_stopping, axis=-1) >= 1
+                event_true_sel['mip_loglikelihood_mean'] = ma.sum(is_muon & ~is_true_stopping, axis=-1) >= 1
+                event_true_sel['stop_pt'] = true_stop_pt.reshape(event_true_sel['stop_pt'].shape)
 
         # reserve data space
         event_sel_slice = self.data_manager.reserve_data(
