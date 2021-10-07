@@ -2,7 +2,7 @@
 
 flow:
   source: events
-  stages: [t0_reco, tracklet_reco, tracklet_merge]
+  stages: [t0_reco, drift_reco, tracklet_reco, tracklet_merge]
   drop: []
 
 events:
@@ -25,15 +25,27 @@ t0_reco:
     t0_dset_name: 'combined/t0'
     ext_trigs_dset_name: 'charge/ext_trigs'
 
+drift_reco:
+  classname: DriftReconstruction # combined/drift_reco.py
+  requires:
+    - 'combined/t0'
+    - 'charge/hits'
+  params:
+    t0_dset_name: 'combined/t0'
+    hits_dset_name: 'charge/hits'
+    drift_dset_name: 'combined/hit_drift'
+
 tracklet_reco:
   classname: TrackletReconstruction # combined/tracklet_reco.py
   requires:
     - 'combined/t0'
     - 'charge/hits'
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
   params:
     tracklet_dset_name: 'combined/tracklets'
     hits_dset_name: 'charge/hits'
-    t0_dset_name: 'combined/t0'
+    hit_drift_dset_name: 'combined/hit_drift'
     dbscan_eps: 25
     dbscan_min_samples: 5
     ransac_min_samples: 2
@@ -47,12 +59,13 @@ tracklet_merge:
      - 'combined/tracklets'
      - name: 'combined/track_hits'
        path: ['combined/tracklets', 'charge/hits']
-     - 'combined/t0'
+     - name: 'combined/track_hit_drift'
+       path: ['combined/tracklets', 'charge/hits', 'combined/hit_drift']
     params:
         merged_dset_name: 'combined/tracklets/merged'
-        t0_dset_name: 'combined/t0'
         hits_dset_name: 'charge/hits'
         track_hits_dset_name: 'combined/track_hits'
+        track_hit_drift_dset_name: 'combined/track_hit_drift'
         tracks_dset_name: 'combined/tracklets'
         pdf_filename: 'joint_pdf-2_0_1.npz'
         pvalue_cut: 0.05

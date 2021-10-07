@@ -42,13 +42,13 @@ class TrackletMerger(H5FlowStage):
          - ``pvalue_cut``: ``float``, p-value/inefficiency used as cut for likelihood ratio
          - ``max_neighbors``: ``int``, number of neighbor tracks to attempt merge procedure
          - ``hits_dset_name``: ``str``, path to input charge hits dataset
-         - ``t0_dset_name``: ``str``, path to input t0 dataset
+         - ``hit_drift_dset_name``: ``str``, path to charge hit drift data
          - ``hits_dset_name``: ``str``, path to input charge hits dataset
          - ``track_hits_dset_name``: ``str``, path to input track-referred charge hits dataset
          - ``tracks_dset_name``: ``str``, path to input track dataset
          - ``merged_dset_name``: ``str``, path to output track dataset
 
-        All of ``hits_dset_name``, ``t0_dset_name``, ``track_hits_dset_name``,
+        All of ``hits_dset_name``, ``hit_drift_dset_name``, ``track_hits_dset_name``,
         and ``tracks_dset_name`` are required in the cache.
 
         Requires both Geometry and DisabledChannels resources in workflow.
@@ -62,11 +62,13 @@ class TrackletMerger(H5FlowStage):
                 classname: TrackletMerger
                 requires:
                  - 'combined/tracklets'
-                 - 'charge/hits'
-                 - 'combined/t0'
+                 - name: 'combined/track_hits
+                   path: ['combined/tracklets', charge/hits']
+                 - name: 'combined/track_hit_drift
+                   path: ['combined/tracklets', charge/hits', 'combined/hit_drift']
                 params:
                     merged_dset_name: 'combined/tracklets/merged'
-                    t0_dset_name: 'combined/t0'
+                    hit_drift_dset_name: 'combined/hit_drift'
                     hits_dset_name: 'charge/hits'
                     tracks_dset_name: 'combined/tracklets'
                     pdf_filename: 'joint_pdf.npz'
@@ -74,7 +76,7 @@ class TrackletMerger(H5FlowStage):
                     max_neighbors: 5
 
     '''
-    class_version = '2.0.1'
+    class_version = '3.0.0'
 
     default_pdf_filename = 'joint_pdf-2_0_1.npz'
     default_pdf_sig_name = 'rereco'
@@ -82,7 +84,7 @@ class TrackletMerger(H5FlowStage):
     default_pvalue_cut = 0.10
     default_max_neighbors = 5
 
-    default_t0_dset_name = 'combined/t0'
+    default_hit_drift_dset_name = 'combined/track_hit_drift'
     default_hits_dset_name = 'charge/hits'
     default_tracks_dset_name = 'combined/tracklets'
     default_track_hits_dset_name = 'combined/track_hits'
@@ -102,7 +104,7 @@ class TrackletMerger(H5FlowStage):
         self.pvalue_cut = params.get('pvalue_cut', self.default_pvalue_cut)
         self.max_neighbors = params.get('max_neighbors', self.default_max_neighbors)
 
-        self.t0_dset_name = params.get('t0_dset_name', self.default_t0_dset_name)
+        self.hit_drift_dset_name = params.get('hit_drift_dset_name', self.default_hit_drift_dset_name)
         self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
         self.track_hits_dset_name = params.get('track_hits_dset_name', self.default_track_hits_dset_name)
         self.tracks_dset_name = params.get('tracks_dset_name', self.default_tracks_dset_name)
@@ -117,7 +119,7 @@ class TrackletMerger(H5FlowStage):
                                     classname=self.classname,
                                     class_version=self.class_version,
                                     hits_dset=self.hits_dset_name,
-                                    t0_dset=self.t0_dset_name,
+                                    hit_drift_dset=self.hit_drift_dset_name,
                                     tracks_dset=self.tracks_dset_name,
                                     max_neighbors=self.max_neighbors,
                                     pvalue_cut=self.pvalue_cut,
@@ -139,9 +141,10 @@ class TrackletMerger(H5FlowStage):
         self.pixel_y = np.unique(resources['Geometry'].pixel_xy.compress((1,)))
 
     def run(self, source_name, source_slice, cache):
-        t0 = cache[self.t0_dset_name]
+        track_hit_drift = cache[self.hit_drift_dset_name]
         track_hits = cache[self.track_hits_dset_name]
         tracks = cache[self.tracks_dset_name]
+        track_hit_drift = track_hit_drift.reshape(track_hits.shape)
 
         # ajacency matrix to represent if tracks should be merged or not (True == to merge)
         track_merged = np.expand_dims(np.diagflat(np.ones(tracks.shape[-1], dtype=bool)), axis=0)
@@ -201,31 +204,35 @@ class TrackletMerger(H5FlowStage):
                 track_merged_mask[ev, index] = False
             track_grp = ma.array(track_merged, mask=track_merged_mask | ~track_merged)
             track_grp_nhit = np.sum(np.expand_dims(tracks['nhit'], axis=1) * track_grp, axis=-1).filled(0)
-            
+
             track_grp_hits_shape = track_grp.shape[:-1] + (np.max(track_grp_nhit),)
             # (n_ev, n_grp, n_hit')
             track_grp_hits = np.zeros(track_grp_hits_shape, dtype=track_hits.dtype)
+            track_grp_hit_drift = np.zeros(track_grp_hits_shape, dtype=track_hit_drift.dtype)
             track_grp_id = np.zeros(track_grp_hits_shape, dtype=int)
             track_grp_hits_mask = np.ones(track_grp_hits_shape, dtype=bool)
             for grp_idx in range(track_grp_hits_shape[-2]):
-                mask = np.indices(track_grp_hits[:,grp_idx].shape)[-1] < track_grp_nhit[:,grp_idx,np.newaxis]
-                
-                hit_mask = ~track_hits[track_grp[:,grp_idx].filled(False)]['id'].mask
-                np.place(track_grp_hits[:,grp_idx], mask, track_hits[track_grp[:,grp_idx].filled(0)][hit_mask])
-                np.place(track_grp_id[:,grp_idx], mask, grp_idx)
-                np.place(track_grp_hits_mask[:,grp_idx], mask, False)
-                
+                mask = np.indices(track_grp_hits[:, grp_idx].shape)[-1] < track_grp_nhit[:, grp_idx, np.newaxis]
+
+                hit_mask = ~track_hits[track_grp[:, grp_idx].filled(False)]['id'].mask
+                np.place(track_grp_hits[:, grp_idx], mask, track_hits[track_grp[:, grp_idx].filled(0)][hit_mask])
+                np.place(track_grp_hit_drift[:, grp_idx], mask, track_hit_drift[track_grp[:, grp_idx].filled(0)][hit_mask])
+                np.place(track_grp_id[:, grp_idx], mask, grp_idx)
+                np.place(track_grp_hits_mask[:, grp_idx], mask, False)
+
             track_grp_hits = ma.array(track_grp_hits, mask=track_grp_hits_mask)
+            track_grp_hit_drift = ma.array(track_grp_hit_drift, mask=track_grp_hits_mask)
             track_grp_id = ma.array(track_grp_id, mask=track_grp_hits_mask)
-            
+
             new_shape = track_grp.shape[0:1] + (-1,)
             track_grp_hits = track_grp_hits.reshape(new_shape)
+            track_grp_hit_drift = track_grp_hit_drift.reshape(new_shape)
             track_grp_id = track_grp_id.reshape(new_shape)
-            
+
             # recalculate track parameters
             calc_shape = (track_grp_id.shape[0], -1)
             merged_tracks = TrackletReconstruction.calc_tracks(
-                track_grp_hits.reshape(calc_shape), t0,
+                track_grp_hits.reshape(calc_shape), track_grp_hit_drift['z'].reshape(calc_shape),
                 track_grp_id.reshape(calc_shape), self.trajectory_pts,
                 self.trajectory_dx)
         else:
@@ -233,6 +240,7 @@ class TrackletMerger(H5FlowStage):
             track_grp = ma.masked_all((0, 1, 1), dtype=bool)
             track_grp_id = ma.masked_all((0, 1), dtype=int)
             track_grp_hits = ma.masked_all((0, 1), dtype=track_hits.dtype)
+            track_grp_hit_drift = ma.masked_all((0, 1), dtype=track_hit_drift.dtype)
 
         # save to merged track dataset
         n_tracks = np.count_nonzero(~merged_tracks['id'].mask)
@@ -310,7 +318,7 @@ class TrackletMerger(H5FlowStage):
             # combine with current track(s)
             new_mask[:] = (new_mask | (other_mask & other_matched) | (other_mask & self_matched))
             step += 1
-            
+
         if np.all(new_mask == mask):
             return new_mask
         return TrackletMerger.create_groups(new_mask)
@@ -375,7 +383,7 @@ class TrackletMerger(H5FlowStage):
         orig_mask0, orig_mask1 = np.broadcast_arrays(orig_mask0, orig_mask1)
         start_xyz0, end_xyz0, start_xyz1, end_xyz1 = np.broadcast_arrays(
             start_xyz0, end_xyz0, start_xyz1, end_xyz1)
-        
+
         d = start_xyz0 - start_xyz1
         v0, v1 = (end_xyz0 - start_xyz0, end_xyz1 - start_xyz1)
         l0, l1 = (np.linalg.norm(v0, axis=-1, keepdims=True),
@@ -404,7 +412,7 @@ class TrackletMerger(H5FlowStage):
             parallel_mask = (1 - v_dp**2 == 0)[..., 0]
             if np.any(parallel_mask):
                 # grab mean position
-                p = (start_xyz0 + end_xyz0 + start_xyz1 + end_xyz1)/4
+                p = (start_xyz0 + end_xyz0 + start_xyz1 + end_xyz1) / 4
                 # calculate perpendicular points on other segments
                 d0 = (start_xyz0 - p) - v0 * np.sum((start_xyz0 - p) * v0,
                                                     axis=-1, keepdims=True)
@@ -450,12 +458,12 @@ class TrackletMerger(H5FlowStage):
         poca0 = (1 - s0) * start0 + s0 * end0
         poca1 = (1 - s1) * start1 + s1 * end1
         poca_d = np.linalg.norm(poca0 - poca1, axis=-1)
-        poca_d = ma.array(poca_d, mask=s0.mask[...,0] | s1.mask[...,0])
+        poca_d = ma.array(poca_d, mask=s0.mask[..., 0] | s1.mask[..., 0])
 
         # remove segments with 0 length
         mask = ((np.linalg.norm(end0 - start0, axis=-1) == 0)
                 | (np.linalg.norm(end1 - start1, axis=-1) == 0))
-        poca_d[mask] = poca_d.max() 
+        poca_d[mask] = poca_d.max()
 
         # minimize point of closest approach
         min_poca_d0 = np.expand_dims(ma.argmin(poca_d, axis=-1), -1)  # (n, M, n0-1, 1)
@@ -488,7 +496,7 @@ class TrackletMerger(H5FlowStage):
         end1.mask[mask] = True
         poca0.mask[mask] = True
         poca1.mask[mask] = True
-        
+
         return (start0, end0, start1, end1, poca0, poca1)
 
     @staticmethod

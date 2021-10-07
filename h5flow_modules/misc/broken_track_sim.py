@@ -46,10 +46,10 @@ class BrokenTrackSim(H5FlowStage):
          - ``broken_track_distance_cut``: ``float``, cut on the distance of the 2nd-closest new track endpoint from the closest source endpoint to label a track as broken
 
          - ``tracks_dset_name``: ``str``, path to input tracks dataset
-         - ``t0_dset_name``: ``str``, path to input t0 dataset
+         - ``hit_drift_dset_name``: ``str``, path to charge hit drift data
          - ``hits_dset_name``: ``str``, path to input charge hits dataset
 
-        All of ``tracks_dset_name``, ``hits_dset_name``, and ``t0_dset_name``
+        All of ``tracks_dset_name``, ``hits_dset_name``, and ``hit_drift_dset_name``
         are required in the cache.
 
         Requires Geometry and DisabledChannels resources in workflow.
@@ -79,7 +79,7 @@ class BrokenTrackSim(H5FlowStage):
         ``TrackletReconstruction.tracklet_dtype``.
 
     '''
-    class_version = '2.0.1'
+    class_version = '3.0.0'
 
     offset_dtype = np.dtype([
         ('id', 'u4'),
@@ -134,7 +134,7 @@ class BrokenTrackSim(H5FlowStage):
 
         self.tracks_dset_name = params.get('tracks_dset_name', 'combined/tracklets')
         self.hits_dset_name = params.get('hits_dset_name', 'charge/hits')
-        self.t0_dset_name = params.get('t0_dset_name', 'combined/t0')
+        self.hit_drift_dset_name = params.get('hit_drift_dset_name', 'combined/hit_drift')
 
     def init(self, source_name):
         self.trajectory_pts = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_pts']
@@ -188,7 +188,8 @@ class BrokenTrackSim(H5FlowStage):
         tracks = cache[self.tracks_dset_name]
         hits = cache[self.hits_dset_name]
         hits_track_idx = cache[f'{self.hits_dset_name}_track_idx']
-        t0 = cache[self.t0_dset_name]
+        hit_drift = cache[self.hit_drift_dset_name]
+        hit_drift = hit_drift.reshape(hits.shape)
         events = np.expand_dims(cache[source_name], axis=-1)
 
         if len(np.r_[source_slice]) != 0:
@@ -204,8 +205,8 @@ class BrokenTrackSim(H5FlowStage):
             d = self.apply_translation(hits, rand_x, rand_y)
             trans_hits = d['trans_hits']
 
-            track_ids = self.reco.find_tracks(trans_hits, t0)
-            new_tracks = self.reco.calc_tracks(trans_hits, t0, track_ids,
+            track_ids = self.reco.find_tracks(trans_hits, hit_drift['z'])
+            new_tracks = self.reco.calc_tracks(trans_hits, hit_drift['z'], track_ids,
                                                self.trajectory_pts,
                                                self.trajectory_dx)
 

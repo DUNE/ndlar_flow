@@ -20,7 +20,8 @@ resources:
 broken_track_sim:
   classname: BrokenTrackSim
   requires:
-    - 'combined/t0'
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
     - 'charge/hits'
     - name: 'charge/hits_track_idx'
       path: ['charge/hits', 'combined/tracklets']
