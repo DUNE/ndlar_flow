@@ -33,7 +33,6 @@ stopping_muon_sel:
     fid_cut: 20 # mm
     cathode_fid_cut: 20 # mm
     profile_dx: 22 # mm
-    lifetime: 2600 # us
     larpix_gain: 245 # e/mV
     curvature_rr_correction: 1.02409
     density_dx_correction_params: [0.81542117, -2.38250604, 30.23552873]

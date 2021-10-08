@@ -131,7 +131,6 @@ class TrackletReconstruction(H5FlowStage):
         events = cache[source_name]                         # shape: (N,)
         hits = cache[self.hits_dset_name]                   # shape: (N,M)
         hit_drift = cache[self.hit_drift_dset_name]         # shape: (N,M,1)
-        print(hit_drift.dtype)
         hit_drift = hit_drift.reshape(hits.shape)
         if self.max_nhit is not None:
             hits = ma.array(hits, mask=(events['nhit'][..., np.newaxis] > self.max_nhit) | hits['id'].mask)

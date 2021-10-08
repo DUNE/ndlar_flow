@@ -17,10 +17,26 @@ LAr data
    :members:
    :show-inheritance:
 
+Geometry
+--------
+
+.. automodule:: module0_flow.resources.geometry
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
 Particle data
 -------------
 
 .. automodule:: module0_flow.resources.particle_data
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
+Disabled channels
+-----------------
+
+.. automodule:: module0_flow.resources.disabled_channels
    :undoc-members:
    :members:
    :show-inheritance:

@@ -126,6 +126,13 @@ def proton_range_table(pytestconfig, tmp_path_factory):
 
 
 @pytest.fixture
+def electron_lifetime_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     'https://portal.nersc.gov/project/dune/data/Module0/electronLifetime/ElecLifetimeFit_Module0.root'
+                                     ))
+
+
+@pytest.fixture
 def muon_range_table(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      'https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/PDG_muon_range_table_Ar.txt'
