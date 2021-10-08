@@ -3,7 +3,7 @@ pytest
 scipy
 scikit-image
 scikit-learn
-yaml
+pyyaml
 recommonmark
 sphinx_rtd_theme
 .
