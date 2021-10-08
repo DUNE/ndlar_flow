@@ -772,6 +772,7 @@ class StoppingMuonSelection(H5FlowStage):
 
         # calculate hit positions and charge
         lifetime = resources['LArData'].electron_lifetime(events['unix_ts'].astype(float))[0]
+        lifetime = lifetime[..., np.newaxis]
         hit_q = self.larpix_gain * hits['q'] / np.exp(-hit_drift['t_drift'] / lifetime)  # convert mV -> ke
         hit_xyz = np.concatenate([
             hits['px'][..., np.newaxis], hits['py'][..., np.newaxis],

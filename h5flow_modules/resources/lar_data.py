@@ -145,7 +145,7 @@ class LArData(H5FlowResource):
 
         :returns: ``lifetime, (lifetime_lower_bound, lifetime_upper_bound)``
         '''
-        if 'electron_lifetime_data' in self.data:
+        if 'electron_lifetime_central_value' in self.data:
             self._init_electron_lifetime()
             return self._electron_lifetime_central_interp(unix_ts), (
                 self._electron_lifetime_lower_interp(unix_ts),
