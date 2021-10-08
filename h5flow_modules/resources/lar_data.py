@@ -139,7 +139,6 @@ class LArData(H5FlowResource):
         self.data['electron_lifetime_lower_bound']['unix_s'] = lower_bound_x
         self.data['electron_lifetime_lower_bound']['lt_us'] = lower_bound_y
 
-    @property
     def electron_lifetime(self, unix_ts):
         '''
         Convert the run unix timestamp into an electron lifetime value
