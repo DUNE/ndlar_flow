@@ -50,7 +50,8 @@ def charge_reco_file(charge_event_built_file, geometry_file, larpix_config_file,
 
 
 @pytest.fixture
-def light_event_built_file(light_source_file, runlist_file, tmp_h5_file):
+def light_event_built_file(light_source_file, runlist_file,
+                           electron_lifetime_file, tmp_h5_file):
     print('Light event building...')
     h5flow.run('h5flow_yamls/reco/light/light_event_building.yaml',
                tmp_h5_file,
@@ -113,6 +114,9 @@ def combined_file(charge_assoc_file, geometry_file, tmp_h5_file,
 
     check_dsets(tmp_h5_file, (
         'combined/t0/data',
+        'combined/hit_drift/data',
+        'combined/tracklets/data',
+        'combined/tracklets/merged/data'
     ))
 
     return tmp_h5_file
@@ -131,6 +135,9 @@ def combined_file_no_light(charge_reco_file, geometry_file, tmp_h5_file,
 
     check_dsets(tmp_h5_file, (
         'combined/t0/data',
+        'combined/hit_drift/data',
+        'combined/tracklets/data',
+        'combined/tracklets/merged/data'
     ))
 
     return tmp_h5_file
@@ -156,7 +163,8 @@ def broken_track_sim_file(combined_file_no_light, geometry_file, tmp_h5_file,
 
 @pytest.fixture
 def stopping_muon_analysis_file(combined_file, geometry_file,
-                                proton_range_table, muon_range_table, tmp_h5_file):
+                                proton_range_table, muon_range_table,
+                                electron_lifetime_file, tmp_h5_file):
     print('Stopping muon analysis...')
     h5flow.run('h5flow_yamls/analysis/stopping_muons_data.yaml',
                tmp_h5_file,
