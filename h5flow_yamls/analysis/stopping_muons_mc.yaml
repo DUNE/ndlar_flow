@@ -23,8 +23,11 @@ stopping_muon_sel:
     - 'combined/tracklets/merged'
     - 'combined/t0'
     - 'charge/hits'
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
   params:
     hits_dset_name: 'charge/hits'
+    hit_drift_dset_name: 'combined/hit_drift'    
     t0_dset_name: 'combined/t0'
     merged_dset_name: 'combined/tracklets/merged'
     fid_cut: 20 # mm
