@@ -77,6 +77,8 @@ class ParticleData(H5FlowResource):
                                                   self.default_proton_range_table_path)
 
     def init(self, source_name):
+        super(ParticleData, self).init(source_name)
+
         if not self.data_manager.attr_exists(self.path, 'classname'):
             # no data stored in file, generate it
             muon_table = self.load_pdg_range_table(self.muon_range_table_path)
@@ -153,19 +155,19 @@ class ParticleData(H5FlowResource):
 
         rv = ksi * (t0 + t1 + t2)
         return rv
-    
+
     def mcs_angle(self, t, mass, dx):
         ''' Multiple coulomb scattering characteristic angle '''
         e = t + mass
         p = np.sqrt(e**2 - mass**2)
         beta = p / e
         gamma = e / mass
-        
-        x = dx/resources['LArData'].radiation_length # radiation lengths
-        f = (1 + 0.088 * np.log10(x/beta**2))
+
+        x = dx / resources['LArData'].radiation_length  # radiation lengths
+        f = (1 + 0.088 * np.log10(x / beta**2))
         theta0 = (13.6 * units.MeV) / (beta * p) * np.sqrt(x) * f
         return theta0
-    
+
     def _ksi(self, x, beta):
         Z = resources['LArData'].Z
         A = resources['LArData'].A
@@ -185,7 +187,7 @@ class ParticleData(H5FlowResource):
         return (x < x0) * (
             (x < x1) * (2 * np.log(10) * x - cbar + a * (x1 - x)**k)
             + (x > x1) * (2 * np.log(10) * x - cbar))
-        
+
     @staticmethod
     def load_nist_range_table(path):
         '''

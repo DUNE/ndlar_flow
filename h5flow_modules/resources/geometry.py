@@ -34,6 +34,8 @@ class Geometry(H5FlowResource):
         # self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
 
     def init(self, source_name):
+        super(Geometry, self).init(source_name)
+
         # create group (if not present)
         self.data_manager.set_attrs(self.path)
         # load data (if present)

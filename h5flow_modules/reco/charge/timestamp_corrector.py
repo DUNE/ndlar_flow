@@ -5,6 +5,7 @@ import logging
 
 from h5flow.core import H5FlowStage, resources
 
+
 class TimestampCorrector(H5FlowStage):
     '''
         Corrects larpix clock timestamps due to slightly different PACMAN clock
@@ -51,10 +52,10 @@ class TimestampCorrector(H5FlowStage):
     class_version = '1.0.0'
 
     ts_dtype = np.dtype([
-        ('id','u8'), # unique identifier
-        ('ts','f8') # PPS timestamp after correcting for timestamp drift [ticks]
-        ])
-    correction_dtype = np.dtype([('iogroup','u1'),('offset','f8'),('slope','f8')])
+        ('id', 'u8'),  # unique identifier
+        ('ts', 'f8')  # PPS timestamp after correcting for timestamp drift [ticks]
+    ])
+    correction_dtype = np.dtype([('iogroup', 'u1'), ('offset', 'f8'), ('slope', 'f8')])
 
     def __init__(self, **params):
         super(TimestampCorrector, self).__init__(**params)
@@ -63,14 +64,16 @@ class TimestampCorrector(H5FlowStage):
         self.packets_dset_name = params.get('packets_dset_name')
 
         self.correction = defaultdict(self._default_correction)
-        for key,val in params.get('correction', dict()).items():
+        for key, val in params.get('correction', dict()).items():
             self.correction[key] = val
 
     @staticmethod
     def _default_correction():
-        return (0.,0.)
+        return (0., 0.)
 
     def init(self, source_name):
+        super(TimestampCorrector, self).init(source_name)
+
         # check if MC
         if resources['RunData'].is_mc:
             # bypass correction for MC
@@ -78,28 +81,30 @@ class TimestampCorrector(H5FlowStage):
 
         # write all configuration variables to the dataset
         self.data_manager.set_attrs(self.ts_dset_name,
-            classname=self.classname,
-            class_version=self.class_version,
-            source_dset=source_name,
-            packets_dset=self.packets_dset_name
-            )
+                                    classname=self.classname,
+                                    class_version=self.class_version,
+                                    source_dset=source_name,
+                                    packets_dset=self.packets_dset_name
+                                    )
         correction_arr = np.empty((len(self.correction.keys()),), dtype=self.correction_dtype)
-        for i,(key,val) in enumerate(self.correction.items()):
+        for i, (key, val) in enumerate(self.correction.items()):
             correction_arr[i]['iogroup'] = key
             correction_arr[i]['slope'] = val[1]
             correction_arr[i]['offset'] = val[0]
         self.data_manager.set_attrs(self.ts_dset_name,
-            correction=correction_arr
-            )
+                                    correction=correction_arr
+                                    )
 
         # then set up new datasets
         self.data_manager.create_dset(self.ts_dset_name, dtype=self.ts_dtype)
         self.data_manager.create_ref(self.packets_dset_name, self.ts_dset_name)
 
     def run(self, source_name, source_slice, cache):
+        super(TimestampCorrector, self).run(source_name, source_slice, cache)
+
         # get packet data from cache
         packets_data = cache[self.packets_dset_name]
-        packets_index = cache[self.packets_dset_name+'_index']
+        packets_index = cache[self.packets_dset_name + '_index']
 
         mask = ~rfn.structured_to_unstructured(packets_data.mask).any(axis=-1)
 
@@ -121,5 +126,5 @@ class TimestampCorrector(H5FlowStage):
 
         # save references
         #   packet -> packet_ts (1:1)
-        ref = np.c_[packets_index, ts_corr_data['id']] if len(packets_data) else np.empty((0,2))
+        ref = np.c_[packets_index, ts_corr_data['id']] if len(packets_data) else np.empty((0, 2))
         self.data_manager.write_ref(self.packets_dset_name, self.ts_dset_name, ref)

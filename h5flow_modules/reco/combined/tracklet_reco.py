@@ -107,6 +107,8 @@ class TrackletReconstruction(H5FlowStage):
         self.dbscan = cluster.DBSCAN(eps=self._dbscan_eps, min_samples=self._dbscan_min_samples)
 
     def init(self, source_name):
+        super(TrackletReconstruction, self).init(source_name)
+
         self.data_manager.set_attrs(self.tracklet_dset_name,
                                     classname=self.classname,
                                     class_version=self.class_version,
@@ -128,6 +130,8 @@ class TrackletReconstruction(H5FlowStage):
         self.data_manager.create_ref(source_name, self.tracklet_dset_name)
 
     def run(self, source_name, source_slice, cache):
+        super(TrackletReconstruction, self).run(source_name, source_slice, cache)
+
         events = cache[source_name]                         # shape: (N,)
         hits = cache[self.hits_dset_name]                   # shape: (N,M)
         hit_drift = cache[self.hit_drift_dset_name]         # shape: (N,M,1)

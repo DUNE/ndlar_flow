@@ -137,6 +137,7 @@ class BrokenTrackSim(H5FlowStage):
         self.hit_drift_dset_name = params.get('hit_drift_dset_name', 'combined/hit_drift')
 
     def init(self, source_name):
+        super(BrokenTrackSim, self).init(source_name)
         self.trajectory_pts = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_pts']
         self.trajectory_dx = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_dx']
         self.new_track_dtype = BrokenTrackSim.new_track_dtype(self.trajectory_pts)
@@ -158,6 +159,7 @@ class BrokenTrackSim(H5FlowStage):
         self.pixel_y = np.unique(resources['Geometry'].pixel_xy.compress((1,)))
 
     def finish(self, source_name):
+        super(BrokenTrackSim, self).finish(source_name)
         # gather from all processes
         if self.generate_2track_joint_pdf:
             if self.rank == 0:
@@ -185,6 +187,7 @@ class BrokenTrackSim(H5FlowStage):
                     self.comm.send(self.pdf[key].n, dest=0)
 
     def run(self, source_name, source_slice, cache):
+        super(BrokenTrackSim, self).run(source_name, source_slice, cache)
         tracks = cache[self.tracks_dset_name]
         hits = cache[self.hits_dset_name]
         hits_track_idx = cache[f'{self.hits_dset_name}_track_idx']

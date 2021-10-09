@@ -153,6 +153,7 @@ class LightEventGenerator(H5FlowGenerator):
                                     )
 
     def finish(self):
+        super(LightEventGenerator, self).finish()
         self.root_file.Close()
 
     def next(self):

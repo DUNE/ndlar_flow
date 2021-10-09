@@ -60,6 +60,8 @@ class T0Reconstruction(H5FlowStage):
         self.ext_trigs_dset_name = params.get('ext_trigs_dset_name', self.default_ext_trigs_dset_name)
 
     def init(self, source_name):
+        super(T0Reconstruction, self).init(source_name)
+
         # create t0 dset
         self.data_manager.create_dset(self.t0_dset_name, self.t0_dtype)
 
@@ -81,13 +83,15 @@ class T0Reconstruction(H5FlowStage):
                                     )
 
     def run(self, source_name, source_slice, cache):
-        events = cache[source_name]                     # shape: (N,)
+        super(T0Reconstruction, self).run(source_name, source_slice, cache)
+
+        events = cache[source_name]                       # shape: (N,)
         if self.ext_trigs_dset_name is not None:
-            ext_trigs = cache[self.ext_trigs_dset_name]     # shape: (N,n)
+            ext_trigs = cache[self.ext_trigs_dset_name]   # shape: (N,n)
         else:
             ext_trigs = None
         if self.light_hits_dset_name is not None:
-            light_hits = cache[self.light_hits_dset_name]   # shape: (N,M,m)
+            light_hits = cache[self.light_hits_dset_name]  # shape: (N,M,m)
         else:
             light_hits = None
 

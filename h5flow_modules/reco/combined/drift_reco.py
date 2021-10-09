@@ -46,6 +46,8 @@ class DriftReconstruction(H5FlowStage):
         self.drift_dset_name = params.get('drift_dset_name', self.default_drift_dset_name)
 
     def init(self, source_name):
+        super(DriftReconstruction, self).init(source_name)
+
         # create drift dset
         self.data_manager.create_dset(self.drift_dset_name, self.drift_dtype)
 
@@ -62,6 +64,8 @@ class DriftReconstruction(H5FlowStage):
                                     )
 
     def run(self, source_name, source_slice, cache):
+        super(DriftReconstruction, self).run(source_name, source_slice, cache)
+
         t0 = cache[self.t0_dset_name]
         hits = cache[self.hits_dset_name]
 

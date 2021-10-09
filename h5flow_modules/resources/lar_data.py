@@ -62,6 +62,8 @@ class LArData(H5FlowResource):
         self.electron_lifetime_file = params.get('electron_lifetime_file', self.default_electron_lifetime_file)
 
     def init(self, source_name):
+        super(LArData, self).init(source_name)
+
         # create group (if not present)
         if not self.data_manager.attr_exists(self.path, 'classname'):
             # no data stored in file, generate it

@@ -3,6 +3,7 @@ import logging
 
 from h5flow.core import H5FlowStage
 
+
 class WaveformNoiseFilter(H5FlowStage):
     '''
         Applies a custom noise filter algorithm across specified waveform
@@ -53,10 +54,10 @@ class WaveformNoiseFilter(H5FlowStage):
     default_keep_noise = False
     default_noise_dset_name = 'light/fwvfm_noise'
 
-    fwvfm_dtype = lambda self,nadc,nchannels,nsamples:np.dtype([('samples','f4',(nadc,nchannels,nsamples))])
+    def fwvfm_dtype(self, nadc, nchannels, nsamples): return np.dtype([('samples', 'f4', (nadc, nchannels, nsamples))])
 
     def __init__(self, **params):
-        super(WaveformNoiseFilter,self).__init__(**params)
+        super(WaveformNoiseFilter, self).__init__(**params)
 
         self.fwvfm_dset_name = params.get('fwvfm_dset_name')
         self.wvfm_dset_name = params.get('wvfm_dset_name')
@@ -67,15 +68,17 @@ class WaveformNoiseFilter(H5FlowStage):
         self.noise_dset_name = params.get('noise_dset_name', self.default_noise_dset_name)
 
     def init(self, source_name):
+        super(WaveformNoiseFilter, self).init(source_name)
+
         # save all config info
         self.data_manager.set_attrs(self.fwvfm_dset_name,
-            classname=self.classname,
-            class_version=self.class_version,
-            source_dset=source_name,
-            wvfm_dset=self.wvfm_dset_name,
-            filter_channels=self.filter_channels,
-            modulo_param=self.modulo_param
-            )
+                                    classname=self.classname,
+                                    class_version=self.class_version,
+                                    source_dset=source_name,
+                                    wvfm_dset=self.wvfm_dset_name,
+                                    filter_channels=self.filter_channels,
+                                    modulo_param=self.modulo_param
+                                    )
 
         # then set up new datasets
         wvfm_dset = self.data_manager.get_dset(self.wvfm_dset_name)
@@ -87,12 +90,14 @@ class WaveformNoiseFilter(H5FlowStage):
             self.data_manager.create_ref(source_name, self.noise_dset_name)
 
     def run(self, source_name, source_slice, cache):
+        super(WaveformNoiseFilter, self).run(source_name, source_slice, cache)
+
         event_data = cache[source_name]
-        wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape).data # don't worry about masked data since 1:1 references
+        wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape).data  # don't worry about masked data since 1:1 references
 
         # flatten into individual waveforms
         wvfm_samples = wvfm_data['samples'].reshape(-1, wvfm_data['samples'].shape[-1])
-        # truncate lowest 6-bits and convert to float        
+        # truncate lowest 6-bits and convert to float
         wvfm_samples = (wvfm_samples - wvfm_samples % 64).astype(float)
         wvfm_mask = event_data['wvfm_valid'].astype(bool).flatten()
         wvfm_mask = wvfm_mask & \
@@ -101,7 +106,7 @@ class WaveformNoiseFilter(H5FlowStage):
         # wrap subset of waveforms according to the modulo parameter
         subsamples = self.filter_samples[-1] - self.filter_samples[0]
         masked_wvfm = wvfm_samples[wvfm_mask, self.filter_samples[0]:self.filter_samples[-1]]
-        masked_wvfm = masked_wvfm[:,:subsamples - subsamples%self.modulo_param].reshape(-1,subsamples//self.modulo_param,self.modulo_param)
+        masked_wvfm = masked_wvfm[:, :subsamples - subsamples % self.modulo_param].reshape(-1, subsamples // self.modulo_param, self.modulo_param)
 
         # take "floating" mean to combine wrapped waveforms
         offset = np.mean(masked_wvfm, axis=-1, keepdims=True)
@@ -110,7 +115,7 @@ class WaveformNoiseFilter(H5FlowStage):
         # extrapolate noise template across waveform
         noise = np.zeros_like(wvfm_samples)
         idcs = np.indices(wvfm_samples[wvfm_mask].shape)
-        noise[wvfm_mask] = masked_wvfm[idcs[0],idcs[1]%self.modulo_param]
+        noise[wvfm_mask] = masked_wvfm[idcs[0], idcs[1] % self.modulo_param]
 
         # cast back into original shape
         noise = noise.reshape(wvfm_data['samples'].shape)
