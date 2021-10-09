@@ -6,6 +6,7 @@ import logging
 
 from h5flow.core import H5FlowStage
 
+
 class EventBuilder(H5FlowStage):
     '''
         High-level event builder - converts raw_events with external trigger and
@@ -51,24 +52,26 @@ class EventBuilder(H5FlowStage):
         ('ts_start', 'f8'), ('ts_end', 'f8'),
         ('n_ext_trigs', 'u4'),
         ('unix_ts', 'u8'),
-        ])
+    ])
 
     def __init__(self, **params):
-        super(EventBuilder,self).__init__(**params)
+        super(EventBuilder, self).__init__(**params)
 
         self.events_dset_name = params.get('events_dset_name')
         self.hits_dset_name = params.get('hits_dset_name')
         self.ext_trigs_dset_name = params.get('ext_trigs_dset_name')
 
     def init(self, source_name):
+        super(EventBuilder, self).init(source_name)
+
         # save all config info
         self.data_manager.set_attrs(self.events_dset_name,
-            classname=self.classname,
-            class_version=self.class_version,
-            source_dset=source_name,
-            hits_dset=self.hits_dset_name,
-            ext_trigs_dset=self.ext_trigs_dset_name
-            )
+                                    classname=self.classname,
+                                    class_version=self.class_version,
+                                    source_dset=source_name,
+                                    hits_dset=self.hits_dset_name,
+                                    ext_trigs_dset=self.ext_trigs_dset_name
+                                    )
 
         # then set up new datasets
         self.data_manager.create_dset(self.events_dset_name, dtype=self.events_dtype)
@@ -76,6 +79,8 @@ class EventBuilder(H5FlowStage):
         self.data_manager.create_ref(self.events_dset_name, self.ext_trigs_dset_name)
 
     def run(self, source_name, source_slice, cache):
+        super(EventBuilder, self).run(source_name, source_slice, cache)
+
         raw_event_data = cache[source_name]
         hits_data = cache[self.hits_dset_name]
         ext_trigs_data = cache[self.ext_trigs_dset_name]
@@ -97,12 +102,11 @@ class EventBuilder(H5FlowStage):
         self.data_manager.write_data(self.events_dset_name, events_slice, events_arr)
 
         # save references
-        ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1,1)
+        ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1, 1)
         hits_ev_id = np.broadcast_to(ev_id, hits_data.shape)
-        ref = np.c_[hits_ev_id[hits_mask],hits_data[hits_mask]['id']]
+        ref = np.c_[hits_ev_id[hits_mask], hits_data[hits_mask]['id']]
         self.data_manager.write_ref(self.events_dset_name, self.hits_dset_name, ref)
 
         trigs_ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
-        ref = np.c_[trigs_ev_id[ext_trigs_mask],ext_trigs_data[ext_trigs_mask]['id']]
+        ref = np.c_[trigs_ev_id[ext_trigs_mask], ext_trigs_data[ext_trigs_mask]['id']]
         self.data_manager.write_ref(self.events_dset_name, self.ext_trigs_dset_name, ref)
-

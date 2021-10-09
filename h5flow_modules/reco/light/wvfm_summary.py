@@ -3,6 +3,7 @@ import logging
 
 from h5flow.core import H5FlowStage
 
+
 class WaveformSummary(H5FlowStage):
     '''
         Extracts summary parameters from light waveforms
@@ -30,42 +31,46 @@ class WaveformSummary(H5FlowStage):
 
     default_pretrigger_window = (0, 80)
     default_wvfm_dset_name = 'light/wvfm'
-    default_wvfm_summ_dset_fmt = '{}_summ' # uses wvfm_dset + _summ as default
+    default_wvfm_summ_dset_fmt = '{}_summ'  # uses wvfm_dset + _summ as default
 
     dtype = np.dtype([
-        ('id','u8'),
-        ('event_id','i8'),
-        ('pre_std','f8'),
-        ('pre_mean','f8'),
+        ('id', 'u8'),
+        ('event_id', 'i8'),
+        ('pre_std', 'f8'),
+        ('pre_mean', 'f8'),
         ('post_sum', 'f8'),
         ('post_max', 'f8'),
         ('post_rising', 'f8'),
         ('ch', 'u4'),
         ('sn', 'u4'),
         ('adc', 'u4'),
-        ])
+    ])
 
     def __init__(self, **params):
-        super(WaveformSummary,self).__init__(**params)
+        super(WaveformSummary, self).__init__(**params)
 
         self.wvfm_dset_name = params.get('wvfm_dset_name')
-        self.wvfm_summ_dset_name = params.get('wvfm_summ_dset_name',self.default_wvfm_summ_dset_fmt.format(self.wvfm_dset_name))
+        self.wvfm_summ_dset_name = params.get('wvfm_summ_dset_name', self.default_wvfm_summ_dset_fmt.format(self.wvfm_dset_name))
         self.pretrigger_window = params.get('pretrigger_window', self.default_pretrigger_window)
 
     def init(self, source_name):
+        super(WaveformSummary, self).init(source_name)
+
         # save all config info
         self.data_manager.set_attrs(self.wvfm_summ_dset_name,
-            classname=self.classname,
-            class_version=self.class_version,
-            source_dset=source_name,
-            wvfm_dset=self.wvfm_dset_name,
-            pretrigger_window=self.pretrigger_window
-            )
+                                    classname=self.classname,
+                                    class_version=self.class_version,
+                                    source_dset=source_name,
+                                    wvfm_dset=self.wvfm_dset_name,
+                                    pretrigger_window=self.pretrigger_window
+                                    )
 
         # then set up new datasets
         self.data_manager.create_dset(self.wvfm_summ_dset_name, dtype=self.dtype)
 
     def run(self, source_name, source_slice, cache):
+        super(WaveformSummary, self).run(source_name, source_slice, cache)
+
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].data
 
@@ -75,17 +80,17 @@ class WaveformSummary(H5FlowStage):
             pre_std = np.std(pre_wvfm, axis=-1)
             pre_mean = np.mean(pre_wvfm, axis=-1)
 
-            post_sum = np.sum(post_wvfm - np.expand_dims(pre_mean,-1), axis=-1)
-            post_max = np.max(post_wvfm - np.expand_dims(pre_mean,-1), axis=-1)
-            post_rising = np.argmax(np.diff(post_wvfm - np.expand_dims(pre_mean,-1), axis=-1), axis=-1)
+            post_sum = np.sum(post_wvfm - np.expand_dims(pre_mean, -1), axis=-1)
+            post_max = np.max(post_wvfm - np.expand_dims(pre_mean, -1), axis=-1)
+            post_rising = np.argmax(np.diff(post_wvfm - np.expand_dims(pre_mean, -1), axis=-1), axis=-1)
 
             ch = event_data['ch']
             sn = np.expand_dims(event_data['sn'], axis=-1)
             sn = np.broadcast_to(sn, ch.shape)
-            adc = np.arange(sn.shape[1]).reshape(1,-1,1)
+            adc = np.arange(sn.shape[1]).reshape(1, -1, 1)
             adc = np.broadcast_to(adc, ch.shape)
 
-            event_id = np.broadcast_to(event_data['id'].reshape(-1,1,1), ch.shape)
+            event_id = np.broadcast_to(event_data['id'].reshape(-1, 1, 1), ch.shape)
 
         valid = event_data['wvfm_valid'].astype(bool)
 

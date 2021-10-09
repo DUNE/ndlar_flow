@@ -71,6 +71,8 @@ class RunData(H5FlowResource):
         self.defaults = params.get('defaults', dict())
 
     def init(self, source_name):
+        super(RunData, self).init(source_name)
+
         self.source_name = source_name
         if not self.data_manager.attr_exists(self.path, 'classname'):
             # run data does not exist, get it from input run list file

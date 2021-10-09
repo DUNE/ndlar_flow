@@ -21,6 +21,8 @@ class DisabledChannels(H5FlowResource):
         self.missing_asic_list = params.get('missing_asic_list', None)
 
     def init(self, source_name):
+        super(DisabledChannels, self).init(source_name)
+
         # create group (if not present)
         self.data_manager.set_attrs(self.path)
         # load data (if present)
@@ -40,7 +42,7 @@ class DisabledChannels(H5FlowResource):
 #             self.data_manager.set_attrs(self.path, **self.data)
             xy_dtype = np.dtype([('x', self._disabled_xy.dtype), ('y', self._disabled_xy.dtype)])
             self.data_manager.create_dset(self.path + '/xy', dtype=xy_dtype)
-            sl = self.data_manager.reserve_data(self.path + '/xy', slice(0,len(self._disabled_xy)))
+            sl = self.data_manager.reserve_data(self.path + '/xy', slice(0, len(self._disabled_xy)))
             self.data_manager.write_data(self.path + '/xy', sl, self._disabled_xy.view(xy_dtype).ravel())
 
             write_lut(self.data_manager, self.path, self.disabled_channel_lut,

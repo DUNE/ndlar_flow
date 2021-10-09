@@ -213,6 +213,7 @@ class RawEventGenerator(H5FlowGenerator):
                 break
 
     def finish(self):
+        super(RawEventGenerator, self).finish()
         self.input_fh.close()
 
     def next(self):

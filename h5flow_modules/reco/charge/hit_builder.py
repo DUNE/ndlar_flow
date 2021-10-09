@@ -5,6 +5,7 @@ import json
 
 from h5flow.core import H5FlowStage, resources
 
+
 class HitBuilder(H5FlowStage):
     '''
         Converts larpix data packets into hits - assigns geometric properties,
@@ -65,14 +66,14 @@ class HitBuilder(H5FlowStage):
 
     #: ASIC ADC configuration lookup table
     configuration = defaultdict(lambda: dict(
-            vref_mv=1300,
-            vcm_mv=288
-        ))
+        vref_mv=1300,
+        vcm_mv=288
+    ))
 
     #: pixel pedestal value
     pedestal = defaultdict(lambda: dict(
-            pedestal_mv=580
-        ))
+        pedestal_mv=580
+    ))
 
     hits_dtype = np.dtype([
         ('id', 'u4'),
@@ -83,32 +84,33 @@ class HitBuilder(H5FlowStage):
         ('q', 'f8'),
         ('iogroup', 'u1'), ('iochannel', 'u1'), ('chipid', 'u1'), ('channelid', 'u1'),
         ('geom', 'i8')
-        ])
+    ])
 
     def __init__(self, **params):
-        super(HitBuilder,self).__init__(**params)
+        super(HitBuilder, self).__init__(**params)
 
         self.hits_dset_name = params.get('hits_dset_name')
         self.packets_dset_name = params.get('packets_dset_name')
-        self.packets_index_name = params.get('packets_index_name', self.packets_dset_name+'_index')
+        self.packets_index_name = params.get('packets_index_name', self.packets_dset_name + '_index')
         self.ts_dset_name = params.get('ts_dset_name')
-        self.pedestal_file = params.get('pedestal_file','')
-        self.configuration_file = params.get('configuration_file','')
+        self.pedestal_file = params.get('pedestal_file', '')
+        self.configuration_file = params.get('configuration_file', '')
 
     def init(self, source_name):
+        super(HitBuilder, self).init(source_name)
         self.load_pedestals()
         self.load_configurations()
 
         # save all config info
         self.data_manager.set_attrs(self.hits_dset_name,
-            classname=self.classname,
-            class_version=self.class_version,
-            source_dset=source_name,
-            packets_dset=self.packets_dset_name,
-            ts_dset=self.ts_dset_name,
-            pedestal_file=self.pedestal_file,
-            configuration_file=self.configuration_file
-            )
+                                    classname=self.classname,
+                                    class_version=self.class_version,
+                                    source_dset=source_name,
+                                    packets_dset=self.packets_dset_name,
+                                    ts_dset=self.ts_dset_name,
+                                    pedestal_file=self.pedestal_file,
+                                    configuration_file=self.configuration_file
+                                    )
 
         # then set up new datasets
         self.data_manager.create_dset(self.hits_dset_name, dtype=self.hits_dtype)
@@ -116,6 +118,7 @@ class HitBuilder(H5FlowStage):
         self.data_manager.create_ref(self.hits_dset_name, self.packets_dset_name)
 
     def run(self, source_name, source_slice, cache):
+        super(HitBuilder, self).run(source_name, source_slice, cache)
         packets_data = cache[self.packets_dset_name]
         packets_index = cache[self.packets_index_name]
         ts_data = cache[self.ts_dset_name].reshape(packets_data.shape)
@@ -146,19 +149,19 @@ class HitBuilder(H5FlowStage):
             hits_arr['iochannel'] = packets_arr['io_channel']
             hits_arr['chipid'] = packets_arr['chip_id']
             hits_arr['channelid'] = packets_arr['channel_id']
-            hit_uniqueid = (((packets_arr['io_group'].astype(int))*256
-                             + packets_arr['io_channel'].astype(int))*256
-                            + packets_arr['chip_id'].astype(int))*64 \
+            hit_uniqueid = (((packets_arr['io_group'].astype(int)) * 256
+                             + packets_arr['io_channel'].astype(int)) * 256
+                            + packets_arr['chip_id'].astype(int)) * 64 \
                 + packets_arr['channel_id'].astype(int)
             hit_uniqueid_str = hit_uniqueid.astype(str)
             xy = resources['Geometry'].pixel_xy[packets_arr['io_group'],
-                packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
+                                                packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             vref = np.array(
                 [self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
             vcm = np.array([self.configuration[unique_id]['vcm_mv']
-                           for unique_id in hit_uniqueid_str])
+                            for unique_id in hit_uniqueid_str])
             ped = np.array([self.pedestal[unique_id]['pedestal_mv']
-                           for unique_id in hit_uniqueid_str])
+                            for unique_id in hit_uniqueid_str])
             hits_arr['px'] = xy[:, 0]
             hits_arr['py'] = xy[:, 1]
             hits_arr['q'] = self.charge_from_dataword(packets_arr['dataword'], vref, vcm, ped)
@@ -178,7 +181,7 @@ class HitBuilder(H5FlowStage):
 
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped):
-        return dw/256. * (vref-vcm) + vcm - ped
+        return dw / 256. * (vref - vcm) + vcm - ped
 
     def load_pedestals(self):
         if self.pedestal_file != '' and not resources['RunData'].is_mc:

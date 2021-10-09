@@ -58,6 +58,8 @@ class Charge2LightAssociation(H5FlowStage):
         self.ts_window = params.get('ts_window', self.default_ts_window)
 
     def init(self, source_name):
+        super(Charge2LightAssociation, self).init(source_name)
+
         # save all config info
         self.events_dset_name = source_name
         self.data_manager.set_attrs(self.events_dset_name,
@@ -86,6 +88,8 @@ class Charge2LightAssociation(H5FlowStage):
         self.light_unix_ts_end = self.light_unix_ts.max()
 
     def run(self, source_name, source_slice, cache):
+        super(Charge2LightAssociation, self).run(source_name, source_slice, cache)
+
         event_data = cache[self.events_dset_name]
         ext_trigs_data = cache[self.ext_trigs_dset_name]
         ext_trigs_idcs = cache[self.ext_trigs_dset_name + '_idcs']

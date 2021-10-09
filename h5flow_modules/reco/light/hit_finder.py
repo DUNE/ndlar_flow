@@ -114,6 +114,8 @@ class WaveformHitFinder(H5FlowStage):
         self.hits_dtype = self.hits_dtype(self.near_samples)
 
     def init(self, source_name):
+        super(WaveformHitFinder, self).init(source_name)
+
         wvfm_dset = self.data_manager.get_dset(self.wvfm_dset_name)
 
         # get convert sample rate to ns
@@ -150,6 +152,7 @@ class WaveformHitFinder(H5FlowStage):
                                     )
 
     def run(self, source_name, source_slice, cache):
+        super(WaveformHitFinder, self).run(source_name, source_slice, cache)
         wvfms = cache[self.wvfm_dset_name].reshape(cache[source_name].shape)[
             'samples']  # 1:1 relationship
         t = cache[self.t_ns_dset_name].reshape(cache[source_name].shape)[

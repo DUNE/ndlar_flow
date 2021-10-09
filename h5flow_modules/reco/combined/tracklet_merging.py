@@ -111,6 +111,8 @@ class TrackletMerger(H5FlowStage):
         self.merged_dset_name = params.get('merged_dset_name', self.default_merged_dset_name)
 
     def init(self, source_name):
+        super(TrackletMerger, self).init(source_name)
+
         self.r, self.r_bins, self.statistic_bins, self.p_bins = (
             self.load_r_values(self.pdf_filename, self.pdf_sig_name,
                                self.pdf_bkg_name))
@@ -141,6 +143,8 @@ class TrackletMerger(H5FlowStage):
         self.pixel_y = np.unique(resources['Geometry'].pixel_xy.compress((1,)))
 
     def run(self, source_name, source_slice, cache):
+        super(TrackletMerger, self).run(source_name, source_slice, cache)
+
         track_hit_drift = cache[self.hit_drift_dset_name]
         track_hits = cache[self.track_hits_dset_name]
         tracks = cache[self.tracks_dset_name]

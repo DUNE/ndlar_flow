@@ -6,6 +6,7 @@ import logging
 
 from h5flow.core import H5FlowStage
 
+
 class ExternalTriggerFinder(H5FlowStage):
     '''
         Extracts external triggers from raw packets
@@ -61,15 +62,15 @@ class ExternalTriggerFinder(H5FlowStage):
     default_larpix_trigger_channels = dict()
 
     ext_trigs_dtype = np.dtype([
-        ('id', 'u8'), # unique identifier
-        ('ts', 'f8'), # corrected PPS timestamp [ticks]
-        ('ts_raw', 'u8'), # PPS timestamp [ticks]
-        ('type', 'i2'), # trigger type (from PACMAN)
-        ('iogroup', 'u1') # PACMAN identifier
-        ])
-    larpix_trigger_channels_dtype = np.dtype([('key',h5py.string_dtype(encoding='utf-8')), ('val',h5py.vlen_dtype('u1'))])
+        ('id', 'u8'),  # unique identifier
+        ('ts', 'f8'),  # corrected PPS timestamp [ticks]
+        ('ts_raw', 'u8'),  # PPS timestamp [ticks]
+        ('type', 'i2'),  # trigger type (from PACMAN)
+        ('iogroup', 'u1')  # PACMAN identifier
+    ])
+    larpix_trigger_channels_dtype = np.dtype([('key', h5py.string_dtype(encoding='utf-8')), ('val', h5py.vlen_dtype('u1'))])
 
-    def __init__(self,**params):
+    def __init__(self, **params):
         super(ExternalTriggerFinder, self).__init__(**params)
 
         self._larpix_trigger_channels = params.get('larpix_trigger_channels', self.default_larpix_trigger_channels)
@@ -81,29 +82,33 @@ class ExternalTriggerFinder(H5FlowStage):
         self.set_parameters()
 
     def init(self, source_name):
+        super(ExternalTriggerFinder, self).init(source_name)
+
         # write all configuration variables to the dataset
         self.data_manager.set_attrs(self.ext_trigs_dset_name,
-            classname=self.classname,
-            class_version=self.class_version,
-            source_dset=source_name,
-            packets_dset=self.packets_dset_name,
-            ts_dset=self.ts_dset_name,
-            **self.get_parameters('pacman_trigger_enabled', 'pacman_trigger_word_filter')
-            )
+                                    classname=self.classname,
+                                    class_version=self.class_version,
+                                    source_dset=source_name,
+                                    packets_dset=self.packets_dset_name,
+                                    ts_dset=self.ts_dset_name,
+                                    **self.get_parameters('pacman_trigger_enabled', 'pacman_trigger_word_filter')
+                                    )
         larpix_trigger_channels = self.get_parameters('larpix_trigger_channels')['larpix_trigger_channels']
         larpix_trigger_channels_arr = np.empty((len(larpix_trigger_channels.keys()),), dtype=self.larpix_trigger_channels_dtype)
-        for i,(key,val) in enumerate(larpix_trigger_channels.items()):
+        for i, (key, val) in enumerate(larpix_trigger_channels.items()):
             larpix_trigger_channels_arr[i]['key'] = key
             larpix_trigger_channels_arr[i]['val'] = np.array(val)
         self.data_manager.set_attrs(self.ext_trigs_dset_name,
-            larpix_trigger_channels=larpix_trigger_channels_arr
-            )
+                                    larpix_trigger_channels=larpix_trigger_channels_arr
+                                    )
 
         # then set up new datasets
         self.data_manager.create_dset(self.ext_trigs_dset_name, dtype=self.ext_trigs_dtype)
         self.data_manager.create_ref(source_name, self.ext_trigs_dset_name)
 
     def run(self, source_name, source_slice, cache):
+        super(ExternalTriggerFinder, self).run(source_name, source_slice, cache)
+
         packets_data = cache[self.packets_dset_name]
         ts_data = cache[self.ts_dset_name].reshape(packets_data.shape)
 
@@ -168,8 +173,8 @@ class ExternalTriggerFinder(H5FlowStage):
                         trigger_mask
                     ))
                 for channel in channels:
-                    trigger_mask = (((events['channel_id'] == channel) & key_mask) \
-                        | trigger_mask)
+                    trigger_mask = (((events['channel_id'] == channel) & key_mask)
+                                    | trigger_mask)
 
         trigger_mask = trigger_mask & ~rfn.structured_to_unstructured(events.mask).any(axis=-1)
 

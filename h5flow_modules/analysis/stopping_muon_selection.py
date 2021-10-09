@@ -124,6 +124,7 @@ class StoppingMuonSelection(H5FlowStage):
         self.regions = []
 
     def init(self, source_name):
+        super(StoppingMuonSelection, self).init(source_name)
         self.is_mc = resources['RunData'].is_mc
 
         self.data_manager.set_attrs(self.path,
@@ -170,6 +171,7 @@ class StoppingMuonSelection(H5FlowStage):
                                     muon_recom=self.muon_range_table['recomb'])
 
     def finish(self, source_name):
+        super(StoppingMuonSelection, self).finish(source_name)
         sel_dset_name = f'{self.path}/{self.event_sel_dset_name}'
 
         total = len(self.data_manager.get_dset(sel_dset_name))
@@ -764,6 +766,7 @@ class StoppingMuonSelection(H5FlowStage):
         return dereference_chain(source_slice, ref, data=data, regions=regions, ref_directions=ref_dir)
 
     def run(self, source_name, source_slice, cache):
+        super(StoppingMuonSelection, self).run(source_name, source_slice, cache)
         events = cache[source_name]
         hits = cache[self.hits_dset_name]
         tracks = cache[self.merged_dset_name]
