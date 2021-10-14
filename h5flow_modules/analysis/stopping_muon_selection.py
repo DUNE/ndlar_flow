@@ -100,17 +100,9 @@ class StoppingMuonSelection(H5FlowStage):
         self.profile_search_dx = params.get('profile_search_dx', self.default_profile_search_dx)
         self.profile_max_range = params.get('profile_max_range',
                                             self.default_profile_max_range)
-        correction_key = ('mc' if resources['RunData'].is_mc
-                             else 'medm')
-        correction_key = ('high' if (not resources['RunData'].is_mc
-                                        and resources['RunData'].charge_thresholds == 'high')
-                             else correction_key)
-        self.curvature_rr_correction = params.get('curvature_rr_correction',
-                                                  dict()).get(rr_correction_key, self.default_curvature_rr_correction)
-        self.density_dx_correction_params = params.get('density_dx_correction_params',
-                                                       dict()).get(correction_key, self.default_density_dx_correction_params)
-        self.larpix_gain = params.get('larpix_gain',
-                                      dict()).get(correction_key, self.default_larpix_gain)
+        self.curvature_rr_correction = params.get('curvature_rr_correction', dict())
+        self.density_dx_correction_params = params.get('density_dx_correction_params', dict())
+        self.larpix_gain = params.get('larpix_gain', dict())
 
         self.hits_dset_name = params.get('hits_dset_name',
                                          self.default_hits_dset_name)
@@ -133,6 +125,15 @@ class StoppingMuonSelection(H5FlowStage):
     def init(self, source_name):
         super(StoppingMuonSelection, self).init(source_name)
         self.is_mc = resources['RunData'].is_mc
+
+        correction_key = ('mc' if self.is_mc
+                             else 'medm')
+        correction_key = ('high' if (not self.is_mc
+                                     and resources['RunData'].charge_thresholds == 'high')
+                             else correction_key)
+        self.curvature_rr_correction = self.curvature_rr_correction.get(correction_key, self.default_curvature_rr_correction)
+        self.density_dx_correction_params = self.density_dx_correction_params.get(correction_key, self.default_density_dx_correction_params)
+        self.larpix_gain = self.larpix_gain.get(correction_key, self.default_larpix_gain)        
 
         self.data_manager.set_attrs(self.path,
                                     classname=self.classname,
