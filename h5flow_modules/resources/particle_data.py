@@ -105,8 +105,8 @@ class ParticleData(H5FlowResource):
             self.data_manager.set_attrs(self.path, **self.data)
         else:
             # data exists, check version compatibility
-            assert_compat_version(self.class_version, self.data['class_version'])
             self.data = dict(self.data_manager.get_attrs(self.path))
+            assert_compat_version(self.class_version, self.data['class_version'])
 
     @property
     def muon_range_table(self):
