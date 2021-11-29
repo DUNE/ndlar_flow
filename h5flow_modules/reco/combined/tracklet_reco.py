@@ -137,8 +137,10 @@ class TrackletReconstruction(H5FlowStage):
         hit_drift = cache[self.hit_drift_dset_name]         # shape: (N,M,1)
         hit_drift = hit_drift.reshape(hits.shape)
         if self.max_nhit is not None:
-            hits = ma.array(hits, mask=(events['nhit'][..., np.newaxis] > self.max_nhit) | hits['id'].mask)
-            hit_drift = ma.array(hit_drift, mask=(events['nhit'][..., np.newaxis] > self.max_nhit) | hits['id'].mask)
+            hits = ma.array(hits, mask=(events['nhit'][..., np.newaxis] > self.max_nhit) | hits['id'].mask,
+                            shrink=False)
+            hit_drift = ma.array(hit_drift, mask=(events['nhit'][..., np.newaxis] > self.max_nhit) | hits['id'].mask,
+                                 shrink=False)
 
         track_ids = self.find_tracks(hits, hit_drift['z'])
         tracks = self.calc_tracks(hits, hit_drift['z'], track_ids, self.trajectory_pts,
@@ -225,7 +227,7 @@ class TrackletReconstruction(H5FlowStage):
                 if np.all(track_ids == -1) or not np.any(iter_mask[i]):
                     break
 
-        return ma.array(track_id, mask=hits['id'].mask)
+        return ma.array(track_id, mask=hits['id'].mask, shrink=False)
 
     @classmethod
     def calc_tracks(cls, hits, hit_z, track_ids, trajectory_pts, trajectory_dx):
@@ -273,7 +275,7 @@ class TrackletReconstruction(H5FlowStage):
                 edge_q = ma.sum(ma.array(
                     np.broadcast_to(hits[i][mask]['q'][np.newaxis, :],
                                     min_edge_mask.shape),
-                    mask=min_edge_mask), axis=-1)  # (npts-1,)
+                    mask=min_edge_mask, shrink=False), axis=-1)  # (npts-1,)
 
                 tracks[i, j]['theta'] = cls.theta(axis)
                 tracks[i, j]['phi'] = cls.phi(axis)
@@ -296,7 +298,7 @@ class TrackletReconstruction(H5FlowStage):
 
                 tracks_mask[i, j] = False
 
-        return ma.array(tracks, mask=tracks_mask)
+        return ma.array(tracks, mask=tracks_mask, shrink=False)
 
     def _do_dbscan(self, xyz, mask):
         '''
@@ -362,7 +364,7 @@ class TrackletReconstruction(H5FlowStage):
 
             # find farthest point
             mask = node_d < dx  # (1, N)
-            max_pt = ma.argmax(ma.array(res, mask=mask), axis=1)  # (1,)
+            max_pt = ma.argmax(ma.array(res, mask=mask, shrink=False), axis=1)  # (1,)
 
             # update trajectory
             new_pt = TrackletReconstruction.local_mean(xyz, xyz[max_pt].ravel(), dx, weights=weights)  # (3,)
@@ -394,7 +396,7 @@ class TrackletReconstruction(H5FlowStage):
         d = np.linalg.norm(r, axis=-1, keepdims=True)  # (N,1)
 
         mask = np.broadcast_to(d > dx, r.shape)  # (N,3)
-        traj = ma.average(ma.array(np.expand_dims(xyz, axis=1), mask=mask),
+        traj = ma.average(ma.array(np.expand_dims(xyz, axis=1), mask=mask, shrink=False),
                           axis=0, weights=weights)  # (3,)
         return traj
 
