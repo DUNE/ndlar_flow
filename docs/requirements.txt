@@ -1,9 +1,5 @@
-h5py>=2.10
 pytest
-scipy
-scikit-image
-scikit-learn
 pyyaml
 recommonmark
 sphinx_rtd_theme
-.
+sphinx-autoapi
