@@ -16,7 +16,7 @@ def check_dsets(filename, datasets, check_empty=True):
 @pytest.fixture
 def charge_event_built_file(charge_source_file, runlist_file, tmp_h5_file):
     print('Charge event building...')
-    h5flow.run('h5flow_yamls/reco/charge/charge_event_building.yaml',
+    h5flow.run(['h5flow_yamls/reco/charge/charge_event_building.yaml'],
                tmp_h5_file,
                charge_source_file,
                verbose=2,
@@ -35,7 +35,7 @@ def charge_event_built_file(charge_source_file, runlist_file, tmp_h5_file):
 def charge_reco_file(charge_event_built_file, geometry_file, larpix_config_file,
                      larpix_pedestal_config_file, tmp_h5_file):
     print('Charge event reconstruction...')
-    h5flow.run('h5flow_yamls/reco/charge/charge_event_reconstruction.yaml',
+    h5flow.run(['h5flow_yamls/reco/charge/charge_event_reconstruction.yaml'],
                tmp_h5_file,
                charge_event_built_file,
                verbose=2)
@@ -53,7 +53,7 @@ def charge_reco_file(charge_event_built_file, geometry_file, larpix_config_file,
 def light_event_built_file(light_source_file, runlist_file,
                            electron_lifetime_file, tmp_h5_file):
     print('Light event building...')
-    h5flow.run('h5flow_yamls/reco/light/light_event_building.yaml',
+    h5flow.run(['h5flow_yamls/reco/light/light_event_building.yaml'],
                tmp_h5_file,
                light_source_file,
                verbose=2,
@@ -72,7 +72,7 @@ def light_event_built_file(light_source_file, runlist_file,
 def light_reco_file(light_event_built_file, light_noise_file, light_signal_file,
                     light_impulse_file, tmp_h5_file):
     print('Light event reconstruction...')
-    h5flow.run('h5flow_yamls/reco/light/light_event_reconstruction.yaml',
+    h5flow.run(['h5flow_yamls/reco/light/light_event_reconstruction.yaml'],
                tmp_h5_file,
                light_event_built_file,
                verbose=2)
@@ -88,7 +88,7 @@ def light_reco_file(light_event_built_file, light_noise_file, light_signal_file,
 @pytest.fixture
 def charge_assoc_file(charge_reco_file, light_reco_file, tmp_h5_file):
     print('Charge/light association...')
-    h5flow.run('h5flow_yamls/reco/charge/charge_light_assoc.yaml',
+    h5flow.run(['h5flow_yamls/reco/charge/charge_light_assoc.yaml'],
                tmp_h5_file,
                charge_reco_file,
                verbose=2)
@@ -106,7 +106,7 @@ def combined_file(charge_assoc_file, geometry_file, tmp_h5_file,
                   disabled_channels_list_file, missing_asic_list_file,
                   track_merging_pdf_file):
     print('Combined reconstruction...')
-    h5flow.run('h5flow_yamls/reco/combined/combined_reconstruction.yaml',
+    h5flow.run(['h5flow_yamls/reco/combined/combined_reconstruction.yaml'],
                tmp_h5_file,
                charge_assoc_file,
                verbose=2,
@@ -127,7 +127,7 @@ def combined_file_no_light(charge_reco_file, geometry_file, tmp_h5_file,
                            disabled_channels_list_file, missing_asic_list_file,
                            track_merging_pdf_file):
     print('Combined reconstruction...')
-    h5flow.run('h5flow_yamls/reco/combined/combined_reconstruction.yaml',
+    h5flow.run(['h5flow_yamls/reco/combined/combined_reconstruction.yaml'],
                tmp_h5_file,
                charge_reco_file,
                verbose=2,
@@ -147,7 +147,7 @@ def combined_file_no_light(charge_reco_file, geometry_file, tmp_h5_file,
 def broken_track_sim_file(combined_file_no_light, geometry_file, tmp_h5_file,
                           disabled_channels_list_file, missing_asic_list_file):
     print('Broken track simulation...')
-    h5flow.run('h5flow_yamls/reco/combined/broken_track_sim.yaml',
+    h5flow.run(['h5flow_yamls/reco/combined/broken_track_sim.yaml'],
                tmp_h5_file,
                combined_file_no_light,
                verbose=2)
@@ -166,7 +166,7 @@ def stopping_muon_analysis_file(combined_file, geometry_file,
                                 proton_range_table, muon_range_table,
                                 electron_lifetime_file, tmp_h5_file):
     print('Stopping muon analysis...')
-    h5flow.run('h5flow_yamls/analysis/stopping_muons_data.yaml',
+    h5flow.run(['h5flow_yamls/analysis/stopping_muons_data.yaml'],
                tmp_h5_file,
                combined_file,
                verbose=2)
