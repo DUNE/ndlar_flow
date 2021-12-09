@@ -14,7 +14,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../'))
 
-autodoc_mock_imports = ['h5py','yaml','tqdm','ROOT','scipy','numpy','h5flow','mpi4py','sklearn','skimage']
+autodoc_mock_imports = ['h5py', 'yaml', 'tqdm', 'ROOT', 'scipy', 'numpy', 'h5flow', 'mpi4py', 'sklearn', 'skimage']
 
 # -- Project information -----------------------------------------------------
 
@@ -30,6 +30,7 @@ author = 'Peter Madigan'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'autoapi.extension',
     'recommonmark',
     'sphinx.ext.autosectionlabel',
     'sphinx.ext.viewcode',
@@ -42,6 +43,10 @@ templates_path = ['_templates']
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+
+autoapi_dirs = ['../h5flow_modules']
+autoapi_add_toctree_entry = False
+autoapi_generate_api_docs = False
 
 
 # -- Options for HTML output -------------------------------------------------

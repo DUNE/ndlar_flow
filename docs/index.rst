@@ -5,7 +5,7 @@ Welcome to module0_flow's documentation!
    :maxdepth: 3
    :caption: Contents:
 
-   modules/module0_flow
+   module0_flow/index.rst
 
 Indices and tables
 ==================

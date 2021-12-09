@@ -1,34 +1,31 @@
-Module 0 utilities
-==================
-
-Compatibility
+compatibility
 -------------
 
-.. automodule:: module0_flow.util.compat
+.. autoapimodule:: h5flow_modules.util.compat
    :undoc-members:
    :members:
    :show-inheritance:
 
-Units
+units
 -----
 
-.. automodule:: module0_flow.util.units
+.. autoapimodule:: h5flow_modules.util.units
    :undoc-members:
    :members:
    :show-inheritance:
 
-Fast lookup tables
+fast lookup tables
 ------------------
 
-.. automodule:: module0_flow.util.lut
+.. autoapimodule:: h5flow_modules.util.lut
    :undoc-members:
    :members:
    :show-inheritance:
 
-Other utility functions
+other utility functions
 -----------------------
 
-.. automodule:: module0_flow.util.func
+.. autoapimodule:: h5flow_modules.util.func
    :undoc-members:
    :members:
    :show-inheritance:
