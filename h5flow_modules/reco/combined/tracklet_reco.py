@@ -270,8 +270,8 @@ class TrackletReconstruction(H5FlowStage):
                 traj = cls.trajectory_approx(centroid, axis, xyz[i][mask],
                                              npts=trajectory_pts, dx=trajectory_dx,
                                              weights=hits[i][mask]['q'])  # (npts, 3)
-                dt, d = cls.trajectory_residual(xyz[i][mask], traj)  # (npts-1, N)
-                min_edge_mask = d != np.min(d, axis=0, keepdims=True)  # (npts-1, N)
+                d = cls.trajectory_residual(xyz[i][mask], traj)  # (npts-1, N)
+                min_edge_mask = np.indices(d.shape)[0] != np.expand_dims(np.argmin(d, axis=0), 0)  # (npts-1, N)
                 edge_q = ma.sum(ma.array(
                     np.broadcast_to(hits[i][mask]['q'][np.newaxis, :],
                                     min_edge_mask.shape),
@@ -291,7 +291,7 @@ class TrackletReconstruction(H5FlowStage):
                 tracks[i, j]['end'] = r_max
 
                 tracks[i, j]['trajectory'] = traj
-                tracks[i, j]['trajectory_residual'] = np.mean(dt, axis=-1)
+                tracks[i, j]['trajectory_residual'] = np.mean(d, axis=-1)
                 tracks[i, j]['dx'] = np.diff(traj, axis=0)
                 tracks[i, j]['dq'] = edge_q
                 tracks[i, j]['dn'] = np.sum(~min_edge_mask, axis=-1)
@@ -355,11 +355,11 @@ class TrackletReconstruction(H5FlowStage):
 
         for i in range(1, npts - 1):
             # calculate residuals
-            dt, d = TrackletReconstruction.trajectory_residual(xyz, traj)  # (M, N)
+            d = TrackletReconstruction.trajectory_residual(xyz, traj)  # (M, N)
 
             # use smallest residual per point
-            i_res_min = np.expand_dims(np.argmin(dt, axis=0), axis=0)  # (1, N)
-            res = np.take_along_axis(dt, i_res_min, axis=0)  # (1, N)
+            i_res_min = np.expand_dims(np.argmin(d, axis=0), axis=0)  # (1, N)
+            res = np.take_along_axis(d, i_res_min, axis=0)  # (1, N)
             node_d = np.take_along_axis(d, i_res_min, axis=0)  # (1, N)
 
             # find farthest point
@@ -439,18 +439,22 @@ class TrackletReconstruction(H5FlowStage):
 
             :param traj: ``shape: (npts, 3)```, trajectory 3D positions
 
-            :returns: ``tuple`` of distance to nearest trajectory edge and distance to nearest trajectory node, ``shape: (npts-1, N)``
+            :returns: distance to nearest trajectory edge ``shape: (npts-1, N)``
         '''
         d0 = np.expand_dims(xyz, axis=0) - np.expand_dims(traj[:-1], axis=1)  # (1, N, 3) - (npts-1, 1, 3)
         d1 = np.expand_dims(xyz, axis=0) - np.expand_dims(traj[1:], axis=1)
-        n = np.expand_dims(np.diff(traj, axis=0), axis=1)  # (npts-1, 1, 3)
+        d = np.expand_dims(np.diff(traj, axis=0), axis=1)  # (npts-1, 1, 3)
         with np.errstate(divide='ignore', invalid='ignore'):
-            n /= np.linalg.norm(n, axis=-1, keepdims=True)
+            n = d / np.linalg.norm(d, axis=-1, keepdims=True)
         n[np.isnan(n) | np.isfinite(n)] = 0
-        dt = d0 - ma.sum(d0 * n, axis=-1, keepdims=True) * n  # (npts-1, N, 3) - (npts-1, N, 1) * (1, 1, 3)
+        dl = ma.sum(d0 * n, axis=-1)
+        dt = d0 - np.expand_dims(dl, -1) * n  # (npts-1, N, 3) - (npts-1, N, 1) * (1, 1, 3)
         dt = np.linalg.norm(dt, axis=-1)  # (npts-1, N)
-        d = np.minimum(np.linalg.norm(d0, axis=-1), np.linalg.norm(d1, axis=-1))  # (npts-1, N)
-        return dt, d
+
+        non_overlap_mask = (dl < 0) | (dl > np.linalg.norm(d, axis=-1))
+        dt[non_overlap_mask] = np.minimum(np.linalg.norm(d0, axis=-1),
+                                          np.linalg.norm(d1, axis=-1))[non_overlap_mask]
+        return dt
 
     @staticmethod
     def theta(axis):
