@@ -166,7 +166,7 @@ def stopping_muon_analysis_file(combined_file, geometry_file,
                                 proton_range_table, muon_range_table,
                                 electron_lifetime_file, tmp_h5_file):
     print('Stopping muon analysis...')
-    h5flow.run(['h5flow_yamls/analysis/stopping_muons_data.yaml'],
+    h5flow.run(['h5flow_yamls/analysis/stopping_muons.yaml'],
                tmp_h5_file,
                combined_file,
                verbose=2)

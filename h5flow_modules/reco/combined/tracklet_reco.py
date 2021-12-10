@@ -276,6 +276,8 @@ class TrackletReconstruction(H5FlowStage):
                     np.broadcast_to(hits[i][mask]['q'][np.newaxis, :],
                                     min_edge_mask.shape),
                     mask=min_edge_mask, shrink=False), axis=-1)  # (npts-1,)
+                edge_res = ma.mean(ma.array(d, mask=min_edge_mask,
+                                            shrink=False), axis=-1)  # (npts-1,)
 
                 tracks[i, j]['theta'] = cls.theta(axis)
                 tracks[i, j]['phi'] = cls.phi(axis)
@@ -291,7 +293,7 @@ class TrackletReconstruction(H5FlowStage):
                 tracks[i, j]['end'] = r_max
 
                 tracks[i, j]['trajectory'] = traj
-                tracks[i, j]['trajectory_residual'] = np.mean(d, axis=-1)
+                tracks[i, j]['trajectory_residual'] = edge_res
                 tracks[i, j]['dx'] = np.diff(traj, axis=0)
                 tracks[i, j]['dq'] = edge_q
                 tracks[i, j]['dn'] = np.sum(~min_edge_mask, axis=-1)
