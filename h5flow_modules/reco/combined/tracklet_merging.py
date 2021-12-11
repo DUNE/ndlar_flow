@@ -240,11 +240,11 @@ class TrackletMerger(H5FlowStage):
                 track_grp_id.reshape(calc_shape), self.trajectory_pts,
                 self.trajectory_dx)
         else:
-            merged_tracks = ma.masked_all((0, 1), dtype=self.merged_dtype, shrink=False)
-            track_grp = ma.masked_all((0, 1, 1), dtype=bool, shrink=False)
-            track_grp_id = ma.masked_all((0, 1), dtype=int, shrink=False)
-            track_grp_hits = ma.masked_all((0, 1), dtype=track_hits.dtype, shrink=False)
-            track_grp_hit_drift = ma.masked_all((0, 1), dtype=track_hit_drift.dtype, shrink=False)
+            merged_tracks = ma.masked_all((0, 1), dtype=self.merged_dtype)
+            track_grp = ma.masked_all((0, 1, 1), dtype=bool)
+            track_grp_id = ma.masked_all((0, 1), dtype=int)
+            track_grp_hits = ma.masked_all((0, 1), dtype=track_hits.dtype)
+            track_grp_hit_drift = ma.masked_all((0, 1), dtype=track_hit_drift.dtype)
 
         # save to merged track dataset
         n_tracks = np.count_nonzero(~merged_tracks['id'].mask)
