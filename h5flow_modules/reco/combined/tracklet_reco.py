@@ -66,7 +66,7 @@ class TrackletReconstruction(H5FlowStage):
     default_max_iterations = 100
     default_trajectory_pts = 5
     default_trajectory_dx = 10
-    default_max_nhit = 500
+    default_max_nhit = 3000
 
     @staticmethod
     def tracklet_dtype(npts=default_trajectory_pts):
