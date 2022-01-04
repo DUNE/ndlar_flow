@@ -4,3 +4,11 @@
 docs/_build*
 docs/_static*
 docs/_templates*
+*.ipynb
+*.txt
+*.npz
+*.npy
+build/
+*.root
+*.h5
+*.egg-info
