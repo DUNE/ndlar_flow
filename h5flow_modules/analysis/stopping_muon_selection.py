@@ -51,9 +51,7 @@ class StoppingMuonSelection(H5FlowStage):
     default_merged_dset_name = 'combined/tracklets/merged'
     default_t0_dset_name = 'combined/t0'
     default_hit_drift_dset_name = 'combined/hit_drift'
-    default_mc_trajectory_path = ['charge/raw_events',
-                                  'mc_truth/events',
-                                  'mc_truth/trajectories']
+    default_truth_trajectories_dset_name = 'mc_truth/trajectories'
     default_path = 'analysis/stopping_muons'
 
     event_sel_dset_name = 'event_sel_reco'
@@ -110,12 +108,12 @@ class StoppingMuonSelection(H5FlowStage):
                                        self.default_t0_dset_name)
         self.hit_drift_dset_name = params.get('hit_drift_dset_name',
                                               self.default_hit_drift_dset_name)
+        self.truth_trajectories_dset_name = params.get('truth_trajectories_dset_name',
+                                                       self.default_truth_trajectories_dset_name)
         self.hits_dset_name = params.get('hits_dset_name',
                                          self.default_hits_dset_name)
         self.merged_dset_name = params.get('merged_dset_name',
                                            self.default_merged_dset_name)
-        self.mc_trajectory_path = params.get('mc_trajectory_path',
-                                             self.default_mc_trajectory_path)
 
         self.event_profile_dtype = self.event_profile_dtype(self.profile_dx,
                                                             self.profile_max_range)
@@ -150,7 +148,8 @@ class StoppingMuonSelection(H5FlowStage):
                                     hits_dset_name=self.hits_dset_name,
                                     t0_dset_name=self.t0_dset_name,
                                     hit_drift_dset_name=self.hit_drift_dset_name,
-                                    merged_dset_name=self.merged_dset_name
+                                    merged_dset_name=self.merged_dset_name,
+                                    truth_trajectories_dset_name=self.truth_trajectories_dset_name,
                                     )
         self.data_manager.create_dset(f'{self.path}/{self.event_sel_dset_name}',
                                       self.event_sel_dtype)
@@ -770,15 +769,6 @@ class StoppingMuonSelection(H5FlowStage):
 #         mean_likelihood += 0.5 * np.sum((profile_n > 0) & (profile_rr < 0), axis=-1)**2
         return mean_likelihood
 
-    def load_track_trajectories(self, source_name, source_slice, path):
-        chain = list(zip(path[:-1], path[1:]))
-
-        data = self.data_manager.get_dset(path[-1])
-        ref, ref_dir = list(zip(*[self.data_manager.get_ref(p, c) for p, c in chain]))
-        regions = [self.data_manager.get_ref_region(p, c) for p, c in chain]
-
-        return dereference_chain(source_slice, ref, data=data, regions=regions, ref_directions=ref_dir)
-
     def run(self, source_name, source_slice, cache):
         super(StoppingMuonSelection, self).run(source_name, source_slice, cache)
         events = cache[source_name]
@@ -815,8 +805,7 @@ class StoppingMuonSelection(H5FlowStage):
 
         if self.is_mc:
             # lookup the track's true trajectory
-            track_traj = self.load_track_trajectories(source_name, source_slice,
-                                                      self.mc_trajectory_path)
+            track_traj = cache[self.truth_trajectories_dset_name]
 
             if track_traj.shape[0]:
                 track_traj = track_traj.reshape(tracks.shape[0:1] + (-1,))
