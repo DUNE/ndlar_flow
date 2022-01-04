@@ -827,19 +827,6 @@ class StoppingMuonSelection(H5FlowStage):
                 track_true_traj = track_true_traj.reshape(-1)
 
                 # find if trajectory ends in the fiducial volume
-                true_xyz_start = track_true_traj['xyz_start'].copy()
-                true_xyz_end = track_true_traj['xyz_end'].copy()
-                # FIXME: coordinates are weird between sim and data
-                true_xyz_start[:, 1] += 218.236
-                true_xyz_end[:, 1] += 218.236
-                new_x_start = true_xyz_start[:, 2].copy()
-                new_x_end = true_xyz_end[:, 2].copy()
-                new_z_start = true_xyz_start[:, 0].copy()
-                new_z_end = true_xyz_end[:, 0].copy()
-                true_xyz_start[:, 0] = new_x_start
-                true_xyz_start[:, 2] = new_z_start
-                true_xyz_end[:, 0] = new_x_end
-                true_xyz_end[:, 2] = new_z_end
                 is_muon = ma.abs(track_true_traj['pdgId']) == 13
                 is_proton = track_true_traj['pdgId'] == 2212
                 is_true_stopping = self.stopping(true_xyz_start, true_xyz_end)
