@@ -31,7 +31,7 @@ class StoppingMuonSelection(H5FlowStage):
 
 
     '''
-    class_version = '1.0.0'
+    class_version = '1.0.1'
 
     default_fid_cut = 20  # mm
     default_cathode_fid_cut = 20  # mm
@@ -52,7 +52,7 @@ class StoppingMuonSelection(H5FlowStage):
     default_t0_dset_name = 'combined/t0'
     default_hit_drift_dset_name = 'combined/hit_drift'
     default_mc_trajectory_path = ['charge/raw_events',
-                                  'mc_truth/tracks',
+                                  'mc_truth/events',
                                   'mc_truth/trajectories']
     default_path = 'analysis/stopping_muons'
 
@@ -120,20 +120,18 @@ class StoppingMuonSelection(H5FlowStage):
         self.event_profile_dtype = self.event_profile_dtype(self.profile_dx,
                                                             self.profile_max_range)
 
-        self.regions = []
-
     def init(self, source_name):
         super(StoppingMuonSelection, self).init(source_name)
         self.is_mc = resources['RunData'].is_mc
 
         correction_key = ('mc' if self.is_mc
-                             else 'medm')
+                          else 'medm')
         correction_key = ('high' if (not self.is_mc
                                      and resources['RunData'].charge_thresholds == 'high')
-                             else correction_key)
+                          else correction_key)
         self.curvature_rr_correction = self.curvature_rr_correction.get(correction_key, self.default_curvature_rr_correction)
         self.density_dx_correction_params = self.density_dx_correction_params.get(correction_key, self.default_density_dx_correction_params)
-        self.larpix_gain = self.larpix_gain.get(correction_key, self.default_larpix_gain)        
+        self.larpix_gain = self.larpix_gain.get(correction_key, self.default_larpix_gain)
 
         self.data_manager.set_attrs(self.path,
                                     classname=self.classname,
@@ -162,9 +160,6 @@ class StoppingMuonSelection(H5FlowStage):
             self.data_manager.create_dset(f'{self.path}/{self.event_sel_truth_dset_name}',
                                           self.event_sel_dtype)
 
-        self.create_regions()
-        self.data_manager.set_attrs(self.path, regions=np.array(self.regions))
-
         self.create_dqdx_profile_templates()
         self.data_manager.set_attrs(self.path,
                                     proton_dqdx=self.proton_range_table['dqdx'],
@@ -182,24 +177,25 @@ class StoppingMuonSelection(H5FlowStage):
         super(StoppingMuonSelection, self).finish(source_name)
         sel_dset_name = f'{self.path}/{self.event_sel_dset_name}'
 
-        total = len(self.data_manager.get_dset(sel_dset_name))
-        nstopping = np.sum(self.data_manager.get_dset(sel_dset_name)['stop'])
-        nselected = np.sum(self.data_manager.get_dset(sel_dset_name)['sel'])
-        print(f'Stopping: {nstopping} / {total} ({nstopping/total:0.03f})')
-        print(f'Selected: {nselected} / {total} ({nselected/total:0.03f})')
+        if self.rank == 0:
+            total = len(self.data_manager.get_dset(sel_dset_name))
+            nstopping = np.sum(self.data_manager.get_dset(sel_dset_name)['stop'])
+            nselected = np.sum(self.data_manager.get_dset(sel_dset_name)['sel'])
+            print(f'Stopping: {nstopping} / {total} ({nstopping/total:0.03f})')
+            print(f'Selected: {nselected} / {total} ({nselected/total:0.03f})')
 
-        if self.is_mc:
-            sel_truth_dset_name = f'{self.path}/{self.event_sel_truth_dset_name}'
-            true_stopping = np.sum(self.data_manager.get_dset(sel_truth_dset_name)['stop'])
-            true_stopping_muon = np.sum(self.data_manager.get_dset(sel_truth_dset_name)['sel'])
-            print(f'True stopping: {true_stopping} / {total} ({true_stopping/total:0.03f})')
-            print(f'True stopping muons: {true_stopping_muon} / {total} ({true_stopping_muon/total:0.03f})')
+            if self.is_mc:
+                sel_truth_dset_name = f'{self.path}/{self.event_sel_truth_dset_name}'
+                true_stopping = np.sum(self.data_manager.get_dset(sel_truth_dset_name)['stop'])
+                true_stopping_muon = np.sum(self.data_manager.get_dset(sel_truth_dset_name)['sel'])
+                print(f'True stopping: {true_stopping} / {total} ({true_stopping/total:0.03f})')
+                print(f'True stopping muons: {true_stopping_muon} / {total} ({true_stopping_muon/total:0.03f})')
 
-            correct = np.sum(self.data_manager.get_dset(sel_truth_dset_name)['sel'] &
-                             self.data_manager.get_dset(sel_dset_name)['sel'])
+                correct = np.sum(self.data_manager.get_dset(sel_truth_dset_name)['sel'] &
+                                 self.data_manager.get_dset(sel_dset_name)['sel'])
 
-            print(f'Purity: {correct} / {nselected} ({correct/nselected:0.03f})')
-            print(f'Efficiency: {correct} / {true_stopping_muon} ({correct/true_stopping_muon:0.03f})')
+                print(f'Purity: {correct} / {nselected} ({correct/nselected:0.03f})')
+                print(f'Efficiency: {correct} / {true_stopping_muon} ({correct/true_stopping_muon:0.03f})')
 
     def create_dqdx_profile_templates(self):
         # create range tables used for dQ/dx profile discrimination
@@ -247,8 +243,8 @@ class StoppingMuonSelection(H5FlowStage):
                                                           resources['ParticleData'].e_mass,
                                                           self.profile_dx) / self.profile_dx
         post_dedx_width = resources['ParticleData'].landau_width(50 * units.MeV,
-                                                                resources['ParticleData'].e_mass,
-                                                                self.profile_dx) / self.profile_dx
+                                                                 resources['ParticleData'].e_mass,
+                                                                 self.profile_dx) / self.profile_dx
         self.muon_range_table['post_dqdx'] = post_dedx * resources['LArData'].ionization_recombination(post_dedx) / w
         self.proton_range_table['post_dqdx'] = 1
         self.muon_range_table['post_dqdx_width'] = post_dedx_width * resources['LArData'].ionization_recombination(post_dedx) / w
@@ -264,7 +260,6 @@ class StoppingMuonSelection(H5FlowStage):
                                                                                       resources['ParticleData'].e_mass,
                                                                                       self.profile_dx)
         self.proton_range_table['post_mcs_angle'] = 1e-9
-                                                              
 
         self.muon_range_table['dqdx_gaus_width'] = self.larpix_noise
         self.proton_range_table['dqdx_gaus_width'] = self.larpix_noise
@@ -293,7 +288,7 @@ class StoppingMuonSelection(H5FlowStage):
         dqdx_width = interp_rr_width(interpolation_pts)
         # combine position resolution, intrinsic width, and noise contributions
         dqdx_width = np.sqrt(
-            #     ndimage.uniform_filter(np.abs(ndimage.convolve(dqdx * dx, [-1, 1], mode='nearest')), int(self.profile_dx / dx), mode='nearest')**2
+            #     ndimage.uniform_filtein_fid(self, xyz, cathode_fid=0.0, field_cage_fid=0.0)inr(np.abs(ndimage.convolve(dqdx * dx, [-1, 1], mode='nearest')), int(self.profile_dx / dx), mode='nearest')**2
             ndimage.uniform_filter(np.abs(ndimage.convolve(dqdx * dx, [0], mode='nearest')), 1, mode='nearest')**2
             + dqdx_width**2
             + noise**2)
@@ -313,35 +308,7 @@ class StoppingMuonSelection(H5FlowStage):
         range_table['dqdx'] = 0.5 * (high_val_interp(np.clip(rr[2:], _min, _max)) + low_val_interp(np.clip(rr[2:], _min, _max)))
         range_table['dqdx_width'] = 0.5 * (high_val_interp(np.clip(rr[2:], _min, _max)) - low_val_interp(np.clip(rr[2:], _min, _max)))
 
-    def create_regions(self):
-        x = resources['Geometry'].pixel_xy.compress((0,))
-        y = resources['Geometry'].pixel_xy.compress((1,))
-        z = resources['Geometry'].anode_z.compress()
-
-        min_x, max_x = np.min(x) + self.fid_cut, np.max(x) - self.fid_cut
-        min_y, max_y = np.min(y) + self.fid_cut, np.max(y) - self.fid_cut
-        min_z, max_z = np.min(z) + self.fid_cut, np.max(z) - self.fid_cut
-
-        self.regions.append((np.array([min_x, min_y, min_z]),
-                             np.array([max_x, max_y, -self.cathode_fid_cut])))
-        self.regions.append((np.array([min_x, min_y, self.cathode_fid_cut]),
-                             np.array([max_x, max_y, max_z])))
-
-    def in_fid(self, xyz):
-        '''
-            :param xyz: array ``shape: (N,3)``
-
-            :returns: array ``shape: (N,)``
-
-        '''
-        coord_in_fid = ma.concatenate([np.expand_dims((xyz < np.expand_dims(boundary[1], 0))
-                                                      & (xyz > np.expand_dims(boundary[0], 0)), axis=-1)
-                                       for boundary in self.regions], axis=-1)
-        in_fid = ma.all(coord_in_fid, axis=1)
-        in_any_fid = ma.any(in_fid, axis=-1)
-        return in_any_fid
-
-    def contained(self, start_xyz, end_xyz):
+    def stopping(self, start_xyz, end_xyz):
         '''
             :param start_xyz: array ``shape: (N,3)``
 
@@ -350,19 +317,40 @@ class StoppingMuonSelection(H5FlowStage):
             :returns: array ``shape: (N,)``
 
         '''
-        start_in_fid = self.in_fid(start_xyz)
-        end_in_fid = self.in_fid(end_xyz)
-        track_contained = (~start_in_fid & end_in_fid) | (start_in_fid & ~end_in_fid)
-        return track_contained
+        start_in_fid = resources['Geometry'].in_fid(
+            start_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+        end_in_fid = resources['Geometry'].in_fid(
+            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+        track_stopping = (~start_in_fid & end_in_fid) | (start_in_fid & ~end_in_fid)
+        return track_stopping
 
     def through_going(self, start_xyz, end_xyz):
-        start_in_fid = self.in_fid(start_xyz)
-        end_in_fid = self.in_fid(end_xyz)
+        '''
+            :param start_xyz: array ``shape: (N,3)``
+
+            :param end_xyz: array ``shape: (N,3)``
+
+            :returns: array ``shape: (N,)``
+
+        '''
+        start_in_fid = resources['Geometry'].in_fid(
+            start_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+        end_in_fid = resources['Geometry'].in_fid(
+            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
         track_through_going = ~start_in_fid & ~end_in_fid
         return track_through_going
 
     def downward(self, start_xyz, end_xyz):
-        end_in_fid = self.in_fid(end_xyz)
+        '''
+            :param start_xyz: array ``shape: (N,3)``
+
+            :param end_xyz: array ``shape: (N,3)``
+
+            :returns: array ``shape: (N,)``
+
+        '''
+        end_in_fid = resources['Geometry'].in_fid(
+            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
         dy = end_xyz[:, 1] - start_xyz[:, 1]
         return ((end_in_fid & (dy < 0)) | (~end_in_fid & (dy > 0)))
 
@@ -375,7 +363,7 @@ class StoppingMuonSelection(H5FlowStage):
     @staticmethod
     def profile_likelihood(profile_rr, profile_dqdx, profile_pos, range_table, type=''):
         '''
-            Calculates the likelihood of a given dqdx v. residual range profile
+            Calculates the likelihood score of a given dqdx v. residual range profile
             using a Moyal-distribution approximation.
 
             Likelihood data is passed via the ``range_table`` parameter which is
@@ -401,9 +389,9 @@ class StoppingMuonSelection(H5FlowStage):
         profile_rr, profile_dqdx = np.broadcast_arrays(profile_rr, profile_dqdx)
         profile_pos = np.broadcast_to(profile_pos, profile_rr.shape + (3,))
 
-        interp = interp1d(np.r_[0,range_table['range']], np.r_[range_table['post_dqdx'],range_table['dqdx']])
-        interp_width = interp1d(np.r_[0,range_table['range']], np.r_[range_table['post_dqdx_width'],range_table['dqdx_width']])
-        interp_angle_width = interp1d(np.r_[0,range_table['range']], np.r_[range_table['post_mcs_angle'],range_table['mcs_angle']])
+        interp = interp1d(np.r_[0, range_table['range']], np.r_[range_table['post_dqdx'], range_table['dqdx']])
+        interp_width = interp1d(np.r_[0, range_table['range']], np.r_[range_table['post_dqdx_width'], range_table['dqdx_width']])
+        interp_angle_width = interp1d(np.r_[0, range_table['range']], np.r_[range_table['post_mcs_angle'], range_table['mcs_angle']])
         min_range = np.min(range_table['range'])
         max_range = np.max(range_table['range'])
 
@@ -458,8 +446,8 @@ class StoppingMuonSelection(H5FlowStage):
         if any_valid:
             angle[..., 1:-1] = np.maximum(np.sum(d[..., 1:, :] * d[..., :-1, :], axis=-1), 1e-15) / np.maximum(norm, 1e-15)
             angle[..., 1:-1] = np.arccos(angle[..., 1:-1])
-            angle[..., 0] = angle[...,1]
-            angle[..., -1] = angle[...,-2]
+            angle[..., 0] = angle[..., 1]
+            angle[..., -1] = angle[..., -2]
 
 #        angle_term = stats.norm.logpdf(angle, loc=0, scale=interp_angle_width) + np.log(2)
         angle_term = stats.expon.logpdf(angle, scale=interp_angle_width) + np.log(2)
@@ -499,7 +487,7 @@ class StoppingMuonSelection(H5FlowStage):
         dxyz = end - start
         dxyz /= np.maximum(np.linalg.norm(dxyz, axis=-1, keepdims=True), 1e-15)
         intersections = []
-        for reg in self.regions:
+        for reg in resources['Geometry'].regions:
             for pxyz in reg:
                 for norm in [np.array([1, 0, 0]), np.array([0, 1, 0]), np.array([0, 0, 1])]:
                     intersections.append(self.intersection(end, dxyz, pxyz, norm)[..., np.newaxis])
@@ -811,14 +799,14 @@ class StoppingMuonSelection(H5FlowStage):
         track_start = tracks.ravel()['trajectory'][..., 0, :]
         track_stop = tracks.ravel()['trajectory'][..., -1, :]
         track_length = tracks.ravel()['length']
-        is_stopping = (self.contained(track_start, track_stop) # track enters and stops
-                       & (track_length > self.length_cut)) # track is reasonably long
+        is_stopping = (self.stopping(track_start, track_stop)  # track enters and stops
+                       & (track_length > self.length_cut))  # track is reasonably long
 
         is_throughgoing = self.through_going(track_start, track_stop)
         is_downward = self.downward(track_start, track_stop)
         d_to_edge = self.extrapolated_intersection(track_start, track_stop)
         is_near_edge = d_to_edge < self.fid_cut
-        
+
         is_stopping = is_stopping.reshape(tracks.shape)
         is_throughgoing = is_throughgoing.reshape(tracks.shape)
         is_downward = is_downward.reshape(tracks.shape)
@@ -854,7 +842,7 @@ class StoppingMuonSelection(H5FlowStage):
                 true_xyz_end[:, 2] = new_z_end
                 is_muon = ma.abs(track_true_traj['pdgId']) == 13
                 is_proton = track_true_traj['pdgId'] == 2212
-                is_true_stopping = self.contained(true_xyz_start, true_xyz_end)
+                is_true_stopping = self.stopping(true_xyz_start, true_xyz_end)
             else:
                 track_true_traj = np.empty(tracks.shape[0], dtype=track_traj.dtype)
                 is_muon = np.zeros(track_true_traj.shape, dtype=bool)
@@ -864,11 +852,15 @@ class StoppingMuonSelection(H5FlowStage):
                 true_xyz_end = track_true_traj['xyz_end']
 
         # define a stopping event as one with exclusively 1 track that ends in fid.
-        seed_pt = np.where(np.expand_dims(self.in_fid(track_start), axis=-1),
+        start_in_fid = resources['Geometry'].in_fid(
+            track_start, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+        seed_pt = np.where(np.expand_dims(start_in_fid, axis=-1),
                            track_stop, track_start).reshape(tracks.shape + (3,))
         seed_pt = np.take_along_axis(seed_pt, np.argmax(is_stopping, axis=-1)[..., np.newaxis, np.newaxis],
                                      axis=-2)
-        hits_not_in_fid = np.any((~self.in_fid(hit_xyz.reshape(-1,3)).reshape(hit_xyz.shape[:-1]) & ~hits['id'].mask
+        hit_in_fid = resources['Geometry'].in_fid(
+            hit_xyz.reshape(-1, 3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut).reshape(hit_xyz.shape[:-1])
+        hits_not_in_fid = np.any((~hit_in_fid & ~hits['id'].mask
                                   & (np.sum((hit_xyz - seed_pt)**2, axis=-1) > self.profile_search_dx**2)), axis=-1)
         event_is_stopping = ((ma.sum(is_stopping, axis=-1) == 1)
                              & (t0['type'] != 0)
@@ -898,7 +890,7 @@ class StoppingMuonSelection(H5FlowStage):
                 #rr_range = -self.profile_search_dx, +self.profile_search_dx
                 rr_range = np.maximum(-250, profile_rr[i][valid_mask].min()), np.minimum(+250, profile_rr[i][valid_mask].max())
                 rr_offset = np.expand_dims(np.linspace(rr_range[0], rr_range[1], 2 * int(np.diff(rr_range) / self.profile_dx)), axis=-1)
-                close_dqdx = np.take_along_axis(profile_dqdx[i:i + 1], np.argmin(np.abs(profile_rr[i:i+1] - rr_offset), axis=-1)[...,np.newaxis], axis=-1)
+                close_dqdx = np.take_along_axis(profile_dqdx[i:i + 1], np.argmin(np.abs(profile_rr[i:i + 1] - rr_offset), axis=-1)[..., np.newaxis], axis=-1)
                 mask = (close_dqdx > self.dqdx_peak_cut)
                 if not np.any(mask):
                     continue
@@ -947,7 +939,8 @@ class StoppingMuonSelection(H5FlowStage):
         end_pt = np.take_along_axis(pos, i_stop, axis=-2)
 
         # check if endpoint in fiducial volume
-        end_pt_in_fid = self.in_fid(end_pt.reshape(-1, 3))
+        end_pt_in_fid = resources['Geometry'].in_fid(
+            end_pt.reshape(-1, 3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
         end_pt_in_fid = end_pt_in_fid.reshape(tracks.shape[0])
 
         # calculate "additional" energy
@@ -980,7 +973,9 @@ class StoppingMuonSelection(H5FlowStage):
         if self.is_mc and len(is_muon):
             # define true stopping events as events with at least 1 muon that ends in fid.
             event_is_true_stopping = is_muon & is_true_stopping
-            true_stop_pt = np.where(np.expand_dims(self.in_fid(true_xyz_start), axis=-1),
+            true_xyz_start_in_fid = resources['Geometry'].in_fid(
+                true_xyz_start, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+            true_stop_pt = np.where(np.expand_dims(true_xyz_start_in_fid, axis=-1),
                                     true_xyz_start, true_xyz_end).reshape((-1, 3))
 
         # prep arrays to write to file

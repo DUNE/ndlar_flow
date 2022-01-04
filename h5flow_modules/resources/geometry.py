@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.ma as ma
 import logging
 import yaml
 
@@ -9,7 +10,7 @@ from module0_flow.util.compat import assert_compat_version
 
 
 class Geometry(H5FlowResource):
-    class_version = '0.0.0'
+    class_version = '0.0.1'
 
     default_path = 'geometry_info'
     default_crs_geometry_file = '-'
@@ -32,6 +33,7 @@ class Geometry(H5FlowResource):
         self.path = params.get('path', self.default_path)
         self.crs_geometry_file = params.get('crs_geometry_file', self.default_crs_geometry_file)
         # self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
+        self._regions = None  # active TPC regions
 
     def init(self, source_name):
         super(Geometry, self).init(source_name)
@@ -68,6 +70,26 @@ class Geometry(H5FlowResource):
         lut_size = (self.pixel_xy.nbytes + self.tile_id.nbytes
                     + self.anode_z.nbytes + self.drift_dir.nbytes)
         logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
+
+    def _create_regions(self):
+        self._regions = []
+
+        io_group, io_channel, chip_id, channel_id = self.pixel_xy.keys()
+        xy = self.pixel_xy[(io_group, io_channel, chip_id, channel_id)]
+        tile_id = self.tile_id[(io_group, io_channel)]
+        anode_z = self.anode_z[(tile_id,)]
+        drift_dir = self.drift_dir[(tile_id,)]
+
+        anode_zs, inv = np.unique(anode_z, return_inverse=True)
+        for i, z in enumerate(anode_zs):
+            mask = (inv == i)
+
+            min_x, max_x = xy[mask, 0].min(), xy[mask, 0].max()
+            min_y, max_y = xy[mask, 1].min(), xy[mask, 1].max()
+            min_z, max_z = (z * (drift_dir[mask][0] < 0), z * (drift_dir[mask][0] > 0))
+
+            self._regions.append(np.array([[min_x, min_y, min_z],
+                                           [max_x, max_y, max_z]]))
 
     @property
     def pixel_pitch(self):
@@ -113,6 +135,33 @@ class Geometry(H5FlowResource):
 
         '''
         return self._drift_dir
+
+    @property
+    def regions(self):
+        if self._regions is None:
+            self._create_regions()
+        return self._regions
+
+    def in_fid(self, xyz, cathode_fid=0.0, field_cage_fid=0.0):
+        '''
+            Check if xyz point is contained in the specified fiducial volume
+
+            :param xyz: point to check, array ``shape: (N,3)``
+
+            :param cathode_fid: fiducial boundary for cathode and anode, ``float``, optional
+
+            :param field_cage_fid: fiducial boundary for field cage walls, ``float``, optional
+
+            :returns: boolean array, ``shape: (N,)``, True indicates point is within fiducial volume
+
+        '''
+        fid = np.array([field_cage_fid, field_cage_fid, cathode_fid])
+        coord_in_fid = ma.concatenate([np.expand_dims((xyz < np.expand_dims(boundary[1] - fid, 0))
+                                                      & (xyz > np.expand_dims(boundary[0] + fid, 0)), axis=-1)
+                                       for boundary in self.regions], axis=-1)
+        in_fid = ma.all(coord_in_fid, axis=1)
+        in_any_fid = ma.any(in_fid, axis=-1)
+        return in_any_fid
 
     def get_z_coordinate(self, io_group, io_channel, drift):
         '''

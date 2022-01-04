@@ -61,6 +61,16 @@ def test_lut_hash(lut):
     assert not np.any(lut[0].hash(*keys) > lut[0].max_hash)
 
 
+def test_lut_get_keys(lut):
+    keys = lut[1][0]
+    shape = lut[1][3]
+    lut[0][keys] = 10
+    if shape is not None:
+        assert np.all(lut[0][lut[0].keys()][..., 0] == lut[0].compress(sel=(0,)))
+    else:
+        assert np.all(lut[0][lut[0].keys()] == lut[0].compress())
+
+
 def test_lut_default(lut):
     keys = lut[1][0]
 
