@@ -422,7 +422,7 @@ class RawEventGenerator(H5FlowGenerator):
         if self.size < 2:
             return
 
-        # rank 1 get stored from rank N-1
+        # rank 0 get stored from rank N-1
         if self.rank == self.size - 1:
             self.comm.send(self.last_unix_ts, dest=0)
         # rank i give max unix timestamp to i+1

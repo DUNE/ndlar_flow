@@ -69,7 +69,8 @@ class Geometry(H5FlowResource):
 
         lut_size = (self.pixel_xy.nbytes + self.tile_id.nbytes
                     + self.anode_z.nbytes + self.drift_dir.nbytes)
-        logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
+        if self.rank == 0:
+            logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
 
     def _create_regions(self):
         self._regions = []
@@ -189,7 +190,8 @@ class Geometry(H5FlowResource):
         return pixel_pos[0] * tile_orientation[2], pixel_pos[1] * tile_orientation[1]
 
     def load_geometry(self):
-        logging.warning(f'Loading geometry from {self.crs_geometry_file}...')
+        if self.rank == 0:
+            logging.warning(f'Loading geometry from {self.crs_geometry_file}...')
 
         with open(self.crs_geometry_file) as gf:
             geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
