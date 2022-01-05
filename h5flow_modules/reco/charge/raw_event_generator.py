@@ -3,6 +3,7 @@ import numpy.ma as ma
 from numpy.lib import recfunctions as rfn
 import h5py
 import logging
+from math import ceil
 
 from h5flow.core import H5FlowGenerator, resources
 from h5flow.data import dereference
@@ -212,7 +213,8 @@ class RawEventGenerator(H5FlowGenerator):
 
             self.data_manager.create_dset(self.mc_tracks_dset_name, dtype=self.mc_tracks_dtype)
             ntracks = len(self.mc_tracks)
-            track_sl = slice(ntracks // self.size * self.rank, min(ntracks, ntracks // self.size * (self.rank + 1)))
+            track_sl = slice(min(ntracks, ceil(ntracks / self.size) * self.rank),
+                             min(ntracks, ceil(ntracks / self.size) * (self.rank + 1)))
             self.data_manager.reserve_data(self.mc_tracks_dset_name, track_sl)
             self.data_manager.write_data(
                 self.mc_tracks_dset_name, track_sl,
@@ -220,7 +222,8 @@ class RawEventGenerator(H5FlowGenerator):
 
             self.data_manager.create_dset(self.mc_trajectories_dset_name, dtype=self.mc_trajectories.dtype)
             ntraj = len(self.mc_trajectories)
-            traj_sl = slice(ntraj // self.size * self.rank, min(ntraj, ntraj // self.size * (self.rank + 1)))
+            traj_sl = slice(min(ntraj, ceil(ntraj / self.size) * self.rank),
+                            min(ntraj, ceil(ntraj / self.size) * (self.rank + 1)))
             self.data_manager.reserve_data(self.mc_trajectories_dset_name, traj_sl)
             self.data_manager.write_data(
                 self.mc_trajectories_dset_name, traj_sl,
@@ -243,8 +246,8 @@ class RawEventGenerator(H5FlowGenerator):
             ev_traj_end = len(self.mc_trajectories['eventID']) - ev_traj_end
             ev_track_end = len(self.mc_tracks['eventID']) - ev_track_end
             truth_slice = slice(
-                (len(evs) // self.size) * self.rank,
-                (len(evs) // self.size) * (self.rank + 1))
+                ceil(len(evs) / self.size) * self.rank,
+                ceil(len(evs) / self.size) * (self.rank + 1))
 
             # create placeholder events data
             mc_events_slice = self.data_manager.reserve_data(self.mc_events_dset_name, len(evs[truth_slice]))
