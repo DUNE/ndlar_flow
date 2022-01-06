@@ -2,7 +2,7 @@
 
 flow:
   source: events
-  stages: [stopping_muon_sel]
+  stages: [truth_labels, stopping_muon_sel]
 
 resources:
   - !include h5flow_yamls/resources/run_data.yaml

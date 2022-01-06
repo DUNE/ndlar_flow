@@ -3,6 +3,7 @@ import numpy.ma as ma
 from numpy.lib import recfunctions as rfn
 import h5py
 import logging
+from math import ceil
 
 from h5flow.core import H5FlowGenerator, resources
 from h5flow.data import dereference
@@ -137,12 +138,10 @@ class RawEventGenerator(H5FlowGenerator):
         tracks_copy = tracks.copy()
         for field in ('x_start', 'y_start', 'z_start', 'x', 'y', 'z', 'x_end',
                       'y_end', 'z_end'):
-            if 'x' in field:
-                tracks_copy[field] = tracks[field.replace('x', 'z')] * units.cm
+            if 'x' in field or 'z' in field:
+                tracks_copy[field] = tracks[field] * units.cm
             elif 'y' in field:
                 tracks_copy[field] = (tracks[field] + 21.8236) * units.cm
-            elif 'z' in field:
-                tracks_copy[field] = tracks[field.replace('z', 'x')] * units.cm
         for field in ('tran_diff', 'dx', 'long_diff'):
             tracks_copy[field] = tracks[field] * units.cm
         tracks_copy['dE'] = tracks['dE'] * units.MeV
@@ -158,7 +157,9 @@ class RawEventGenerator(H5FlowGenerator):
             traj_copy[field][:, 1] = traj[field][:, 1] * units.mm + 218.236
             traj_copy[field][:, 2] = traj[field][:, 0] * units.mm
         for field in ('pxyz_start', 'pxyz_end'):
-            traj_copy[field] = traj[field] * units.MeV
+            traj_copy[field][:, 0] = traj[field][:, 2] * units.MeV
+            traj_copy[field][:, 1] = traj[field][:, 1] * units.MeV
+            traj_copy[field][:, 2] = traj[field][:, 0] * units.MeV
         for field in ('t_start', 't_end'):
             traj_copy[field] = traj[field] * units.ns
         return traj_copy
@@ -212,7 +213,9 @@ class RawEventGenerator(H5FlowGenerator):
 
             self.data_manager.create_dset(self.mc_tracks_dset_name, dtype=self.mc_tracks_dtype)
             ntracks = len(self.mc_tracks)
-            track_sl = slice(ntracks // self.size * self.rank, min(ntracks, ntracks // self.size * (self.rank + 1)))
+            track_sl = slice(
+                min(ntracks, ceil(ntracks / self.size) * self.rank),
+                min(ntracks, ceil(ntracks / self.size) * (self.rank + 1)))
             self.data_manager.reserve_data(self.mc_tracks_dset_name, track_sl)
             self.data_manager.write_data(
                 self.mc_tracks_dset_name, track_sl,
@@ -220,7 +223,9 @@ class RawEventGenerator(H5FlowGenerator):
 
             self.data_manager.create_dset(self.mc_trajectories_dset_name, dtype=self.mc_trajectories.dtype)
             ntraj = len(self.mc_trajectories)
-            traj_sl = slice(ntraj // self.size * self.rank, min(ntraj, ntraj // self.size * (self.rank + 1)))
+            traj_sl = slice(
+                min(ntracks, ceil(ntraj / self.size * self.rank)),
+                min(ntraj, ceil(ntraj / self.size * (self.rank + 1))))
             self.data_manager.reserve_data(self.mc_trajectories_dset_name, traj_sl)
             self.data_manager.write_data(
                 self.mc_trajectories_dset_name, traj_sl,
@@ -267,9 +272,9 @@ class RawEventGenerator(H5FlowGenerator):
                 ref[:, 1] += track_start
                 self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, ref)
                 ref = np.argwhere(ev == traj_evid_block)
-                ref[:, 0] = i + mc_events_slice.start
-                ref[:, 1] += traj_start
-                self.data_manager.write_ref(self.mc_events_dset_name, self.mc_trajectories_dset_name, ref)
+                ref[:, 0] += traj_start
+                ref[:, 1] = i + mc_events_slice.start
+                self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, ref)
                 ref = np.argwhere(ev == track_evid_block)
                 ref[:, 0] = i + mc_events_slice.start
                 ref[:, 1] += track_start
@@ -406,8 +411,13 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.write_data(self.mc_packet_fraction_dset_name, sl, event_packet_fraction.compressed())
 
             # find events associated with tracks
+            if H5FLOW_MPI:
+                self.comm.barrier()
             ref_dset, ref_dir = self.data_manager.get_ref(self.mc_tracks_dset_name, self.mc_events_dset_name)
             ref_region = self.data_manager.get_ref_region(self.mc_tracks_dset_name, self.mc_events_dset_name)
+            if self.rank in (0,12):
+                import h5py
+                self.data_manager['mc_truth'].visit(lambda d: print(d) if isinstance(d, h5py.Dataset) else None)
             mc_evs = dereference(ref[:, 1], ref_dset, region=ref_region,
                                  ref_direction=ref_dir, indices_only=True)
 

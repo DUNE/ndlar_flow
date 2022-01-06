@@ -86,7 +86,7 @@ class Geometry(H5FlowResource):
 
             min_x, max_x = xy[mask, 0].min(), xy[mask, 0].max()
             min_y, max_y = xy[mask, 1].min(), xy[mask, 1].max()
-            min_z, max_z = (z * (drift_dir[mask][0] < 0), z * (drift_dir[mask][0] > 0))
+            min_z, max_z = (z * (drift_dir[mask][0] > 0), z * (drift_dir[mask][0] < 0))
 
             self._regions.append(np.array([[min_x, min_y, min_z],
                                            [max_x, max_y, max_z]]))
