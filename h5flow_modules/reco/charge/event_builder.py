@@ -103,8 +103,8 @@ class EventBuilder(H5FlowStage):
         self.data_manager.write_data(self.events_dset_name, events_slice, events_arr)
 
         # save references
-        self.data_manager.write_ref(source_name , self.events_dset_name, np.c_[source_slice, events_slice])
-        
+        self.data_manager.write_ref(self.events_dset_name, source_name, np.c_[np.r_[events_slice], np.r_[source_slice]])
+
         ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1, 1)
         hits_ev_id = np.broadcast_to(ev_id, hits_data.shape)
         ref = np.c_[hits_ev_id[hits_mask], hits_data[hits_mask]['id']]

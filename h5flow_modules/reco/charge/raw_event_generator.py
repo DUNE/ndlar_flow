@@ -213,6 +213,7 @@ class RawEventGenerator(H5FlowGenerator):
 
             self.data_manager.create_dset(self.mc_tracks_dset_name, dtype=self.mc_tracks_dtype)
             ntracks = len(self.mc_tracks)
+
             track_sl = slice(
                 min(ntracks, ceil(ntracks / self.size) * self.rank),
                 min(ntracks, ceil(ntracks / self.size) * (self.rank + 1)))
@@ -248,8 +249,8 @@ class RawEventGenerator(H5FlowGenerator):
             ev_traj_end = len(self.mc_trajectories['eventID']) - ev_traj_end
             ev_track_end = len(self.mc_tracks['eventID']) - ev_track_end
             truth_slice = slice(
-                (len(evs) // self.size) * self.rank,
-                (len(evs) // self.size) * (self.rank + 1))
+                ceil(len(evs) / self.size) * self.rank,
+                ceil(len(evs) / self.size) * (self.rank + 1))
 
             # create placeholder events data
             mc_events_slice = self.data_manager.reserve_data(self.mc_events_dset_name, len(evs[truth_slice]))
@@ -432,7 +433,7 @@ class RawEventGenerator(H5FlowGenerator):
         if self.size < 2:
             return
 
-        # rank 1 get stored from rank N-1
+        # rank 0 get stored from rank N-1
         if self.rank == self.size - 1:
             self.comm.send(self.last_unix_ts, dest=0)
         # rank i give max unix timestamp to i+1

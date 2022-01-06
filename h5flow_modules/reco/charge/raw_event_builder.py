@@ -57,8 +57,9 @@ class RawEventBuilder(object):
             rank = comm.Get_rank()
             size = comm.Get_size()
 
-            for attr in attrs:
-                logging.debug(f'get {attr}: {getattr(self,attr).shape}')
+            if rank == 0:
+                for attr in attrs:
+                    logging.debug(f'get {attr}: {getattr(self,attr).shape}')
 
             if size < 2:
                 return
