@@ -24,6 +24,9 @@ truth_labels:
       path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories']
     - name: 'mc_truth/tracks'
       path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories', 'mc_truth/tracks']
+    - name: 'mc_truth/tracks_idx'
+      path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories', 'mc_truth/tracks']
+      index_only: True
   params:
     truth_trajectories_dset_name: 'mc_truth/trajectories'
     truth_tracks_dset_name: 'mc_truth/tracks'

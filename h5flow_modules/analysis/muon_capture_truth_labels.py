@@ -48,6 +48,7 @@ class MuonCaptureTruthLabels(H5FlowStage):
         ('scatter_valid', 'u1', (2,)),
         ('scatter_contained', 'u1', (2,)),
     ])
+    ref_dtype = bool
 
     def __init__(self, **params):
         super(MuonCaptureTruthLabels, self).__init__(**params)
@@ -65,6 +66,12 @@ class MuonCaptureTruthLabels(H5FlowStage):
         if not self.is_mc:
             return
         self.data_manager.create_dset(self.truth_labels_dset_name, dtype=self.truth_label_dtype)
+        self.data_manager.create_dset(self.truth_labels_dset_name + '/stopping_track', dtype=self.ref_dtype)
+        self.data_manager.create_dset(self.truth_labels_dset_name + '/michel_track', dtype=self.ref_dtype)
+        self.data_manager.create_dset(self.truth_labels_dset_name + '/scatter_track', dtype=self.ref_dtype)        
+        self.data_manager.create_ref(self.truth_labels_dset_name + '/stopping_track', self.truth_tracks_dset_name)
+        self.data_manager.create_ref(self.truth_labels_dset_name + '/michel_track', self.truth_tracks_dset_name)
+        self.data_manager.create_ref(self.truth_labels_dset_name + '/scatter_track', self.truth_tracks_dset_name)
 
     def run(self, source_name, source_slice, cache):
         super(MuonCaptureTruthLabels, self).run(source_name, source_slice, cache)
@@ -73,7 +80,7 @@ class MuonCaptureTruthLabels(H5FlowStage):
 
         # get trajectory/track segment info
         traj = cache[self.truth_trajectories_dset_name]
-
+        
         # create truth labels
         truth_label = np.zeros(traj.shape[0], dtype=self.truth_label_dtype)
         data_slice = self.data_manager.reserve_data(self.truth_labels_dset_name, source_slice)
@@ -82,7 +89,9 @@ class MuonCaptureTruthLabels(H5FlowStage):
             traj = traj.reshape(traj.shape[0], -1)  # events, trajectories
             tracks = cache[self.truth_tracks_dset_name]
             tracks = tracks.reshape(traj.shape + (-1,))  # events, trajectories, segments
-
+            tracks_idx = cache[self.truth_tracks_dset_name + '_idx']
+            tracks_idx = tracks_idx.reshape(traj.shape + (-1,))
+            
             # check for pile-up
             pileup = np.any(traj['eventID'] != traj['eventID'][...,0:1], axis=-1)
 
@@ -92,6 +101,8 @@ class MuonCaptureTruthLabels(H5FlowStage):
             i_traj_stop = ma.argmax(ma.array(np.linalg.norm(traj['pxyz_start'], axis=-1), mask=~is_traj_stop), axis=-1)
             traj_stop = np.take_along_axis(traj, i_traj_stop[..., np.newaxis], axis=-1).ravel()
             track_stop = np.take_along_axis(tracks, i_traj_stop[..., np.newaxis, np.newaxis], axis=-2).reshape(traj.shape[0],-1)
+            track_idx_stop = np.take_along_axis(tracks_idx, i_traj_stop[..., np.newaxis, np.newaxis], axis=-2).reshape(traj.shape[0],-1)
+            track_idx_stop.mask = track_idx_stop.mask | ~is_traj_stop[..., np.newaxis, np.newaxis]
             track_d_from_start = np.sqrt(
                 (track_stop['x_start'] - traj_stop['xyz_start'][...,0:1])**2
                 + (track_stop['y_start'] - traj_stop['xyz_start'][...,1:2])**2
@@ -118,6 +129,9 @@ class MuonCaptureTruthLabels(H5FlowStage):
                    | (np.linalg.norm(traj['pxyz_start'], axis=-1) > 1016)))
             michel = np.take_along_axis(
                 traj, ma.argmax(is_traj_michel, axis=-1)[...,np.newaxis], axis=-1).ravel()
+            michel_track_idx = np.take_along_axis(
+                tracks_idx, ma.argmax(is_traj_michel, axis=-1)[...,np.newaxis,np.newaxis], axis=-2).reshape(len(michel),-1)
+            michel_track_idx.mask = michel_track_idx.mask | ~np.any(is_traj_michel, axis=-1)[...,np.newaxis]
             truth_label['michel'] = np.any(is_traj_michel, axis=-1)
             truth_label['michel_start_xyz'] = michel['xyz_start'] * np.expand_dims(truth_label['michel'],-1)
             truth_label['michel_end_xyz'] = michel['xyz_end'] * np.expand_dims(truth_label['michel'],-1)
@@ -150,6 +164,7 @@ class MuonCaptureTruthLabels(H5FlowStage):
             gamma1_valid = np.take_along_axis(is_gamma, i_gamma1, axis=-1).ravel()            
 
             # find first gamma scatter (use track segment due to funny edepsim truth for low energy)
+            scat_idx = [None]*2
             for i, (valid, gamma) in enumerate([(gamma0_valid, gamma0), (gamma1_valid, gamma1)]):
                 truth_label['gamma_valid'][...,i] = valid
                 truth_label['gamma_pxyz'][...,i,:] = gamma['pxyz_start'] * np.expand_dims(valid,-1)
@@ -179,6 +194,8 @@ class MuonCaptureTruthLabels(H5FlowStage):
                     np.take_along_axis(dt, i_min_seg, axis=-1)[...,0],
                     axis=-1)[...,np.newaxis]
                 scat = np.take_along_axis(traj, i_min_traj, axis=-1).ravel()
+                scat_idx[i] = np.take_along_axis(
+                    np.take_along_axis(tracks_idx, i_min_seg, axis=-1)[...,0], i_min_traj, axis=-1)
                 min_seg_de = np.take_along_axis(
                     np.take_along_axis(tracks['dE'], i_min_seg, axis=-1).reshape(traj.shape),
                     i_min_traj, axis=-1).ravel()
@@ -191,6 +208,7 @@ class MuonCaptureTruthLabels(H5FlowStage):
                 valid = valid & (min_seg_dt < 0.0002) & np.take_along_axis( # insures you only use the first scatter parallel to the photon direction
                     np.take_along_axis(seg_mask, i_min_seg, axis=-1).reshape(traj.shape),
                     i_min_traj, axis=-1).ravel()
+                scat_idx[i].mask = scat_idx[i].mask | ~valid
                 
                 truth_label['gamma_scatter_dt'][...,i] = min_seg_dt * valid
                 truth_label['gamma_scatter_xyz'][...,i,:] = min_seg_xyz * np.expand_dims(valid,-1)
@@ -200,6 +218,43 @@ class MuonCaptureTruthLabels(H5FlowStage):
                 truth_label['scatter_track_id'][...,i] = scat['trackID'] * valid
                 truth_label['scatter_valid'][...,i] = valid
                 truth_label['scatter_contained'][...,i] = resources['Geometry'].in_fid(min_seg_xyz) * valid
+        else:
+            track_idx_stop = ma.array(np.empty((len(traj),0)), mask=True, shrink=False)
+            michel_track_idx = ma.array(np.empty((len(traj),0)), mask=True, shrink=False)
+            scat_idx = [ma.array(np.empty((len(traj),0)), mask=True, shrink=False)]*2
                 
         # save truth info
         self.data_manager.write_data(self.truth_labels_dset_name, data_slice, truth_label)
+
+        if len(traj):
+            ev_idx = np.broadcast_to(np.r_[source_slice][...,np.newaxis], track_idx_stop.shape)
+            ref = np.c_[ev_idx.ravel(), track_idx_stop.ravel()]
+            ref = ref[~track_idx_stop.mask.ravel()]
+        else:
+            ref = np.empty((0,2))
+        self.data_manager.reserve_data(self.truth_labels_dset_name + '/stopping_track', source_slice)
+        self.data_manager.write_data(self.truth_labels_dset_name + '/stopping_track', source_slice, np.any(~track_idx_stop.mask, axis=-1))
+        self.data_manager.write_ref(self.truth_labels_dset_name + '/stopping_track', self.truth_tracks_dset_name, ref)
+
+        if len(traj):
+            ev_idx = np.broadcast_to(np.r_[source_slice][...,np.newaxis], michel_track_idx.shape)
+            ref = np.c_[ev_idx.ravel(), michel_track_idx.ravel()]
+            ref = ref[~michel_track_idx.mask.ravel()]
+        else:
+            ref = np.empty((0,2))
+        self.data_manager.reserve_data(self.truth_labels_dset_name + '/michel_track', source_slice)
+        self.data_manager.write_data(self.truth_labels_dset_name + '/michel_track', source_slice, np.any(~michel_track_idx.mask, axis=-1))        
+        self.data_manager.write_ref(self.truth_labels_dset_name + '/michel_track', self.truth_tracks_dset_name, ref)
+
+        scat_idx = ma.concatenate(scat_idx, axis=-1)
+        if len(traj):
+            ev_idx = np.broadcast_to(np.r_[source_slice][...,np.newaxis], scat_idx.shape)
+            ref = np.c_[ev_idx.ravel(), scat_idx.ravel()]
+            ref = ref[~scat_idx.mask.ravel()]
+        else:
+            ref = np.empty((0,2))
+        self.data_manager.reserve_data(self.truth_labels_dset_name + '/scatter_track', source_slice)
+        self.data_manager.write_data(self.truth_labels_dset_name + '/scatter_track', source_slice, np.any(~scat_idx.mask, axis=-1))        
+        self.data_manager.write_ref(self.truth_labels_dset_name + '/scatter_track', self.truth_tracks_dset_name, ref)
+
+        
