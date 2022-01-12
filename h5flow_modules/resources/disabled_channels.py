@@ -9,6 +9,35 @@ from module0_flow.util.compat import assert_compat_version
 
 
 class DisabledChannels(H5FlowResource):
+    '''
+        Provides helper functions for identifying the positions of disabled
+        channels.
+
+        Parameters:
+         - ``path``: ``str``, path to stored geometry data within file
+         - ``disabled_channels_list``: ``str``, path to file specifying channels that are disabled
+         - ``missing_asic_list``: ``str``, path to file specifying coordinates that are not included in the pixel geometry but should be included as disabled regions of the detector
+
+        Provides:
+         - ``disabled_xy``: x,y coordinates of all disabled channels
+         - ``disabled_channel_lut``: lookup table to find if a pixel x,y coordinate is disabled
+
+        Example usage::
+
+            from h5flow.core import resources
+
+            resources['DisabledChannels'].disabled_channel_lut[(io_group,x,y)]
+
+        Example config::
+
+            resources:
+                - classname: DisabledChannels
+                  params:
+                    path: 'disabled_channels'
+                    disabled_channels_list: 'module0-run1-selftrigger-disabled-list.json'
+                    missing_asic_list: 'module0-network-absent-ASICs.json'
+
+    '''
     class_version = '0.0.0'
 
     default_path = 'disabled_channels'
