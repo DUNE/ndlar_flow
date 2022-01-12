@@ -31,7 +31,7 @@ class StoppingMuonSelection(H5FlowStage):
 
 
     '''
-    class_version = '1.0.1'
+    class_version = '1.1.0'
 
     default_fid_cut = 20  # mm
     default_cathode_fid_cut = 20  # mm
@@ -65,6 +65,7 @@ class StoppingMuonSelection(H5FlowStage):
                                 ('muon_loglikelihood_mean', 'f8'),
                                 ('proton_loglikelihood_mean', 'f8'),
                                 ('mip_loglikelihood_mean', 'f8'),
+                                ('stop_pt_corr', 'f8', (3,)),
                                 ('stop_pt', 'f8', (3,))])
 
     @staticmethod
@@ -685,7 +686,7 @@ class StoppingMuonSelection(H5FlowStage):
                 ma.array(hit_td, mask=~(hit_on_traj | hit_near_traj_pt)),
                 axis=-1), axis=-1)
             hit_min_td = np.take_along_axis(hit_td, itraj_min_td, axis=-1)
-            traj_hit_mask = ((hit_min_td < dx)[..., 0] & hit_mask
+            traj_hit_mask = ((hit_min_td < dx/2)[..., 0] & hit_mask
                              & (np.any(hit_on_traj, axis=-1) | np.any(hit_near_traj_pt, axis=-1)))
             hit_mask = hit_mask & ~traj_hit_mask  # remove from next iteration
             # (N, nhit)
@@ -814,6 +815,8 @@ class StoppingMuonSelection(H5FlowStage):
                 i_primary_traj = np.argmin(track_traj['trackID'], axis=-1)
                 track_true_traj = np.take_along_axis(track_traj, i_primary_traj[..., np.newaxis], axis=-1)
                 track_true_traj = track_true_traj.reshape(-1)
+                true_xyz_start = track_true_traj['xyz_start']
+                true_xyz_end = track_true_traj['xyz_end']
 
                 # find if trajectory ends in the fiducial volume
                 is_muon = ma.abs(track_true_traj['pdgId']) == 13
@@ -863,14 +866,14 @@ class StoppingMuonSelection(H5FlowStage):
         # perform a fit for the stopping point assuming a muon or a proton
         muon_r0 = np.zeros(profile_dqdx.shape[:-1])
         proton_r0 = np.zeros(profile_dqdx.shape[:-1])
-        iteration_max_range = (250, self.profile_dx)  # first pass within 25cm of initial guess, second within a single profile bin
-        iteration_sample_factor = (2, 10)  # first pass resolution is profile bin/2, second is profile bin/10
+        iteration_max_range = (250, self.profile_dx)  # first pass within 25cm of initial guess, second within 2 profile bins
+        iteration_sample_factor = (2, 20)  # first pass resolution is profile bin/2, second is profile bin/10
         for i in range(muon_r0.shape[0]):
             if np.any((profile_n[i] > 0)):
                 valid_mask = profile_n[i] > 0
                 for max_range, sample_factor in zip(iteration_max_range, iteration_sample_factor):
-                    rr_range = (np.maximum(-max_range[0], profile_rr[i][valid_mask].min()),
-                                np.minimum(+max_range[1], profile_rr[i][valid_mask].max()))
+                    rr_range = (np.maximum(-max_range, profile_rr[i][valid_mask].min()),
+                                np.minimum(+max_range, profile_rr[i][valid_mask].max()))
                     rr_offset = np.expand_dims(
                         np.linspace(rr_range[0], rr_range[1],
                                     sample_factor * int(np.diff(rr_range) / self.profile_dx)),
@@ -881,12 +884,12 @@ class StoppingMuonSelection(H5FlowStage):
                         continue
 
                     muon_likelihood = self.mean_neg_loglikelihood(
-                        rr_offset, self.muon_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], profile_rr[i:i + 1] - muon_r0[i], pos[i:i + 1])
-                    muon_r0[i] = rr_offset[ma.argmin(ma.array(muon_likelihood, mask=~mask), axis=0)]
+                        rr_offset + muon_r0[i], self.muon_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], profile_rr[i:i + 1], pos[i:i + 1])
+                    muon_r0[i] = rr_offset[ma.argmin(ma.array(muon_likelihood, mask=~mask), axis=0)] + muon_r0[i]
 
                     proton_likelihood = self.mean_neg_loglikelihood(
-                        rr_offset, self.proton_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], profile_rr[i:i + 1] - proton_r0[i], pos[i:i + 1])
-                    proton_r0[i] = rr_offset[ma.argmin(ma.array(proton_likelihood, mask=~mask), axis=0)]
+                        rr_offset + proton_r0[i], self.proton_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], profile_rr[i:i + 1], pos[i:i + 1])
+                    proton_r0[i] = rr_offset[ma.argmin(ma.array(proton_likelihood, mask=~mask), axis=0)] + proton_r0[i]
 
         # calculate likelihood scores for refined dQ/dx profile
         muon_likelihood_dqdx, muon_likelihood_mcs = self.profile_likelihood(
@@ -923,13 +926,19 @@ class StoppingMuonSelection(H5FlowStage):
         i_stop = np.argmin(np.abs(profile_rr), axis=-1)[..., np.newaxis, np.newaxis]
         end_pt = np.take_along_axis(pos, i_stop, axis=-2)
 
+        # correct for rounding error
+        stop_rr = np.take_along_axis(profile_rr, i_stop[...,0], axis=-1)[...,np.newaxis]
+        n = end_pt - np.take_along_axis(pos, np.clip(i_stop-1,0,None), axis=-2)
+        n /= np.clip(np.linalg.norm(n, axis=-1, keepdims=True), 1e-15, None)
+        end_pt_corr = stop_rr * n
+
         # check if endpoint in fiducial volume
         end_pt_in_fid = resources['Geometry'].in_fid(
             end_pt.reshape(-1, 3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
         end_pt_in_fid = end_pt_in_fid.reshape(tracks.shape[0])
 
         # calculate "additional" energy (all energy not associated to the parent muon) assuming nominal michel dE/dx
-        q_sum = hit_q.sum(axis=-1) - ma.array(dq, mask=(profile_rr < 0) | (profile_n <= 0)).sum(axis=-1)
+        q_sum = hit_q.sum(axis=-1) - ma.array(dq, mask=(np.around(profile_rr/self.profile_dx) * self.profile_dx < 0) | (profile_n <= 0)).sum(axis=-1)
         michel_dedx = resources['ParticleData'].landau_peak(50 * units.MeV, resources['ParticleData'].e_mass, resources['Geometry'].pixel_pitch)
         e = q_sum * resources['LArData'].ionization_w / resources['LArData'].ionization_recombination(michel_dedx)
 
@@ -973,6 +982,7 @@ class StoppingMuonSelection(H5FlowStage):
             event_sel['proton_loglikelihood_mean'] = np.mean(proton_likelihood_mcs, axis=-1) * 0 + np.mean(proton_likelihood_dqdx, axis=-1)
             event_sel['mip_loglikelihood_mean'] = np.mean(mip_likelihood_mcs, axis=-1) * 0 + np.mean(mip_likelihood_dqdx, axis=-1)
             event_sel['stop_pt'] = end_pt.reshape(event_sel['stop_pt'].shape)
+            event_sel['stop_pt_corr'] = end_pt_corr.reshape(event_sel['stop_pt_corr'].shape)            
             event_sel['remaining_e'] = e
             event_sel['d_to_edge'] = ma.sum(is_stopping * d_to_edge, axis=-1)
 
@@ -1009,7 +1019,7 @@ class StoppingMuonSelection(H5FlowStage):
         if self.is_mc:
             event_sel_truth_slice = self.data_manager.reserve_data(
                 f'{self.path}/{self.event_sel_truth_dset_name}',
-                len(event_true_sel))
+                source_slice)
 
         # write
         self.data_manager.write_data(f'{self.path}/{self.event_sel_dset_name}',
