@@ -1,7 +1,7 @@
 compatibility
 -------------
 
-.. autoapimodule:: h5flow_modules.util.compat
+.. autoapimodule:: module0_flow.util.compat
    :undoc-members:
    :members:
    :show-inheritance:
@@ -9,7 +9,7 @@ compatibility
 units
 -----
 
-.. autoapimodule:: h5flow_modules.util.units
+.. autoapimodule:: module0_flow.util.units
    :undoc-members:
    :members:
    :show-inheritance:
@@ -17,7 +17,7 @@ units
 fast lookup tables
 ------------------
 
-.. autoapimodule:: h5flow_modules.util.lut
+.. autoapimodule:: module0_flow.util.lut
    :undoc-members:
    :members:
    :show-inheritance:
@@ -25,7 +25,7 @@ fast lookup tables
 other utility functions
 -----------------------
 
-.. autoapimodule:: h5flow_modules.util.func
+.. autoapimodule:: module0_flow.util.func
    :undoc-members:
    :members:
    :show-inheritance:

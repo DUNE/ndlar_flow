@@ -1,7 +1,7 @@
 light event building
 ====================
 
-.. autoapimodule:: h5flow_modules.reco.light.raw_event_generator
+.. autoapimodule:: module0_flow.reco.light.raw_event_generator
    :undoc-members:
    :members:
    :show-inheritance:
@@ -12,7 +12,7 @@ light hit reconstruction
 waveform noise filter
 ---------------------
 
-.. autoapimodule:: h5flow_modules.reco.light.wvfm_noise_filter
+.. autoapimodule:: module0_flow.reco.light.wvfm_noise_filter
    :undoc-members:
    :members:
    :show-inheritance:
@@ -20,7 +20,7 @@ waveform noise filter
 waveform deconvolution
 ----------------------
 
-.. autoapimodule:: h5flow_modules.reco.light.wvfm_deconv
+.. autoapimodule:: module0_flow.reco.light.wvfm_deconv
    :undoc-members:
    :members:
    :show-inheritance:
@@ -28,7 +28,7 @@ waveform deconvolution
 waveform hit finding
 --------------------
 
-.. autoapimodule:: h5flow_modules.reco.light.hit_finder
+.. autoapimodule:: module0_flow.reco.light.hit_finder
    :undoc-members:
    :members:
    :show-inheritance:
@@ -39,7 +39,7 @@ other light modules
 waveform summary
 ----------------
 
-.. autoapimodule:: h5flow_modules.reco.light.wvfm_summary
+.. autoapimodule:: module0_flow.reco.light.wvfm_summary
    :undoc-members:
    :members:
    :show-inheritance:
