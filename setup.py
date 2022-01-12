@@ -14,7 +14,6 @@ setuptools.setup(name='module0_flow',
                  author='Peter Madigan',
                  author_email='pmadigan@berkeley.edu',
                  package_dir={'module0_flow': 'module0_flow/'},
-                 packages=[p for p in setuptools.find_packages(where='.')],
                  python_requires='>=3.7',
                  install_requires=[
                      'h5py>=2.10',
