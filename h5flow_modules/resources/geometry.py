@@ -9,6 +9,37 @@ from module0_flow.util.compat import assert_compat_version
 
 
 class Geometry(H5FlowResource):
+    '''
+        Provides helper functions for finding coordinates within the Module0
+        geometry.
+
+        Parameters:
+         - ``path``: ``str``, path to stored geometry data within file
+         - ``crs_geometry_file``: ``str``, path to pixel tile geometry yaml
+
+        Provides:
+         - ``pixel_pitch``: pixel pitch of anode tiles
+         - ``pixel_xy``: pixel position lookup table for each pixel
+         - ``tile_id``: tile id lookup table for each asic
+         - ``anode_z``: anode drift coordinate lookup table for each tile
+         - ``drift_dir``: direction of drift lookup table for each tile
+         - ``get_z_coordinate(io_group, io_channel, drift)``: helper function to convert a drift distance to a z-coordinate
+
+        Example usage::
+
+            from h5flow.core import resources
+
+            resources['Geometry'].drift_dir[(tile_id,)]
+
+        Example config::
+
+            resources:
+                - classname: Geometry
+                  params:
+                    path: 'geometry_info'
+                    crs_geometry_file: 'multi_tile_layout-2.3.16.yaml'
+
+    '''
     class_version = '0.0.0'
 
     default_path = 'geometry_info'
