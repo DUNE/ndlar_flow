@@ -85,9 +85,10 @@ class LArData(H5FlowResource):
             self.data = dict(self.data_manager.get_attrs(self.path))
             assert_compat_version(self.class_version, self.data['class_version'])
 
-        logging.info(f'v_drift: {self.v_drift}')
-        logging.info(f'density: {self.density}')
-        logging.info(f'W(ionization): {self.ionization_w}')
+        if self.rank == 0:
+            logging.info(f'v_drift: {self.v_drift}')
+            logging.info(f'density: {self.density}')
+            logging.info(f'W(ionization): {self.ionization_w}')
 
     def _init_electron_lifetime(self):
         if 'electron_lifetime_central_value' in self.data:

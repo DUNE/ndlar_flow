@@ -82,9 +82,10 @@ class DisabledChannels(H5FlowResource):
             self._disabled_channel_lut = read_lut(self.data_manager, self.path,
                                                   'lut')
 
-        logging.info(f'N disabled channels: {len(self.disabled_xy)}')
-        logging.info(f'Disabled channel LUT size: '
-                     f'{self.disabled_channel_lut.nbytes/1024/1024:0.02f}MB')
+        if self.rank == 0:
+            logging.info(f'N disabled channels: {len(self.disabled_xy)}')
+            logging.info(f'Disabled channel LUT size: '
+                         f'{self.disabled_channel_lut.nbytes/1024/1024:0.02f}MB')
 
     @property
     def disabled_xy(self):

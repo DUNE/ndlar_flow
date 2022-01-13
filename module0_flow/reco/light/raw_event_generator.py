@@ -190,7 +190,8 @@ class LightEventGenerator(H5FlowGenerator):
 
         if H5FLOW_MPI:
             self.entry = self.comm.bcast(self.entry, root=0)
-            logging.debug(f'entry {self.entry-self.start_position}/{self.end_position-self.start_position} ({round(self.entry-self.start_position/(self.end_position-self.start_position), 3)}) buffers {[(key,len(val)) for key,val in self.data_buffer.items()]}')
+            if self.rank == 0:
+                logging.debug(f'entry {self.entry-self.start_position}/{self.end_position-self.start_position} ({round(self.entry-self.start_position/(self.end_position-self.start_position), 3)}) buffers {[(key,len(val)) for key,val in self.data_buffer.items()]}')
 
         # distribute events to processes
         nevents = len(self.event_buffer)

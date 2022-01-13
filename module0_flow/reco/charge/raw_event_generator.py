@@ -3,8 +3,11 @@ import numpy.ma as ma
 from numpy.lib import recfunctions as rfn
 import h5py
 import logging
+from math import ceil
+from tqdm import tqdm
 
 from h5flow.core import H5FlowGenerator, resources
+from h5flow.data import dereference
 from h5flow import H5FLOW_MPI
 
 from module0_flow.reco.charge.raw_event_builder import *
@@ -14,7 +17,18 @@ import module0_flow.util.units as units
 class RawEventGenerator(H5FlowGenerator):
     '''
         Low-level event builder - generates packet groups according to the
-        specified algorithm from a larpix packet datalog file
+        specified algorithm from a larpix packet datalog file.
+
+        For simulated data, also creates the following datasets:
+         - ``mc_truth/events``: Dataset containing event-level truth
+         - ``mc_truth/trajectories``: Dataset containing true particle trajectories
+         - ``mc_truth/tracks``: Dataset containing true edep-sim segments
+        and references:
+         - ``mc_truth/events -> mc_truth/trajectories``
+         - ``mc_truth/events -> mc_truth/tracks``
+         - ``mc_truth/trajectories -> mc_truth/tracks``
+         - ``charge/raw_events -> mc_truth/events``
+         - ``charge/packets -> mc_truth/tracks``
 
         Parameters:
          - ``packets_dset_name`` : ``str``, required, output dataset path for packet groups
@@ -24,6 +38,7 @@ class RawEventGenerator(H5FlowGenerator):
          - ``sync_noise_cut`` : ``int``, optional, if ``sync_noise_cut_enabled`` removes all events that have a timestamp less than this value
          - ``event_builder_class`` : ``str``, optional, event builder algorithm to use (see ``raw_event_builder.py``)
          - ``event_builder_config`` : ``dict``, optional, modify parameters of the event builder algorithm (see ``raw_event_builder.py``)
+         - ``mc_events_dset_name`` : ``str``, optional, output dataset for mc events (if present)
          - ``mc_tracks_dset_name`` : ``str``, optional, output dataset path for mc truth tracks (if present)
          - ``mc_trajectories_dset_name`` : ``str``, optional, output dataset path for mc truth trajectories (if present)
          - ``mc_packet_fraction_dset_name`` : ``str``, optional, output dataset path for packet charge fraction truth (if present)
@@ -56,7 +71,7 @@ class RawEventGenerator(H5FlowGenerator):
             unix_ts     u8, unix timestamp of event [s since epoch]
 
     '''
-    class_version = '0.2.2'
+    class_version = '0.3.0'
 
     default_buffer_size = 38400
     default_nhit_cut = 100
@@ -65,6 +80,7 @@ class RawEventGenerator(H5FlowGenerator):
     default_event_builder_class = 'SymmetricWindowRawEventBuilder'
     default_event_builder_config = dict()
     default_packets_dset_name = 'charge/packets'
+    default_mc_events_dset_name = 'mc_truth/events'
     default_mc_tracks_dset_name = 'mc_truth/tracks'
     default_mc_trajectories_dset_name = 'mc_truth/trajectories'
     default_mc_packet_fraction_dset_name = 'mc_truth/packet_fraction'
@@ -72,6 +88,10 @@ class RawEventGenerator(H5FlowGenerator):
     raw_event_dtype = np.dtype([
         ('id', 'u8'),
         ('unix_ts', 'u8')
+    ])
+
+    mc_event_dtype = np.dtype([
+        ('id', 'u8'),
     ])
 
     def __init__(self, **params):
@@ -88,6 +108,7 @@ class RawEventGenerator(H5FlowGenerator):
         # set up new dataset paths
         self.packets_dset_name = params.get('packets_dset_name', self.default_packets_dset_name)
         self.raw_event_dset_name = self.dset_name
+        self.mc_events_dset_name = params.get('mc_events_dset_name', self.default_mc_events_dset_name)
         self.mc_tracks_dset_name = params.get('mc_tracks_dset_name', self.default_mc_tracks_dset_name)
         self.mc_trajectories_dset_name = params.get('mc_trajectories_dset_name', self.default_mc_trajectories_dset_name)
         self.mc_packet_fraction_dset_name = params.get('mc_packet_fraction_dset_name', self.default_mc_packet_fraction_dset_name)
@@ -112,6 +133,37 @@ class RawEventGenerator(H5FlowGenerator):
 
     def __len__(self):
         return len(self.slices)
+
+    def _convert_mc_truth_tracks(self, tracks):
+        ''' Apply geometry transformation from edep-sim coordinates to larnd-sim / module0_flow coordinates '''
+        tracks_copy = tracks.copy()
+        for field in ('x_start', 'y_start', 'z_start', 'x', 'y', 'z', 'x_end',
+                      'y_end', 'z_end'):
+            if 'x' in field or 'z' in field:
+                tracks_copy[field] = tracks[field] * units.cm
+            elif 'y' in field:
+                tracks_copy[field] = (tracks[field] + 21.8236) * units.cm
+        for field in ('tran_diff', 'dx', 'long_diff'):
+            tracks_copy[field] = tracks[field] * units.cm
+        tracks_copy['dE'] = tracks['dE'] * units.MeV
+        tracks_copy['dEdx'] = tracks['dEdx'] * (units.MeV / units.cm)
+        for field in ('t', 't_start', 't_end'):
+            tracks_copy[field] = tracks[field] * units.us
+        return tracks_copy
+
+    def _convert_mc_truth_trajectories(self, traj):
+        traj_copy = traj.copy()
+        for field in ('xyz_start', 'xyz_end'):
+            traj_copy[field][:, 0] = traj[field][:, 2] * units.mm
+            traj_copy[field][:, 1] = traj[field][:, 1] * units.mm + 218.236
+            traj_copy[field][:, 2] = traj[field][:, 0] * units.mm
+        for field in ('pxyz_start', 'pxyz_end'):
+            traj_copy[field][:, 0] = traj[field][:, 2] * units.MeV
+            traj_copy[field][:, 1] = traj[field][:, 1] * units.MeV
+            traj_copy[field][:, 2] = traj[field][:, 0] * units.MeV
+        for field in ('t_start', 't_end'):
+            traj_copy[field] = traj[field] * units.ns
+        return traj_copy
 
     def init(self):
         super(RawEventGenerator, self).init()
@@ -156,23 +208,37 @@ class RawEventGenerator(H5FlowGenerator):
                                         mc_packet_fraction_dset_name=self.mc_packet_fraction_dset_name)
 
             self.data_manager.create_dset(self.mc_packet_fraction_dset_name, dtype=self.mc_assn['fraction'].dtype)
+            self.data_manager.create_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name)
 
             # copy datasets from source file
+            self.data_manager.create_dset(self.mc_events_dset_name, dtype=self.mc_event_dtype)
+
             self.data_manager.create_dset(self.mc_tracks_dset_name, dtype=self.mc_tracks_dtype)
             ntracks = len(self.mc_tracks)
-            track_sl = slice(ntracks // self.size * self.rank, min(ntracks, ntracks // self.size * (self.rank + 1)))
+
+            track_sl = slice(
+                min(ntracks, ceil(ntracks / self.size) * self.rank),
+                min(ntracks, ceil(ntracks / self.size) * (self.rank + 1)))
             self.data_manager.reserve_data(self.mc_tracks_dset_name, track_sl)
-            self.data_manager.write_data(self.mc_tracks_dset_name, track_sl, self.mc_tracks[track_sl])
+            self.data_manager.write_data(
+                self.mc_tracks_dset_name, track_sl,
+                self._convert_mc_truth_tracks(self.mc_tracks[track_sl]))
 
             self.data_manager.create_dset(self.mc_trajectories_dset_name, dtype=self.mc_trajectories.dtype)
             ntraj = len(self.mc_trajectories)
-            traj_sl = slice(ntraj // self.size * self.rank, min(ntraj, ntraj // self.size * (self.rank + 1)))
+            traj_sl = slice(
+                min(ntracks, ceil(ntraj / self.size * self.rank)),
+                min(ntraj, ceil(ntraj / self.size * (self.rank + 1))))
             self.data_manager.reserve_data(self.mc_trajectories_dset_name, traj_sl)
-            self.data_manager.write_data(self.mc_trajectories_dset_name, traj_sl, self.mc_trajectories[traj_sl])
+            self.data_manager.write_data(
+                self.mc_trajectories_dset_name, traj_sl,
+                self._convert_mc_truth_trajectories(self.mc_trajectories[traj_sl]))
 
             # set up references
+            self.data_manager.create_ref(self.raw_event_dset_name, self.mc_events_dset_name)
             self.data_manager.create_ref(self.packets_dset_name, self.mc_tracks_dset_name)
-            self.data_manager.create_ref(self.raw_event_dset_name, self.mc_tracks_dset_name)
+            self.data_manager.create_ref(self.mc_events_dset_name, self.mc_trajectories_dset_name)
+            self.data_manager.create_ref(self.mc_events_dset_name, self.mc_tracks_dset_name)
             self.data_manager.create_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name)
 
             # create references between trajectories and tracks
@@ -184,21 +250,45 @@ class RawEventGenerator(H5FlowGenerator):
                 traj_evid[::-1], tracks_evid[::-1], return_indices=True)
             ev_traj_end = len(self.mc_trajectories['eventID']) - ev_traj_end
             ev_track_end = len(self.mc_tracks['eventID']) - ev_track_end
+            truth_slice = slice(
+                ceil(len(evs) / self.size) * self.rank,
+                ceil(len(evs) / self.size) * (self.rank + 1))
+
+            # create placeholder events data
+            mc_events_slice = self.data_manager.reserve_data(self.mc_events_dset_name, len(evs[truth_slice]))
+            mc_events_data = np.empty(len(evs[truth_slice]), dtype=self.mc_event_dtype)
+            mc_events_data['id'] = evs[truth_slice]
+            self.data_manager.write_data(
+                self.mc_events_dset_name, mc_events_slice, mc_events_data)
 
             traj_trackid = self.mc_trajectories['trackID'][:]
             tracks_trackid = self.mc_tracks['trackID'][:]
-            for i, (ev, traj_start, traj_end, track_start, track_end) in enumerate(
-                    zip(evs, ev_traj_start, ev_traj_end, ev_track_start, ev_track_end)):
-                traj_trackid_block = np.expand_dims(traj_trackid[traj_start:traj_end], -1)
-                track_trackid_block = np.expand_dims(tracks_trackid[track_start:track_end], 0)
-                traj_evid_block = np.expand_dims(traj_evid[traj_start:traj_end], -1)
-                track_evid_block = np.expand_dims(tracks_evid[track_start:track_end], 0)
-                ref = np.argwhere((traj_trackid_block == track_trackid_block) &
-                                  (traj_evid_block == track_evid_block))
-                ref[:, 0] += traj_start
-                ref[:, 1] += track_start
-                sub_ref = ref[(len(ref) // self.size) * self.rank:(len(ref) // self.size) * (self.rank + 1)]
-                self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, ref)
+            for i in tqdm(range(truth_slice.start, truth_slice.stop), smoothing=1, desc='generating truth references'):
+                if i < len(evs):
+                    ev = evs[i]
+                    traj_start, traj_end = ev_traj_start[i], ev_traj_end[i]
+                    track_start, track_end = ev_track_start[i], ev_track_end[i]
+                    traj_trackid_block = np.expand_dims(traj_trackid[traj_start:traj_end], -1)
+                    track_trackid_block = np.expand_dims(tracks_trackid[track_start:track_end], 0)
+                    traj_evid_block = np.expand_dims(traj_evid[traj_start:traj_end], -1)
+                    track_evid_block = np.expand_dims(tracks_evid[track_start:track_end], 0)
+                    ref = np.argwhere((traj_trackid_block == track_trackid_block) &
+                                      (traj_evid_block == track_evid_block))
+                    ref[:, 0] += traj_start
+                    ref[:, 1] += track_start
+                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, ref)
+                    ref = np.argwhere(ev == traj_evid_block)
+                    ref[:, 0] += traj_start
+                    ref[:, 1] = i + mc_events_slice.start
+                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, ref)
+                    ref = np.argwhere(ev == track_evid_block)
+                    ref[:, 0] = i + mc_events_slice.start
+                    ref[:, 1] += track_start
+                    self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, ref)
+                else:
+                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
+                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, np.empty((0,2)))
+                    self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))                                        
 
         # if self.is_mc:
         #     # copy meta-data from input file
@@ -329,13 +419,23 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.write_ref(self.packets_dset_name, self.mc_tracks_dset_name, ref)
             sl = self.data_manager.reserve_data(self.mc_packet_fraction_dset_name, len(ref))
             self.data_manager.write_data(self.mc_packet_fraction_dset_name, sl, event_packet_fraction.compressed())
+            self.data_manager.write_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name, np.c_[ref[:,0], sl])
 
-            # set up event references
+            # find events associated with tracks
+            if H5FLOW_MPI:
+                self.comm.barrier()
+            ref_dset, ref_dir = self.data_manager.get_ref(self.mc_tracks_dset_name, self.mc_events_dset_name)
+            ref_region = self.data_manager.get_ref_region(self.mc_tracks_dset_name, self.mc_events_dset_name)
+            if self.rank in (0,12):
+                import h5py
+                self.data_manager['mc_truth'].visit(lambda d: print(d) if isinstance(d, h5py.Dataset) else None)
+            mc_evs = dereference(ref[:, 1], ref_dset, region=ref_region,
+                                 ref_direction=ref_dir, indices_only=True)
+
             ev_idcs = np.broadcast_to(np.expand_dims(ev_idcs, axis=-1), event_tracks.shape)
-            ref = np.c_[ev_idcs.ravel(), event_tracks.ravel()]
-            ref = np.unique(ref[~event_tracks.mask.ravel()], axis=0) \
-                if len(ref) else ref
-            self.data_manager.write_ref(self.raw_event_dset_name, self.mc_tracks_dset_name, ref)
+            ref = np.c_[ev_idcs[~event_tracks.mask].ravel(), mc_evs.ravel()]
+            ref = np.unique(ref, axis=0) if len(ref) else ref
+            self.data_manager.write_ref(self.raw_event_dset_name, self.mc_events_dset_name, ref)
 
         return raw_event_slice if nevents else H5FlowGenerator.EMPTY
 
@@ -343,7 +443,7 @@ class RawEventGenerator(H5FlowGenerator):
         if self.size < 2:
             return
 
-        # rank 1 get stored from rank N-1
+        # rank 0 get stored from rank N-1
         if self.rank == self.size - 1:
             self.comm.send(self.last_unix_ts, dest=0)
         # rank i give max unix timestamp to i+1
