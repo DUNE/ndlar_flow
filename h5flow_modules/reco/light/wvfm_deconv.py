@@ -145,8 +145,9 @@ class WaveformDeconvolution(H5FlowStage):
                 s = spectrum['spectrum'] / spectrum['spectrum'].shape[-1]
                 s_shape = s.shape[-1]
                 if s_shape != fft_shape:
-                    logging.warning(f'Input spectrum size mismatch (in: {s_shape}, needed: {fft_shape}). '
-                                    'Interpolating assuming same sample rate...')
+                    if self.rank == 0:
+                        logging.warning(f'Input spectrum size mismatch (in: {s_shape}, needed: {fft_shape}). '
+                                        'Interpolating assuming same sample rate...')
                     spline = scipy.interpolate.CubicSpline(np.linspace(0, fft_shape, s_shape), s, axis=-1)
                     s = spline(np.arange(fft_shape))
                     s[np.isnan(s)] = 0
@@ -155,8 +156,9 @@ class WaveformDeconvolution(H5FlowStage):
             wvfm_shape = wvfm_dset.dtype['samples'].shape[-1]
             impulse = self.signal_impulse['impulse']
             if impulse.shape[-1] != wvfm_shape:
-                logging.warning(f'Input impulse function size mismatch (in: {impulse.shape[-1]}, needed: {wvfm_shape}). '
-                                 'Truncating to shorter length...')
+                if self.rank == 0:
+                    logging.warning(f'Input impulse function size mismatch (in: {impulse.shape[-1]}, needed: {wvfm_shape}). '
+                                    'Truncating to shorter length...')
                 new_impulse = np.zeros(wvfm_dset.dtype['samples'].shape, dtype=wvfm_dset.dtype['samples'].base)
                 valid_samples = min(wvfm_shape, impulse.shape[-1])
                 new_impulse[..., :valid_samples] = impulse[..., :valid_samples]

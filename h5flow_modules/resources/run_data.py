@@ -89,8 +89,9 @@ class RunData(H5FlowResource):
             self.data = dict(self.data_manager.get_attrs(self.path))
             assert_compat_version(self.class_version, self.data['class_version'])
 
-        for attr in self.required_attr:
-            logging.info(f'{attr}: {getattr(self,attr)}')
+        if self.rank == 0:
+            for attr in self.required_attr:
+                logging.info(f'{attr}: {getattr(self,attr)}')
 
     def _lookup_row_in_runlist(self):
         '''
@@ -111,7 +112,8 @@ class RunData(H5FlowResource):
             input_filenames.append(self.data_manager.get_attrs(self.source_name)['input_filename'])
         except (RuntimeError, KeyError):
             # otherwise use current input file
-            logging.warning(f'Source dataset {self.source_name} has no input file in metadata stored under \'input_filename\', using {self.input_filename} for RunData lookup')
+            if self.rank == 0:
+                logging.warning(f'Source dataset {self.source_name} has no input file in metadata stored under \'input_filename\', using {self.input_filename} for RunData lookup')
             input_filenames.append(self.input_filename)
 
         row = dict()
@@ -119,8 +121,9 @@ class RunData(H5FlowResource):
             with open(self.runlist_file, 'r') as fi:
                 lines = fi.readlines()
                 column_names = lines[0].strip().split()
-                logging.info(f'Loading from {self.runlist_file}')
-                logging.info(lines[0].strip())
+                if self.rank == 0:
+                    logging.info(f'Loading from {self.runlist_file}')
+                    logging.info(lines[0].strip())
 
                 for line in lines[1:]:
                     row_data = dict([(n, v) for n, v in zip(column_names, line.strip().split())])
@@ -130,11 +133,14 @@ class RunData(H5FlowResource):
                         row = row_data
                         break
                 if row:
-                    logging.info(line.strip())
+                    if self.rank == 0:
+                        logging.info(line.strip())
                 else:
-                    logging.warning(f'Could not find row matching {input_filenames} in {self.runlist_file}')
+                    if self.rank == 0:
+                        logging.warning(f'Could not find row matching {input_filenames} in {self.runlist_file}')
         except Exception as e:
-            logging.warning(f'Failed to load {self.runlist_file}: {e}')
+            if self.rank == 0:
+                logging.warning(f'Failed to load {self.runlist_file}: {e}')
 
         self.data.update(row)
 

@@ -62,7 +62,7 @@ class LUT(object):
         self.max_hash = int(self._hash(*[max_ for min_, max_ in min_max_keys]))
         shape = (self.max_hash + 1,) + shape if shape else (self.max_hash + 1,)
         self._data = np.zeros(shape, dtype=self.dtype)
-        self._filled = np.zeros_like(self._data, dtype=bool)
+        self._filled = np.zeros(shape[0], dtype=bool)
         if default is not None:
             self.default = default
 
@@ -96,8 +96,11 @@ class LUT(object):
 
             :returns: compressed array of entry data that has been filled
         '''
-        sel = (..., ) + sel
-        return np.compress(self._filled[sel], self._data[sel], axis=0)
+        if len(sel):
+            sel = (..., ) + sel
+            return np.compress(self._filled, self._data[sel], axis=0)
+        else:
+            return np.compress(self._filled, self._data, axis=0)
 
     def min(self, sel=tuple()):
         '''
@@ -164,7 +167,7 @@ class LUT(object):
         ])
         dtype_data = np.dtype([
             ('data', self.dtype, self._data.shape[1:]),
-            ('filled', self._filled.dtype, self._filled.shape[1:])
+            ('filled', self._filled.dtype)
         ])
         meta_arr = np.zeros((1,), dtype=dtype_meta)
         meta_arr['min_max_keys'] = self.min_max_keys
@@ -224,6 +227,25 @@ class LUT(object):
         self._data[idx] = self.default
         self._filled[idx] = False
 
+    def keys(self):
+        '''
+            Return existing keys
+
+            :returns: tuple of arrays, each ``shape: (N,)``
+        '''
+        shapes = [[1] * i + [n] + [1] * (len(self.lengths) - i - 1)
+                  for i, n in enumerate(self.lengths)]
+        keys = [np.arange(min_, min_ + n).reshape(shape)
+                for min_, n, shape in zip(self.min_max_keys[:, 0], self.lengths, shapes)]
+        keys = [k.ravel() for k in np.broadcast_arrays(*keys)]
+        idx = self.hash(*keys)
+        filled = self._filled[idx]
+
+        rv = tuple([key[filled if len(filled.shape) == 1
+                        else np.all(filled.reshape(len(key), -1), axis=-1)]
+                    for key in keys])
+        return rv
+
     def __getitem__(self, keys):
         return self._data[self.hash(*keys)]
 
@@ -233,6 +255,6 @@ class LUT(object):
         self._data[idx] = val
         self._filled[idx] = True
 
-        if np.any(self._filled[0]):
+        if self._filled[0]:
             i = np.where(idx == 0)[0]
             raise RuntimeError(f'invalid key tried to overwrite default: {[np.array(key)[i] for key in keys]}, value={np.array(val)[i]}')
