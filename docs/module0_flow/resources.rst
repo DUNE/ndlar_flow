@@ -1,7 +1,7 @@
 run data
 --------
 
-.. autoapimodule:: module0_flow.resources.run_data
+.. autoapimodule:: h5flow_modules.resources.run_data
    :undoc-members:
    :members:
    :show-inheritance:
@@ -9,7 +9,7 @@ run data
 LAr data
 --------
 
-.. autoapimodule:: module0_flow.resources.lar_data
+.. autoapimodule:: h5flow_modules.resources.lar_data
    :undoc-members:
    :members:
    :show-inheritance:
@@ -17,7 +17,7 @@ LAr data
 geometry
 --------
 
-.. autoapimodule:: module0_flow.resources.geometry
+.. autoapimodule:: h5flow_modules.resources.geometry
    :undoc-members:
    :members:
    :show-inheritance:
@@ -25,7 +25,7 @@ geometry
 particle data
 -------------
 
-.. autoapimodule:: module0_flow.resources.particle_data
+.. autoapimodule:: h5flow_modules.resources.particle_data
    :undoc-members:
    :members:
    :show-inheritance:
@@ -33,7 +33,7 @@ particle data
 disabled channels
 -----------------
 
-.. autoapimodule:: module0_flow.resources.disabled_channels
+.. autoapimodule:: h5flow_modules.resources.disabled_channels
    :undoc-members:
    :members:
    :show-inheritance:

@@ -1,7 +1,7 @@
 broken track simulation
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoapimodule:: module0_flow.misc.broken_track_sim
+.. autoapimodule:: h5flow_modules.misc.broken_track_sim
    :undoc-members:
    :members:
    :show-inheritance:

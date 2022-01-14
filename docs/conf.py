@@ -44,7 +44,7 @@ templates_path = ['_templates']
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-autoapi_dirs = ['../module0_flow']
+autoapi_dirs = ['../h5flow_modules']
 autoapi_add_toctree_entry = False
 autoapi_generate_api_docs = False
 
