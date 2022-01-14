@@ -1,7 +1,8 @@
-classname: RunData
+classname: RunData # resources/run_data.py
 params:
   path: 'run_info'
   runlist_file: 'runlist.txt'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/runlist.txt
   defaults:
     charge_filename: '-'
     light_filename: '-'

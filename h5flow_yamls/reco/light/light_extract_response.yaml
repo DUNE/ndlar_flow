@@ -4,9 +4,11 @@ flow:
   source: event_loop
   stages: [wvfm_extract_sig_noise]
 
+
 resources:
   - !include h5flow_yamls/resources/run_data.yaml
   - !include h5flow_yamls/resources/lar_data.yaml
+
 
 event_loop:
   classname: H5FlowDatasetLoopGenerator
@@ -14,12 +16,16 @@ event_loop:
   params:
     chunk_size: 128
 
+
 wvfm_extract_sig_noise:
   classname: WaveformDeconvolution
   requires:
     - 'light/fwvfm'
   params:
-    wvfm_dset_name: 'light/fwvfm' # use pedestal+noise subtracted waveforms
+    # input
+    wvfm_dset_name: 'light/fwvfm'
+
+    # configuration parameters
     noise_strategy: PPS # or slice
     noise_slice: [-256, null] # last 256 samples
     pps_threshold: 5000

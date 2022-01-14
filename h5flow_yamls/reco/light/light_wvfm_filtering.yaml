@@ -36,6 +36,7 @@ wvfm_deconv_inverse:
     noise_spectrum_filename: 'rwf_20210624_094156.fwvfm.noise_power.npz'
     signal_spectrum_filename: 'wvfm_deconv_signal_power.npz'
     signal_impulse_filename: 'wvfm_deconv_signal_impulse.fit.npz'
+    # see light_event_reconstruction.yaml for download links
 
 wvfm_deconv_wiener:
   classname: WaveformDeconvolution
@@ -51,6 +52,7 @@ wvfm_deconv_wiener:
     noise_spectrum_filename: 'rwf_20210624_094156.fwvfm.noise_power.npz'
     signal_spectrum_filename: 'wvfm_deconv_signal_power.npz'
     signal_impulse_filename: 'wvfm_deconv_signal_impulse.fit.npz'
+    # see light_event_reconstruction.yaml for download links
 
 wvfm_deconv_matched:
   classname: WaveformDeconvolution
@@ -66,3 +68,4 @@ wvfm_deconv_matched:
     noise_spectrum_filename: 'rwf_20210624_094156.fwvfm.noise_power.npz'
     signal_spectrum_filename: 'wvfm_deconv_signal_power.npz'
     signal_impulse_filename: 'wvfm_deconv_signal_impulse.fit.npz'
+    # see light_event_reconstruction.yaml for download links

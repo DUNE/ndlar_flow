@@ -25,6 +25,10 @@ class LArData(H5FlowResource):
          - ``ionization_w``: ionization W-value
          - ``density``: LAr density
          - ``ionization_recombination(dedx)``: helper function for calculating recombination factor
+         - ``electron_lifetime(unix_ts)``: helper function for looking up electron lifetime at a given timestamp
+         - ``A``: atomic mass number for atmospheric Argon
+         - ``Z``: atomic number for Argon
+         - ``radiation_length``: radiation length in argon
 
         Example usage::
 

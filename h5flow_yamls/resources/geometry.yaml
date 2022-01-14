@@ -1,4 +1,5 @@
-classname: Geometry
+classname: Geometry # resources/geometry.py
 params:
   path: 'geometry_info'
   crs_geometry_file: 'multi_tile_layout-2.2.16.yaml'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/multi_tile_layout-2.2.16.yaml
