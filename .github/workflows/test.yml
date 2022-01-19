@@ -3,6 +3,7 @@ name: Linting and tests
 on:
   push:
     branches: [ develop, main ]
+    tags: [ '*' ]
   pull_request:
     branches: [ develop, main ]
   workflow_dispatch: {}
