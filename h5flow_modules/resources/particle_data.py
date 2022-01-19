@@ -1,5 +1,4 @@
 import numpy as np
-import logging
 
 from h5flow.core import H5FlowResource, resources
 
@@ -25,7 +24,7 @@ class ParticleData(H5FlowResource):
          - ``proton_range_table``: Range, kinetic energy, and <dE/dx> for protons in LAr
          - ``landau_width``: 1-sigma width of Landau dE/dx distribution in LAr
          - ``landau_peak``: MPV of Landau dE/dx distribution in LAr
-         - ``{particle}_mass``: for proton (``p``), neutron (``n``), muon (``mu``), electron (``e``), pion (``pi``), pi0 (``pi0``)
+         - ``{}_mass``: for proton (``p``), neutron (``n``), muon (``mu``), electron (``e``), pion (``pi``), pi0 (``pi0``)
 
         Example usage::
 
@@ -147,7 +146,7 @@ class ParticleData(H5FlowResource):
         gamma = e / mass
 
         ksi = self._ksi(dx, beta)
-        I = 188.0 * units.eV
+        I = 188.0 * units.eV  # noqa: E741
 
         t0 = np.log(2 * self.e_mass * beta**2 * gamma**2 / I)
         t1 = np.log(ksi / I)
@@ -161,7 +160,6 @@ class ParticleData(H5FlowResource):
         e = t + mass
         p = np.sqrt(e**2 - mass**2)
         beta = p / e
-        gamma = e / mass
 
         x = dx / resources['LArData'].radiation_length  # radiation lengths
         f = (1 + 0.088 * np.log10(x / beta**2))

@@ -1,6 +1,3 @@
-import numpy as np
-import numpy.lib.recfunctions as rfn
-from collections import defaultdict
 import logging
 import h5py
 
@@ -20,13 +17,16 @@ class RunData(H5FlowResource):
          - ``light_data_file``: light raw data file source name
          - ``e_field``: TPC electric field in kV/mm
          - ``light_nsamples``: light system number of samples
-         - ``charge_threshold``: charge system global thresholds (either ``high`` or ``medm``)
+         - ``charge_threshold``: charge system global thresholds (either
+           ``high`` or ``medm``)
          - ``is_mc``: boolean flag, ``True`` if file was produced by simulation
 
         Parameters:
          - ``path``: ``str``, path to run data within file
-         - ``runlist_file``: ``str``, path to runlist file containing run meta data
-         - ``defaults``: ``dict``, key value pairs of ``data_name: data_value`` to use if lookup fails
+         - ``runlist_file``: ``str``, path to runlist file containing run meta
+           data
+         - ``defaults``: ``dict``, key value pairs of ``data_name: data_value``
+           to use if lookup fails
 
         To access data, use the corresponding ``RunData`` property, e.g.::
 
@@ -47,8 +47,11 @@ class RunData(H5FlowResource):
         Run list file specification:
 
          1. Whitespace-delimited text file
-         2. First line of the text file contains the column names: ``e_field``, ``charge_filename``, ``light_filename``, ``charge_thresholds``, ``light_samples``, in any order.
-         3. The remainder of the file consists of whitespace separated data corresponding to the column names
+         2. First line of the text file contains the column names: ``e_field``,
+            ``charge_filename``, ``light_filename``, ``charge_thresholds``,
+            ``light_samples``, in any order.
+         3. The remainder of the file consists of whitespace separated data
+            corresponding to the column names.
 
         ``e_field`` run list file units are V/cm.
 
@@ -93,6 +96,24 @@ class RunData(H5FlowResource):
             for attr in self.required_attr:
                 logging.info(f'{attr}: {getattr(self,attr)}')
 
+    def _lookup_filename(self):
+        input_filename = ''
+
+        # check for existing input file info
+        try:
+            if not self.data_manager.attr_exists(self.source_name, 'input_filename'):
+                raise RuntimeError
+            input_filename = self.data_manager.get_attrs(self.source_name)['input_filename']
+        except (RuntimeError, KeyError):
+            # otherwise use current input file
+            if self.rank == 0:
+                logging.warning(f'Source dataset {self.source_name} has no input'
+                                'file in metadata stored under \'input_filename\','
+                                ' using {self.input_filename} for RunData lookup')
+            input_filename = self.input_filename
+
+        return input_filename
+
     def _lookup_row_in_runlist(self):
         '''
             Load the run list file and check the charge or light data files against:
@@ -103,18 +124,7 @@ class RunData(H5FlowResource):
             in that order.
 
         '''
-        input_filenames = list()
-
-        # check for existing input file info
-        try:
-            if not self.data_manager.attr_exists(self.source_name, 'input_filename'):
-                raise RuntimeError
-            input_filenames.append(self.data_manager.get_attrs(self.source_name)['input_filename'])
-        except (RuntimeError, KeyError):
-            # otherwise use current input file
-            if self.rank == 0:
-                logging.warning(f'Source dataset {self.source_name} has no input file in metadata stored under \'input_filename\', using {self.input_filename} for RunData lookup')
-            input_filenames.append(self.input_filename)
+        input_filename = self._lookup_filename()
 
         row = dict()
         try:
@@ -129,7 +139,7 @@ class RunData(H5FlowResource):
                     row_data = dict([(n, v) for n, v in zip(column_names, line.strip().split())])
                     if not row_data:
                         continue
-                    if any([row_data[key] in f for key in self.source_filename_columns for f in input_filenames]):
+                    if any([row_data[key] in input_filename for key in self.source_filename_columns]):
                         row = row_data
                         break
                 if row:
@@ -137,7 +147,7 @@ class RunData(H5FlowResource):
                         logging.info(line.strip())
                 else:
                     if self.rank == 0:
-                        logging.warning(f'Could not find row matching {input_filenames} in {self.runlist_file}')
+                        logging.warning(f'Could not find row matching {input_filename} in {self.runlist_file}')
         except Exception as e:
             if self.rank == 0:
                 logging.warning(f'Failed to load {self.runlist_file}: {e}')
