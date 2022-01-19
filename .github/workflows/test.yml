@@ -17,18 +17,22 @@ jobs:
       matrix:
         mpi_enabled: [0, 1]
       fail-fast: false
+
     steps:
     - name: checkout
       uses: actions/checkout@v2
+
     - name: checkout h5flow
       run: |
         cd ..
         git clone https://github.com/peter-madigan/h5flow.git
+
     - name: conda cache
       uses: actions/cache@v2
       with:
         path: ~/conda_pkgs_dir
         key: ${{ runner.OS }}-conda-${{ hashFiles('**/env*.y*l') }}-${{ matrix.mpi_enabled }}-1
+
     - name: setup conda
       uses: conda-incubator/setup-miniconda@v2
       with:
@@ -36,6 +40,7 @@ jobs:
         activate-environment: test
         python-version: "3.9"
         use-only-tar-bz2: true
+
     - name: install h5flow (mpi)
       if: matrix.mpi_enabled == 1
       env:
@@ -45,22 +50,26 @@ jobs:
         cd ../h5flow
         conda env update --file environment.yml
         pip install .
+
     - name: install h5flow (no mpi)
       if: matrix.mpi_enabled == 0
       run: |
         cd ../h5flow
         conda env update --file environment-nompi.yml
         pip install .
+
     - name: install module0_flow (mpi)
       if: matrix.mpi_enabled == 1
       run: |
-        conda env update --file env.yaml
+        conda env update --file -vvv env.yaml
         pip install .
+
     - name: install module0_flow (no mpi)
       if: matrix.mpi_enabled == 0
       run: |
-        conda env update --file env-nompi.yaml
+        conda env update --file -vvv env-nompi.yaml
         pip install .
+
     - name: lint
       run: |
         conda install flake8
