@@ -3,7 +3,7 @@ import numpy.ma as ma
 import logging
 import yaml
 
-from h5flow.core import H5FlowResource, resources
+from h5flow.core import H5FlowResource
 
 from module0_flow.util.lut import LUT, write_lut, read_lut
 from module0_flow.util.compat import assert_compat_version

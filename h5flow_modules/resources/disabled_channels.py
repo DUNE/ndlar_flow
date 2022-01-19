@@ -16,7 +16,7 @@ class DisabledChannels(H5FlowResource):
         Parameters:
          - ``path``: ``str``, path to stored geometry data within file
          - ``disabled_channels_list``: ``str``, path to file specifying channels that are disabled
-         - ``missing_asic_list``: ``str``, path to file specifying coordinates that are not included in the pixel geometry but should be included as disabled regions of the detector
+         - ``missing_asic_list``: ``str``, path to file specifying coordinates disabled coordinates not in geometry file
 
         Provides:
          - ``disabled_xy``: x,y coordinates of all disabled channels
@@ -59,7 +59,8 @@ class DisabledChannels(H5FlowResource):
 
         if not self.data:
             # no data stored in file, generate it
-            self._disabled_channel_lut, self._disabled_xy = self.load_disabled_channels_lut(self.disabled_channels_list, self.missing_asic_list)
+            self._disabled_channel_lut, self._disabled_xy = self.load_disabled_channels_lut(
+                self.disabled_channels_list, self.missing_asic_list)
             self.data['classname'] = self.classname
             self.data['class_version'] = self.class_version
             self.data['disabled_channels_list'] = (self.disabled_channels_list
@@ -112,7 +113,11 @@ class DisabledChannels(H5FlowResource):
         ``missing_asic_list`` contains ``io_group: [[x,y], ...]`` pixel positions
         that should be considered as disabled regions.
 
-        :returns: a boolean ``module0_flow.util.lut.LUT`` instance, with keys of ``(io_group, pixel_x.astype(int), pixel_y.astype(int))`` and a ``list`` of xy coordinates for each disabled channel
+        Creates a boolean lookup table with keys of
+        ``(io_group, int(pixel_x), int(pixel_y))`` to determine if a given
+        pixel position falls onto a disabled channel.
+
+        :returns: ``tuple`` of boolean ``module0_flow.util.lut.LUT`` and ``list`` of xy coordinates for each disabled channel
 
         '''
         io_group = list()

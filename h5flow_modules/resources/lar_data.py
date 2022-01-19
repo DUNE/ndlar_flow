@@ -204,11 +204,11 @@ class LArData(H5FlowResource):
 
     @property
     def density(self):
-        ''' Liquid argon density in g/mm^3. Fixed value of 0.0013962 '''
+        ''' Liquid argon density in g/mm^3. Fixed value of 0.00138 '''
         if 'density' in self.data:
             return self.data['density']
 
-        #self.data['density'] = 1.3962 * units.g / (units.cm)**3
+        # self.data['density'] = 1.3962 * units.g / (units.cm)**3
         self.data['density'] = 1.38 * units.g / (units.cm)**3
         return self.density
 
