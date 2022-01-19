@@ -49,6 +49,10 @@ production jobs.
 usage
 =====
 
+There is a tutorial repo at
+[https://github.com/peter-madigan/module0_flow_tutorial] that should help you
+get started.
+
 The ``module0_flow`` reconstruction chain breaks up the reconstruction into the
 following steps for each component of the reconstruction. For charge-only
 reconstruction, there are two workflows:
