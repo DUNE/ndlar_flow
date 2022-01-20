@@ -2,7 +2,7 @@
 
 flow:
   source: events
-  stages: [truth_labels, stopping_muon_sel]
+  stages: [truth_labels, stopping_muon_sel, michel_id]
 
 resources:
   - !include h5flow_yamls/resources/run_data.yaml
@@ -28,8 +28,11 @@ truth_labels:
       path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories', 'mc_truth/tracks']
       index_only: True
   params:
+    # inputs
     truth_trajectories_dset_name: 'mc_truth/trajectories'
     truth_tracks_dset_name: 'mc_truth/tracks'
+
+    # output
     truth_labels_dset_name: 'analysis/muon_capture/truth_labels'
 
 stopping_muon_sel:
@@ -43,11 +46,14 @@ stopping_muon_sel:
     - name: 'mc_truth/trajectories'
       path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories']
   params:
+    # inputs
     hits_dset_name: 'charge/hits'
     hit_drift_dset_name: 'combined/hit_drift'    
     t0_dset_name: 'combined/t0'
     merged_dset_name: 'combined/tracklets/merged'
     truth_trajectories_dset_name: 'mc_truth/trajectories'
+
+    # configuration parameters
     fid_cut: 20 # mm
     cathode_fid_cut: 20 # mm
     profile_dx: 22 # mm
@@ -63,4 +69,18 @@ stopping_muon_sel:
       mc: [1.13515744, -2.6721365,  47.73539495]
       medm: [1.46942669, -2.6902787,  69.34914266]
       high: [1.73174021, -3.62691494, 25.45025883]
-    
+
+michel_id:
+  classname: MichelID
+  requires:
+    - 'charge/hits'
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
+    - name: 'analysis/stopping_muons/hit_profile_id'
+      path: ['charge/hits', 'analysis/stopping_muons/hit_profile_id']
+  params:
+    # configuration parameters
+    michel_e_cut: 10000 # keV
+    michel_nhit_cut: 5
+    generate_likelihood_pdf: True #False
+
