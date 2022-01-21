@@ -63,7 +63,7 @@ tracklet_reco:
     ransac_min_samples: 2
     ransac_residual_threshold: 8
     ransac_max_trials: 10
-    trajectory_pts: 8
+    trajectory_pts: 16 #8
 
 
 tracklet_merge:

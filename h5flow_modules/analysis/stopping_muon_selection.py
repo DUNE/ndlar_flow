@@ -31,28 +31,33 @@ class StoppingMuonSelection(H5FlowStage):
 
 
     '''
-    class_version = '1.1.0'
+    class_version = '2.0.0'
 
-    default_fid_cut = 20  # mm
-    default_cathode_fid_cut = 20  # mm
-    default_length_cut = 100  # mm
-    default_profile_dx = 20  # mm
-    default_profile_max_range = 1600  # mm
-    default_larpix_gain = 250  # e/mV
-    default_larpix_noise = 500  # e/mm
-    default_proton_classifier_cut = 0.1565
-    default_muon_classifier_cut = 0.2424
-    default_dqdx_peak_cut = 12e3  # e/mm
-    default_profile_search_dx = 50  # mm
-    default_remaining_e_cut = 85e3  # keV
-    default_curvature_rr_correction = 22.6647 / 22
-    default_density_dx_correction_params = [0.78497819, -3.41826874, 198.93022888]
-    default_hits_dset_name = 'charge/hits'
-    default_merged_dset_name = 'combined/tracklets/merged'
-    default_t0_dset_name = 'combined/t0'
-    default_hit_drift_dset_name = 'combined/hit_drift'
-    default_truth_trajectories_dset_name = 'mc_truth/trajectories'
-    default_path = 'analysis/stopping_muons'
+    defaults = dict(
+        fid_cut=30, # mm
+        cathode_fid_cut=20, # mm
+        anode_fid_cut=30, # mm
+        projected_length_cut=20, # mm
+        veto_charge_cut=100e3, # e-
+        profile_dx=22, # mm
+        profile_max_range=1600, # mm
+        larpix_gain=250, # e/mV
+        larpix_noise=500,  # e/mm
+        proton_classifier_cut=0.1565,
+        muon_classifier_cut=0.2424,
+        dqdx_peak_cut=12e3, # e/mm
+        profile_search_dx=50, # mm
+        remaining_e_cut=85e3, # keV
+
+        curvature_rr_correction=22.6647 / 22,
+        density_dx_correction_params=[0.78497819, -3.41826874, 198.93022888],
+
+        hits_dset_name='charge/hits',
+        merged_dset_name='combined/tracklets/merged',
+        t0_dset_name='combined/t0',
+        hit_drift_dset_name='combined/hit_drift',
+        truth_trajectories_dset_name='mc_truth/trajectories',
+        path='analysis/stopping_muons')
 
     event_sel_dset_name = 'event_sel_reco'
     event_profile_dset_name = 'event_profile'
@@ -86,35 +91,12 @@ class StoppingMuonSelection(H5FlowStage):
     def __init__(self, **params):
         super(StoppingMuonSelection, self).__init__(**params)
 
-        self.path = params.get('path', self.default_path)
-        self.fid_cut = params.get('fid_cut', self.default_fid_cut)
-        self.cathode_fid_cut = params.get('cathode_fid_cut', self.default_cathode_fid_cut)
-        self.length_cut = params.get('length_cut', self.default_length_cut)
-        self.larpix_noise = params.get('larpix_noise', self.default_larpix_noise)
-        self.dqdx_peak_cut = params.get('dqdx_peak_cut', self.default_dqdx_peak_cut)
-        self.proton_classifier_cut = params.get('proton_classifier_cut', self.default_proton_classifier_cut)
-        self.muon_classifier_cut = params.get('muon_classifier_cut', self.default_muon_classifier_cut)
-        self.remaining_e_cut = params.get('remaining_e_cut', self.default_remaining_e_cut)
-        self.profile_dx = params.get('profile_dx', self.default_profile_dx)
-        self.profile_search_dx = params.get('profile_search_dx', self.default_profile_search_dx)
-        self.profile_max_range = params.get('profile_max_range',
-                                            self.default_profile_max_range)
+        for key,val in self.defaults.items():
+            setattr(self, key, params.get(key, val))
+
         self.curvature_rr_correction = params.get('curvature_rr_correction', dict())
         self.density_dx_correction_params = params.get('density_dx_correction_params', dict())
         self.larpix_gain = params.get('larpix_gain', dict())
-
-        self.hits_dset_name = params.get('hits_dset_name',
-                                         self.default_hits_dset_name)
-        self.t0_dset_name = params.get('t0_dset_name',
-                                       self.default_t0_dset_name)
-        self.hit_drift_dset_name = params.get('hit_drift_dset_name',
-                                              self.default_hit_drift_dset_name)
-        self.truth_trajectories_dset_name = params.get('truth_trajectories_dset_name',
-                                                       self.default_truth_trajectories_dset_name)
-        self.hits_dset_name = params.get('hits_dset_name',
-                                         self.default_hits_dset_name)
-        self.merged_dset_name = params.get('merged_dset_name',
-                                           self.default_merged_dset_name)
 
         self.event_profile_dtype = self.event_profile_dtype(self.profile_dx,
                                                             self.profile_max_range)
@@ -132,26 +114,13 @@ class StoppingMuonSelection(H5FlowStage):
         self.density_dx_correction_params = self.density_dx_correction_params.get(correction_key, self.default_density_dx_correction_params)
         self.larpix_gain = self.larpix_gain.get(correction_key, self.default_larpix_gain)
 
+        attrs = dict()
+        for key in self.defaults:
+            attrs[key] = getattr(self, key)
         self.data_manager.set_attrs(self.path,
                                     classname=self.classname,
                                     class_version=self.class_version,
-                                    fid_cut=self.fid_cut,
-                                    length_cut=self.length_cut,
-                                    profile_dx=self.profile_dx,
-                                    dqdx_peak_cut=self.dqdx_peak_cut,
-                                    proton_classifier_cut=self.proton_classifier_cut,
-                                    muon_classifier_cut=self.muon_classifier_cut,
-                                    remaining_e_cut=self.remaining_e_cut,
-                                    profile_search_dx=self.profile_search_dx,
-                                    profile_max_range=self.profile_max_range,
-                                    curvature_rr_correction=self.curvature_rr_correction,
-                                    density_dx_correction_params=self.density_dx_correction_params,
-                                    hits_dset_name=self.hits_dset_name,
-                                    t0_dset_name=self.t0_dset_name,
-                                    hit_drift_dset_name=self.hit_drift_dset_name,
-                                    merged_dset_name=self.merged_dset_name,
-                                    truth_trajectories_dset_name=self.truth_trajectories_dset_name,
-                                    )
+                                    **attrs)
         self.data_manager.create_dset(f'{self.path}/{self.event_sel_dset_name}',
                                       self.event_sel_dtype)
         self.data_manager.create_dset(f'{self.path}/{self.event_profile_dset_name}',
@@ -318,9 +287,9 @@ class StoppingMuonSelection(H5FlowStage):
 
         '''
         start_in_fid = resources['Geometry'].in_fid(
-            start_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+            start_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         end_in_fid = resources['Geometry'].in_fid(
-            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         track_stopping = (~start_in_fid & end_in_fid) | (start_in_fid & ~end_in_fid)
         return track_stopping
 
@@ -334,9 +303,9 @@ class StoppingMuonSelection(H5FlowStage):
 
         '''
         start_in_fid = resources['Geometry'].in_fid(
-            start_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+            start_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         end_in_fid = resources['Geometry'].in_fid(
-            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         track_through_going = ~start_in_fid & ~end_in_fid
         return track_through_going
 
@@ -350,7 +319,7 @@ class StoppingMuonSelection(H5FlowStage):
 
         '''
         end_in_fid = resources['Geometry'].in_fid(
-            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         dy = end_xyz[:, 1] - start_xyz[:, 1]
         return ((end_in_fid & (dy < 0)) | (~end_in_fid & (dy > 0)))
 
@@ -790,8 +759,7 @@ class StoppingMuonSelection(H5FlowStage):
         track_start = tracks.ravel()['trajectory'][..., 0, :]
         track_stop = tracks.ravel()['trajectory'][..., -1, :]
         track_length = tracks.ravel()['length']
-        is_stopping = (self.stopping(track_start, track_stop)  # track enters and stops
-                       & (track_length > self.length_cut))  # track is reasonably long
+        is_stopping = self.stopping(track_start, track_stop)  # track enters and stops
 
         is_throughgoing = self.through_going(track_start, track_stop)
         is_downward = self.downward(track_start, track_stop)
@@ -830,22 +798,34 @@ class StoppingMuonSelection(H5FlowStage):
                 true_xyz_start = track_true_traj['xyz_start']
                 true_xyz_end = track_true_traj['xyz_end']
 
-        # define a stopping event as one with exclusively 1 track that ends in fid.
+        # define a stopping event as one with exclusively 1 track that enters from the outer boundary,
+        # going downward, with little activity in the outer veto region and no through-going tracks
         start_in_fid = resources['Geometry'].in_fid(
-            track_start, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+            track_start, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         seed_pt = np.where(np.expand_dims(start_in_fid, axis=-1),
                            track_stop, track_start).reshape(tracks.shape + (3,))
-        seed_pt = np.take_along_axis(seed_pt, np.argmax(is_stopping, axis=-1)[..., np.newaxis, np.newaxis],
-                                     axis=-2)
+        seed_near_cathode = (resources['Geometry'].in_fid(
+                seed_pt, cathode_fid=0, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+            & ~resources['Geometry'].in_fid(
+                seed_pt, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut))
+        seed_near_cathode = seed_near_cathode.reshape(tracks.shape)
+        seed_track_mask = is_stopping & ~seed_near_cathode & is_downward
+        seed_pt = np.take_along_axis(seed_pt, np.argmax(seed_track_mask, axis=-1)[..., np.newaxis, np.newaxis], axis=-2)
+
         hit_in_fid = resources['Geometry'].in_fid(
-            hit_xyz.reshape(-1, 3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut).reshape(hit_xyz.shape[:-1])
-        hits_not_in_fid = np.any((~hit_in_fid & ~hits['id'].mask
-                                  & (np.sum((hit_xyz - seed_pt)**2, axis=-1) > self.profile_search_dx**2)), axis=-1)
-        event_is_stopping = ((ma.sum(is_stopping, axis=-1) == 1)
-                             & (t0['type'] != 0)
-                             & ~hits_not_in_fid
+            hit_xyz.reshape(-1, 3), cathode_fid=0, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut).reshape(hit_xyz.shape[:-1])
+        hit_in_veto = (~hit_in_fid & ~hits.mask['id'] & (np.sum((hit_xyz - seed_pt)**2, axis=-1) > 25*stopping_muon_selection.profile_search_dx**2))
+        veto_q = np.sum(hits['q'] * self.larpix_gain * hit_in_veto, axis=-1)
+
+        active_proj_length = self.extrapolated_intersection(tracks.ravel()['trajectory'][..., -2, :], tracks.ravel()['trajectory'][..., -1, :])
+        active_proj_length = active_proj_length.reshape(tracks.shape)
+        active_proj_length = np.take_along_axis(active_proj_length, np.argmax(seed_track_mask, axis=-1)[...,np.newaxis], axis=-1).reshape(events.shape)
+        
+        event_is_stopping = ((t0['type'] != 0)
+                             & (veto_q < self.veto_charge_cut)
+                             & (active_proj_length > self.projected_length_cut)
                              & (ma.sum(is_throughgoing, axis=-1) == 0)
-                             & (ma.sum(is_stopping & is_downward, axis=-1) == 1))
+                             & (ma.sum(seed_track_mask, axis=-1) == 1))
 
         # now check the likelihood of a stopping muon
         # first generated the dQ/dx profile
@@ -934,7 +914,7 @@ class StoppingMuonSelection(H5FlowStage):
 
         # check if endpoint in fiducial volume
         end_pt_in_fid = resources['Geometry'].in_fid(
-            end_pt.reshape(-1, 3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+            end_pt.reshape(-1, 3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         end_pt_in_fid = end_pt_in_fid.reshape(tracks.shape[0])
 
         # calculate "additional" energy (all energy not associated to the parent muon) assuming nominal michel dE/dx
@@ -968,7 +948,7 @@ class StoppingMuonSelection(H5FlowStage):
             # define true stopping events as events with at least 1 muon that ends in fid.
             event_is_true_stopping = is_muon & is_true_stopping
             true_xyz_start_in_fid = resources['Geometry'].in_fid(
-                true_xyz_start, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut)
+                true_xyz_start, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
             true_stop_pt = np.where(np.expand_dims(true_xyz_start_in_fid, axis=-1),
                                     true_xyz_start, true_xyz_end).reshape((-1, 3))
 
