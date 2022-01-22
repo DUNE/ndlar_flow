@@ -26,12 +26,12 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
         dest = os.path.join(tmp_path_factory.getbasetemp(), 'module0_flow')
 
     cached_filepath = os.path.join(dest, file)
-    src_filepath = os.path.join(src, file)
+    src_filepath = os.path.join(src, file) if src is not None else None
     dest_filepath = os.path.join('./h5flow_data/', file)
 
     # check if file exists in current cache
     if not os.path.exists(cached_filepath):
-        if src is None or not os.path.exists(src_filepath):
+        if src_filepath is None or not os.path.exists(src_filepath):
             # copy from url
             print(f'Downloading {file} from {url}...')
             subprocess.run(['curl', '-f', '-o', cached_filepath, url], check=True)
