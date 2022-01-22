@@ -36,15 +36,15 @@ class StoppingMuonSelection(H5FlowStage):
     defaults = dict(
         fid_cut=30, # mm
         cathode_fid_cut=20, # mm
-        anode_fid_cut=30, # mm
-        projected_length_cut=20, # mm
+        anode_fid_cut=20, # mm
+        projected_length_cut=30, # mm
         veto_charge_cut=100e3, # e-
         profile_dx=22, # mm
         profile_max_range=1600, # mm
         larpix_gain=250, # e/mV
         larpix_noise=500,  # e/mm
-        proton_classifier_cut=0.1565,
-        muon_classifier_cut=0.2424,
+        proton_classifier_cut=0.05,
+        muon_classifier_cut=0.08,
         dqdx_peak_cut=12e3, # e/mm
         profile_search_dx=50, # mm
         remaining_e_cut=85e3, # keV
@@ -110,9 +110,9 @@ class StoppingMuonSelection(H5FlowStage):
         correction_key = ('high' if (not self.is_mc
                                      and resources['RunData'].charge_thresholds == 'high')
                           else correction_key)
-        self.curvature_rr_correction = self.curvature_rr_correction.get(correction_key, self.default_curvature_rr_correction)
-        self.density_dx_correction_params = self.density_dx_correction_params.get(correction_key, self.default_density_dx_correction_params)
-        self.larpix_gain = self.larpix_gain.get(correction_key, self.default_larpix_gain)
+        self.curvature_rr_correction = self.curvature_rr_correction.get(correction_key, self.defaults['curvature_rr_correction'])
+        self.density_dx_correction_params = self.density_dx_correction_params.get(correction_key, self.defaults['density_dx_correction_params'])
+        self.larpix_gain = self.larpix_gain.get(correction_key, self.defaults['larpix_gain'])
 
         attrs = dict()
         for key in self.defaults:
@@ -805,16 +805,16 @@ class StoppingMuonSelection(H5FlowStage):
         seed_pt = np.where(np.expand_dims(start_in_fid, axis=-1),
                            track_stop, track_start).reshape(tracks.shape + (3,))
         seed_near_cathode = (resources['Geometry'].in_fid(
-                seed_pt, cathode_fid=0, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+                seed_pt.reshape(-1,3), cathode_fid=0, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
             & ~resources['Geometry'].in_fid(
-                seed_pt, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut))
+                seed_pt.reshape(-1,3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut))
         seed_near_cathode = seed_near_cathode.reshape(tracks.shape)
         seed_track_mask = is_stopping & ~seed_near_cathode & is_downward
         seed_pt = np.take_along_axis(seed_pt, np.argmax(seed_track_mask, axis=-1)[..., np.newaxis, np.newaxis], axis=-2)
 
         hit_in_fid = resources['Geometry'].in_fid(
             hit_xyz.reshape(-1, 3), cathode_fid=0, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut).reshape(hit_xyz.shape[:-1])
-        hit_in_veto = (~hit_in_fid & ~hits.mask['id'] & (np.sum((hit_xyz - seed_pt)**2, axis=-1) > 25*stopping_muon_selection.profile_search_dx**2))
+        hit_in_veto = (~hit_in_fid & ~hits.mask['id'] & (np.sum((hit_xyz - seed_pt)**2, axis=-1) > 25*self.profile_search_dx**2))
         veto_q = np.sum(hits['q'] * self.larpix_gain * hit_in_veto, axis=-1)
 
         active_proj_length = self.extrapolated_intersection(tracks.ravel()['trajectory'][..., -2, :], tracks.ravel()['trajectory'][..., -1, :])
@@ -957,7 +957,7 @@ class StoppingMuonSelection(H5FlowStage):
 
         if len(event_sel):
             event_sel['sel'] = event_is_stopping_muon
-            event_sel['stop'] = event_is_stopping & end_pt_in_fid
+            event_sel['stop'] = event_is_stopping# & end_pt_in_fid
             event_sel['muon_loglikelihood_mean'] = np.mean(muon_likelihood_mcs, axis=-1) * 0 + np.mean(muon_likelihood_dqdx, axis=-1)
             event_sel['proton_loglikelihood_mean'] = np.mean(proton_likelihood_mcs, axis=-1) * 0 + np.mean(proton_likelihood_dqdx, axis=-1)
             event_sel['mip_loglikelihood_mean'] = np.mean(mip_likelihood_mcs, axis=-1) * 0 + np.mean(mip_likelihood_dqdx, axis=-1)
