@@ -25,32 +25,30 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
     except FileExistsError:
         dest = os.path.join(tmp_path_factory.getbasetemp(), 'module0_flow')
 
+    cached_filepath = os.path.join(dest, file)
+    src_filepath = os.path.join(src, file) if src is not None else None
+    dest_filepath = os.path.join('./h5flow_data/', file)
+
     # check if file exists in current cache
-    if not os.path.exists(os.path.join(dest, file)):
-        if src is None or not os.path.exists(os.path.join(src, file)):
+    if not os.path.exists(cached_filepath):
+        if src_filepath is None or not os.path.exists(src_filepath):
             # copy from url
             print(f'Downloading {file} from {url}...')
-            subprocess.run(['curl', '-f', '-o', os.path.join(dest, file), url],
-                           check=True)
+            subprocess.run(['curl', '-f', '-o', cached_filepath, url], check=True)
         else:
             # copy from old cache
-            print(f'Copying {file} from existing cache '
-                  f'{os.path.join(src, file)}...')
-            shutil.copy(os.path.join(src, file), os.path.join(dest, file))
-        print(f'Saved to current cache @ {os.path.join(dest, file)}')
-
+            print(f'Copying {file} from existing cache {src_filepath}...')
+            shutil.copy(os.path.join(src, file), cached_filepath)
+        print(f'Saved to current cache @ {cached_filepath}')
         pytestconfig.cache.set(f'cached_{url}', str(dest))
 
-    # copy file from current cache to cwd
-    if os.path.exists(file):
-        os.remove(file)
-    shutil.copy(os.path.join(dest, file), './')
+    # copy file from current cache to current h5flow data directory
+    if os.path.exists(dest_filepath):
+        print(f'Overwriting {dest_filepath}...')
+        os.remove(dest_filepath)
+    shutil.copy(cached_filepath, dest_filepath)
 
-    yield file
-
-    # cleanup
-    if os.path.exists(file):
-        os.remove(file)
+    yield dest_filepath
 
 
 @pytest.fixture(params=[

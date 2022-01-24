@@ -143,7 +143,7 @@ class Geometry(H5FlowResource):
             self._create_regions()
         return self._regions
 
-    def in_fid(self, xyz, cathode_fid=0.0, field_cage_fid=0.0):
+    def in_fid(self, xyz, cathode_fid=0.0, field_cage_fid=0.0, anode_fid=0.0):
         '''
             Check if xyz point is contained in the specified fiducial volume
 
@@ -156,10 +156,12 @@ class Geometry(H5FlowResource):
             :returns: boolean array, ``shape: (N,)``, True indicates point is within fiducial volume
 
         '''
-        fid = np.array([field_cage_fid, field_cage_fid, cathode_fid])
-        coord_in_fid = ma.concatenate([np.expand_dims((xyz < np.expand_dims(boundary[1] - fid, 0))
-                                                      & (xyz > np.expand_dims(boundary[0] + fid, 0)), axis=-1)
-                                       for boundary in self.regions], axis=-1)
+        fid_cathode = np.array([field_cage_fid, field_cage_fid, cathode_fid])
+        fid_anode = np.array([field_cage_fid, field_cage_fid, anode_fid])
+        fid = [(fid_cathode, fid_anode) if np.around(boundary[0,2]) == 0 else (fid_anode, fid_cathode) for boundary in self.regions]
+        coord_in_fid = ma.concatenate([np.expand_dims((xyz < np.expand_dims(boundary[1] - fid[i][1], 0))
+                                                      & (xyz > np.expand_dims(boundary[0] + fid[i][0], 0)), axis=-1)
+                                       for i,boundary in enumerate(self.regions)], axis=-1)
         in_fid = ma.all(coord_in_fid, axis=1)
         in_any_fid = ma.any(in_fid, axis=-1)
         return in_any_fid
