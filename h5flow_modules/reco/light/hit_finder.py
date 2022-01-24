@@ -20,8 +20,8 @@ class WaveformHitFinder(H5FlowStage):
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``near_samples``: ``int``, number of neighboring samples to keep
          - ``busy_channel``: ``int``, channel to extract ADC busy signal (used for timing)
-         - ``channel_threshold``: ``dict`` of ``dict`` containing sets of ``adc_index: {channel_index: adc_threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
-         - ``channel_mask``: ``list`` of ``int``, channels to ignore when finding hits
+         - ``threshold``: ``dict`` of ``dict`` containing sets of ``adc_index: {channel_index: adc_threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
+         - ``mask``: ``list`` of ``int``, channels to ignore when finding hits
 
          Both ``wvfm_dset_name`` and ``t_ns_dset_name`` are required in the cache.
 
@@ -47,16 +47,16 @@ class WaveformHitFinder(H5FlowStage):
             fwhm_spline f4,             spline FWHM [ns]
 
     '''
-    class_version = '1.1.0'
+    class_version = '1.2.0'
 
     default_hits_dset_name = 'light/hits'
     default_near_samples = 3
     default_busy_channel = 0
     default_interpolation = 256
     default_global_threshold = 2000
-    default_channel_mask = []
+    default_mask = []
 
-    def default_channel_threshold(self, global_threshold):
+    def default_threshold(self, global_threshold):
         return defaultdict(lambda: defaultdict(lambda: global_threshold))
 
     def hits_dtype(self, near_samples):
@@ -90,26 +90,26 @@ class WaveformHitFinder(H5FlowStage):
                                        self.default_near_samples)
         self.busy_channel = params.get('busy_channel',
                                        self.default_busy_channel)
-        self.channel_mask = np.array(params.get('channel_mask',
-                                                self.default_channel_mask))
+        self.mask = np.array(params.get('mask',
+                                                self.default_mask))
         self.interpolation = params.get('interpolation',
                                         self.default_interpolation)
 
-        # set channel hit finding thresholds (will be converted to an array later in init())
-        self.channel_threshold = params.get('channel_threshold',
+        # set hit finding thresholds (will be converted to an array later in init())
+        self.threshold = params.get('threshold',
                                             self.default_global_threshold)
-        if isinstance(self.channel_threshold, int) or isinstance(self.channel_threshold, float):
+        if isinstance(self.threshold, int) or isinstance(self.threshold, float):
             # if a global threshold is specified, use the default generator
-            self.channel_threshold = self.default_channel_threshold(
-                self.channel_threshold)
-        elif isinstance(self.channel_threshold, dict):
+            self.threshold = self.default_threshold(
+                self.threshold)
+        elif isinstance(self.threshold, dict):
             # otherwise convert to a defaultdict
-            new_dict = self.default_channel_threshold(
+            new_dict = self.default_threshold(
                 self.default_global_threshold)
-            for key, subdict in self.channel_threshold.items():
+            for key, subdict in self.threshold.items():
                 for subkey, subval in subdict.items():
                     new_dict[key][subkey] = subval
-            self.channel_threshold = new_dict
+            self.threshold = new_dict
 
         self.hits_dtype = self.hits_dtype(self.near_samples)
 
@@ -132,8 +132,8 @@ class WaveformHitFinder(H5FlowStage):
         for adc in range(self.nadc):
             for channel in range(self.nchan):
                 threshold_array[adc,
-                                channel] = self.channel_threshold[adc][channel]
-        self.channel_threshold = threshold_array
+                                channel] = self.threshold[adc][channel]
+        self.threshold = threshold_array
 
         # create datasets and references
         self.data_manager.create_dset(self.hits_dset_name,
@@ -147,8 +147,8 @@ class WaveformHitFinder(H5FlowStage):
                                     t_ns_dset=self.t_ns_dset_name,
                                     near_samples=self.near_samples,
                                     busy_channel=self.busy_channel,
-                                    channel_thresholds=self.channel_threshold,
-                                    channel_mask=self.channel_mask
+                                    thresholds=self.threshold,
+                                    mask=self.mask
                                     )
 
     def run(self, source_name, source_slice, cache):
@@ -168,13 +168,13 @@ class WaveformHitFinder(H5FlowStage):
         wvfm_d = np.diff(wvfms, axis=-1)
         peaks = ((np.sign(wvfm_d[..., 1:]) * np.sign(wvfm_d[..., :-1]) < 0)
                  & (np.sign(np.diff(wvfm_d, axis=-1)) <= 0)
-                 & ~np.isin(np.arange(self.nchan), self.channel_mask).reshape(1, 1, -1, 1)
+                 & ~np.isin(np.arange(self.nchan), self.mask).reshape(1, 1, -1, 1)
                  & np.all(~wvfms.mask, axis=-1, keepdims=True))
         peaks = np.where(peaks)  # tuple of (ev, adc, ch, index)
         peak_max = wvfms[..., 1:][peaks]  # waveform value at each peak
 
         # apply threshold
-        threshold_mask = peak_max >= self.channel_threshold[peaks[1:-1]].ravel(
+        threshold_mask = peak_max >= self.threshold[peaks[1:-1]].ravel(
         )
 
         if np.count_nonzero(threshold_mask):
