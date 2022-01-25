@@ -14,6 +14,11 @@ class WaveformHitFinder(H5FlowStage):
         a defined threshold. Stores the nearest ±N samples around the hit,
         along with timing information and some summary information.
 
+        To most precisely reconstruct the time of a given hit, use the
+        following::
+
+            (hits['ns'] + hits['ns_spline']) * units.ns
+
         Parameters:
          - ``wvfm_dset_name``: ``str``, path to input waveforms
          - ``t_ns_dset_name``: ``str``, path to corrected light PPS timestamps
@@ -41,8 +46,8 @@ class WaveformHitFinder(H5FlowStage):
             max         f4,             peak adc value
             sum_spline  f4,             integral of spline around peak (out to ±near_samples)
             max_spline  f4,             maximum of spline around peak
-            ns_spline   f4,             offset from PPS timestamp of peak for maximum of spline [ns]
-            rising_spline f4,           projection of spline to rising edge zero-crossing (offset from peak) [ns]
+            ns_spline   f4,             offset from center sample for maximum of spline [ns]
+            rising_spline f4,           projection of spline to rising edge zero-crossing (offset from center sample) [ns]
             rising_err_spline f4,       an estimate of the error on the rising edge zero-crossing [ns]
             fwhm_spline f4,             spline FWHM [ns]
 
@@ -159,7 +164,6 @@ class WaveformHitFinder(H5FlowStage):
             't_ns']  # 1:1 relationship
         events = cache[source_name]
         wvfm_sn = events['sn']
-        #wvfm_ch = events['ch']
         wvfm_ch = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
 
         # find all peaks
@@ -172,14 +176,12 @@ class WaveformHitFinder(H5FlowStage):
         peak_max = wvfms[..., 1:][peaks]  # waveform value at each peak
 
         # apply threshold
-        threshold_mask = peak_max >= self.threshold[peaks[1:-1]].ravel(
-        )
+        threshold_mask = peak_max >= self.threshold[peaks[1:-1]].ravel()
 
         if np.count_nonzero(threshold_mask):
             # hits are present in event, extract parameters
             peaks = tuple(p[threshold_mask].reshape(-1, 1) for p in peaks)
             peak_max = peak_max[threshold_mask]
-            peak_ns = t[peaks[:3]]
 
             # get neighboring samples
             peak_sample_index = np.clip(peaks[-1].reshape(-1, 1)
@@ -241,18 +243,29 @@ class WaveformHitFinder(H5FlowStage):
             # project to 0-crossing for sub-sample resolution
             rising_edge = rising_edge - np.take_along_axis(
                 busy_sig, rising_edge, axis=-1) / np.take_along_axis(busy_d, rising_edge, axis=-1)
+            last_rising_edge = np.max(rising_edge, axis=-1)
             peak_busy_ns = (
-                peaks[-1] - rising_edge[peaks[:2]].reshape(-1, 1)) * self.sample_rate
+                peaks[-1] - rising_edge[peaks[:2]].reshape(-1, 1)
+                ) * self.sample_rate
+
+            # use the busy signal rising edge to set the event timestamp
+            peak_ns = np.take_along_axis(t.min(axis=-1), np.argmax(rising_edge, axis=-1), axis=-1)[peaks[:1]]
+
+            hit_ns = peak_ns + (
+                + (peaks[-1] - rising_edge[peaks[:2]].reshape(-1,1)) # hit relative to trigger edge
+                - (rising_edge[peaks[:2]].reshape(-1, 1)
+                    - last_rising_edge[peaks[:1]].reshape(-1, 1)) # trigger edge relative to event
+                ) * self.sample_rate
 
             hit_data = np.empty((len(peaks[-1])), dtype=self.hits_dtype)
             hit_data['adc'] = peaks[1].ravel()
             hit_data['sn'] = wvfm_sn[peaks[:2]].ravel()
             hit_data['ch'] = wvfm_ch[peaks[:3]].ravel()
-            hit_data['ns'] = peak_ns.ravel()
+            hit_data['ns'] = hit_ns.ravel()
             hit_data['sample_idx'] = peaks[-1].ravel() + 1
             hit_data['busy_ns'] = peak_busy_ns.ravel()
-            hit_data['samples'] = peak_samples.reshape(-1,
-                                                       2 * self.near_samples + 1)
+            hit_data['samples'] = peak_samples.reshape(
+                -1, 2 * self.near_samples + 1)
             hit_data['sum'] = peak_sum.ravel()
             hit_data['max'] = peak_max.ravel()
             hit_data['sum_spline'] = peak_sum_spline.ravel()
