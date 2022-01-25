@@ -3,7 +3,7 @@
 
 flow:
   source: 'light/events'
-  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, hit_finder]
+  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_sum, hit_finder]
 
   # remove waveforms from output file
   drop: ['light/wvfm', 'light/fwvfm', 'light/deconv']
@@ -79,10 +79,10 @@ wvfm_sum:
   classname: WaveformSum # light/wvfm_sum.py
   requires:
     - 'light/events'
-    - 'light/deconv_wvfm'
+    - 'light/deconv'
   params:
     # input
-    wvfm_dset_name: 'light/deconv_wvfm'
+    wvfm_dset_name: 'light/deconv'
 
     # output
     swvfm_dset_name: 'light/swvfm'

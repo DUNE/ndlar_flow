@@ -51,7 +51,7 @@ class WaveformSum(H5FlowStage):
     '''
     class_version = '0.0.0'
 
-    default_detector_channels = list(range(64))
+    default_detector_channels = [list(range(64))]
 
     def swvfm_dtype(self, nadc, ndet, nsamples): return np.dtype([('samples', 'f4', (nadc, ndet, nsamples))])
 
@@ -60,7 +60,7 @@ class WaveformSum(H5FlowStage):
 
         self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.swvfm_dset_name = params.get('swvfm_dset_name')
-        self.detector_channels = params.get('filter_channels', {'All': self.default_detector_channels})
+        self.detector_channels = params.get('detector_channels', {'All': self.default_detector_channels})
         self.ndet = max([len(det) for det in self.detector_channels.values()])
 
     def init(self, source_name):
@@ -83,7 +83,7 @@ class WaveformSum(H5FlowStage):
         self.data_manager.create_ref(source_name, self.swvfm_dset_name)
 
     def run(self, source_name, source_slice, cache):
-        super(WaveformNoiseSum, self).run(source_name, source_slice, cache)
+        super(WaveformSum, self).run(source_name, source_slice, cache)
 
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape).data
@@ -92,15 +92,16 @@ class WaveformSum(H5FlowStage):
         for i_adc in range(swvfm_data['samples'].shape[1]):
             for i_det in range(wvfm_data['samples'].shape[2]):
                 if 'All' in self.detector_channels:
-                    if i_det < len(self.detector_channels['All']):
-                        channels = self.detector_channels['All'][i_det]
+                    key = 'All'
                 elif i_adc in self.detector_channels:
-                    if i_det < len(self.detector_channels[i_adc]):
-                        channels = self.detector_channels[i_adc][i_det]
+                    key = i_adc
                 else:
-                    channels = None
-                if channels is not None:
-                    swvfm_data['samples'][:,i_adc,i_det,:] = np.sum(wvfm_data['samples'][:,i_adc,channels,:], axis=2)
+                    raise KeyError(f'ADC #{i_adc} not found in detector_channels')
+
+                if i_det < len(self.detector_channels[key]):
+                    channels = np.array(self.detector_channels[key][i_det])
+                    swvfm_data['samples'][:,i_adc,i_det,:] = np.sum(np.expand_dims(event_data['wvfm_valid'][:,i_adc,channels].astype(float),-1)
+                                                                    * wvfm_data['samples'][:,i_adc,channels,:], axis=1)
 
         # reserve new data
         swvfm_slice = self.data_manager.reserve_data(self.swvfm_dset_name, source_slice)

@@ -158,11 +158,9 @@ class WaveformHitFinder(H5FlowStage):
         t = cache[self.t_ns_dset_name].reshape(cache[source_name].shape)[
             't_ns']  # 1:1 relationship
         events = cache[source_name]
-        wvfm_valid = events['wvfm_valid'].astype(bool)
         wvfm_sn = events['sn']
-        wvfm_ch = events['ch']
-
-        wvfms.mask = wvfms.mask | np.expand_dims(~wvfm_valid, axis=-1)
+        #wvfm_ch = events['ch']
+        wvfm_ch = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
 
         # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
