@@ -153,7 +153,10 @@ class WaveformHitFinder(H5FlowStage):
                                     near_samples=self.near_samples,
                                     busy_channel=self.busy_channel,
                                     thresholds=self.threshold,
-                                    mask=self.mask
+                                    mask=self.mask,
+                                    nadc=self.nadc,
+                                    nchannels=self.nchan,
+                                    nsamples=self.nsamples
                                     )
 
     def run(self, source_name, source_slice, cache):
