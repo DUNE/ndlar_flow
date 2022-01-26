@@ -142,14 +142,14 @@ class WaveformDeconvolution(H5FlowStage):
             # interpolate mis-matched FFTs
             fft_shape = wvfm_dset.dtype['samples'].shape[-1] // 2 + 1
             for spectrum in (self.noise_spectrum, self.signal_spectrum):
-                s = spectrum['spectrum'] / spectrum['spectrum'].shape[-1]
+                s = spectrum['spectrum']
                 s_shape = s.shape[-1]
                 if s_shape != fft_shape:
                     if self.rank == 0:
                         logging.warning(f'Input spectrum size mismatch (in: {s_shape}, needed: {fft_shape}). '
                                         'Interpolating assuming same sample rate...')
-                    spline = scipy.interpolate.CubicSpline(np.linspace(0, fft_shape, s_shape), s, axis=-1)
-                    s = spline(np.arange(fft_shape))
+                    spline = scipy.interpolate.CubicSpline(np.linspace(0, fft_shape, s_shape), s/s_shape, axis=-1)
+                    s = spline(np.arange(fft_shape)) * fft_shape
                     s[np.isnan(s)] = 0
                     spectrum['spectrum'] = s
 
@@ -252,8 +252,8 @@ class WaveformDeconvolution(H5FlowStage):
                     fft_bins = fft.shape[-1]
                     exp_fft_bins = self.noise_spectrum['spectrum'].shape[-1]
 
-                    spline = scipy.interpolate.CubicSpline(np.linspace(0, exp_fft_bins, fft_bins), spectrum, axis=-1)
-                    spectrum = spline(np.arange(exp_fft_bins))
+                    spline = scipy.interpolate.CubicSpline(np.linspace(0, exp_fft_bins, fft_bins), spectrum/fft_bins, axis=-1)
+                    spectrum = spline(np.arange(exp_fft_bins)) * exp_fft_bins
                     spectrum[np.isnan(spectrum)] = 0
 
                     old_n = self.noise_spectrum['n']
@@ -347,7 +347,7 @@ class WaveformDeconvolution(H5FlowStage):
             with np.errstate(divide='ignore', invalid='ignore'):
                 if self.filter_type == self.FILT_WIENER:
                     # wiener deconvolution assuming delta-funtion signal (optimizes MSE)
-                    sig_power = self.signal_spectrum['spectrum'] - self.noise_spectrum['spectrum']
+                    sig_power = np.clip(self.signal_spectrum['spectrum'] - self.noise_spectrum['spectrum'], 0, None)
                     filt_fft = fft * np.conj(impulse_fft) * sig_power \
                         / (sig_power * np.abs(impulse_fft)**2 + self.noise_spectrum['spectrum'])
                 elif self.filter_type == self.FILT_INVERSE:
