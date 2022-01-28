@@ -137,7 +137,9 @@ class DelayedSignal(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         super(DelayedSignal, self).run(source_name, source_slice, cache)
         # load from cache
-        hits = cache[self.hits_dset_name].reshape(len(np.r_[source_slice]),-1)
+        hits = cache[self.hits_dset_name]
+        if len(hits):
+            hits = hits.reshape(len(np.r_[source_slice]),-1)
 
         # find prompt signal time and amplitude
         # definition:
@@ -151,7 +153,6 @@ class DelayedSignal(H5FlowStage):
             & (np.around(hits['ns']) == first_trigger_ns)
             & (hits['max_spline'] >= self.prompt_thresholds[hits['adc'].filled(0), hits['ch'].filled(0)].reshape(hits.shape))
             )
-        print(prompt_hit_mask.shape, hits.shape, first_trigger_ns.shape)
         hit_ns = hits['ns'] + hits['busy_ns'] + hits['ns_spline']
         hit_ns.mask = hit_ns.mask | ~prompt_hit_mask
         prompt_ns = ma.average(hit_ns, axis=-1, weights=hits['max_spline'])
@@ -175,7 +176,7 @@ class DelayedSignal(H5FlowStage):
                 hit_submask = ((hits['adc'] == i) & (hits['ch'] == j)
                     & ~prompt_hit_mask
                     & (hits['ns'] + hits['busy_ns'] + hits['ns_spline'] - prompt_ns[:,np.newaxis] < self.delayed_window[1])
-                    & (hits['ns'] + hits['busy_ns'] + hits['ns_spline'] - prompt_ns[:,np.newaxis] >= self.delayed_window[1]))
+                    & (hits['ns'] + hits['busy_ns'] + hits['ns_spline'] - prompt_ns[:,np.newaxis] >= self.delayed_window[0]))
                 if np.any(hit_submask):
                     p_ns = np.broadcast_to(prompt_ns[:,np.newaxis], hit_submask.shape)
                     p_ampl = np.broadcast_to(prompt_ampl[:,i,j,np.newaxis], hit_submask.shape)
@@ -184,7 +185,7 @@ class DelayedSignal(H5FlowStage):
                         + hits[hit_submask]['ns_spline']
                         - p_ns[hit_submask])
                     hit_rel_ampl[hit_submask] = hits[hit_submask]['max_spline'] / np.clip(p_ampl[hit_submask],1e-15,None)
-                    hit_rel_valid[hit_submask] = (p_ampl > 0)
+                    hit_rel_valid[hit_submask] = (p_ampl[hit_submask] > 0)
 
         if self.calibration_flag:
             # fill likelihood histogram
@@ -208,7 +209,7 @@ class DelayedSignal(H5FlowStage):
         hit_rel_ns_sorted = np.take_along_axis(hit_rel_ns, hit_ordering, axis=-1)
         hit_weight_sorted = np.take_along_axis(hit_weight, hit_ordering, axis=-1)
         hit_weight_summed = np.cumsum(hit_weight_sorted, axis=-1)
-        hit_weight_summed /= hit_weight_sorted.sum(axis=-1, keepdims=True)
+        hit_weight_summed /= np.clip(hit_weight_sorted.sum(axis=-1, keepdims=True), 1e-15, None)
         hit_i_median = np.argmax(hit_weight_summed >= 0.5, axis=-1)[...,np.newaxis]
         delayed_ns_med = np.take_along_axis(hit_rel_ns, hit_i_median, axis=-1)
         delayed_ns_min = delayed_ns_med - self.delayed_hit_window
@@ -216,7 +217,10 @@ class DelayedSignal(H5FlowStage):
 
         # calculate delayed signal parameters
         hit_in_window = hit_mask & (hit_rel_ns < delayed_ns_max) & (hit_rel_ns >= delayed_ns_min)
-        delayed_time = np.average(hit_rel_ns, axis=-1, weights=hit_in_window * hits['max_spline'])
+        if np.any(hit_in_window):
+            delayed_time = ma.average(hit_rel_ns, axis=-1, weights=hit_in_window * hits['max_spline'])
+        else:
+            delayed_time = np.zeros(hit_rel_ns.shape[0])
         delayed_ns = prompt_ns + delayed_time
         delayed_score = -np.sum(hit_weight * np.log(hit_score), axis=-1)
         delayed_valid = np.any(hit_in_window, axis=-1)
@@ -232,26 +236,31 @@ class DelayedSignal(H5FlowStage):
         prompt_data = np.zeros(hits.shape[0], dtype=self.prompt_dtype)
         delayed_data = np.zeros(hits.shape[0], dtype=self.delayed_dtype)
 
-        prompt_data['ns'] = prompt_ns
-        prompt_data['valid'] = np.any(prompt_ampl > 0)
-        prompt_data['ampl'] = prompt_ampl
+        if len(prompt_data):
+            prompt_data['ns'] = prompt_ns
+            prompt_data['valid'] = np.any(prompt_ampl > 0)
+            prompt_data['ampl'] = prompt_ampl
 
-        delayed_data['ns'] = delayed_ns
-        delayed_data['delay'] = delayed_time
-        delayed_data['ampl'] = delayed_ampl
-        delayed_data['score'] = delayed_score
-        delayed_data['valid'] = delayed_valid
+        if len(delayed_data):
+            delayed_data['ns'] = delayed_ns
+            delayed_data['delay'] = delayed_time
+            delayed_data['ampl'] = delayed_ampl
+            delayed_data['score'] = delayed_score
+            delayed_data['valid'] = delayed_valid
 
         prompt_slice = self.data_manager.reserve_data(
             self.prompt_dset_name, len(prompt_data))
         self.data_manager.write_data(self.prompt_dset_name, prompt_slice, prompt_data)
-        print(np.c_[source_slice, prompt_slice].shape, np.any(prompt_hit_mask, axis=-1).shape, prompt_hit_mask.shape)
         ref = np.c_[source_slice, prompt_slice][np.any(prompt_hit_mask, axis=-1)]
+        if len(ref) == 0:
+            ref = np.empty((0,2), int)
         self.data_manager.write_ref(source_name, self.prompt_dset_name, ref)
 
         delayed_slice = self.data_manager.reserve_data(
             self.delayed_dset_name, len(delayed_data))
-        self.data_manager.write_data(self.delayed_dset_name, delayed_slice, delayed_data)
+        self.data_manager.write_data(self.delayed_dset_name, delayed_slice, delayed_data)        
         ref = np.c_[prompt_slice, delayed_slice][delayed_valid]
+        if len(ref) == 0:
+            ref = np.empty((0,2), int)        
         self.data_manager.write_ref(self.prompt_dset_name, self.delayed_dset_name, ref)
 
