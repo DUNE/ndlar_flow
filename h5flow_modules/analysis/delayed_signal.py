@@ -4,12 +4,12 @@ import logging
 import os
 
 from h5flow import H5FLOW_MPI
-from h5flow.core import H5FlowStage, resources
+from h5flow.core import H5FlowStage
 
 
-def fill_hist(rel_time, rel_ampl, bkg_hist, rel_time_bins, rel_ampl_bins):
+def fill_hist(adc, det, rel_time, rel_ampl, bkg_hist, *bins):
     pairs = np.concatenate([np.expand_dims(rel_time,-1), np.expand_dims(rel_ampl,-1)], axis=-1)
-    return np.histogramdd(pairs.reshape(-1,2), bins=(rel_time_bins, rel_ampl_bins))[0] + bkg_hist
+    return np.histogramdd(pairs.reshape(-1,2), bins=bins)[0] + bkg_hist
 
 
 def normalize_hist(hist):
@@ -19,11 +19,13 @@ def normalize_hist(hist):
     return cum_norm_hist
 
 
-def score_delayed(rel_time, rel_ampl, bkg_cum_norm_hist, rel_time_bins, rel_ampl_bins):
-    i_time = np.clip(np.digitize(rel_time, bins=rel_time_bins)-1,0,len(rel_time_bins)-2)
-    i_ampl = np.clip(np.digitize(rel_ampl, bins=rel_ampl_bins)-1,0,len(rel_ampl_bins)-2)
+def score_delayed(adc, det, rel_time, rel_ampl, bkg_cum_norm_hist, *bins):
+    i_adc = np.clip(np.digitize(adc, bins=bins[0])-1,0,len(bins[0])-2)
+    i_det = np.clip(np.digitize(det, bins=bins[1])-1,0,len(bins[1])-2)
+    i_time = np.clip(np.digitize(rel_time, bins=bins[2])-1,0,len(bins[2])-2)
+    i_ampl = np.clip(np.digitize(rel_ampl, bins=bins[3])-1,0,len(bins[3])-2)
 
-    return 1 - bkg_cum_norm_hist[i_time, i_ampl]
+    return 1 - bkg_cum_norm_hist[i_adc, i_det, i_time, i_ampl]
 
 
 class DelayedSignal(H5FlowStage):
@@ -76,8 +78,22 @@ class DelayedSignal(H5FlowStage):
     def init(self, source_name):
         super(DelayedSignal, self).init(source_name)
 
+        # get number of adcs/detectors
+        hit_attrs = self.data_manager.get_attrs(self.hits_dset_name)
+        nadc = hit_attrs['nadc']
+        ndet = hit_attrs['nchannels']
+        self.prompt_dtype = self.prompt_dtype(nadc, ndet)
+        self.delayed_dtype = self.delayed_dtype(nadc, ndet)
+
+        # add set of bins for each detector
+        self.bkg_bins = [np.arange(nadc+1), np.arange(ndet+1)] + self.bkg_bins
+
+        # set prompt signal thresholds
+        thresholds = hit_attrs['thresholds']
+        self.prompt_thresholds = self.prompt_threshold_factor * thresholds
+
         # load / setup calibration file
-        if os.path.exists(self.delayed_bkg_file):
+        if os.path.exists(self.delayed_bkg_file) and not self.calibration_flag:
             delayed_data = np.load(self.delayed_bkg_file)
             self.bkg_bins = [delayed_data[key] for key in sorted(list(delayed_data.keys())) if 'bins' in key]
             self.bkg_cum_norm_hist = delayed_data['hist']
@@ -87,17 +103,6 @@ class DelayedSignal(H5FlowStage):
         self.bkg_cum_norm_hist = normalize_hist(self.bkg_cum_norm_hist)
 
         self.bkg_hist = np.zeros([len(bins)-1 for bins in self.bkg_bins])
-
-        # get number of adcs/detectors
-        hit_attrs = self.data_manager.get_attrs(self.hits_dset_name)
-        nadc = hit_attrs['nadc']
-        ndet = hit_attrs['nchannels']
-        self.prompt_dtype = self.prompt_dtype(nadc, ndet)
-        self.delayed_dtype = self.delayed_dtype(nadc, ndet)
-
-        # set prompt signal thresholds
-        thresholds = hit_attrs['thresholds']
-        self.prompt_thresholds = self.prompt_threshold_factor * thresholds
 
         # format output file
         attrs = dict(class_version=self.class_version, classname=self.classname)
@@ -190,10 +195,13 @@ class DelayedSignal(H5FlowStage):
         if self.calibration_flag:
             # fill likelihood histogram
             self.bkg_hist = fill_hist(
-                hit_rel_ns[hit_rel_valid], hit_rel_ampl[hit_rel_valid], self.bkg_hist, *self.bkg_bins)
+                hits['adc'][hit_rel_valid], hits['ch'][hit_rel_valid],
+                hit_rel_ns[hit_rel_valid], hit_rel_ampl[hit_rel_valid],
+                self.bkg_hist, *self.bkg_bins)
 
         # look for delayed signal
         hit_score = score_delayed(
+            hits['adc'], hits['ch'],
             hit_rel_ns * hit_rel_valid, hit_rel_ampl * hit_rel_valid,
             self.bkg_cum_norm_hist, *self.bkg_bins)
 
@@ -258,9 +266,9 @@ class DelayedSignal(H5FlowStage):
 
         delayed_slice = self.data_manager.reserve_data(
             self.delayed_dset_name, len(delayed_data))
-        self.data_manager.write_data(self.delayed_dset_name, delayed_slice, delayed_data)        
+        self.data_manager.write_data(self.delayed_dset_name, delayed_slice, delayed_data)
         ref = np.c_[prompt_slice, delayed_slice][delayed_valid]
         if len(ref) == 0:
-            ref = np.empty((0,2), int)        
+            ref = np.empty((0,2), int)
         self.data_manager.write_ref(self.prompt_dset_name, self.delayed_dset_name, ref)
 
