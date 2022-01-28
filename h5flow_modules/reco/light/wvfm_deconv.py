@@ -69,7 +69,7 @@ class WaveformDeconvolution(H5FlowStage):
                     noise_slice: [-256, null] # last 256 samples
 
     '''
-    class_version = '0.0.0'
+    class_version = '0.0.1'
 
     default_noise_spectrum_filename = 'wvfm_deconv_noise_power.npz'
     default_signal_spectrum_filename = 'wvfm_deconv_signal_power.npz'
