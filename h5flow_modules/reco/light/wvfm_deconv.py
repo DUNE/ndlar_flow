@@ -162,6 +162,7 @@ class WaveformDeconvolution(H5FlowStage):
                 new_impulse = np.zeros(wvfm_dset.dtype['samples'].shape, dtype=wvfm_dset.dtype['samples'].base)
                 valid_samples = min(wvfm_shape, impulse.shape[-1])
                 new_impulse[..., :valid_samples] = impulse[..., :valid_samples]
+                new_impulse[np.abs(new_impulse) < 1e-4] = 0.
                 self.signal_impulse['impulse'] = new_impulse
 
             if self.gaus_filter_width > 0:
@@ -347,7 +348,11 @@ class WaveformDeconvolution(H5FlowStage):
             with np.errstate(divide='ignore', invalid='ignore'):
                 if self.filter_type == self.FILT_WIENER:
                     # wiener deconvolution assuming delta-funtion signal (optimizes MSE)
-                    sig_power = np.clip(self.signal_spectrum['spectrum'] - self.noise_spectrum['spectrum'], 0, None)
+                    #sig_power = np.clip(self.signal_spectrum['spectrum'] - self.noise_spectrum['spectrum'], 0, None).mean(axis=-1, keepdims=True)
+                    if self.gaus_fft is None:
+                        sig_power = np.clip(self.signal_spectrum['spectrum'] - self.noise_spectrum['spectrum'], 0, None).mean(axis=-1, keepdims=True)
+                    else:
+                        sig_power = np.clip(self.signal_spectrum['spectrum'] - self.noise_spectrum['spectrum'], 0, None).sum(axis=-1, keepdims=True) * np.abs(self.gaus_fft)**2
                     filt_fft = fft * np.conj(impulse_fft) * sig_power \
                         / (sig_power * np.abs(impulse_fft)**2 + self.noise_spectrum['spectrum'])
                 elif self.filter_type == self.FILT_INVERSE:
