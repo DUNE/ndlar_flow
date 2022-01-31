@@ -140,7 +140,7 @@ class WaveformDeconvolution(H5FlowStage):
             self.signal_impulse = dict(np.load(self.signal_impulse_filename))
 
             # interpolate mis-matched FFTs
-            fft_shape = wvfm_dset.dtype['samples'].shape[-1] // 2 + 1
+            fft_shape = (2 * wvfm_dset.dtype['samples'].shape[-1]) // 2 + 1
             for spectrum in (self.noise_spectrum, self.signal_spectrum):
                 s = spectrum['spectrum']
                 s_shape = s.shape[-1]
@@ -153,22 +153,21 @@ class WaveformDeconvolution(H5FlowStage):
                     s[np.isnan(s)] = 0
                     spectrum['spectrum'] = s
 
-            wvfm_shape = wvfm_dset.dtype['samples'].shape[-1]
+            impulse_shape = 2 * wvfm_dset.dtype['samples'].shape[-1]
             impulse = self.signal_impulse['impulse']
-            if impulse.shape[-1] != wvfm_shape:
+            if impulse.shape[-1] != impulse_shape:
                 if self.rank == 0:
-                    logging.warning(f'Input impulse function size mismatch (in: {impulse.shape[-1]}, needed: {wvfm_shape}). '
+                    logging.warning(f'Input impulse function size mismatch (in: {impulse.shape[-1]}, needed: {impulse_shape}). '
                                     'Truncating to shorter length...')
-                new_impulse = np.zeros(wvfm_dset.dtype['samples'].shape, dtype=wvfm_dset.dtype['samples'].base)
-                valid_samples = min(wvfm_shape, impulse.shape[-1])
+                new_impulse = np.zeros(wvfm_dset.dtype['samples'].shape[:-1] + (impulse_shape,), dtype=wvfm_dset.dtype['samples'].base)
+                valid_samples = min(impulse_shape, impulse.shape[-1])
                 new_impulse[..., :valid_samples] = impulse[..., :valid_samples]
-                new_impulse[np.abs(new_impulse) < 1e-4] = 0.
                 self.signal_impulse['impulse'] = new_impulse
 
             if self.gaus_filter_width > 0:
-                gaus = np.exp(-0.5 * np.arange(-wvfm_shape // 2, wvfm_shape // 2)**2 / self.gaus_filter_width**2)
+                gaus = np.exp(-0.5 * np.arange(-impulse_shape // 2, impulse_shape // 2)**2 / self.gaus_filter_width**2)
                 gaus /= gaus.sum()
-                gaus = gaus.reshape(1, 1, 1, wvfm_shape)
+                gaus = gaus.reshape(1, 1, 1, impulse_shape)
                 self.gaus_fft = np.abs(np.fft.rfft(gaus, axis=-1))
             else:
                 self.gaus_fft = None
@@ -342,13 +341,14 @@ class WaveformDeconvolution(H5FlowStage):
                 self.signal_impulse['n'] = n + old_n
 
         if self.do_filtering:
-            fft = np.fft.rfft(wvfms, axis=-1)
+            # zero-pad to remove cyclic artifacts
+            padding = np.zeros_like(wvfms)
+            fft = np.fft.rfft(np.concatenate((wvfms,padding), axis=-1), axis=-1)
             impulse_fft = np.fft.rfft(self.signal_impulse['impulse'])
 
             with np.errstate(divide='ignore', invalid='ignore'):
                 if self.filter_type == self.FILT_WIENER:
-                    # wiener deconvolution assuming delta-funtion signal (optimizes MSE)
-                    #sig_power = np.clip(self.signal_spectrum['spectrum'] - self.noise_spectrum['spectrum'], 0, None).mean(axis=-1, keepdims=True)
+                    # wiener deconvolution assuming delta-funtion (or gaussian) signal (optimizes MSE)
                     if self.gaus_fft is None:
                         sig_power = np.clip(self.signal_spectrum['spectrum'] - self.noise_spectrum['spectrum'], 0, None).mean(axis=-1, keepdims=True)
                     else:
@@ -367,7 +367,7 @@ class WaveformDeconvolution(H5FlowStage):
                     filt_fft *= self.gaus_fft
 
             filt_fft[np.isnan(filt_fft) | ~np.isfinite(filt_fft)] = 0.  # protect against invalid values
-            filt_wvfms = np.fft.irfft(filt_fft, axis=-1)
+            filt_wvfms = np.fft.irfft(filt_fft, axis=-1)[..., :wvfms.shape[-1]]
 
             # save waveforms
             fwvfm = cache[self.wvfm_dset_name].reshape(cache[source_name].shape).copy()
