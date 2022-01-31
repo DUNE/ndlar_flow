@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.ma as ma
+import scipy.ndimage as ndimage
 import logging
 import os
 
@@ -8,14 +9,16 @@ from h5flow.core import H5FlowStage
 
 
 def fill_hist(adc, det, rel_time, rel_ampl, bkg_hist, *bins):
-    pairs = np.concatenate([np.expand_dims(rel_time,-1), np.expand_dims(rel_ampl,-1)], axis=-1)
-    return np.histogramdd(pairs.reshape(-1,2), bins=bins)[0] + bkg_hist
+    pairs = np.concatenate([np.expand_dims(adc,-1), np.expand_dims(det,-1), np.expand_dims(rel_time,-1), np.expand_dims(rel_ampl,-1)], axis=-1)
+    return np.histogramdd(pairs.reshape(-1,4), bins=bins)[0] + bkg_hist
 
 
-def normalize_hist(hist):
+def normalize_hist(hist, sigma=1):
     cum_norm_hist = np.cumsum(hist, axis=-1)
-    cum_norm_hist /= np.sum(hist, axis=-1, keepdims=True)
+    cum_norm_hist /= np.clip(np.sum(hist, axis=-1, keepdims=True), 1e-15, None)
     cum_norm_hist = 1 - cum_norm_hist
+    if sigma is not None:
+        cum_norm_hist = ndimage.gaussian_filter1d(cum_norm_hist, sigma, axis=-1, mode='nearest')
     return cum_norm_hist
 
 
@@ -35,14 +38,14 @@ class DelayedSignal(H5FlowStage):
         hits_dset_name='light/hits',
         prompt_dset_name='analysis/muon_capture/prompt',
         delayed_dset_name='analysis/muon_capture/delayed',
-        prompt_threshold_factor=2,
+        prompt_threshold_factor=1,
         prompt_window=[-350,-250], # ns
         delayed_window=[100,1600], # ns
-        delayed_hit_window=20, # ns
-        delayed_likelihood_cut=0.05,
+        delayed_hit_window=10, # ns
+        delayed_likelihood_cut=1.,
         calibration_flag=False,
         delayed_bkg_file='h5flow_data/delayed_bkg-{class_version}.npz',
-        bkg_bins=(np.linspace(100,1600,150), np.linspace(0,2,50)),
+        bkg_bins=(np.linspace(100,1600,150), np.geomspace(1e-4,2,50)),
         )
 
 
@@ -135,6 +138,8 @@ class DelayedSignal(H5FlowStage):
                 np.savez_compressed(self.delayed_bkg_file,
                     bins0=self.bkg_bins[0],
                     bins1=self.bkg_bins[1],
+                    bins2=self.bkg_bins[2],
+                    bins3=self.bkg_bins[3],
                     hist=self.bkg_hist
                     )
 
@@ -184,7 +189,7 @@ class DelayedSignal(H5FlowStage):
                     & (hits['ns'] + hits['busy_ns'] + hits['ns_spline'] - prompt_ns[:,np.newaxis] >= self.delayed_window[0]))
                 if np.any(hit_submask):
                     p_ns = np.broadcast_to(prompt_ns[:,np.newaxis], hit_submask.shape)
-                    p_ampl = np.broadcast_to(prompt_ampl[:,i,j,np.newaxis], hit_submask.shape)
+                    p_ampl = np.broadcast_to(prompt_ampl.sum(axis=-1).sum(axis=-1)[...,np.newaxis], hit_submask.shape)
                     hit_rel_ns[hit_submask] = (hits[hit_submask]['ns']
                         + hits[hit_submask]['busy_ns']
                         + hits[hit_submask]['ns_spline']
@@ -207,22 +212,28 @@ class DelayedSignal(H5FlowStage):
 
         # find best delayed time interval
         # definition:
-        #  - create window using weighted median of relative hit time with (1 - hit_score) weight, for hits with hit_score < delayed_likelihood_cut
-        #  - weighted mean of relative hit time of hits within window
+        #  - create a sliding window
+        #  - find window with largest energy
+        #  - use weighted mean of relative hit time of hits within window
         hit_mask = ((hit_score < self.delayed_likelihood_cut)
-            & (hit_rel_valid))
-        # calculate weighted median
-        hit_weight = hit_mask * (1 - hit_score / self.delayed_likelihood_cut)
-        hit_ordering = np.argsort(hit_rel_ns, axis=-1)
-        hit_rel_ns_sorted = np.take_along_axis(hit_rel_ns, hit_ordering, axis=-1)
-        hit_weight_sorted = np.take_along_axis(hit_weight, hit_ordering, axis=-1)
-        hit_weight_summed = np.cumsum(hit_weight_sorted, axis=-1)
-        hit_weight_summed /= np.clip(hit_weight_sorted.sum(axis=-1, keepdims=True), 1e-15, None)
-        hit_i_median = np.argmax(hit_weight_summed >= 0.5, axis=-1)[...,np.newaxis]
-        delayed_ns_med = np.take_along_axis(hit_rel_ns, hit_i_median, axis=-1)
+                    & (hit_rel_valid))
+
+        sliding_center = np.linspace(
+            self.delayed_window[0]+self.delayed_hit_window,
+            self.delayed_window[1]-self.delayed_hit_window,
+            2*int(np.ceil((self.delayed_window[1] - self.delayed_window[0] - 2*self.delayed_hit_window)/self.delayed_hit_window)))
+        sliding_center = sliding_center[np.newaxis,np.newaxis,:]
+        hit_in_window = (hit_mask[...,np.newaxis]
+                         & (hit_rel_ns[...,np.newaxis] < sliding_center + self.delayed_hit_window)
+                         & (hit_rel_ns[...,np.newaxis] >= sliding_center - self.delayed_hit_window))
+        sliding_score = np.sum(hit_in_window * hits['max_spline'][...,np.newaxis], axis=-2)        
+        if len(sliding_score):
+            delayed_ns_med = np.take_along_axis(sliding_center[0], np.argmax(sliding_score, axis=-1)[...,np.newaxis], axis=-1)
+        else:
+            delayed_ns_med = np.empty((0,1))
         delayed_ns_min = delayed_ns_med - self.delayed_hit_window
         delayed_ns_max = delayed_ns_med + self.delayed_hit_window
-
+        
         # calculate delayed signal parameters
         hit_in_window = hit_mask & (hit_rel_ns < delayed_ns_max) & (hit_rel_ns >= delayed_ns_min)
         if np.any(hit_in_window):
@@ -230,7 +241,7 @@ class DelayedSignal(H5FlowStage):
         else:
             delayed_time = np.zeros(hit_rel_ns.shape[0])
         delayed_ns = prompt_ns + delayed_time
-        delayed_score = -np.sum(hit_weight * np.log(hit_score), axis=-1)
+        delayed_score = -np.sum(hit_in_window * np.log(np.clip(hit_score,1e-15,None)), axis=-1)
         delayed_valid = np.any(hit_in_window, axis=-1)
         delayed_ampl = np.zeros_like(prompt_ampl)
         for i in range(delayed_ampl.shape[1]):
