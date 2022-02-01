@@ -41,13 +41,8 @@ class DelayedSignal(H5FlowStage):
         prompt_threshold_factor=1,
         prompt_window=[-350,-250], # ns
         delayed_window=[100,1600], # ns
-<<<<<<< Updated upstream
         delayed_hit_window=10, # ns
         delayed_likelihood_cut=1.,
-=======
-        delayed_hit_window=20, # ns
-        delayed_likelihood_cut=0.10,
->>>>>>> Stashed changes
         calibration_flag=False,
         delayed_bkg_file='h5flow_data/delayed_bkg-{class_version}.npz',
         bkg_bins=(np.linspace(100,1600,150), np.geomspace(1e-4,2,50)),
