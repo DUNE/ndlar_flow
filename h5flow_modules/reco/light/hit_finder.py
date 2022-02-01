@@ -14,14 +14,19 @@ class WaveformHitFinder(H5FlowStage):
         a defined threshold. Stores the nearest ±N samples around the hit,
         along with timing information and some summary information.
 
+        To most precisely reconstruct the time of a given hit, use the
+        following::
+
+            (hits['ns'] + hits['busy_ns'] + hits['ns_spline']) * units.ns
+
         Parameters:
          - ``wvfm_dset_name``: ``str``, path to input waveforms
          - ``t_ns_dset_name``: ``str``, path to corrected light PPS timestamps
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``near_samples``: ``int``, number of neighboring samples to keep
          - ``busy_channel``: ``int``, channel to extract ADC busy signal (used for timing)
-         - ``channel_threshold``: ``dict`` of ``dict`` containing sets of ``adc_index: {channel_index: adc_threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
-         - ``channel_mask``: ``list`` of ``int``, channels to ignore when finding hits
+         - ``threshold``: ``dict`` of ``dict`` containing sets of ``adc_index: {channel_index: adc_threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
+         - ``mask``: ``list`` of ``int``, channels to ignore when finding hits
 
          Both ``wvfm_dset_name`` and ``t_ns_dset_name`` are required in the cache.
 
@@ -41,22 +46,22 @@ class WaveformHitFinder(H5FlowStage):
             max         f4,             peak adc value
             sum_spline  f4,             integral of spline around peak (out to ±near_samples)
             max_spline  f4,             maximum of spline around peak
-            ns_spline   f4,             offset from PPS timestamp of peak for maximum of spline [ns]
-            rising_spline f4,           projection of spline to rising edge zero-crossing (offset from peak) [ns]
+            ns_spline   f4,             offset from center sample for maximum of spline [ns]
+            rising_spline f4,           projection of spline to rising edge zero-crossing (offset from center sample) [ns]
             rising_err_spline f4,       an estimate of the error on the rising edge zero-crossing [ns]
             fwhm_spline f4,             spline FWHM [ns]
 
     '''
-    class_version = '1.1.0'
+    class_version = '1.2.0'
 
     default_hits_dset_name = 'light/hits'
     default_near_samples = 3
     default_busy_channel = 0
     default_interpolation = 256
     default_global_threshold = 2000
-    default_channel_mask = []
+    default_mask = []
 
-    def default_channel_threshold(self, global_threshold):
+    def default_threshold(self, global_threshold):
         return defaultdict(lambda: defaultdict(lambda: global_threshold))
 
     def hits_dtype(self, near_samples):
@@ -90,26 +95,26 @@ class WaveformHitFinder(H5FlowStage):
                                        self.default_near_samples)
         self.busy_channel = params.get('busy_channel',
                                        self.default_busy_channel)
-        self.channel_mask = np.array(params.get('channel_mask',
-                                                self.default_channel_mask))
+        self.mask = np.array(params.get('mask',
+                                                self.default_mask))
         self.interpolation = params.get('interpolation',
                                         self.default_interpolation)
 
-        # set channel hit finding thresholds (will be converted to an array later in init())
-        self.channel_threshold = params.get('channel_threshold',
+        # set hit finding thresholds (will be converted to an array later in init())
+        self.threshold = params.get('threshold',
                                             self.default_global_threshold)
-        if isinstance(self.channel_threshold, int) or isinstance(self.channel_threshold, float):
+        if isinstance(self.threshold, int) or isinstance(self.threshold, float):
             # if a global threshold is specified, use the default generator
-            self.channel_threshold = self.default_channel_threshold(
-                self.channel_threshold)
-        elif isinstance(self.channel_threshold, dict):
+            self.threshold = self.default_threshold(
+                self.threshold)
+        elif isinstance(self.threshold, dict):
             # otherwise convert to a defaultdict
-            new_dict = self.default_channel_threshold(
+            new_dict = self.default_threshold(
                 self.default_global_threshold)
-            for key, subdict in self.channel_threshold.items():
+            for key, subdict in self.threshold.items():
                 for subkey, subval in subdict.items():
                     new_dict[key][subkey] = subval
-            self.channel_threshold = new_dict
+            self.threshold = new_dict
 
         self.hits_dtype = self.hits_dtype(self.near_samples)
 
@@ -132,8 +137,8 @@ class WaveformHitFinder(H5FlowStage):
         for adc in range(self.nadc):
             for channel in range(self.nchan):
                 threshold_array[adc,
-                                channel] = self.channel_threshold[adc][channel]
-        self.channel_threshold = threshold_array
+                                channel] = self.threshold[adc][channel]
+        self.threshold = threshold_array
 
         # create datasets and references
         self.data_manager.create_dset(self.hits_dset_name,
@@ -147,8 +152,11 @@ class WaveformHitFinder(H5FlowStage):
                                     t_ns_dset=self.t_ns_dset_name,
                                     near_samples=self.near_samples,
                                     busy_channel=self.busy_channel,
-                                    channel_thresholds=self.channel_threshold,
-                                    channel_mask=self.channel_mask
+                                    thresholds=self.threshold,
+                                    mask=self.mask,
+                                    nadc=self.nadc,
+                                    nchannels=self.nchan,
+                                    nsamples=self.nsamples
                                     )
 
     def run(self, source_name, source_slice, cache):
@@ -158,30 +166,26 @@ class WaveformHitFinder(H5FlowStage):
         t = cache[self.t_ns_dset_name].reshape(cache[source_name].shape)[
             't_ns']  # 1:1 relationship
         events = cache[source_name]
-        wvfm_valid = events['wvfm_valid'].astype(bool)
+        t = ma.array(t, mask=~events['wvfm_valid'].astype(bool))        
         wvfm_sn = events['sn']
-        wvfm_ch = events['ch']
-
-        wvfms.mask = wvfms.mask | np.expand_dims(~wvfm_valid, axis=-1)
+        wvfm_ch = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
 
         # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
         peaks = ((np.sign(wvfm_d[..., 1:]) * np.sign(wvfm_d[..., :-1]) < 0)
                  & (np.sign(np.diff(wvfm_d, axis=-1)) <= 0)
-                 & ~np.isin(np.arange(self.nchan), self.channel_mask).reshape(1, 1, -1, 1)
+                 & ~np.isin(np.arange(self.nchan), self.mask).reshape(1, 1, -1, 1)
                  & np.all(~wvfms.mask, axis=-1, keepdims=True))
         peaks = np.where(peaks)  # tuple of (ev, adc, ch, index)
         peak_max = wvfms[..., 1:][peaks]  # waveform value at each peak
 
         # apply threshold
-        threshold_mask = peak_max >= self.channel_threshold[peaks[1:-1]].ravel(
-        )
+        threshold_mask = peak_max >= self.threshold[peaks[1:-1]].ravel()
 
         if np.count_nonzero(threshold_mask):
             # hits are present in event, extract parameters
             peaks = tuple(p[threshold_mask].reshape(-1, 1) for p in peaks)
             peak_max = peak_max[threshold_mask]
-            peak_ns = t[peaks[:3]]
 
             # get neighboring samples
             peak_sample_index = np.clip(peaks[-1].reshape(-1, 1)
@@ -243,8 +247,11 @@ class WaveformHitFinder(H5FlowStage):
             # project to 0-crossing for sub-sample resolution
             rising_edge = rising_edge - np.take_along_axis(
                 busy_sig, rising_edge, axis=-1) / np.take_along_axis(busy_d, rising_edge, axis=-1)
-            peak_busy_ns = (
-                peaks[-1] - rising_edge[peaks[:2]].reshape(-1, 1)) * self.sample_rate
+
+            # use the busy signal rising edge to set the event timestamp
+            peak_ns = np.take_along_axis(t.min(axis=-1), np.argmax(rising_edge, axis=-2), axis=-1)[peaks[:1]]
+
+            hit_ns = (peaks[-1].ravel() - rising_edge[peaks[:2]].ravel()) * self.sample_rate
 
             hit_data = np.empty((len(peaks[-1])), dtype=self.hits_dtype)
             hit_data['adc'] = peaks[1].ravel()
@@ -252,9 +259,9 @@ class WaveformHitFinder(H5FlowStage):
             hit_data['ch'] = wvfm_ch[peaks[:3]].ravel()
             hit_data['ns'] = peak_ns.ravel()
             hit_data['sample_idx'] = peaks[-1].ravel() + 1
-            hit_data['busy_ns'] = peak_busy_ns.ravel()
-            hit_data['samples'] = peak_samples.reshape(-1,
-                                                       2 * self.near_samples + 1)
+            hit_data['busy_ns'] = hit_ns.ravel()
+            hit_data['samples'] = peak_samples.reshape(
+                -1, 2 * self.near_samples + 1)
             hit_data['sum'] = peak_sum.ravel()
             hit_data['max'] = peak_max.ravel()
             hit_data['sum_spline'] = peak_sum_spline.ravel()
