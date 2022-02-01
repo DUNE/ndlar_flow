@@ -2,8 +2,8 @@
 
 flow:
   source: events
-  stages: [delayed_calibration] # uncomment to generate background calibration sample
-  # stages: [delayed_analysis] # uncomment to analyze files
+  # stages: [delayed_calibration] # uncomment to generate background calibration sample
+  stages: [delayed_analysis] # uncomment to analyze files
 
 
 events:
