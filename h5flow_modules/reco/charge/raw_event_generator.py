@@ -426,9 +426,6 @@ class RawEventGenerator(H5FlowGenerator):
                 self.comm.barrier()
             ref_dset, ref_dir = self.data_manager.get_ref(self.mc_tracks_dset_name, self.mc_events_dset_name)
             ref_region = self.data_manager.get_ref_region(self.mc_tracks_dset_name, self.mc_events_dset_name)
-            if self.rank in (0,12):
-                import h5py
-                self.data_manager['mc_truth'].visit(lambda d: print(d) if isinstance(d, h5py.Dataset) else None)
             mc_evs = dereference(ref[:, 1], ref_dset, region=ref_region,
                                  ref_direction=ref_dir, indices_only=True)
 
