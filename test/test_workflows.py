@@ -160,6 +160,27 @@ def combined_file(charge_assoc_file, geometry_file, tmp_h5_file,
 
 
 @pytest.fixture
+def combined_wvfm_file(charge_assoc_wvfm_file, geometry_file, tmp_h5_file,
+                  disabled_channels_list_file, missing_asic_list_file,
+                  track_merging_pdf_file):
+    print('Combined reconstruction...')
+    h5flow.run(['h5flow_yamls/workflows/combined/combined_reconstruction.yaml'],
+               tmp_h5_file,
+               charge_assoc_wvfm_file,
+               verbose=2,
+               end_position=64)
+
+    check_dsets(tmp_h5_file, (
+        'combined/t0/data',
+        'combined/hit_drift/data',
+        'combined/tracklets/data',
+        'combined/tracklets/merged/data'
+    ))
+
+    return tmp_h5_file
+
+
+@pytest.fixture
 def combined_file_no_light(charge_reco_file, geometry_file, tmp_h5_file,
                            disabled_channels_list_file, missing_asic_list_file,
                            track_merging_pdf_file):
@@ -233,15 +254,15 @@ def delayed_signal_analysis_file(charge_assoc_file, tmp_h5_file):
 
 
 @pytest.fixture
-def light_calib_file(charge_assoc_wvfm_file, tmp_h5_file):
+def light_calib_file(combined_wvfm_file, tmp_h5_file):
     print('Stopping muon analysis...')
     h5flow.run(['h5flow_yamls/workflows/combined/light_gain_calibration.yaml'],
                tmp_h5_file,
-               charge_assoc_wvfm_file,
+               combined_wvfm_file,
                verbose=2)
 
     check_dsets(tmp_h5_file, (
-        'light/calib/data'
+        'light/calib/data',
     ))
 
     return tmp_h5_file
