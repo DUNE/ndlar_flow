@@ -11,4 +11,4 @@ resources:
 
 
 charge_light_associator:
-  !include h5flow_yamls/reco/charge/Charge2LightAssociation
+  !include h5flow_yamls/reco/charge/Charge2LightAssociation.yaml
