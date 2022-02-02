@@ -237,7 +237,7 @@ def light_calib_file(charge_assoc_wvfm_file, tmp_h5_file):
     print('Stopping muon analysis...')
     h5flow.run(['h5flow_yamls/workflows/combined/light_gain_calibration.yaml'],
                tmp_h5_file,
-               charge_assoc_file,
+               charge_assoc_wvfm_file,
                verbose=2)
 
     check_dsets(tmp_h5_file, (
