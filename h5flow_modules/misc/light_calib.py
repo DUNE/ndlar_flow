@@ -66,8 +66,12 @@ class LightCalibration(H5FlowStage):
     def __init__(self, **params):
         super(LightCalibration, self).__init__(**params)
 
-        for key,val in self.defaults:
+        for key,val in self.defaults.items():
             setattr(self, key, params.get(key,val))
+
+        self.wvfm_dset_name = params['wvfm_dset_name']
+        self.hits_dset_name = params['hits_dset_name']
+        self.hit_drift_dset_name = params['hit_drift_dset_name']
 
 
     def init(self, source_name):
@@ -118,7 +122,7 @@ class LightCalibration(H5FlowStage):
         hit_drift = hit_drift.reshape(hits.shape)
         hit_xyz = np.concatenate((
             hits['px'][...,np.newaxis],
-            hits['py'][...,np.newaxis]
+            hits['py'][...,np.newaxis],
             hit_drift['z'][...,np.newaxis]), axis=-1)
 
         if len(np.r_[source_slice]) != 0:
