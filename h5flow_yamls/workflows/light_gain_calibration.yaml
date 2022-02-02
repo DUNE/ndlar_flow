@@ -14,9 +14,9 @@ events:
 
 
 resources:
-  - !include h5flow_yamls/resources/run_data.yaml
-  - !include h5flow_yamls/resources/geometry.yaml
-  - !include h5flow_yamls/resources/lar_data.yaml
+  - !include h5flow_yamls/resources/RunData.yaml
+  - !include h5flow_yamls/resources/Geometry.yaml
+  - !include h5flow_yamls/resources/LArData.yaml
 
 
 light_gain_calib:

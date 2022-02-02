@@ -1,0 +1,11 @@
+classname: EventBuilder # reco/charge/event_builder.py
+requires:
+  - 'charge/hits'
+  - 'charge/ext_trigs'
+params:
+  # inputs
+  hits_dset_name: 'charge/hits'
+  ext_trigs_dset_name: 'charge/ext_trigs'
+
+  # output
+  events_dset_name: 'charge/events'

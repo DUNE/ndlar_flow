@@ -1,0 +1,9 @@
+classname: T0Reconstruction # reco/combined/t0_reco.py
+requires:
+  - 'charge/ext_trigs'
+params:
+  # input
+  ext_trigs_dset_name: 'charge/ext_trigs'
+
+  # output
+  t0_dset_name: 'combined/t0'
