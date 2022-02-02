@@ -4,6 +4,8 @@ from math import ceil
 
 from h5flow.core import H5FlowStage, resources, H5FLOW_MPI
 
+from module0_flow.util import units
+
 
 class LightCalibration(H5FlowStage):
     '''
@@ -78,7 +80,7 @@ class LightCalibration(H5FlowStage):
         super(LightCalibration, self).init(source_name)
 
         self.nadc, self.nchannel = self.data_manager.get_dset(self.wvfm_dset_name)['samples'].shape[1:-1]
-        self.calib_dtype = self.calib_dtype(nadc,nchannel)
+        self.calib_dtype = self.calib_dtype(self.nadc, self.nchannel)
 
         self.data_manager.create_dset(self.calib_dset_name, dtype=self.calib_dtype)
         self.data_manager.create_ref(source_name, self.calib_dset_name)
@@ -105,10 +107,10 @@ class LightCalibration(H5FlowStage):
             for adc,ch in channels:
                 calib = self.data_manager.get_dset(self.calib_dset_name)
                 vis_energy = calib['vis_energy'][:,adc,ch]
-                adc = calib['sig'][:,adc,ch]
+                sig = calib['sig'][:,adc,ch]
                 mask = calib['mask'][:,adc,ch].astype(bool)
 
-                gain = ma.array(adc, mask=~mask) / vis_energy * self.gain_prefactor.get(adc,{ch: 1}).get(ch,1)
+                gain = ma.array(sig, mask=~mask) / vis_energy * self.gain_prefactor.get(adc,{ch: 1}).get(ch,1)
 
                 print(f'\t{adc}\t{ch}\t{gain.mean():0.04e}\t{ma.median(gain):0.04e}\t{gain.std():0.04e}')
 
@@ -129,14 +131,14 @@ class LightCalibration(H5FlowStage):
             # remove events that don't pass the basic quality selection
             event_mask = (np.any(~wvfm.mask['samples'].reshape(wvfm.shape + (-1,)))
                 & ((~wvfm.mask['samples']).any(axis=-1).any(axis=-1).any(axis=-1).sum(axis=-1) == 1))
-            hit_in_fid = resources['Geometry'].in_fid(hit_xyz.ravel(), field_cage_fid=self.fid_cut)
+            hit_in_fid = resources['Geometry'].in_fid(hit_xyz.reshape(-1,3), field_cage_fid=self.fid_cut)
             hit_in_fid = hit_in_fid.reshape(hits.shape)
             fid_cut = np.any(~hit_in_fid & ~hits.mask['id'], axis=-1)
             event_mask = event_mask & fid_cut
 
             # calculate event energy
-            lifetime = resources['LArData'].electron_lifetime(event['unix_ts'])[...,np.newaxis]
-            hit_q = hit_q['q'] * self.larpix_gain * np.exp(hit_drift['t_drift'] * resources['RunData'].crs_ticks/lifetime)
+            lifetime = resources['LArData'].electron_lifetime(event['unix_ts'])[0][...,np.newaxis]
+            hit_q = hits['q'] * self.larpix_gain * np.exp(hit_drift['t_drift'] * resources['RunData'].crs_ticks/lifetime)
             hit_e = (hit_q * resources['LArData'].ionization_w # FIXME: assumes MIP for all tracks
                 / resources['LArData'].ionization_recombination(2.12 * units.MeV / units.cm))
 
@@ -151,14 +153,15 @@ class LightCalibration(H5FlowStage):
 
             shape = hits.shape + (self.nadc, self.nchannel)
             acc = resources['Geometry'].solid_angle(hit_xyz.reshape(-1,3), tpc_id.ravel(), det_id.ravel()) / (4 * np.pi)
-            acc = acc * (tpc_id.ravel()[np.newaxis,:]+1 == hits['io_group'].ravel()[:np.newaxis])
+            acc = acc.reshape(shape)
+            acc = acc * (tpc_id[np.newaxis,np.newaxis,...]+1 == hits['iogroup'][...,np.newaxis,np.newaxis])
 
-            vis_charge = (acc * hit_q.ravel()[:,np.newaxis]).reshape(shape).sum(axis=1)
-            vis_energy = (acc * hit_e.ravel()[:,np.newaxis]).reshape(shape).sum(axis=1)
+            vis_charge = (acc * hit_q[...,np.newaxis,np.newaxis]).sum(axis=1)
+            vis_energy = (acc * hit_e[...,np.newaxis,np.newaxis]).sum(axis=1)
 
             # calculate detector signal
             # get first trigger in each event
-            wvfm_samples = wvfm['samples'][:,0,...,self.sample_window[0]:self.sample_window[1]]
+            wvfm_samples = wvfm['samples'][:,0,...,self.sample_window[0]:self.sample_window[1]].reshape(len(event), self.nadc, self.nchannel, -1)
             sig = wvfm_samples.max(axis=-1)
             sig_mask = vis_energy >= self.vis_energy_cut
         else:
