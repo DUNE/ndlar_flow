@@ -28,7 +28,7 @@ wvfm_deconv:
 
 
 wvfm_align:
-  !include h5flow_yamls/reco/light/WaveformAlignment.yaml
+  !include h5flow_yamls/reco/light/WaveformAlign.yaml
 
 
 wvfm_sum:
