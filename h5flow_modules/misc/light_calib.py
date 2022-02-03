@@ -27,6 +27,7 @@ class LightCalibration(H5FlowStage):
          - ``vis_energy_cut``: ``float``, do not collect calibration data on waveforms with less than this amount of expected energy
          - ``gain_prefactor``: ``dict`` of ``dict`` of ``<adc #>: <channel #>: <prefactor value>`` adjusts the gain correction on each channel by this amount (e.g. to account for multiple SiPM per module)
          - ``sample_window``: search between ``[<min sample>, <max sample>]`` for the maximum ADC
+         - ``light_event_dset_name``: ``str``, path to light event dataset
          - ``wvfm_dset_name``: ``str``, path to input waveform dataset
          - ``hit_drift_dset_name``: ``str``, path to charge hit drift data
          - ``hits_dset_name``: ``str``, path to input charge hits dataset
@@ -49,11 +50,11 @@ class LightCalibration(H5FlowStage):
     defaults = dict(
         calib_dset_name='light/calib',
         fid_cut=20.0, # mm
-        vis_energy_cut=1e3, # keV
+        vis_energy_cut=1e2, # keV
         larpix_gain=221, # e/mV
         gain_prefactor=dict(),
-        sample_window=[0,0], # FIXME: figure out a decent value for these
-        )
+        sample_window=[80,100],
+    )
 
     def calib_dtype(self,nadc,nchannel):
         return np.dtype([
@@ -71,6 +72,7 @@ class LightCalibration(H5FlowStage):
         for key,val in self.defaults.items():
             setattr(self, key, params.get(key,val))
 
+        self.light_event_dset_name = params['light_event_dset_name']
         self.wvfm_dset_name = params['wvfm_dset_name']
         self.hits_dset_name = params['hits_dset_name']
         self.hit_drift_dset_name = params['hit_drift_dset_name']
@@ -79,7 +81,21 @@ class LightCalibration(H5FlowStage):
     def init(self, source_name):
         super(LightCalibration, self).init(source_name)
 
-        self.nadc, self.nchannel = self.data_manager.get_dset(self.wvfm_dset_name)['samples'].shape[1:-1]
+        attrs = dict()
+        for key in self.defaults:
+            attrs[key] = getattr(self, key)
+        del attrs['gain_prefactor']
+        attrs['gain_prefactor'] = np.array([(adc, ch, val) for adc in gain
+                                            for ch, val in gain.get(adc, {}).items()],
+                                           dtype=np.dtype([('adc','i4'), ('ch','i4'),('val','f4')]))
+        attrs['light_event_dset_name'] = self.light_event_dset_name
+        attrs['wvfm_dset_name'] = self.wvfm_dset_name
+        attrs['hits_dset_name'] = self.hits_dset_name
+        attrs['hit_drift_dset_name'] = self.hit_drift_dset_name
+        
+        self.data_manager.set_attrs(self.calib_dset_name, **attrs)
+
+        self.nadc, self.nchannel = self.data_manager.get_dset(self.wvfm_dset_name).dtype['samples'].shape[:-1]
         self.calib_dtype = self.calib_dtype(self.nadc, self.nchannel)
 
         self.data_manager.create_dset(self.calib_dset_name, dtype=self.calib_dtype)
@@ -89,19 +105,16 @@ class LightCalibration(H5FlowStage):
     def finish(self, source_name):
         super(LightCalibration, self).finish(source_name)
         if self.rank == 0:
-            print('\tADC\tCHANNEL\tGAIN MEAN (ADC/keV)\tGAIN MED (ADC/keV)\tGAIN STD (ADC/keV)')
+            print('\tADC\tCHANNEL\tGAIN (keV/ADC)')
 
         channels = [(adc,ch) for adc in range(self.nadc) for ch in range(self.nchannel)]
         if H5FLOW_MPI:
-            subset = slice(
-                ceil(len(channels)/self.size) * self.rank,
-                ceil(len(channels)/self.size) * (self.rank+1),
-                )
-            if subset.start < len(channels):
+            self.comm.barrier()
+            subset = slice(self.rank, len(channels), self.size)
+            if self.rank < len(channels):
                 channels = channels[subset]
             else:
                 channels = []
-            self.comm.barrier()
 
         if len(channels):
             for adc,ch in channels:
@@ -110,14 +123,29 @@ class LightCalibration(H5FlowStage):
                 sig = calib['sig'][:,adc,ch]
                 mask = calib['mask'][:,adc,ch].astype(bool)
 
-                gain = ma.array(sig, mask=~mask) / vis_energy * self.gain_prefactor.get(adc,{ch: 1}).get(ch,1)
+                if np.any(mask):
+                    vis_energy_bound = np.percentile(vis_energy[mask],1), np.percentile(vis_energy[mask], 99)
+                    sig_bound = np.percentile(sig[mask],1), np.percentile(sig[mask], 99)
 
-                print(f'\t{adc}\t{ch}\t{gain.mean():0.04e}\t{ma.median(gain):0.04e}\t{gain.std():0.04e}')
+                    mask = (mask
+                            & (vis_energy >= vis_energy_bound[0]) & (vis_energy < vis_energy_bound[1])
+                            & (sig >= sig_bound[0]) & (sig < sig_bound[1]))
+                    if np.any(mask):
+                        gain = np.linalg.lstsq(np.c_[sig[mask]],vis_energy[mask])[0][0] * self.gain_prefactor.get(adc,{ch: 1}).get(ch,1)
+                        print(f'\t{adc}\t{ch}\t{gain:0.04e}')
+                    else:
+                        print(f'\t{adc}\t{ch}\t--')
+                else:
+                    print(f'\t{adc}\t{ch}\t--')                    
+                    
+        if H5FLOW_MPI:
+            self.comm.barrier()
 
 
     def run(self, source_name, source_slice, cache):
         super(LightCalibration, self).run(source_name, source_slice, cache)
         event = cache[source_name]
+        light_event = cache[self.light_event_dset_name]
         wvfm = cache[self.wvfm_dset_name]
         hits = cache[self.hits_dset_name]
         hit_drift = cache[self.hit_drift_dset_name]
@@ -130,7 +158,7 @@ class LightCalibration(H5FlowStage):
         if len(np.r_[source_slice]) != 0:
             # remove events that don't pass the basic quality selection
             event_mask = (np.any(~wvfm.mask['samples'].reshape(wvfm.shape + (-1,)))
-                & ((~wvfm.mask['samples']).any(axis=-1).any(axis=-1).any(axis=-1).sum(axis=-1) == 1))
+                & ((~wvfm.mask['samples']).any(axis=-1).any(axis=-1).any(axis=-1)[...,0].sum(axis=-1) == 1))
             hit_in_fid = resources['Geometry'].in_fid(hit_xyz.reshape(-1,3), field_cage_fid=self.fid_cut)
             hit_in_fid = hit_in_fid.reshape(hits.shape)
             fid_cut = np.any(~hit_in_fid & ~hits.mask['id'], axis=-1)
@@ -151,26 +179,35 @@ class LightCalibration(H5FlowStage):
             tpc_id = resources['Geometry'].tpc_id[(adc.ravel(), ch.ravel())].reshape(shape)
             det_id = resources['Geometry'].det_id[(adc.ravel(), ch.ravel())].reshape(shape)
 
-            shape = hits.shape + (self.nadc, self.nchannel)
-            acc = resources['Geometry'].solid_angle(hit_xyz.reshape(-1,3), tpc_id.ravel(), det_id.ravel()) / (4 * np.pi)
-            acc = acc.reshape(shape)
-            acc = acc * (tpc_id[np.newaxis,np.newaxis,...]+1 == hits['iogroup'][...,np.newaxis,np.newaxis])
+            shape = event.shape + (self.nadc, self.nchannel)
+            vis_charge = np.zeros(shape)
+            vis_energy = np.zeros(shape)
+            for adc in range(self.nadc):
+                for chan in range(self.nchannel):
+                    acc = resources['Geometry'].solid_angle(hit_xyz.reshape(-1,3), tpc_id[adc,chan], det_id[adc,chan]) / (4 * np.pi)
+                    acc = acc.reshape(hits.shape)
 
-            vis_charge = (acc * hit_q[...,np.newaxis,np.newaxis]).sum(axis=1)
-            vis_energy = (acc * hit_e[...,np.newaxis,np.newaxis]).sum(axis=1)
+                    vis_charge[:,adc,chan] += (acc * hit_q).sum(axis=1)
+                    vis_energy[:,adc,chan] += (acc * hit_e).sum(axis=1)
 
             # calculate detector signal
             # get first trigger in each event
             wvfm_samples = wvfm['samples'][:,0,...,self.sample_window[0]:self.sample_window[1]].reshape(len(event), self.nadc, self.nchannel, -1)
             sig = wvfm_samples.max(axis=-1)
-            sig_mask = vis_energy >= self.vis_energy_cut
+            sig_mask = (
+                (vis_energy >= self.vis_energy_cut)
+                & (event_mask[...,np.newaxis,np.newaxis])
+                & (light_event['wvfm_valid'].astype(bool)[:,0].reshape(sig.shape)))
+
+            sig = sig.filled(0)
+            sig_mask = sig_mask.filled(False)
         else:
             vis_charge = np.zeros(event.shape + (self.nadc, self.nchannel), dtype=float)
             vis_energy = np.zeros_like(vis_charge)
             sig = np.zeros_like(vis_charge)
             sig_mask = np.zeros_like(vis_charge, dtype=bool)
 
-        calib_data = np.empty(event.shape, dtype=self.calib_dtype)
+        calib_data = np.zeros(event.shape, dtype=self.calib_dtype)
         calib_data['vis_charge'] = vis_charge
         calib_data['vis_energy'] = vis_energy
         calib_data['sig'] = sig
@@ -181,4 +218,4 @@ class LightCalibration(H5FlowStage):
             calib_data['id'] = np.r_[calib_slice]
         self.data_manager.write_data(self.calib_dset_name, calib_slice, calib_data)
         self.data_manager.write_ref(source_name, self.calib_dset_name,
-            np.c_[source_slice,calib_slice] if len(event) else np.empty((0,2), dtype=int))
+            np.c_[source_slice,calib_slice] if len(event) else np.zeros((0,2), dtype=int))
