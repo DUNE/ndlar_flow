@@ -85,8 +85,8 @@ class LightCalibration(H5FlowStage):
         for key in self.defaults:
             attrs[key] = getattr(self, key)
         del attrs['gain_prefactor']
-        attrs['gain_prefactor'] = np.array([(adc, ch, val) for adc in gain
-                                            for ch, val in gain.get(adc, {}).items()],
+        attrs['gain_prefactor'] = np.array([(adc, ch, val) for adc in self.gain_prefactor
+                                            for ch, val in self.gain_prefactor.get(adc, {}).items()],
                                            dtype=np.dtype([('adc','i4'), ('ch','i4'),('val','f4')]))
         attrs['light_event_dset_name'] = self.light_event_dset_name
         attrs['wvfm_dset_name'] = self.wvfm_dset_name
