@@ -3,7 +3,7 @@
 
 flow:
   source: 'light/events'
-  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_sum, hit_finder]
+  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_sum, hit_finder]
 
   # remove waveforms from output file
   drop: ['light/wvfm', 'light/fwvfm', 'light/deconv', 'light/swvfm']
@@ -11,6 +11,7 @@ flow:
 
 resources:
   - !include h5flow_yamls/resources/RunData.yaml
+  - !include h5flow_yamls/resources/Geometry.yaml
   - !include h5flow_yamls/resources/LArData.yaml
 
 
@@ -24,6 +25,10 @@ wvfm_filt:
 
 wvfm_deconv:
   !include h5flow_yamls/reco/light/WaveformDeconvolution.yaml
+
+
+wvfm_align:
+  !include h5flow_yamls/reco/light/WaveformAlignment.yaml
 
 
 wvfm_sum:

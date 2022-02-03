@@ -1,6 +1,7 @@
 classname: WaveformHitFinder # light/hit_finder.py
 requires:
   - 'light/swvfm'
+  - 'light/swvfm/alignment'
   - 'light/t_ns'
 params:
   # inputs
@@ -12,7 +13,6 @@ params:
 
   # configuration parameters
   near_samples: 2
-  busy_channel: 16
 
   # global hit threshold
   # threshold: 2000

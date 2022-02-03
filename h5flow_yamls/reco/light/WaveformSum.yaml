@@ -2,6 +2,7 @@ classname: WaveformSum # light/wvfm_sum.py
 requires:
   - 'light/events'
   - 'light/deconv'
+  - 'light/deconv/alignment'
 params:
   # input
   wvfm_dset_name: 'light/deconv'
