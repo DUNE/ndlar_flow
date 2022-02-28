@@ -44,8 +44,8 @@ class WaveformSum(H5FlowStage):
     def swvfm_dtype(self, ntpc, ndet, nsamples):
         return np.dtype([('samples', 'f4', (ntpc, ndet, nsamples))])
 
-    def align_dtype(self, ntpc):
-        return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (ntpc,))])
+    def align_dtype(self, ntpc, ndet):
+        return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (ntpc,ndet))])
 
     def __init__(self, **params):
         super(WaveformSum, self).__init__(**params)
@@ -87,7 +87,7 @@ class WaveformSum(H5FlowStage):
         self.data_manager.create_dset(self.swvfm_dset_name, dtype=self.swvfm_dtype)
         self.data_manager.create_ref(source_name, self.swvfm_dset_name)
 
-        self.align_dtype = self.align_dtype(len(np.unique(tpc_ids)))
+        self.align_dtype = self.align_dtype(len(np.unique(tpc_ids)), len(np.unique(det_ids)))
         self.data_manager.create_dset(self.align_dset_name, dtype=self.align_dtype)
         self.data_manager.create_ref(source_name, self.align_dset_name)
 
@@ -108,8 +108,8 @@ class WaveformSum(H5FlowStage):
                 if tpc_id < 0 or det_id < 0:
                     continue
                 mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
-                align_data['sample_idx'][mask,tpc_id] = wvfm_align_data['sample_idx'][mask,adc]
-                align_data['ns'][mask] = wvfm_align_data['sample_idx'][mask,adc]
+                align_data['sample_idx'][mask,tpc_id,det_id] = wvfm_align_data['sample_idx'][mask,adc]
+                align_data['ns'][mask] = wvfm_align_data['ns'][mask]
 
         for adc in range(wvfm_data['samples'].shape[1]):
             for chan in range(wvfm_data['samples'].shape[2]):
