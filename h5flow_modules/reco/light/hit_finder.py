@@ -161,7 +161,7 @@ class WaveformHitFinder(H5FlowStage):
         t = cache[self.t_ns_dset_name].reshape(cache[source_name].shape)[
             't_ns']  # 1:1 relationship
         events = cache[source_name]
-        t = ma.array(t, mask=~events['wvfm_valid'].astype(bool))        
+        t = ma.array(t, mask=~events['wvfm_valid'].astype(bool))
         wvfm_sn = events['sn']
         wvfm_det = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
 

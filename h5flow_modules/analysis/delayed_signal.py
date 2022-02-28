@@ -27,7 +27,6 @@ def score_delayed(tpc, det, rel_time, rel_ampl, bkg_cum_norm_hist, *bins):
     i_det = np.clip(np.digitize(det, bins=bins[1])-1,0,len(bins[1])-2)
     i_time = np.clip(np.digitize(rel_time, bins=bins[2])-1,0,len(bins[2])-2)
     i_ampl = np.clip(np.digitize(rel_ampl, bins=bins[3])-1,0,len(bins[3])-2)
-
     return 1 - bkg_cum_norm_hist[i_tpc, i_det, i_time, i_ampl]
 
 

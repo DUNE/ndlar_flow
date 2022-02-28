@@ -91,7 +91,6 @@ class WaveformSum(H5FlowStage):
         self.data_manager.create_dset(self.align_dset_name, dtype=self.align_dtype)
         self.data_manager.create_ref(source_name, self.align_dset_name)
 
-
     def run(self, source_name, source_slice, cache):
         super(WaveformSum, self).run(source_name, source_slice, cache)
 
