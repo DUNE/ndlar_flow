@@ -240,7 +240,7 @@ class WaveformHitFinder(H5FlowStage):
             hit_data['det'] = wvfm_det[peaks[:3]].ravel()
             hit_data['ns'] = wvfm_align['ns'][peaks[0]].ravel()
             hit_data['sample_idx'] = peaks[-1].ravel() + 1
-            hit_data['busy_ns'] = (peaks[-1] + 1 - wvfm_align['sample_idx'][peaks[:2]]).ravel() * self.sample_rate
+            hit_data['busy_ns'] = (peaks[-1] + 1 - wvfm_align['sample_idx'][peaks[:3]]).ravel() * self.sample_rate
             hit_data['samples'] = peak_samples.reshape(
                 -1, 2 * self.near_samples + 1)
             hit_data['sum'] = peak_sum.ravel()
