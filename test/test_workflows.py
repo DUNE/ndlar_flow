@@ -32,7 +32,7 @@ def charge_event_built_file(charge_source_file, runlist_file, tmp_h5_file):
 
 
 @pytest.fixture
-def charge_reco_file(charge_event_built_file, geometry_file, larpix_config_file,
+def charge_reco_file(charge_event_built_file, geometry_file, light_geometry_file, larpix_config_file,
                      larpix_pedestal_config_file, tmp_h5_file):
     print('Charge event reconstruction...')
     h5flow.run(['h5flow_yamls/workflows/charge/charge_event_reconstruction.yaml'],
@@ -70,7 +70,7 @@ def light_event_built_file(light_source_file, runlist_file,
 
 @pytest.fixture
 def light_reco_file(light_event_built_file, light_noise_file, light_signal_file,
-                    light_impulse_file, tmp_h5_file):
+                    light_impulse_file, light_geometry_file, tmp_h5_file):
     print('Light event reconstruction...')
     h5flow.run(['h5flow_yamls/workflows/light/light_event_reconstruction.yaml'],
                tmp_h5_file,
@@ -87,7 +87,7 @@ def light_reco_file(light_event_built_file, light_noise_file, light_signal_file,
 
 @pytest.fixture
 def light_reco_wvfm_file(light_event_built_file, light_noise_file, light_signal_file,
-                    light_impulse_file, tmp_h5_file):
+                    light_impulse_file, light_geometry_file, tmp_h5_file):
     print('Light event reconstruction...')
     h5flow.run(['h5flow_yamls/workflows/light/light_event_reconstruction-keep_wvfm.yaml'],
                tmp_h5_file,
@@ -139,7 +139,7 @@ def charge_assoc_wvfm_file(charge_reco_file, light_reco_wvfm_file, tmp_h5_file):
 
 
 @pytest.fixture
-def combined_file(charge_assoc_file, geometry_file, tmp_h5_file,
+def combined_file(charge_assoc_file, geometry_file, light_geometry_file, tmp_h5_file,
                   disabled_channels_list_file, missing_asic_list_file,
                   track_merging_pdf_file):
     print('Combined reconstruction...')
@@ -160,7 +160,7 @@ def combined_file(charge_assoc_file, geometry_file, tmp_h5_file,
 
 
 @pytest.fixture
-def combined_wvfm_file(charge_assoc_wvfm_file, geometry_file, tmp_h5_file,
+def combined_wvfm_file(charge_assoc_wvfm_file, geometry_file, light_geometry_file, tmp_h5_file,
                   disabled_channels_list_file, missing_asic_list_file,
                   track_merging_pdf_file):
     print('Combined reconstruction...')
@@ -181,7 +181,7 @@ def combined_wvfm_file(charge_assoc_wvfm_file, geometry_file, tmp_h5_file,
 
 
 @pytest.fixture
-def combined_file_no_light(charge_reco_file, geometry_file, tmp_h5_file,
+def combined_file_no_light(charge_reco_file, geometry_file, light_geometry_file, tmp_h5_file,
                            disabled_channels_list_file, missing_asic_list_file,
                            track_merging_pdf_file):
     print('Combined reconstruction...')
@@ -202,7 +202,7 @@ def combined_file_no_light(charge_reco_file, geometry_file, tmp_h5_file,
 
 
 @pytest.fixture
-def broken_track_sim_file(combined_file_no_light, geometry_file, tmp_h5_file,
+def broken_track_sim_file(combined_file_no_light, geometry_file, light_geometry_file, tmp_h5_file,
                           disabled_channels_list_file, missing_asic_list_file):
     print('Broken track simulation...')
     h5flow.run(['h5flow_yamls/workflows/combined/broken_track_sim.yaml'],
@@ -220,7 +220,7 @@ def broken_track_sim_file(combined_file_no_light, geometry_file, tmp_h5_file,
 
 
 @pytest.fixture
-def stopping_muon_analysis_file(combined_file, geometry_file,
+def stopping_muon_analysis_file(combined_file, geometry_file, light_geometry_file,
                                 proton_range_table, muon_range_table,
                                 electron_lifetime_file, tmp_h5_file):
     print('Stopping muon analysis...')
