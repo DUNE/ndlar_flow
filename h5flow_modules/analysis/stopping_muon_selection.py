@@ -34,7 +34,7 @@ class StoppingMuonSelection(H5FlowStage):
     class_version = '2.0.0'
 
     defaults = dict(
-        fid_cut=30, # mm
+        fid_cut=20, # mm
         cathode_fid_cut=20, # mm
         anode_fid_cut=20, # mm
         projected_length_cut=30, # mm
@@ -62,6 +62,7 @@ class StoppingMuonSelection(H5FlowStage):
     event_sel_dset_name = 'event_sel_reco'
     event_profile_dset_name = 'event_profile'
     event_sel_truth_dset_name = 'event_sel_truth'
+    hit_profile_dset_name = 'hit_profile_id'
 
     event_sel_dtype = np.dtype([('sel', 'u1'),
                                 ('stop', 'u1'),
@@ -87,6 +88,8 @@ class StoppingMuonSelection(H5FlowStage):
             ('proton_likelihood', 'f8', (profile_bins, 2)),
             ('mip_likelihood', 'f8', (profile_bins, 2)),
         ])
+
+    hit_profile_id_dtype = 'i4'
 
     def __init__(self, **params):
         super(StoppingMuonSelection, self).__init__(**params)
@@ -125,6 +128,9 @@ class StoppingMuonSelection(H5FlowStage):
                                       self.event_sel_dtype)
         self.data_manager.create_dset(f'{self.path}/{self.event_profile_dset_name}',
                                       self.event_profile_dtype)
+        self.data_manager.create_dset(f'{self.path}/{self.hit_profile_dset_name}',
+                                      self.hit_profile_id_dtype)
+        self.data_manager.create_ref(f'{self.path}/{self.hit_profile_dset_name}', self.hits_dset_name)
         if self.is_mc:
             self.data_manager.create_dset(f'{self.path}/{self.event_sel_truth_dset_name}',
                                           self.event_sel_dtype)
@@ -593,7 +599,7 @@ class StoppingMuonSelection(H5FlowStage):
 
             :param pixel_pitch: float, pixel pitch for dx correction
 
-            :returns: ``tuple`` of masked arrays, shape: (..., m). ``dq``, ``dn``, ``start_pt``, ``end_pt``, ``pos``
+            :returns: ``tuple`` of masked arrays, shape: (..., m). ``dq``, ``dn``, ``start_pt``, ``end_pt``, ``pos``, ``hit_prof_idx``
         '''
         orig_len = len(tracks)
         if mask is not None:
@@ -611,6 +617,7 @@ class StoppingMuonSelection(H5FlowStage):
         dq = np.zeros((len(tracks), int(max_range / dx)))
         dn = np.zeros((len(tracks), int(max_range / dx)), dtype=int)
         pos = np.zeros((len(tracks), int(max_range / dx), 3))
+        hit_prof_idx = np.full((len(tracks), hit_q.shape[-1]), -1, dtype=int)
         s_min = np.full((len(tracks), int(max_range / dx)), max_range + 1.)
         s_max = np.full((len(tracks), int(max_range / dx)), -max_range - 1.)
 
@@ -668,6 +675,7 @@ class StoppingMuonSelection(H5FlowStage):
 
             # and create a histogram
             i_bin = np.expand_dims(np.clip(np.digitize(hit_s, bins=bins) - 1, 0, len(bins) - 1), axis=-1)
+            np.place(hit_prof_idx, traj_hit_mask, i_bin)
             # (N, nhit, nbin)
             q_mask = ((i_bin == np.expand_dims(np.indices(dq.shape)[-1], axis=-2))
                       & np.expand_dims(traj_hit_mask, axis=-1)
@@ -715,6 +723,7 @@ class StoppingMuonSelection(H5FlowStage):
         r_end_pt = np.zeros((orig_len,) + end_pt.shape[1:])
         r_pos = np.zeros((orig_len,) + pos.shape[1:])
         r_ds = np.zeros((orig_len,) + s_min.shape[1:])
+        r_hit_prof_idx = np.zeros((orig_len,) + hit_prof_idx.shape[1:])
 
         np.place(r_dq, np.broadcast_to(mask[..., np.newaxis], r_dq.shape), dq)
         np.place(r_dn, np.broadcast_to(mask[..., np.newaxis], r_dn.shape), dn)
@@ -722,8 +731,9 @@ class StoppingMuonSelection(H5FlowStage):
         np.place(r_start_pt, np.broadcast_to(mask[..., np.newaxis, np.newaxis], r_start_pt.shape), start_pt)
         np.place(r_end_pt, np.broadcast_to(mask[..., np.newaxis, np.newaxis], r_end_pt.shape), end_pt)
         np.place(r_pos, np.broadcast_to(mask[..., np.newaxis, np.newaxis], r_pos.shape), pos)
+        np.place(r_hit_prof_idx, np.broadcast_to(mask[..., np.newaxis], r_hit_prof_idx.shape), hit_prof_idx.shape)
 
-        return r_dq, r_dn, r_ds, r_start_pt, r_end_pt, r_pos
+        return r_dq, r_dn, r_ds, r_start_pt, r_end_pt, r_pos, r_hit_prof_idx
 
     @staticmethod
     def mean_neg_loglikelihood(r0, range_table, profile_n, profile_dqdx, profile_rr, profile_pos):
@@ -820,7 +830,7 @@ class StoppingMuonSelection(H5FlowStage):
         active_proj_length = self.extrapolated_intersection(tracks.ravel()['trajectory'][..., -2, :], tracks.ravel()['trajectory'][..., -1, :])
         active_proj_length = active_proj_length.reshape(tracks.shape)
         active_proj_length = np.take_along_axis(active_proj_length, np.argmax(seed_track_mask, axis=-1)[...,np.newaxis], axis=-1).reshape(events.shape)
-        
+
         event_is_stopping = ((t0['type'] != 0)
                              & (veto_q < self.veto_charge_cut)
                              & (active_proj_length > self.projected_length_cut)
@@ -829,13 +839,10 @@ class StoppingMuonSelection(H5FlowStage):
 
         # now check the likelihood of a stopping muon
         # first generated the dQ/dx profile
-        dq, dn, ds, start_pt, end_pt, pos = self.profiled_dqdx(tracks, seed_pt, hit_xyz,
-                                                               hit_q,
-                                                               mask=event_is_stopping,
-                                                               dx=self.profile_dx,
-                                                               search_dx=self.profile_search_dx,
-                                                               max_range=self.profile_max_range,
-                                                               pixel_pitch=resources['Geometry'].pixel_pitch)
+        dq, dn, ds, start_pt, end_pt, pos, hit_prof_idx = self.profiled_dqdx(
+            tracks, seed_pt, hit_xyz, hit_q, mask=event_is_stopping,
+            dx=self.profile_dx, search_dx=self.profile_search_dx,
+            max_range=self.profile_max_range, pixel_pitch=resources['Geometry'].pixel_pitch)
         profile_n = dn
         profile_dqdx = dq / ma.maximum(ds, resources['Geometry'].pixel_pitch) * (dn > 0)
         profile_dqdx[dn <= 0] = 0
@@ -996,6 +1003,8 @@ class StoppingMuonSelection(H5FlowStage):
             f'{self.path}/{self.event_sel_dset_name}', source_slice)
         event_profile_slice = self.data_manager.reserve_data(
             f'{self.path}/{self.event_profile_dset_name}', source_slice)
+        event_hits_slice = self.data_manager.reserve_data(
+            f'{self.path}/{self.hit_profile_dset_name}', int((~hits['id'].mask).sum()))
         if self.is_mc:
             event_sel_truth_slice = self.data_manager.reserve_data(
                 f'{self.path}/{self.event_sel_truth_dset_name}',
@@ -1006,6 +1015,10 @@ class StoppingMuonSelection(H5FlowStage):
                                      event_sel_slice, event_sel)
         self.data_manager.write_data(f'{self.path}/{self.event_profile_dset_name}',
                                      event_profile_slice, event_profile)
+        self.data_manager.write_data(f'{self.path}/{self.hit_profile_dset_name}',
+                                     event_hits_slice, hit_prof_idx[~hits['id'].mask])
+        self.data_manager.write_ref(f'{self.path}/{self.hit_profile_dset_name}',
+                self.hits_dset_name, np.c_[event_hits_slice, hits['id'].compressed()])
         if self.is_mc:
             self.data_manager.write_data(
                 f'{self.path}/{self.event_sel_truth_dset_name}',

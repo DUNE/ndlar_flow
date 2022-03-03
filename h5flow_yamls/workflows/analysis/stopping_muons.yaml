@@ -2,7 +2,7 @@
 
 flow:
   source: events
-  stages: [truth_labels, stopping_muon_sel]
+  stages: [truth_labels, stopping_muon_sel, michel_id]
 
 
 resources:
@@ -58,6 +58,9 @@ stopping_muon_sel:
     truth_trajectories_dset_name: 'mc_truth/trajectories'
 
     # configuration parameters
+    fid_cut: 20 # mm
+    cathode_fid_cut: 20 # mm
+
     profile_dx: 22 # mm
     larpix_gain:
       mc: 250 # e/mV
@@ -72,4 +75,18 @@ stopping_muon_sel:
       mc: [1.46942669, -2.6902787,  69.34914266]
       medm: [1.46942669, -2.6902787,  69.34914266]
       high: [1.73174021, -3.62691494, 25.45025883]
-    
+
+michel_id:
+  classname: MichelID
+  requires:
+    - 'charge/hits'
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
+    - name: 'analysis/stopping_muons/hit_profile_id'
+      path: ['charge/hits', 'analysis/stopping_muons/hit_profile_id']
+  params:
+    # configuration parameters
+    michel_e_cut: 10000 # keV
+    michel_nhit_cut: 5
+    generate_likelihood_pdf: True #False
+
