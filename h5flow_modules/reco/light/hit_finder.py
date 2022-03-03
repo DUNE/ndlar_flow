@@ -24,20 +24,18 @@ class WaveformHitFinder(H5FlowStage):
          - ``t_ns_dset_name``: ``str``, path to corrected light PPS timestamps
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``near_samples``: ``int``, number of neighboring samples to keep
-         - ``busy_channel``: ``int``, channel to extract ADC busy signal (used for timing)
-         - ``threshold``: ``dict`` of ``dict`` containing sets of ``adc_index: {channel_index: adc_threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
-         - ``mask``: ``list`` of ``int``, channels to ignore when finding hits
+         - ``threshold``: ``dict`` of ``dict`` containing sets of ``tpc_index: {channel_index: threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
+         - ``mask``: ``list`` of ``int``, detectors to ignore when finding hits
 
-         Both ``wvfm_dset_name`` and ``t_ns_dset_name`` are required in the cache.
+         Both ``wvfm_dset_name``, ``{wvfm_dset_name}/alignment``, and ``t_ns_dset_name`` are required in the cache.
 
          Requires RunData resource in workflow.
 
          ``hits`` datatype::
 
             id          u4,             unique identifier
-            adc         u1,             adc index (1:1 w/ sn)
-            sn          u4,             serial number of adc
-            ch          u1,             channel id
+            tpc         u1,             tpc index
+            det         u1,             detector index
             sample_idx  u2,             sample index of peak within waveform
             ns          f8,             PPS timestamp of peak [ns]
             busy_ns     f8,             timestamp of peak relative to busy rising edge [ns]
@@ -52,11 +50,10 @@ class WaveformHitFinder(H5FlowStage):
             fwhm_spline f4,             spline FWHM [ns]
 
     '''
-    class_version = '1.2.0'
+    class_version = '2.0.0'
 
     default_hits_dset_name = 'light/hits'
     default_near_samples = 3
-    default_busy_channel = 0
     default_interpolation = 256
     default_global_threshold = 2000
     default_mask = []
@@ -67,9 +64,8 @@ class WaveformHitFinder(H5FlowStage):
     def hits_dtype(self, near_samples):
         return np.dtype([
             ('id', 'u4'),
-            ('adc', 'u1'),
-            ('sn', 'u4'),
-            ('ch', 'u1'),
+            ('tpc', 'u1'),
+            ('det', 'u1'),
             ('sample_idx', 'u2'),
             ('ns', 'f8'),
             ('busy_ns', 'f8'),
@@ -88,13 +84,12 @@ class WaveformHitFinder(H5FlowStage):
         super(WaveformHitFinder, self).__init__(**params)
 
         self.wvfm_dset_name = params.get('wvfm_dset_name')
+        self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
         self.t_ns_dset_name = params.get('t_ns_dset_name')
         self.hits_dset_name = params.get('hits_dset_name',
                                          self.default_hits_dset_name)
         self.near_samples = params.get('near_samples',
                                        self.default_near_samples)
-        self.busy_channel = params.get('busy_channel',
-                                       self.default_busy_channel)
         self.mask = np.array(params.get('mask',
                                                 self.default_mask))
         self.interpolation = params.get('interpolation',
@@ -128,16 +123,16 @@ class WaveformHitFinder(H5FlowStage):
                             / units.ns)
 
         # get waveform shape information
-        self.nadc = wvfm_dset.dtype['samples'].shape[0]
-        self.nchan = wvfm_dset.dtype['samples'].shape[1]
+        self.ntpc = wvfm_dset.dtype['samples'].shape[0]
+        self.ndet = wvfm_dset.dtype['samples'].shape[1]
         self.nsamples = wvfm_dset.dtype['samples'].shape[2]
 
         # convert channel thresholds into an array
-        threshold_array = np.zeros((self.nadc, self.nchan, 1))
-        for adc in range(self.nadc):
-            for channel in range(self.nchan):
-                threshold_array[adc,
-                                channel] = self.threshold[adc][channel]
+        threshold_array = np.zeros((self.ntpc, self.ndet, 1))
+        for tpc in range(self.ntpc):
+            for det in range(self.ndet):
+                threshold_array[tpc,
+                                det] = self.threshold[tpc][det]
         self.threshold = threshold_array
 
         # create datasets and references
@@ -151,11 +146,10 @@ class WaveformHitFinder(H5FlowStage):
                                     wvfm_dset=self.wvfm_dset_name,
                                     t_ns_dset=self.t_ns_dset_name,
                                     near_samples=self.near_samples,
-                                    busy_channel=self.busy_channel,
                                     thresholds=self.threshold,
                                     mask=self.mask,
-                                    nadc=self.nadc,
-                                    nchannels=self.nchan,
+                                    ntpc=self.ntpc,
+                                    ndet=self.ndet,
                                     nsamples=self.nsamples
                                     )
 
@@ -163,20 +157,21 @@ class WaveformHitFinder(H5FlowStage):
         super(WaveformHitFinder, self).run(source_name, source_slice, cache)
         wvfms = cache[self.wvfm_dset_name].reshape(cache[source_name].shape)[
             'samples']  # 1:1 relationship
+        wvfm_align = cache[self.wvfm_align_dset_name].reshape(cache[source_name].shape)
         t = cache[self.t_ns_dset_name].reshape(cache[source_name].shape)[
             't_ns']  # 1:1 relationship
         events = cache[source_name]
-        t = ma.array(t, mask=~events['wvfm_valid'].astype(bool))        
+        t = ma.array(t, mask=~events['wvfm_valid'].astype(bool))
         wvfm_sn = events['sn']
-        wvfm_ch = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
+        wvfm_det = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
 
         # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
         peaks = ((np.sign(wvfm_d[..., 1:]) * np.sign(wvfm_d[..., :-1]) < 0)
                  & (np.sign(np.diff(wvfm_d, axis=-1)) <= 0)
-                 & ~np.isin(np.arange(self.nchan), self.mask).reshape(1, 1, -1, 1)
+                 & ~np.isin(np.arange(self.ndet), self.mask).reshape(1, 1, -1, 1)
                  & np.all(~wvfms.mask, axis=-1, keepdims=True))
-        peaks = np.where(peaks)  # tuple of (ev, adc, ch, index)
+        peaks = np.where(peaks)  # tuple of (ev, tpc, det, index)
         peak_max = wvfms[..., 1:][peaks]  # waveform value at each peak
 
         # apply threshold
@@ -237,29 +232,15 @@ class WaveformHitFinder(H5FlowStage):
                                                mask=lhm_outlier_mask)
             peak_uhm_spline_samples = ma.array(peak_uhm_spline_samples,
                                                mask=uhm_outlier_mask)
-            peak_fwhm_spline = peak_uhm_spline_samples.mean(axis=-1)
-            - peak_lhm_spline_samples.mean(axis=-1)
-
-            # find busy signal rising edge
-            busy_sig = wvfms[..., self.busy_channel, :]
-            busy_d = np.diff(busy_sig, axis=-1)
-            rising_edge = np.expand_dims(np.argmax(busy_d, axis=-1), axis=-1)
-            # project to 0-crossing for sub-sample resolution
-            rising_edge = rising_edge - np.take_along_axis(
-                busy_sig, rising_edge, axis=-1) / np.take_along_axis(busy_d, rising_edge, axis=-1)
-
-            # use the busy signal rising edge to set the event timestamp
-            peak_ns = np.take_along_axis(t.min(axis=-1), np.argmax(rising_edge, axis=-2), axis=-1)[peaks[:1]]
-
-            hit_ns = (peaks[-1].ravel() - rising_edge[peaks[:2]].ravel()) * self.sample_rate
+            peak_fwhm_spline = (peak_uhm_spline_samples.mean(axis=-1)
+                - peak_lhm_spline_samples.mean(axis=-1))
 
             hit_data = np.empty((len(peaks[-1])), dtype=self.hits_dtype)
-            hit_data['adc'] = peaks[1].ravel()
-            hit_data['sn'] = wvfm_sn[peaks[:2]].ravel()
-            hit_data['ch'] = wvfm_ch[peaks[:3]].ravel()
-            hit_data['ns'] = peak_ns.ravel()
+            hit_data['tpc'] = peaks[1].ravel()
+            hit_data['det'] = wvfm_det[peaks[:3]].ravel()
+            hit_data['ns'] = wvfm_align['ns'][peaks[0]].ravel()
             hit_data['sample_idx'] = peaks[-1].ravel() + 1
-            hit_data['busy_ns'] = hit_ns.ravel()
+            hit_data['busy_ns'] = (peaks[-1] + 1 - wvfm_align['sample_idx'][peaks[:3]]).ravel() * self.sample_rate
             hit_data['samples'] = peak_samples.reshape(
                 -1, 2 * self.near_samples + 1)
             hit_data['sum'] = peak_sum.ravel()

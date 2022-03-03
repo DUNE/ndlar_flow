@@ -8,8 +8,8 @@ from h5flow import H5FLOW_MPI
 from h5flow.core import H5FlowStage
 
 
-def fill_hist(adc, det, rel_time, rel_ampl, bkg_hist, *bins):
-    pairs = np.concatenate([np.expand_dims(adc,-1), np.expand_dims(det,-1), np.expand_dims(rel_time,-1), np.expand_dims(rel_ampl,-1)], axis=-1)
+def fill_hist(tpc, det, rel_time, rel_ampl, bkg_hist, *bins):
+    pairs = np.concatenate([np.expand_dims(tpc,-1), np.expand_dims(det,-1), np.expand_dims(rel_time,-1), np.expand_dims(rel_ampl,-1)], axis=-1)
     return np.histogramdd(pairs.reshape(-1,4), bins=bins)[0] + bkg_hist
 
 
@@ -22,13 +22,12 @@ def normalize_hist(hist, sigma=1):
     return cum_norm_hist
 
 
-def score_delayed(adc, det, rel_time, rel_ampl, bkg_cum_norm_hist, *bins):
-    i_adc = np.clip(np.digitize(adc, bins=bins[0])-1,0,len(bins[0])-2)
+def score_delayed(tpc, det, rel_time, rel_ampl, bkg_cum_norm_hist, *bins):
+    i_tpc = np.clip(np.digitize(tpc, bins=bins[0])-1,0,len(bins[0])-2)
     i_det = np.clip(np.digitize(det, bins=bins[1])-1,0,len(bins[1])-2)
     i_time = np.clip(np.digitize(rel_time, bins=bins[2])-1,0,len(bins[2])-2)
     i_ampl = np.clip(np.digitize(rel_ampl, bins=bins[3])-1,0,len(bins[3])-2)
-
-    return 1 - bkg_cum_norm_hist[i_adc, i_det, i_time, i_ampl]
+    return 1 - bkg_cum_norm_hist[i_tpc, i_det, i_time, i_ampl]
 
 
 class DelayedSignal(H5FlowStage):
@@ -50,20 +49,20 @@ class DelayedSignal(H5FlowStage):
 
 
     @staticmethod
-    def prompt_dtype(nadc, ndet):
+    def prompt_dtype(ntpc, ndet):
         return np.dtype([
             ('valid', 'u1'),
             ('ns', 'f8'),
-            ('ampl', 'f8', (nadc, ndet)),
+            ('ampl', 'f8', (ntpc, ndet)),
             ])
 
 
     @staticmethod
-    def delayed_dtype(nadc, ndet):
+    def delayed_dtype(ntpc, ndet):
         return np.dtype([
             ('ns', 'f8'),
             ('delay', 'f8'),
-            ('ampl', 'f8', (nadc, ndet)),
+            ('ampl', 'f8', (ntpc, ndet)),
             ('score', 'f8'),
             ('valid', 'u1')
             ])
@@ -81,15 +80,15 @@ class DelayedSignal(H5FlowStage):
     def init(self, source_name):
         super(DelayedSignal, self).init(source_name)
 
-        # get number of adcs/detectors
+        # get number of tpcs/detectors
         hit_attrs = self.data_manager.get_attrs(self.hits_dset_name)
-        nadc = hit_attrs['nadc']
-        ndet = hit_attrs['nchannels']
-        self.prompt_dtype = self.prompt_dtype(nadc, ndet)
-        self.delayed_dtype = self.delayed_dtype(nadc, ndet)
+        ntpc = hit_attrs['ntpc']
+        ndet = hit_attrs['ndet']
+        self.prompt_dtype = self.prompt_dtype(ntpc, ndet)
+        self.delayed_dtype = self.delayed_dtype(ntpc, ndet)
 
         # add set of bins for each detector
-        self.bkg_bins = [np.arange(nadc+1), np.arange(ndet+1)] + self.bkg_bins
+        self.bkg_bins = [np.arange(ntpc+1), np.arange(ndet+1)] + self.bkg_bins
 
         # set prompt signal thresholds
         thresholds = hit_attrs['thresholds']
@@ -162,7 +161,7 @@ class DelayedSignal(H5FlowStage):
             (hits['busy_ns'] + hits['ns_spline'] >= self.prompt_window[0])
             & (hits['busy_ns'] + hits['ns_spline'] < self.prompt_window[1])
             & (np.around(hits['ns']) == first_trigger_ns)
-            & (hits['max_spline'] >= self.prompt_thresholds[hits['adc'].filled(0), hits['ch'].filled(0)].reshape(hits.shape))
+            & (hits['max_spline'] >= self.prompt_thresholds[hits['tpc'].filled(0), hits['det'].filled(0)].reshape(hits.shape))
             )
         hit_ns = hits['ns'] + hits['busy_ns'] + hits['ns_spline']
         hit_ns.mask = hit_ns.mask | ~prompt_hit_mask
@@ -170,7 +169,7 @@ class DelayedSignal(H5FlowStage):
         prompt_ampl = np.zeros(hits.shape[0:1] + self.prompt_dtype['ampl'].shape)
         for i in range(prompt_ampl.shape[1]):
             for j in range(prompt_ampl.shape[2]):
-                hit_submask = (hits['adc'] == i) & (hits['ch'] == j) & prompt_hit_mask
+                hit_submask = (hits['tpc'] == i) & (hits['det'] == j) & prompt_hit_mask
                 if np.any(hit_submask):
                     prompt_ampl[:,i,j] = (hit_submask * hits['max_spline']).sum(axis=-1)
                     prompt_ampl[~np.any(hit_submask, axis=-1),i,j] = 0
@@ -184,7 +183,7 @@ class DelayedSignal(H5FlowStage):
         hit_rel_valid = np.zeros(hits.shape, dtype=bool)
         for i in range(prompt_ampl.shape[1]):
             for j in range(prompt_ampl.shape[2]):
-                hit_submask = ((hits['adc'] == i) & (hits['ch'] == j)
+                hit_submask = ((hits['tpc'] == i) & (hits['det'] == j)
                     & ~prompt_hit_mask
                     & (hits['ns'] + hits['busy_ns'] + hits['ns_spline'] - prompt_ns[:,np.newaxis] < self.delayed_window[1])
                     & (hits['ns'] + hits['busy_ns'] + hits['ns_spline'] - prompt_ns[:,np.newaxis] >= self.delayed_window[0]))
@@ -201,14 +200,14 @@ class DelayedSignal(H5FlowStage):
         if self.calibration_flag:
             # fill likelihood histogram
             self.bkg_hist = fill_hist(
-                hits['adc'][hit_rel_valid], hits['ch'][hit_rel_valid],
+                hits['tpc'][hit_rel_valid], hits['det'][hit_rel_valid],
                 hit_rel_ns[hit_rel_valid], hit_rel_ampl[hit_rel_valid],
                 self.bkg_hist, *self.bkg_bins)
 
         else:
             # look for delayed signal
             hit_score = score_delayed(
-                hits['adc'], hits['ch'],
+                hits['tpc'], hits['det'],
                 hit_rel_ns * hit_rel_valid, hit_rel_ampl * hit_rel_valid,
                 self.bkg_cum_norm_hist, *self.bkg_bins)
 
@@ -248,7 +247,7 @@ class DelayedSignal(H5FlowStage):
             delayed_ampl = np.zeros_like(prompt_ampl)
             for i in range(delayed_ampl.shape[1]):
                 for j in range(delayed_ampl.shape[2]):
-                    hit_submask = (hits['adc'] == i) & (hits['ch'] == j) & hit_in_window
+                    hit_submask = (hits['tpc'] == i) & (hits['det'] == j) & hit_in_window
                     if np.any(hit_submask):
                         delayed_ampl[:,i,j] = (hit_submask * hits['max_spline']).sum(axis=-1)
                         delayed_ampl[~np.any(hit_submask, axis=-1),i,j] = 0

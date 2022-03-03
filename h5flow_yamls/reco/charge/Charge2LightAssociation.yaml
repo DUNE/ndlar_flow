@@ -1,0 +1,14 @@
+classname: Charge2LightAssociation # reco/charge/charge2light.py
+requires:
+  - 'charge/ext_trigs'
+  - name: 'charge/ext_trigs_idcs'
+    path: 'charge/ext_trigs'
+    index_only: True
+params:
+  # inputs
+  light_event_dset_name: 'light/events'
+  ext_trigs_dset_name: 'charge/ext_trigs'
+
+  # configuration parameters
+  unix_ts_window: 3
+  ts_window: 10

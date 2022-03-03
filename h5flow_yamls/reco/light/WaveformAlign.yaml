@@ -1,0 +1,7 @@
+classname: WaveformAlign
+requires:
+    - 'light/deconv'
+params:
+    wvfm_dset_name: 'light/deconv'
+    busy_channel:
+        All: 0

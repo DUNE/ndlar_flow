@@ -1,0 +1,20 @@
+classname: TrackletReconstruction # reco/combined/tracklet_reco.py
+requires:
+  - 'charge/hits'
+  - name: 'combined/hit_drift'
+    path: ['charge/hits', 'combined/hit_drift']
+params:
+  # inputs
+  hits_dset_name: 'charge/hits'
+  hit_drift_dset_name: 'combined/hit_drift'
+
+  # output
+  tracklet_dset_name: 'combined/tracklets'
+
+  # configuration parameters
+  dbscan_eps: 25
+  dbscan_min_samples: 5
+  ransac_min_samples: 2
+  ransac_residual_threshold: 8
+  ransac_max_trials: 10
+  trajectory_pts: 16

@@ -1,0 +1,31 @@
+classname: WaveformHitFinder # light/hit_finder.py
+requires:
+  - 'light/swvfm'
+  - 'light/swvfm/alignment'
+  - 'light/t_ns'
+params:
+  # inputs
+  wvfm_dset_name: 'light/swvfm'
+  t_ns_dset_name: 'light/t_ns'
+
+  # output
+  hits_dset_name: 'light/hits' # new dataset to produce
+
+  # configuration parameters
+  near_samples: 2
+
+  # global hit threshold
+  # threshold: 500
+
+  # individual detector threshold
+  #   <adc>: { <det #>: <threshold> }, determined as 3 x mean(std(samples 25:50))
+  threshold:
+    0: {  0: 605.2062, 1: 136.5390, 2: 167.1929, 3: 189.0789,
+          4: 600.7896, 5: 140.3284, 6: 165.0596, 7: 182.7784,
+          8: 555.9109, 9: 218.7787, 10: 394.6519, 11: 129.7704,
+          12: 531.8600, 13: 136.5708, 14: 177.3912, 15: 338.6423,}
+    1: {  0: 513.9062, 1: 148.8334, 2: 170.2456, 3: 145.7354,
+          4: 432.4131, 5: 138.3909, 6: 194.3165, 7: 171.2630,
+          8: 0.0000, 9: 137.1913, 10: 173.1882, 11: 148.2387,
+          12: 435.9421, 13: 179.9740, 14: 228.2152, 15: 157.5978,}
+

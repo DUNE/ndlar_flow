@@ -83,6 +83,14 @@ def geometry_file(pytestconfig, tmp_path_factory):
 
 
 @ pytest.fixture
+def light_geometry_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/'
+                                      'light_module_desc-0.0.0.yaml')))
+
+
+@ pytest.fixture
 def larpix_config_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
