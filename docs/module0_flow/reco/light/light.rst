@@ -25,6 +25,22 @@ waveform deconvolution
    :members:
    :show-inheritance:
 
+waveform summation
+------------------
+
+.. autoapimodule:: h5flow_modules.reco.light.wvfm_sum
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
+waveform alignment
+------------------
+
+.. autoapimodule:: h5flow_modules.reco.light.wvfm_align
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
 waveform hit finding
 --------------------
 
@@ -40,6 +56,14 @@ waveform summary
 ----------------
 
 .. autoapimodule:: h5flow_modules.reco.light.wvfm_summary
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
+light detector calibration
+--------------------------
+
+.. autoapimodule:: h5flow_modules.misc.light_calib
    :undoc-members:
    :members:
    :show-inheritance:

@@ -76,7 +76,7 @@ charge event building
 
 To run charge event builder::
 
-    mpiexec h5flow -c h5flow_yamls/reco/charge/charge_event_building.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/reco/charge/charge_event_building.yaml \
         -i <input file> -o <output file>
 
 This generates the ``charge/raw_events`` and ``charge/packets`` datasets. The
@@ -87,7 +87,7 @@ charge event reconstruction
 
 To run charge reconstruction::
 
-    mpiexec h5flow -c h5flow_yamls/reco/charge/charge_event_reconstruction.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/reco/charge/charge_event_reconstruction.yaml \
         -i <input file> -o <output file>
 
 This generates ``charge/packets_corr_ts``, ``charge/ext_trigs``, ``charge/hits``,
@@ -99,7 +99,7 @@ light event building
 
 To run light event builder::
 
-    mpiexec h5flow -c h5flow_yamls/reco/light/light_event_building.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/reco/light/light_event_building.yaml \
         -i <input file> -o <output file>
 
 This generates the ``light/events`` and ``light/wvfm`` datasets. The input file
@@ -111,7 +111,7 @@ light event reconstruction
 
 To run light reconstruction::
 
-    mpiexec h5flow -c h5flow_yamls/reco/light/light_event_reconstruction.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/reco/light/light_event_reconstruction.yaml \
         -i <input file> -o <output file>
 
 This generates ``light/t_ns`` and ``light/hits`` datasets. The input file is a light event built ``module0_flow``
@@ -122,7 +122,7 @@ charge-to-light association
 
 To associate charge events to light events, run::
 
-    mpiexec h5flow -c h5flow_yamls/reco/charge/charge_light_association.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/reco/charge/charge_light_association.yaml \
         -i <input file> -o <output file>
 
 This creates references between ``charge/ext_trigs`` and ``light/events`` as well
@@ -144,7 +144,7 @@ merged event reconstruction
 
 To generate T0s and tracks, run::
 
-    mpiexec h5flow -c h5flow_yamls/reco/combined/combined_reconstruction.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/reco/combined/combined_reconstruction.yaml \
         -i <input file> -o <output file>
 
 minimal staging
@@ -156,16 +156,16 @@ version 0.1.8, you can combine them into only two commands::
     output_file=<output file>
 
     mpiexec h5flow -c \
-        h5flow_yamls/reco/light/light_event_building.yaml \
-        h5flow_yamls/reco/light/light_event_reconstruction.yaml \
+        h5flow_yamls/workflows/reco/light/light_event_building.yaml \
+        h5flow_yamls/workflows/reco/light/light_event_reconstruction.yaml \
         -i <input light file> \
         -o $output_file
 
     mpiexec h5flow -c \
-        h5flow_yamls/reco/charge/charge_event_building.yaml \
-        h5flow_yamls/reco/charge/charge_event_reconstruction.yaml \
-        h5flow_yamls/reco/charge/charge_light_association.yaml \
-        h5flow_yamls/reco/combined/combined_reconstruction.yaml \
+        h5flow_yamls/workflows/reco/charge/charge_event_building.yaml \
+        h5flow_yamls/workflows/reco/charge/charge_event_reconstruction.yaml \
+        h5flow_yamls/workflows/reco/charge/charge_light_association.yaml \
+        h5flow_yamls/workflows/reco/combined/combined_reconstruction.yaml \
         -i <input charge file> \
         -o $output_file
 
