@@ -4,18 +4,21 @@ flow:
   source: events
   stages: [truth_labels, stopping_muon_sel, michel_id]
 
+
 resources:
-  - !include h5flow_yamls/resources/run_data.yaml
-  - !include h5flow_yamls/resources/lar_data.yaml
-  - !include h5flow_yamls/resources/geometry.yaml
-  - !include h5flow_yamls/resources/particle_data.yaml
-  - !include h5flow_yamls/resources/disabled_channels.yaml
+  - !include h5flow_yamls/resources/RunData.yaml
+  - !include h5flow_yamls/resources/LArData.yaml
+  - !include h5flow_yamls/resources/Geometry.yaml
+  - !include h5flow_yamls/resources/ParticleData.yaml
+  - !include h5flow_yamls/resources/DisabledChannels.yaml
+
 
 events:
   classname: H5FlowDatasetLoopGenerator
   dset_name: 'charge/events'
   params:
     chunk_size: 32
+
 
 truth_labels:
   classname: MuonCaptureTruthLabels # analysis/muon_capture_truth_labels.py
@@ -34,6 +37,7 @@ truth_labels:
 
     # output
     truth_labels_dset_name: 'analysis/muon_capture/truth_labels'
+
 
 stopping_muon_sel:
   classname: StoppingMuonSelection # analysis/stopping_muon_selection.py
@@ -56,6 +60,7 @@ stopping_muon_sel:
     # configuration parameters
     fid_cut: 20 # mm
     cathode_fid_cut: 20 # mm
+
     profile_dx: 22 # mm
     larpix_gain:
       mc: 250 # e/mV
@@ -66,7 +71,8 @@ stopping_muon_sel:
       medm: 1.024
       high: 1.030
     density_dx_correction_params:
-      mc: [1.13515744, -2.6721365,  47.73539495]
+      #mc: [1.13515744, -2.6721365,  47.73539495]
+      mc: [1.46942669, -2.6902787,  69.34914266]
       medm: [1.46942669, -2.6902787,  69.34914266]
       high: [1.73174021, -3.62691494, 25.45025883]
 

@@ -5,11 +5,12 @@ from module0_flow.resources.geometry import Geometry
 
 
 @pytest.fixture
-def geo(tmp_h5_file, geometry_file):
+def geo(tmp_h5_file, geometry_file, light_geometry_file):
     dm = H5FlowDataManager(tmp_h5_file)
 
     geo = Geometry(data_manager=dm, classname='Geometry',
-                   crs_geometry_file=geometry_file)
+                   crs_geometry_file=geometry_file,
+                   lrs_geometry_file=light_geometry_file)
 
     return geo
 
