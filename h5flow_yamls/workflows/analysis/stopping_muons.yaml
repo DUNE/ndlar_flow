@@ -67,13 +67,13 @@ stopping_muon_sel:
       medm: 221 # e/mV
       high: 221 # e/mV
     curvature_rr_correction:
-      mc: 1.027
-      medm: 1.024
+      mc: 1.0173259837
+      medm: 1.0143151891
       high: 1.030
     density_dx_correction_params:
       #mc: [1.13515744, -2.6721365,  47.73539495]
-      mc: [1.46942669, -2.6902787,  69.34914266]
-      medm: [1.46942669, -2.6902787,  69.34914266]
+      medm: [1.75457167,  -3.51691849, 109.78693745]
+      mc:   [1.54540381,  -3.53689009, 133.36754227]
       high: [1.73174021, -3.62691494, 25.45025883]
 
 michel_id:
@@ -86,7 +86,5 @@ michel_id:
       path: ['charge/hits', 'analysis/stopping_muons/hit_profile_id']
   params:
     # configuration parameters
-    michel_e_cut: 10000 # keV
-    michel_nhit_cut: 5
-    generate_likelihood_pdf: True #False
-
+    generate_likelihood_pdf: False #True
+    likelihood_pdf_filename: h5flow_data/michel_pdf-0.1.0.npz
