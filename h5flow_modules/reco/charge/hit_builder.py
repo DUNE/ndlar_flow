@@ -68,6 +68,8 @@ class HitBuilder(H5FlowStage):
     configuration = defaultdict(lambda: dict(
         vref_mv=1300,
         vcm_mv=288
+        #vref_mv=1344.14,
+        #vcm_mv=297.89
     ))
 
     #: pixel pedestal value
@@ -154,8 +156,8 @@ class HitBuilder(H5FlowStage):
                             + packets_arr['chip_id'].astype(int)) * 64 \
                 + packets_arr['channel_id'].astype(int)
             hit_uniqueid_str = hit_uniqueid.astype(str)
-            xy = resources['Geometry'].pixel_xy[packets_arr['io_group'],
-                                                packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
+            xy = resources['Geometry'].pixel_xy[packets_arr['chip_id'], packets_arr['channel_id']]
+#            xy = resources['Geometry'].pixel_xy[packets_arr['io_group'], packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             vref = np.array(
                 [self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
             vcm = np.array([self.configuration[unique_id]['vcm_mv']

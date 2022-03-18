@@ -2,7 +2,7 @@
 
 flow:
   source: events
-  stages: [t0_reco, drift_reco, tracklet_reco, tracklet_merge]
+  stages: [t0_reco, drift_reco, tracklet_reco] #, tracklet_merge]
   drop: []
 
 events:
@@ -15,7 +15,7 @@ resources:
   - !include h5flow_yamls/resources/run_data.yaml
   - !include h5flow_yamls/resources/geometry.yaml
   - !include h5flow_yamls/resources/lar_data.yaml
-  - !include h5flow_yamls/resources/disabled_channels.yaml
+#  - !include h5flow_yamls/resources/disabled_channels.yaml
 
 t0_reco:
   classname: T0Reconstruction # reco/combined/t0_reco.py
@@ -85,7 +85,7 @@ tracklet_merge:
     merged_dset_name: 'combined/tracklets/merged'
 
     # configuration parameters
-    pdf_filename: 'joint_pdf-2_0_1.npz'
+    pdf_filename: '/sdf/group/neutrino/cyifan/slacube_ana/util/joint_pdf-2_0_1.npz'
     # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/joint_pdf-2_0_1.npz
     pvalue_cut: 0.05
     max_neighbors: 5

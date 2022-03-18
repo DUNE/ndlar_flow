@@ -221,9 +221,13 @@ class LArData(H5FlowResource):
         # get electric field from run data
         e_field = resources['RunData'].e_field
 
-        # calculate drift velocity
-        self.data['v_drift'] = self.electron_mobility(e_field) * e_field
+        # get temperature from run data
+        temp = resources['RunData'].temp
 
+        # calculate drift velocity
+        self.data['v_drift'] = self.electron_mobility(e_field, temp) * e_field
+
+        print("vdrift: ", self.v_drift)
         return self.v_drift
 
     def electron_mobility(self, e, t=87.17):

@@ -1,5 +1,6 @@
 classname: Geometry # resources/geometry.py
 params:
   path: 'geometry_info'
-  crs_geometry_file: 'multi_tile_layout-2.2.16.yaml'
+  crs_geometry_file: '/sdf/group/neutrino/cyifan/slacube_ana/util/layout-2.4.0.yaml'
+  #crs_geometry_file: '/sdf/group/neutrino/cyifan/slacube_ana/geo/multi_tile_layout-2.2.16.yaml'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/multi_tile_layout-2.2.16.yaml

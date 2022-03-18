@@ -213,6 +213,11 @@ class RunData(H5FlowResource):
         return self.data['e_field']
 
     @property
+    def temp(self):
+        ''' LAr temperature in K '''
+        return self.data['temp']
+
+    @property
     def light_samples(self):
         ''' Number of light waveform samples per trigger '''
         return self.data['light_samples']

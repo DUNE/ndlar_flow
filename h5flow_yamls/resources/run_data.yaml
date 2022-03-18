@@ -1,12 +1,13 @@
 classname: RunData # resources/run_data.py
 params:
   path: 'run_info'
-  runlist_file: 'runlist.txt'
+  #runlist_file: '/sdf/group/neutrino/larpix/dataset/dummy_runlist.txt'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/runlist.txt
   defaults:
     charge_filename: '-'
     light_filename: '-'
     e_field: 0.05 # kV/mm
+    temp: 90 # K
     light_samples: 256
     charge_thresholds: 'medm'
     is_mc: False
