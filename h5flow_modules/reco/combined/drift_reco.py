@@ -70,7 +70,6 @@ class DriftReconstruction(H5FlowStage):
         hits = cache[self.hits_dset_name]
 
         drift_t = hits['ts'] - t0['ts']
-        print("vdrift here: ", resources['LArData'].v_drift)
         drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks)
         z = resources['Geometry'].get_z_coordinate(hits['iogroup'], hits['iochannel'], drift_d)
 

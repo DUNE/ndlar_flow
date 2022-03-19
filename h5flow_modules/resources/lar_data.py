@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import logging
 import scipy.interpolate as interpolate
 import os
@@ -213,21 +214,62 @@ class LArData(H5FlowResource):
         return self.density
 
     @property
-    def v_drift(self):
-        ''' Electron drift velocity in kV/mm '''
+    def v_drift(self, mode=1):
+        ''' 
+            Electron drift velocity in mm/us
+            
+            mode:
+            1. LArSoft (commonly used, a lot hard codded numbers here) 
+               Ref: https://internal.dunescience.org/doxygen/lardataalg_2lardataalg_2DetectorInfo_2DetectorPropertiesStandard_8cxx_source.html
+            2. BNL mobility measurement (see function electron_mobility())
+ 
+        '''
         if 'v_drift' in self.data:
             return self.data['v_drift']
 
         # get electric field from run data
-        e_field = resources['RunData'].e_field
+        e_field = resources['RunData'].e_field 
 
         # get temperature from run data
         temp = resources['RunData'].temp
 
-        # calculate drift velocity
-        self.data['v_drift'] = self.electron_mobility(e_field, temp) * e_field
+        # get the mode for v_drift model
+        mode = resources['RunData'].mode
 
-        print("vdrift: ", self.v_drift)
+        # calculate drift velocity
+        if mode == 1:
+            # for low eField use mobility, but the parametrization is different than the BNL one
+            e_field = e_field / (units.kV / units.cm)
+            tdiff = temp - 87.302
+            eFit = 0.0938163 - 0.0052563 * tdiff - 0.000146981 * np.power(tdiff,2)
+            muFit = 5.183987 + 0.01447761 * tdiff - 0.0034972 * np.power(tdiff,2) - 0.0005162374 * np.power(tdiff,3)
+
+            # parameters for drift speed fit
+            # p1, p2, p3, p4, p5, p6, t0
+            ICARUS_params = np.array([-0.04640231, 0.0171171, 1.881246, 0.9940772, 0.0117183, 4.202141, 105.7491])
+            Walkowiak_params = np.array([-0.01481, -0.0075, 0.141, 12.4, 1.627, 0.317, 90.371])
+
+            # for low eField, vdrift model uses mobility * eField 
+            if e_field < eFit:
+                self.data['v_drift'] = muFit * e_field
+
+            # for intermediate eField, vdrift model uses ICARUS parametrization
+            elif e_field < 0.619:
+                self.data['v_drift'] = self.drift_speed_helper(ICARUS_params, e_field, temp)
+       
+            # for eField between two model ranges
+            elif e_field < 0.699:
+                self.data['v_drift'] = (0.699 - e_field) / 0.08 * self.drift_speed_helper(ICARUS_params, e_field, temp) \
+                                     + (e_field - 0.619) / 0.08 * self.drift_speed_helper(Walkowiak_params, e_field, temp)
+
+            # for high eField, vdrift model uses Walkowiak parametrization
+            else:
+                self.data['v_drift'] = self.drift_speed_helper(Walkowiak_params, e_field, temp)
+
+        if mode == 2:
+            self.data['v_drift'] = self.electron_mobility(e_field, temp) * e_field
+
+        print(f"vdrift: {self.v_drift} mm/us")
         return self.v_drift
 
     def electron_mobility(self, e, t=87.17):
@@ -260,3 +302,15 @@ class LArData(H5FlowResource):
         mu = mu * ((units.cm**2) / units.V / units.s)
 
         return mu
+
+    def drift_speed_helper(self, params, e, t=87.17):
+        '''
+            Help function for drift speed calculation  w.r.t LAr temperature and electric field.
+        '''
+        p1, p2, p3, p4, p5, p6, t0 = params
+
+        vdrift = (1 + p1 * (t - t0) ) * (p3 * e * math.log(1 + abs(p4) / e) + p5 * np.power(e,p6)) + p2 * (t-t0)
+
+        return vdrift
+
+        

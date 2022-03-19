@@ -208,6 +208,11 @@ class RunData(H5FlowResource):
         return self.data['light_filename']
 
     @property
+    def mode(self):
+        ''' choices for vdrift models '''
+        return self.data['mode']
+
+    @property
     def e_field(self):
         ''' TPC electric field in kV/mm '''
         return self.data['e_field']
