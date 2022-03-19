@@ -223,6 +223,11 @@ class RunData(H5FlowResource):
         return self.data['temp']
 
     @property
+    def is_singlecube(self):
+        ''' Single readout tile flag, ``True`` if the detector has only one readout tile '''
+        return self.data['is_singlecube']
+
+    @property
     def light_samples(self):
         ''' Number of light waveform samples per trigger '''
         return self.data['light_samples']

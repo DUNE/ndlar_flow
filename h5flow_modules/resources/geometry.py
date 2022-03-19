@@ -196,6 +196,9 @@ class Geometry(H5FlowResource):
         with open(self.crs_geometry_file) as gf:
             geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
 
+        if 'multitile_layout_version' in geometry_yaml.keys() == resources['RunData'].is_singlecube:
+            raise ValueError("The tile layout yaml and is_singlecube flag in run_data yaml is incompatible.")
+
         if 'multitile_layout_version' not in geometry_yaml.keys():
 #            raise RuntimeError('Only multi-tile geometry configurations are accepted')
 

@@ -9,6 +9,7 @@ params:
     mode: 1 # choices of vdrift models: 1. LArSoft 2.BNL mobility measurement 
     e_field: 0.05 # kV/mm
     temp: 90 # K
+    is_singlecube: True
     light_samples: 256
     charge_thresholds: 'medm'
     is_mc: False
