@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.ma as ma
 import scipy.ndimage as ndimage
+import logging
 
 from h5flow import H5FLOW_MPI
 from h5flow.core import H5FlowStage, resources
@@ -59,13 +60,13 @@ class MichelID(H5FlowStage):
         drift_dset_name='combined/hit_drift',
         profile_dset_name='analysis/stopping_muons/event_profile',
         stopping_sel_dset_name='analysis/stopping_muons/event_sel_reco',
-        hit_prof_idx_dset_name='analysis/stopping_muons/hit_profile_id',
+        hit_prof_dset_name='analysis/stopping_muons/hit_profile',
 
         hit_label_dset_name='analysis/michel_id/hit_michel_label',
         michel_label_dset_name='analysis/michel_id/michel_label',
 
-        michel_e_cut=5 * units.MeV,
-        michel_nhit_cut=5,
+        michel_e_cut=6.5 * units.MeV,
+        michel_nhit_cut=6,
 
         likelihood_pdf_filename='michel_pdf-{version}.npz',
         generate_likelihood_pdf=False,
@@ -88,7 +89,7 @@ class MichelID(H5FlowStage):
         ('muon_flag', 'u1')
     ])
 
-    likelihood_bins = (np.linspace(-1, 1, 50), np.linspace(-1, 1, 50), np.geomspace(0.1, 1000, 50))
+    likelihood_bins = (np.linspace(-1, 1, 50), np.linspace(-1, 1, 50), np.geomspace(2, 1000, 50))
 
     def __init__(self, **params):
         super(MichelID, self).__init__(**params)
@@ -103,6 +104,9 @@ class MichelID(H5FlowStage):
         self.larpix_gain = self.data_manager.get_attrs('/'.join(self.stopping_sel_dset_name.split('/')[:-1]))['larpix_gain']
         michel_dedx = resources['ParticleData'].landau_peak(50 * units.MeV, resources['ParticleData'].e_mass, resources['Geometry'].pixel_pitch)
         self.recomb_factor = 1 / resources['LArData'].ionization_recombination(michel_dedx)
+        if self.rank == 0:
+            logging.warn(f'Using larpix gain of {self.larpix_gain:0.04f}')
+            logging.warn(f'Using Michel recombination factor of {1/self.recomb_factor:0.04f}')
 
         # load likelihood function
         if not self.generate_likelihood_pdf:
@@ -150,7 +154,10 @@ class MichelID(H5FlowStage):
         if len(ev):
             # load hit xyz positions
             hit_drift = cache[self.drift_dset_name].reshape(hits.shape)
-            hit_prof_idx = cache[self.hit_prof_idx_dset_name].reshape(hits.shape)
+            hit_prof = cache[self.hit_prof_dset_name].reshape(hits.shape)
+            hit_prof.mask = hit_prof.mask['idx'] | (hit_prof['idx'] == -1) # ignore non-profiled hits
+            hit_prof_idx = hit_prof['idx']
+            hit_prof_rr = hit_prof['rr']
             hit_xyz = np.concatenate([
                 np.expand_dims(hits['px'], -1), np.expand_dims(hits['py'], -1),
                 np.expand_dims(hit_drift['z'], -1)], axis=-1)
@@ -160,40 +167,57 @@ class MichelID(H5FlowStage):
             prof = self.data_manager[self.profile_dset_name, source_slice].reshape(ev.shape)
             sel_mask = stopping_sel['sel'].astype(bool)
 
-            # find start and end points
-            mu_start = np.take_along_axis(
-                prof['profile_pos'], np.expand_dims(np.argmax(prof['profile_n'] > 0, axis=-1), (1, 2)), axis=1)
-            mu_end = stopping_sel['stop_pt'] + stopping_sel['stop_pt_corr']
-            last_profile_rr = ma.array(prof['profile_rr'], mask=(prof['profile_n'] <= 0) | (prof['profile_rr'] < 0))
+            # find end points
+            #mu_end = stopping_sel['stop_pt'] + stopping_sel['stop_pt_corr']
+            hit_stop_d = np.linalg.norm(hit_xyz - (stopping_sel['stop_pt'] + stopping_sel['stop_pt_corr'])[...,np.newaxis,:], axis=-1)
+            mu_end = np.take_along_axis(
+                hit_xyz, np.expand_dims(np.argmax(hits['q'] * (hit_stop_d < 22), axis=-1), (1,2)), axis=1)
+            mu_end = mu_end.reshape(ev.shape + (3,))
+            no_near_hits_mask = ~((hit_stop_d < 22).any(axis=-1))
+            mu_end[no_near_hits_mask] = (stopping_sel['stop_pt'] + stopping_sel['stop_pt_corr'])[no_near_hits_mask]
+            #mu_end = np.take_along_axis(
+            #    hit_xyz, np.expand_dims(np.argmin(np.abs(hit_prof_rr), axis=-1), (1,2)), axis=1)
+            last_profile_rr = ma.array(prof['profile_rr'], mask=(prof['profile_n'] <= 0) | (prof['profile_rr'] < 0), shrink=False)
             last_profile_rr = last_profile_rr.min(axis=-1, keepdims=True)
             last_profile_rr = last_profile_rr.filled(0.)
+            profile_dr = np.diff(prof['profile_pos'], axis=-2)
+            profile_cosine = np.sum(profile_dr[...,:-1,:] * profile_dr[...,1:,:], axis=-1)
+            profile_cosine /= np.clip(np.linalg.norm(profile_dr[...,:-1,:], axis=-1) * np.linalg.norm(profile_dr[...,1:,:], axis=-1),1e-15,None)
+            profile_cosine = np.concatenate([np.ones(profile_cosine.shape[:-1]+(1,)), profile_cosine], axis=-1)
             gap_mask = (prof['profile_rr'] <= last_profile_rr) & (prof['profile_n'] > 0)
-            gap_mask[...,:-1] = gap_mask[...,:-1] & (prof['profile_n'][...,1:] == 0)
-
+            gap_mask[...,:-1] = gap_mask[...,:-1] & (
+                (prof['profile_n'][...,1:] == 0)
+                | (-np.diff(prof['profile_rr'], axis=-1) > 35)
+                | ((profile_cosine < 0.5) & (prof['profile_rr'][...,:-1] < -35)))
+            
+            gap_profile_idx = np.argmax(gap_mask, axis=-1)
+            hit_in_gap_profile_pt = (hit_prof_idx == gap_profile_idx[...,np.newaxis])
+            hit_in_gap_profile_pt = ma.array(hit_in_gap_profile_pt, mask=~hit_in_gap_profile_pt)
+            last_michel_hit_idx = np.argmin(hit_prof_rr * hit_in_gap_profile_pt, axis=-1)
             michel_end = np.take_along_axis(
-                prof['profile_pos'], np.expand_dims(np.argmax(gap_mask, axis=-1), (1,2)), axis=1)
+                hit_xyz, np.expand_dims(last_michel_hit_idx, (1,2)), axis=1)
+            michel_end[~np.any(hit_in_gap_profile_pt, axis=-1)] = mu_end[~np.any(hit_in_gap_profile_pt, axis=-1)][...,np.newaxis,:]
 
-            mu_start = mu_start.reshape(ev.shape + (-1,))
-            mu_end = mu_end.reshape(ev.shape + (-1,))
-            michel_end = michel_end.reshape(ev.shape + (-1,))
+            mu_end = mu_end.reshape(ev.shape + (3,))
+            michel_end = michel_end.reshape(ev.shape + (3,))
 
             # find axes
-            mu_dir = mu_start - mu_end
+            # use charge weighted average position for hits near end point
+            hit_dr = hit_xyz - mu_end[...,np.newaxis,:]
+            hit_d = np.linalg.norm(hit_dr, axis=-1)
+            muon_flag = (hit_prof_rr >= 0)
+            
+            muon_range_mask = np.broadcast_to(np.expand_dims(muon_flag & (hit_d < 200), axis=-1), hit_xyz.shape)
+            michel_range_mask = np.broadcast_to(np.expand_dims((hit_prof_rr < 0) & (hit_d < 200), axis=-1), hit_xyz.shape)
+            
+            michel_dir = ma.average(ma.array(hit_dr, mask=~michel_range_mask), weights=np.broadcast_to(hits['q'][...,np.newaxis], hit_dr.shape), axis=1)
+            michel_dir /= np.clip(np.linalg.norm(michel_dir, axis=-1, keepdims=True), 1e-15, None)
+            mu_dir = ma.average(ma.array(hit_dr, mask=~muon_range_mask), weights=np.broadcast_to(hits['q'][...,np.newaxis], hit_dr.shape), axis=1)
             mu_dir /= np.clip(np.linalg.norm(mu_dir, axis=-1, keepdims=True), 1e-15, None)
 
-            michel_dir = michel_end - mu_end
-            # if no track-able michel, use charge weighted average position not included in parent muon for michel axis
-            no_michel_mask = np.all(michel_end == stopping_sel['stop_pt'], axis=-1)
-            hit_profile_mask = np.broadcast_to(np.expand_dims(
-                (hit_prof_idx == -1) | ((hit_prof_idx >= np.argmax(prof['profile_rr'] <= 0, axis=-1)[...,np.newaxis]))
-                , -1), hit_xyz.shape)
-            muon_flag = ~hit_profile_mask.any(axis=-1)
-            michel_dir[no_michel_mask] = (ma.average(ma.array(hit_xyz, mask=~hit_profile_mask),
-                                                     weights=np.broadcast_to(hits['q'][...,np.newaxis], hit_xyz.shape), axis=1)
-                          - mu_end)[no_michel_mask]
-            michel_dir /= np.clip(np.linalg.norm(michel_dir, axis=-1, keepdims=True), 1e-15, None)
             # special case: michel start and end are the same, and no non-profiled hits (will call all of these non-michel hits)
-            no_hit_mask = ~hit_profile_mask.any(axis=-1).any(axis=-1)
+            #no_hit_mask = ~hit_profile_mask.any(axis=-1).any(axis=-1)
+            no_hit_mask = ~michel_range_mask.any(axis=-1).any(axis=-1)            
 
             # calculate likelihood parameters
             hit_cos_mu = np.sum((hit_xyz - mu_end[:, np.newaxis, :])
@@ -222,12 +246,12 @@ class MichelID(H5FlowStage):
                     axis=-2)
                 hit_traj = hit_traj.reshape(hits.shape)
                 hit_label_truth = (
-                    ((hit_traj['trackID'] != event_truth['stopping_track_id']))
+                    (hit_traj['trackID'] != event_truth['stopping_track_id'])
                     # | (hit_traj['parentID'] == event_truth['michel_track_id']))
                     & event_truth['michel'].astype(bool))
 
-                michel_mask = sel_mask & ~no_hit_mask
-                hist_mask = (~hit_label_truth.mask & ~muon_flag)
+                michel_mask = sel_mask & ~no_hit_mask # event mask
+                hist_mask = (~hit_label_truth.mask & ~muon_flag) # hit mask
                 sig, bkg = fill_likelihood_pdf(
                     hit_cos_mu[michel_mask][hist_mask[michel_mask]],
                     hit_cos_e[michel_mask][hist_mask[michel_mask]],
@@ -237,19 +261,17 @@ class MichelID(H5FlowStage):
                 self.michel_likelihood_args[0] = sig
                 self.michel_likelihood_args[1] = bkg
 
-            # grab michel energy (from stopping muon selection)
-            michel_e = stopping_sel['remaining_e']
-
             # use michel tag to reconstruct energy
             lifetime = resources['LArData'].electron_lifetime(ev['unix_ts'].astype(float))[0]
             lifetime = lifetime[..., np.newaxis]
             hit_q = self.larpix_gain * hits['q'] / np.exp(-hit_drift['t_drift'] * resources['RunData'].crs_ticks / lifetime)
             hit_e = hit_q * resources['LArData'].ionization_w * self.recomb_factor
             michel_tagged_e = (((hit_score > 0) & ~muon_flag) * hit_e).sum(axis=-1)
+            michel_e = (hit_e * ~muon_flag).sum(axis=-1)
 
             # cut on variables
             michel_flag = ((np.sum((hit_score > 0) & ~muon_flag, axis=-1) > self.michel_nhit_cut)
-                           | (michel_tagged_e > self.michel_e_cut))
+                           & (michel_tagged_e > self.michel_e_cut))
 
         # create output arrays
         michel_label = np.empty(ev.shape, dtype=self.michel_label_dtype)
