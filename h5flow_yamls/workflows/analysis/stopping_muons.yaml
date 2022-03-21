@@ -71,8 +71,8 @@ stopping_muon_sel:
       medm: 1.0
       high: 1.0
     density_dx_correction_params:
-      medm: [1.06938198,  1.52281043, 122.37072575]
-      mc:   [0.90327591,  1.32293714, 182.45456797]
+      medm: [  1.32677493,   1.34213283, 119.1455561 ]
+      mc:   [  1.00982736,   1.2525887,  130.32791666]
       high: [1.06938198,  1.52281043, 122.37072575]
 
 michel_id:
@@ -81,8 +81,8 @@ michel_id:
     - 'charge/hits'
     - name: 'combined/hit_drift'
       path: ['charge/hits', 'combined/hit_drift']
-    - name: 'analysis/stopping_muons/hit_profile_id'
-      path: ['charge/hits', 'analysis/stopping_muons/hit_profile_id']
+    - name: 'analysis/stopping_muons/hit_profile'
+      path: ['charge/hits', 'analysis/stopping_muons/hit_profile']
   params:
     # configuration parameters
     generate_likelihood_pdf: False
