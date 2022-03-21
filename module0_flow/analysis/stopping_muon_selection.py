@@ -420,8 +420,10 @@ class StoppingMuonSelection(H5FlowStage):
         angle = np.zeros_like(packed_dqdx)
         norm = np.linalg.norm(d[..., 1:, :], axis=-1) * np.linalg.norm(d[..., :-1, :], axis=-1)
         if any_valid and angle.shape[-1] > 1:
-            angle[..., 1:-1] = np.sum(d[..., 1:, :] * d[..., :-1, :], axis=-1) / np.maximum(norm, 1e-15)
-            angle = np.arccos(angle) 
+            angle[..., 2:] = np.sum(d[..., 1:, :] * d[..., :-1, :], axis=-1) / np.maximum(norm, 1e-15)
+            angle = np.arccos(angle)
+            angle[..., 0] = 0
+            angle[..., 1] = 0
             #angle[..., 0] = angle[..., 1]
             #angle[..., -1] = angle[..., -2]
 
@@ -435,6 +437,7 @@ class StoppingMuonSelection(H5FlowStage):
         #if any_valid:
         #    np.put_along_axis(angle_term, np.argmin(np.abs(packed_rr), axis=-1)[..., np.newaxis], -np.log(2), axis=-1)
         if any_valid:
+            # don't count the last profile point towards score
             np.put_along_axis(rv_angle_term, np.argmin(np.abs(profile_rr), axis=-1)[..., np.newaxis], -np.log(2), axis=-1)
 
         return dqdx_term, rv_angle_term * mcs_weight
