@@ -594,6 +594,16 @@ class StoppingMuonSelection(H5FlowStage):
         curr_direction = ma.array(hit_xyz - seed_pt, mask=~local_mask).mean(axis=-2)
         curr_direction /= np.clip(np.linalg.norm(curr_direction, axis=-1, keepdims=True),1e-15,None)
         hit_mask = hit_mask & ~local_mask[...,0]
+
+        disabled_channel_lut = resources.get('DisabledChannels', None)
+        if disabled_channel_lut is not None:
+            disabled_channel_lut = disabled_channel_lut.disabled_channel_lut
+            pixel_x = np.sort(np.unique(resources['Geometry'].pixel_xy.compress((0,))))
+            pixel_y = np.sort(np.unique(resources['Geometry'].pixel_xy.compress((1,))))
+            io_group,io_channel,_,_ = resources['Geometry'].pixel_xy.keys()
+            tile_id = resources['Geometry'].tile_id[(io_group,io_channel)]
+            anode_z,idx = np.unique(resources['Geometry'].anode_z[(tile_id,)], return_index=True)
+            tpc_lookup = io_group[idx]
         
         i = 0
         while (i < sample_points-1) and np.any(hit_mask):
@@ -606,14 +616,31 @@ class StoppingMuonSelection(H5FlowStage):
             dt = np.linalg.norm(dr - dl * curr_direction[...,np.newaxis,:], axis=-1, keepdims=True)
             local_mask = (dl < dx) & (dt < dx/2) & hit_mask[...,np.newaxis] & forward
 
-            # if none found, expand search radius
-            search_factor = 1
-            while np.any(~(local_mask[...,0]).any(axis=-1) & hit_mask.any(axis=-1)):
+            # if none found, expand search
+            if np.any(~((local_mask[...,0]).any(axis=-1)) & hit_mask.any(axis=-1)):
                 r = np.linalg.norm(dr, axis=-1, keepdims=True)
-                local_mask = (local_mask | ((r < search_factor * search_dx) & hit_mask[...,np.newaxis] & ~(local_mask).any(axis=-2, keepdims=True)))
-                search_factor += 1
-                if search_factor > 5:
-                    break
+
+                # if disabled channels list present and next step is a disabled region, search in a longer line first
+                if disabled_channel_lut is not None:
+                    proposed_step = traj[...,i-1,:] + curr_direction * dx
+                    proposed_pixel_x = pixel_x[np.clip(np.digitize(proposed_step[...,0], bins=pixel_x)-1, 0, len(pixel_x)-1).astype(int)].astype(int)
+                    proposed_pixel_y = pixel_y[np.clip(np.digitize(proposed_step[...,1], bins=pixel_y)-1, 0, len(pixel_y)-1).astype(int)].astype(int)
+                    proposed_tpc = tpc_lookup[np.argmin(proposed_step[...,2,np.newaxis] - anode_z.reshape([1,]*(proposed_step.ndim-1)+[-1,]), axis=-1)].astype(int)
+                    step_is_disabled = disabled_channel_lut[(proposed_tpc,proposed_pixel_x,proposed_pixel_y)]
+                    local_mask = local_mask | (
+                        (dl < 2*dx) & (dt < 3*dx/4) & hit_mask[...,np.newaxis] & forward
+                        & step_is_disabled[...,np.newaxis,np.newaxis]
+                        & ~(local_mask).any(axis=-2, keepdims=True))
+
+                # then search in a sphere in ever expanding circles
+                search_factor = 1
+                while np.any(~(local_mask[...,0]).any(axis=-1) & hit_mask.any(axis=-1)):
+                    local_mask = (local_mask | (
+                        (r < search_factor * search_dx) & hit_mask[...,np.newaxis]
+                        & ~(local_mask).any(axis=-2, keepdims=True)))
+                    search_factor += 1
+                    if search_factor > 5:
+                        break
 
             # if no more hits found, continue
             if not np.any(local_mask):
