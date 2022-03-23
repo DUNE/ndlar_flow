@@ -61,6 +61,9 @@ stopping_muon_sel:
     fid_cut: 20 # mm
     cathode_fid_cut: 20 # mm
 
+    proton_classifier_cut: 0.2576
+    muon_classifier_cut: -0.0152
+
     profile_dx: 22 # mm
     larpix_gain:
       mc: 250 # e/mV
@@ -71,8 +74,8 @@ stopping_muon_sel:
       medm: 1.0
       high: 1.0
     density_dx_correction_params:
-      medm: [  1.32677493,   1.34213283, 119.1455561 ]
-      mc:   [  1.00982736,   1.2525887,  130.32791666]
+      medm: [  1.28,   1.41, 85.9 ]
+      mc:   [  1.06,   1.24, 112  ]
       high: [1.06938198,  1.52281043, 122.37072575]
 
 michel_id:
@@ -85,6 +88,9 @@ michel_id:
       path: ['charge/hits', 'analysis/stopping_muons/hit_profile']
   params:
     # configuration parameters
+    michel_e_cut: 4000 # keV
+    michel_nhit_cut: 7
+
     generate_likelihood_pdf: False
     #generate_likelihood_pdf: True
     likelihood_pdf_filename: h5flow_data/michel_pdf-0.1.0.npz

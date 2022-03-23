@@ -337,7 +337,7 @@ class StoppingMuonSelection(H5FlowStage):
         return rv
 
     @staticmethod
-    def profile_likelihood(profile_rr, profile_dqdx, profile_pos, range_table, type='', mcs_weight=0.5):
+    def profile_likelihood(profile_rr, profile_dqdx, profile_pos, range_table, type='', mcs_weight=0.0625):
         '''
             Calculates the log-likelihood score of a given dqdx v. residual range profile
             using a Moyal-distribution approximation.
