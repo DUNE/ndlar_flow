@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.ma as ma
 import logging
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, pchip_interpolate
 import scipy.integrate as integrate
 import scipy.stats as stats
 import scipy.ndimage as ndimage
@@ -337,6 +337,95 @@ class StoppingMuonSelection(H5FlowStage):
         return rv
 
     @staticmethod
+    def dx_estimate(profile_pos, hit_xyz, hit_idx, pixel_pitch, nsamples=10, tol=0.1):
+        '''
+            Calculate the track dx to be associated with each profile point.
+
+            First finds the furthest point along the line that falls on a hit pixel.
+            Then samples the track length between those points, checking to see if the sample point falls onto a
+            disabled channel. The track length is calculated as the length between the furthest points, minus the
+            approximate length on disabled channels
+
+            :param profile_pos: xyz position of each profile point ``shape: (..., nprof, 3)``
+
+            :param hit_xyz: xyz position of each hit ``shape: (..., nhit, 3)``
+
+            :param hit_idx: index into ``profile_pos`` of each hit ``shape: (..., nhit)``
+
+            :param nsamples: number of sample points to estimate disabled fraction of track
+
+            :returns: dx to be associated with each profile point ``shape: (..., nprof)``
+
+        '''
+        dx = np.zeros(profile_pos.shape[:-1])
+        for iprof in range(profile_pos.shape[-2]):
+            if ~np.any(hit_idx >= iprof):
+                break
+            hit_mask = hit_idx == iprof
+            if ~np.any(hit_mask):
+                continue
+
+            xyz = ma.array(hit_xyz, mask=np.broadcast_to(~hit_mask[...,np.newaxis], hit_xyz.shape)) # (nev, nhit, 3)
+            valid = np.any(~xyz.mask[...,0], axis=-1) # (nev,)
+
+            # get profile centroid
+            pos = profile_pos[...,iprof,:] # (nev, 3)
+
+            # get profile trajectory segment directions
+            dirs = [profile_pos[...,iprof+1,:] - pos if iprof < profile_pos.shape[-2]-1 else profile_pos[...,-2,:] - pos,
+                    profile_pos[...,iprof-1,:] - pos if iprof > 0 else profile_pos[...,1,:] - pos]
+            dirs = np.concatenate([dr[...,np.newaxis,np.newaxis,np.newaxis,:] for dr in dirs], axis=1) # (nev, ndirection, 1, 1, 3)
+            
+            for idr in range(dirs.shape[1]):
+                invalid_dir = np.all(dirs[:,idr] == 0., axis=-1)
+                dirs[:,idr][invalid_dir] = -dirs[:,(idr+1)%2][invalid_dir]
+            dirs = dirs / np.clip(np.linalg.norm(dirs, axis=-1, keepdims=True), 1e-15, None)
+
+            # get active volume
+            min_xyz,max_xyz = np.min(xyz, axis=-2) - pixel_pitch/2, np.max(xyz, axis=-2) + pixel_pitch/2
+            min_xyz = min_xyz.reshape(-1,1,1,1,3)
+            max_xyz = max_xyz.reshape(-1,1,1,1,3)
+            c = np.concatenate([min_xyz, max_xyz], axis=2) # (nev, 1, ncorner, 1, 3)
+            n = np.array([(1,0,0), (0,1,0), (0,0,1)]).reshape(1,1,1,3,3) # (1, 1, 1, naxes, 3)
+
+            # find intersections with active volume planes
+            pos = pos.reshape(-1, 1, 1, 1, 3)
+            intersection = StoppingMuonSelection.intersection(pos, dirs, c, n)
+            alpha = np.sum(dirs * (intersection - pos), axis=-1)
+
+            # only use intersections that are within active volume (and in the correct direction relative to the trajectory segment)
+            within_active_region = ((intersection[...,0] - max_xyz[...,0] <= tol)
+                                    & (intersection[...,0] - min_xyz[...,0] >= -tol)
+                                    & (intersection[...,1] - max_xyz[...,1] <= tol)
+                                    & (intersection[...,1] - min_xyz[...,1] >= -tol)
+                                    & (intersection[...,2] - max_xyz[...,2] <= tol)
+                                    & (intersection[...,2] - min_xyz[...,2] >= -tol)
+                                    & (alpha > 0) & valid.reshape(-1,1,1,1)) # (nev, ndirection, ncorner, naxes)
+
+            intersection = np.take_along_axis(intersection, np.argmax(within_active_region[...,np.newaxis], axis=-2)[...,np.newaxis], axis=-2) # (nev, ndirection, ncorner, 1, 3)
+            within_active_region = np.take_along_axis(within_active_region[...,np.newaxis], np.argmax(within_active_region[...,np.newaxis], axis=-2)[...,np.newaxis], axis=-2)
+            intersection = np.take_along_axis(intersection, np.argmax(within_active_region, axis=-3)[...,np.newaxis], axis=-3) # (nev, ndirection, 1, 1, 3)
+            within_active_region = np.take_along_axis(within_active_region, np.argmax(within_active_region, axis=-3)[...,np.newaxis], axis=-3)
+
+            # calculate track length in active volume
+            prof_dx = np.linalg.norm(intersection - pos, axis=-1) # (nev, ndirection, 1, 1)
+
+            # correct for disabled channels
+            disabled_fraction = np.zeros_like(prof_dx)
+            if 'DisabledChannels' in resources:
+                sample_pts = np.linspace(pos, intersection, nsamples, axis=0)
+                sample_pt_disabled = ~resources['DisabledChannels'].is_active(sample_pts).reshape(sample_pts.shape[:-1])
+                disabled_fraction = np.sum(sample_pt_disabled, axis=0) / nsamples
+
+            prof_dx *= (1 - disabled_fraction)
+
+            # collect result
+            dx[...,iprof] = (prof_dx * within_active_region[...,0]).sum(axis=(1,2,3)) # (nev,)
+
+        return dx
+        
+
+    @staticmethod
     def profile_likelihood(profile_rr, profile_dqdx, profile_pos, range_table, type='', mcs_weight=0.0625):
         '''
             Calculates the log-likelihood score of a given dqdx v. residual range profile
@@ -445,19 +534,17 @@ class StoppingMuonSelection(H5FlowStage):
     @staticmethod
     def intersection(xyz, dxyz, pxyz, pnorm):
         '''
-            calculate the intersection of a set of lines with a plane
+            calculate the intersection of lines with planes
 
-            :param xyz: (N, 3) array representing line origins
-            :param dxyz: (N, 3) array representing line directions (unit norm)
-            :param pxyz: (3,) array representing a point on the plane
-            :param pnorm: (3,) array representing plane normal (unit norm)
+            :param xyz: (..., 3) array representing line origins
+            :param dxyz: (..., 3) array representing line directions (unit norm)
+            :param pxyz: (..., 3) array representing a point on the plane
+            :param pnorm: (..., 3) array representing plane normal (unit norm)
 
-            :returns: (N, 3) array representing the intersection point
+            :returns: (..., 3) array representing the intersection point
         '''
-        pxyz = np.expand_dims(pxyz, axis=0)
-        pnorm = np.expand_dims(pnorm, axis=0)
         d = np.sum((pxyz - xyz) * pnorm, axis=-1) / np.sum(dxyz * pnorm, axis=-1)
-        return xyz + dxyz * d[:, np.newaxis]
+        return xyz + dxyz * d[..., np.newaxis]
 
     def extrapolated_intersection(self, start, end):
         '''
@@ -471,7 +558,7 @@ class StoppingMuonSelection(H5FlowStage):
         for reg in resources['Geometry'].regions:
             for pxyz in reg:
                 for norm in [np.array([1, 0, 0]), np.array([0, 1, 0]), np.array([0, 0, 1])]:
-                    intersections.append(self.intersection(end, dxyz, pxyz, norm)[..., np.newaxis])
+                    intersections.append(self.intersection(end, dxyz, pxyz[np.newaxis,:], norm[np.newaxis,:])[..., np.newaxis])
         intersections = np.concatenate(intersections, axis=-1)
         end_intersection = np.take_along_axis(
             intersections,
@@ -595,15 +682,7 @@ class StoppingMuonSelection(H5FlowStage):
         curr_direction /= np.clip(np.linalg.norm(curr_direction, axis=-1, keepdims=True),1e-15,None)
         hit_mask = hit_mask & ~local_mask[...,0]
 
-        disabled_channel_lut = resources.get('DisabledChannels', None)
-        if disabled_channel_lut is not None:
-            disabled_channel_lut = disabled_channel_lut.disabled_channel_lut
-            pixel_x = np.sort(np.unique(resources['Geometry'].pixel_xy.compress((0,))))
-            pixel_y = np.sort(np.unique(resources['Geometry'].pixel_xy.compress((1,))))
-            io_group,io_channel,_,_ = resources['Geometry'].pixel_xy.keys()
-            tile_id = resources['Geometry'].tile_id[(io_group,io_channel)]
-            anode_z,idx = np.unique(resources['Geometry'].anode_z[(tile_id,)], return_index=True)
-            tpc_lookup = io_group[idx]
+        disabled_channels = resources.get('DisabledChannels', None)
         
         i = 0
         while (i < sample_points-1) and np.any(hit_mask):
@@ -621,12 +700,9 @@ class StoppingMuonSelection(H5FlowStage):
                 r = np.linalg.norm(dr, axis=-1, keepdims=True)
 
                 # if disabled channels list present and next step is a disabled region, search in a longer line first
-                if disabled_channel_lut is not None:
+                if disabled_channels is not None:
                     proposed_step = traj[...,i-1,:] + curr_direction * dx
-                    proposed_pixel_x = pixel_x[np.clip(np.digitize(proposed_step[...,0], bins=pixel_x)-1, 0, len(pixel_x)-1).astype(int)].astype(int)
-                    proposed_pixel_y = pixel_y[np.clip(np.digitize(proposed_step[...,1], bins=pixel_y)-1, 0, len(pixel_y)-1).astype(int)].astype(int)
-                    proposed_tpc = tpc_lookup[np.argmin(proposed_step[...,2,np.newaxis] - anode_z.reshape([1,]*(proposed_step.ndim-1)+[-1,]), axis=-1)].astype(int)
-                    step_is_disabled = disabled_channel_lut[(proposed_tpc,proposed_pixel_x,proposed_pixel_y)]
+                    step_is_disabled = ~disabled_channels.is_active(proposed_step)
                     local_mask = local_mask | (
                         (dl < 2*dx) & (dt < 3*dx/4) & hit_mask[...,np.newaxis] & forward
                         & step_is_disabled[...,np.newaxis,np.newaxis]
@@ -848,7 +924,8 @@ class StoppingMuonSelection(H5FlowStage):
             tracks, seed_pt, hit_xyz, hit_q, mask=event_is_stopping,
             dx=self.profile_dx, search_dx=self.profile_search_dx,
             max_range=self.profile_max_range, pixel_pitch=resources['Geometry'].pixel_pitch)
-        ds += resources['Geometry'].pixel_pitch # correct for pixel edges
+        #ds += resources['Geometry'].pixel_pitch # correct for pixel edges
+        ds = self.dx_estimate(pos, hit_xyz, hit_prof_idx, resources['Geometry'].pixel_pitch)
         profile_n = dn
         profile_dqdx = dq / ma.maximum(ds, resources['Geometry'].pixel_pitch) * (dn > 0)
         profile_dqdx[dn <= 0] = 0
@@ -970,7 +1047,7 @@ class StoppingMuonSelection(H5FlowStage):
         e = q_sum * resources['LArData'].ionization_w / resources['LArData'].ionization_recombination(michel_dedx)
 
         # apply a hit density correction
-        profile_dqdx = profile_dqdx * ds / ma.maximum(ds - self.density_dx_correction(profile_rr, *self.density_dx_correction_params), resources['Geometry'].pixel_pitch) * (dn > 0)
+        #profile_dqdx = profile_dqdx * ds / ma.maximum(ds - self.density_dx_correction(profile_rr, *self.density_dx_correction_params), resources['Geometry'].pixel_pitch) * (dn > 0)
         # apply a curvature correction
         profile_rr = profile_rr * self.curvature_rr_correction
 
