@@ -187,6 +187,11 @@ class Geometry(H5FlowResource):
 
     @property
     def regions(self):
+        '''
+            List of active volume extent for each TPC, each shape: ``(2,3)``
+            representing the minimum xyz coordinate and the maximum xyz
+            coordinate
+        '''
         if self._regions is None:
             self._create_regions()
         return self._regions
@@ -245,16 +250,34 @@ class Geometry(H5FlowResource):
 
     @property
     def tpc_id(self):
+        '''
+            Lookup table for TPC id, usage::
+
+                resource['Geometry'].tpc_id[(adc_index, channel_index)]
+
+        '''
         return self._tpc_id
 
 
     @property
     def det_id(self):
+        '''
+            Lookup table for detector id within a TPC, usage::
+
+                resource['Geometry'].det_id[(adc_index, channel_index)]
+
+        '''
         return self._det_id
 
 
     @property
     def det_bounds(self):
+        '''
+            Lookup table for detector min and max xyz coordinate, usage::
+
+                resource['Geometry'].det_bounds[(tpc_id, det_id)]
+
+        '''
         return self._det_bounds
 
 
@@ -318,6 +341,9 @@ class Geometry(H5FlowResource):
 
         with open(self.lrs_geometry_file) as gf:
             geometry = yaml.load(gf, Loader=yaml.FullLoader)
+
+        # enforce that light geometry formatting is as expected
+        assert_compat_version(geometry['format_version'], '0.0.0')
 
         tpc_ids = np.array([v for v in geometry['tpc_center'].keys()])
         det_ids = np.array([v for v in geometry['det_center'].keys()])

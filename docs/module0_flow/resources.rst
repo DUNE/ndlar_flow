@@ -22,6 +22,8 @@ geometry
    :members:
    :show-inheritance:
 
+.. include:: light_geometry.rst
+
 particle data
 -------------
 
