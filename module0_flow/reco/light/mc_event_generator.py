@@ -27,6 +27,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
          - ``channel_map``: ``list`` of ``list`` of ``int``, mapping from simulation optical detector to adc, channel, ``-1`` values indicate channel is not connected
          - ``busy_channel``: ``list`` of ``int``, channel used for busy signal on each ADC (if relevant)
          - ``busy_delay``: ``int``, number of ticks prior to busy signal for each trigger
+         - ``disabled_channels``: ``list`` of ``(adc_idx, channel_idx)``, channels to zero out (optional)
 
         Requires RunData resource in workflow.
 
@@ -76,8 +77,8 @@ class LightEventGeneratorMC(H5FlowGenerator):
         mc_truth_dset_name='mc_truth/light',
         n_adcs=2,
         n_channels=64,
-        busy_delay=120,
-        busy_ampl=10e3,
+        busy_delay=123,
+        busy_ampl=20e3,
         chunk_size=32
         )
 
@@ -92,6 +93,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
         self.adc_sn = np.array(params['adc_sn'])
         self.channel_map = np.array(params['channel_map'])
         self.busy_channel = np.array(params.get('busy_channel',[0]*self.n_adcs))
+        self.disabled_channels = np.array(params.get('disabled_channels',[]))
         self.event_dset_name = self.dset_name
         self.n_samples = 0
 
@@ -166,6 +168,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
                                     adc_sn=self.adc_sn,
                                     channel_map=self.channel_map,
                                     busy_channel=self.busy_channel,
+                                    disabled_channels=self.disabled_channels,
                                     wvfm_dset_name=self.wvfm_dset_name,
                                     start_position=self.start_position,
                                     end_position=self.end_position,
@@ -181,6 +184,8 @@ class LightEventGeneratorMC(H5FlowGenerator):
         self.data_manager.reserve_data(self.mc_truth_dset_name, truth_slice)
         self.data_manager.write_data(self.mc_truth_dset_name, truth_slice, remapped_light_dat)
 
+        mc_channel = np.indices(self.light_dat[0:1].shape)[1]
+        
 
     def finish(self):
         super(LightEventGeneratorMC, self).finish()
@@ -196,9 +201,13 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         # convert channel map
         remapped_wvfms = self._remap_array(self.channel_map, -next_wvfms, axis=-2)
+        remapped_wvfms = remapped_wvfms * (self.channel_map != -1)[np.newaxis,:,:,np.newaxis]
 
         # mock busy signal
-        remapped_wvfms[:, np.r_[range(self.n_adcs)], self.busy_channel, self.busy_delay:] = -self.busy_ampl
+        remapped_wvfms[:, np.r_[range(self.n_adcs)], self.busy_channel, self.busy_delay:] = self.busy_ampl
+
+        # zero out disabled channels
+        remapped_wvfms[:, self.disabled_channels[...,0], self.disabled_channels[...,1]] = 0.
 
         # write event to file
         event_slice = self.data_manager.reserve_data(self.event_dset_name, next_trig.shape[0])
