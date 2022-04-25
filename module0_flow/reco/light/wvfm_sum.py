@@ -13,6 +13,7 @@ class WaveformSum(H5FlowStage):
          - ``wvfm_dset_name`` : ``str``, required, input dataset path
          - ``swvfm_dset_name`` : ``str``, required, output dataset path
          - ``gain``: ``dict`` of ``dict`` of ``<adc #>: <channel #>: <gain correction>`` where each gain correction converts the ADC value to visible energy
+         - ``gain_mc``: same as ``gain``, but only applied if datafile is simulation
 
         ``wvfm_dset_name`` along with ``{wvfm_dset_name}/alignment`` are
         required in the data cache.
@@ -54,17 +55,27 @@ class WaveformSum(H5FlowStage):
         self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
         self.swvfm_dset_name = params.get('swvfm_dset_name')
         self.align_dset_name = f'{self.swvfm_dset_name}/alignment'
-        gain = params.get('gain',{'default': 1.0})
-        self.gain = defaultdict(lambda : defaultdict((lambda : gain.get('default',1.0))))
-        for adc in gain:
+        self.gain = params.get('gain',{'default': 1.0})
+        self.gain_mc = params.get('gain_mc',{'default': 1.0})
+
+
+    def _load_gain_data(self, gain_data):
+        self.gain = defaultdict(lambda : defaultdict((lambda : gain_data.get('default',1.0))))
+        for adc in gain_data:
             if adc == 'default':
                 continue
-            for chan in gain[adc]:
-                self.gain[adc][chan] = gain[adc][chan]
+            for chan in gain_data[adc]:
+                self.gain[adc][chan] = gain_data[adc][chan]
 
-
+                
     def init(self, source_name):
         super(WaveformSum, self).init(source_name)
+
+        # use appropriate gain data
+        if resources['RunData'].is_mc:
+            self._load_gain_data(self.gain_mc)
+        else:
+            self._load_gain_data(self.gain)
 
         # save all config info
         gain = np.array([(int(adc), int(chan), self.gain[adc][chan])

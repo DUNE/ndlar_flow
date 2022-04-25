@@ -53,7 +53,7 @@ class LightCalibration(H5FlowStage):
         vis_energy_cut=1e2, # keV
         larpix_gain=221, # e/mV
         gain_prefactor=dict(),
-        sample_window=[80,100],
+        sample_window=[0,256],
     )
 
     def calib_dtype(self,nadc,nchannel):
@@ -117,11 +117,12 @@ class LightCalibration(H5FlowStage):
                 channels = []
 
         if len(channels):
+            calib = self.data_manager.get_dset(self.calib_dset_name)
+            output_gain = np.zeros(calib['vis_energy'].shape[-2:])
             for adc,ch in channels:
-                calib = self.data_manager.get_dset(self.calib_dset_name)
                 vis_energy = calib['vis_energy'][:,adc,ch]
                 sig = calib['sig'][:,adc,ch]
-                mask = calib['mask'][:,adc,ch].astype(bool)
+                mask = calib['mask'][:,adc,ch].astype(bool) & np.isfinite(sig) & np.isfinite(vis_energy)
 
                 if np.any(mask):
                     vis_energy_bound = np.percentile(vis_energy[mask],1), np.percentile(vis_energy[mask], 99)
@@ -131,12 +132,16 @@ class LightCalibration(H5FlowStage):
                             & (vis_energy >= vis_energy_bound[0]) & (vis_energy < vis_energy_bound[1])
                             & (sig >= sig_bound[0]) & (sig < sig_bound[1]))
                     if np.any(mask):
-                        gain = np.linalg.lstsq(np.c_[sig[mask]],vis_energy[mask])[0][0] * self.gain_prefactor.get(adc,{ch: 1}).get(ch,1)
+                        gain = np.linalg.lstsq(np.c_[sig[mask]], vis_energy[mask])[0][0] * self.gain_prefactor.get(adc,{ch: 1}).get(ch,1)
+                        output_gain[adc,ch] = gain
                         print(f'\t{adc}\t{ch}\t{gain:0.04e}')
                     else:
                         print(f'\t{adc}\t{ch}\t--')
                 else:
-                    print(f'\t{adc}\t{ch}\t--')                    
+                    print(f'\t{adc}\t{ch}\t--')
+            if H5FLOW_MPI:
+                output_gain = np.sum(self.comm.allgather(output_gain), axis=0)
+            self.data_manager.set_attrs(self.calib_dset_name, gain=output_gain)
                     
         if H5FLOW_MPI:
             self.comm.barrier()
@@ -193,7 +198,7 @@ class LightCalibration(H5FlowStage):
             # calculate detector signal
             # get first trigger in each event
             wvfm_samples = wvfm['samples'][:,0,...,self.sample_window[0]:self.sample_window[1]].reshape(len(event), self.nadc, self.nchannel, -1)
-            sig = wvfm_samples.max(axis=-1)
+            sig = wvfm_samples.sum(axis=-1)
             sig_mask = (
                 (vis_energy >= self.vis_energy_cut)
                 & (event_mask[...,np.newaxis,np.newaxis])
