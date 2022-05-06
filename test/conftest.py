@@ -166,8 +166,8 @@ def muon_range_table(pytestconfig, tmp_path_factory):
 def light_noise_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0-Run2/LRS/LED/'
-                                      'rwf_20210624_094156.fwvfm.noise_power.npz')))
+                                      'data/Module0/merged/reco_data/'
+                                      'events_2021_04_10_04_21_27_CEST.fwvfm.noise_power.npz')))
 
 
 @ pytest.fixture
