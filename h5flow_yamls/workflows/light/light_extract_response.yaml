@@ -20,15 +20,17 @@ event_loop:
 wvfm_extract_sig_noise:
   classname: WaveformDeconvolution
   requires:
-    - 'light/fwvfm'
+    - 'light/wvfm'
   params:
     # input
-    wvfm_dset_name: 'light/fwvfm'
+    wvfm_dset_name: 'light/wvfm'
 
     # configuration parameters
-    noise_strategy: PPS # or slice
-    noise_slice: [-256, null] # last 256 samples
-    pps_threshold: 5000
+    #noise_strategy: PPS # or slice
+    noise_strategy: slice
+    noise_slice: [0, 80] # first 80 samples
+    # noise_slice: [-256, null] # last 256 samples
+    # pps_threshold: 5000
     signal_amplitude: [1000,5000]
     gen_noise_spectrum: True
     gen_signal_spectrum: True

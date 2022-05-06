@@ -3,8 +3,10 @@
 
 flow:
   source: 'light/events'
-  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_sum] #, hit_finder]
-  drop: ['light/wvfm']
+  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_sum, hit_finder]
+
+  # remove waveforms from output file
+  drop: ['light/wvfm', 'light/fwvfm', 'light/deconv', 'light/swvfm']
 
 
 resources:
@@ -30,7 +32,7 @@ wvfm_align:
 
 
 wvfm_sum:
-  !include h5flow_yamls/reco/light/WaveformSum.yaml
+  !include h5flow_yamls/reco/light/WaveformSumMC.yaml
 
 
 hit_finder:
