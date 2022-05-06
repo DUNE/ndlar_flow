@@ -250,7 +250,7 @@ class MuonCaptureTruthLabels(H5FlowStage):
         if len(traj):
             ev_idx = np.broadcast_to(np.r_[source_slice][...,np.newaxis], scat_idx.shape)
             ref = np.c_[ev_idx.ravel(), scat_idx.ravel()]
-            ref = ref[~scat_idx.mask.ravel()]
+            ref = ref[~np.broadcast_to(scat_idx.mask.ravel(), ref.shape[0])]
         else:
             ref = np.empty((0,2))
         self.data_manager.reserve_data(self.truth_labels_dset_name + '/scatter_track', source_slice)

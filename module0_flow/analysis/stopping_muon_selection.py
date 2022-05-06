@@ -1,7 +1,8 @@
 import numpy as np
 import numpy.ma as ma
 import logging
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, pchip_interpolate
+import scipy.integrate as integrate
 import scipy.stats as stats
 import scipy.ndimage as ndimage
 import scipy.optimize as optimize
@@ -40,7 +41,7 @@ class StoppingMuonSelection(H5FlowStage):
         projected_length_cut=30, # mm
         veto_charge_cut=100e3, # e-
         profile_dx=22, # mm
-        profile_max_range=1600, # mm
+        profile_max_range=2000, # mm
         larpix_gain=250, # e/mV
         larpix_noise=500,  # e/mm
         proton_classifier_cut=0.05,
@@ -62,7 +63,7 @@ class StoppingMuonSelection(H5FlowStage):
     event_sel_dset_name = 'event_sel_reco'
     event_profile_dset_name = 'event_profile'
     event_sel_truth_dset_name = 'event_sel_truth'
-    hit_profile_dset_name = 'hit_profile_id'
+    hit_profile_dset_name = 'hit_profile'
 
     event_sel_dtype = np.dtype([('sel', 'u1'),
                                 ('stop', 'u1'),
@@ -89,7 +90,7 @@ class StoppingMuonSelection(H5FlowStage):
             ('mip_likelihood', 'f8', (profile_bins, 2)),
         ])
 
-    hit_profile_id_dtype = 'i4'
+    hit_profile_dtype = np.dtype([('idx','i4'),('rr','f8')])
 
     def __init__(self, **params):
         super(StoppingMuonSelection, self).__init__(**params)
@@ -129,7 +130,7 @@ class StoppingMuonSelection(H5FlowStage):
         self.data_manager.create_dset(f'{self.path}/{self.event_profile_dset_name}',
                                       self.event_profile_dtype)
         self.data_manager.create_dset(f'{self.path}/{self.hit_profile_dset_name}',
-                                      self.hit_profile_id_dtype)
+                                      self.hit_profile_dtype)
         self.data_manager.create_ref(f'{self.path}/{self.hit_profile_dset_name}', self.hits_dset_name)
         if self.is_mc:
             self.data_manager.create_dset(f'{self.path}/{self.event_sel_truth_dset_name}',
@@ -336,9 +337,98 @@ class StoppingMuonSelection(H5FlowStage):
         return rv
 
     @staticmethod
-    def profile_likelihood(profile_rr, profile_dqdx, profile_pos, range_table, type=''):
+    def dx_estimate(profile_pos, hit_xyz, hit_idx, pixel_pitch, nsamples=10, tol=0.1):
         '''
-            Calculates the likelihood score of a given dqdx v. residual range profile
+            Calculate the track dx to be associated with each profile point.
+
+            First finds the furthest point along the line that falls on a hit pixel.
+            Then samples the track length between those points, checking to see if the sample point falls onto a
+            disabled channel. The track length is calculated as the length between the furthest points, minus the
+            approximate length on disabled channels
+
+            :param profile_pos: xyz position of each profile point ``shape: (..., nprof, 3)``
+
+            :param hit_xyz: xyz position of each hit ``shape: (..., nhit, 3)``
+
+            :param hit_idx: index into ``profile_pos`` of each hit ``shape: (..., nhit)``
+
+            :param nsamples: number of sample points to estimate disabled fraction of track
+
+            :returns: dx to be associated with each profile point ``shape: (..., nprof)``
+
+        '''
+        dx = np.zeros(profile_pos.shape[:-1])
+        for iprof in range(profile_pos.shape[-2]):
+            if ~np.any(hit_idx >= iprof):
+                break
+            hit_mask = hit_idx == iprof
+            if ~np.any(hit_mask):
+                continue
+
+            xyz = ma.array(hit_xyz, mask=np.broadcast_to(~hit_mask[...,np.newaxis], hit_xyz.shape)) # (nev, nhit, 3)
+            valid = np.any(~xyz.mask[...,0], axis=-1) # (nev,)
+
+            # get profile centroid
+            pos = profile_pos[...,iprof,:] # (nev, 3)
+
+            # get profile trajectory segment directions
+            dirs = [profile_pos[...,iprof+1,:] - pos if iprof < profile_pos.shape[-2]-1 else profile_pos[...,-2,:] - pos,
+                    profile_pos[...,iprof-1,:] - pos if iprof > 0 else profile_pos[...,1,:] - pos]
+            dirs = np.concatenate([dr[...,np.newaxis,np.newaxis,np.newaxis,:] for dr in dirs], axis=1) # (nev, ndirection, 1, 1, 3)
+            
+            for idr in range(dirs.shape[1]):
+                invalid_dir = np.all(dirs[:,idr] == 0., axis=-1)
+                dirs[:,idr][invalid_dir] = -dirs[:,(idr+1)%2][invalid_dir]
+            dirs = dirs / np.clip(np.linalg.norm(dirs, axis=-1, keepdims=True), 1e-15, None)
+
+            # get active volume
+            min_xyz,max_xyz = np.min(xyz, axis=-2) - pixel_pitch/2, np.max(xyz, axis=-2) + pixel_pitch/2
+            min_xyz = min_xyz.reshape(-1,1,1,1,3)
+            max_xyz = max_xyz.reshape(-1,1,1,1,3)
+            c = np.concatenate([min_xyz, max_xyz], axis=2) # (nev, 1, ncorner, 1, 3)
+            n = np.array([(1,0,0), (0,1,0), (0,0,1)]).reshape(1,1,1,3,3) # (1, 1, 1, naxes, 3)
+
+            # find intersections with active volume planes
+            pos = pos.reshape(-1, 1, 1, 1, 3)
+            intersection = StoppingMuonSelection.intersection(pos, dirs, c, n)
+            alpha = np.sum(dirs * (intersection - pos), axis=-1)
+
+            # only use intersections that are within active volume (and in the correct direction relative to the trajectory segment)
+            within_active_region = ((intersection[...,0] - max_xyz[...,0] <= tol)
+                                    & (intersection[...,0] - min_xyz[...,0] >= -tol)
+                                    & (intersection[...,1] - max_xyz[...,1] <= tol)
+                                    & (intersection[...,1] - min_xyz[...,1] >= -tol)
+                                    & (intersection[...,2] - max_xyz[...,2] <= tol)
+                                    & (intersection[...,2] - min_xyz[...,2] >= -tol)
+                                    & (alpha > 0) & valid.reshape(-1,1,1,1)) # (nev, ndirection, ncorner, naxes)
+
+            intersection = np.take_along_axis(intersection, np.argmax(within_active_region[...,np.newaxis], axis=-2)[...,np.newaxis], axis=-2) # (nev, ndirection, ncorner, 1, 3)
+            within_active_region = np.take_along_axis(within_active_region[...,np.newaxis], np.argmax(within_active_region[...,np.newaxis], axis=-2)[...,np.newaxis], axis=-2)
+            intersection = np.take_along_axis(intersection, np.argmax(within_active_region, axis=-3)[...,np.newaxis], axis=-3) # (nev, ndirection, 1, 1, 3)
+            within_active_region = np.take_along_axis(within_active_region, np.argmax(within_active_region, axis=-3)[...,np.newaxis], axis=-3)
+
+            # calculate track length in active volume
+            prof_dx = np.linalg.norm(intersection - pos, axis=-1) # (nev, ndirection, 1, 1)
+
+            # correct for disabled channels
+            disabled_fraction = np.zeros_like(prof_dx)
+            if 'DisabledChannels' in resources:
+                sample_pts = np.linspace(pos, intersection, nsamples, axis=0)
+                sample_pt_disabled = ~resources['DisabledChannels'].is_active(sample_pts).reshape(sample_pts.shape[:-1])
+                disabled_fraction = np.sum(sample_pt_disabled, axis=0) / nsamples
+
+            prof_dx *= (1 - disabled_fraction)
+
+            # collect result
+            dx[...,iprof] = (prof_dx * within_active_region[...,0]).sum(axis=(1,2,3)) # (nev,)
+
+        return dx
+        
+
+    @staticmethod
+    def profile_likelihood(profile_rr, profile_dqdx, profile_pos, range_table, type='', mcs_weight=0.0625):
+        '''
+            Calculates the log-likelihood score of a given dqdx v. residual range profile
             using a Moyal-distribution approximation.
 
             Likelihood data is passed via the ``range_table`` parameter which is
@@ -411,47 +501,50 @@ class StoppingMuonSelection(H5FlowStage):
         np.place(packed_dqdx, place_mask, profile_dqdx[valid_mask])
         np.place(packed_rr, place_mask, profile_rr[valid_mask])
 
-        interp_angle_width = interp_angle_width(np.clip(packed_rr, min_range, max_range))
+        #interp_angle_width = interp_angle_width(np.clip(packed_rr, min_range, max_range))
+        interp_angle_width = interp_angle_width(np.clip(profile_rr, min_range, max_range))
 
         d = packed_pos[..., 1:, :] - packed_pos[..., :-1, :]
-        d = d * ((np.linalg.norm(packed_pos[..., 1:, :], axis=-1, keepdims=True) > 0) *
-                 (np.linalg.norm(packed_pos[..., :-1, :], axis=-1, keepdims=True) > 0))
+        d = d * place_mask[...,1:,np.newaxis] * place_mask[...,:-1,np.newaxis]
         angle = np.zeros_like(packed_dqdx)
         norm = np.linalg.norm(d[..., 1:, :], axis=-1) * np.linalg.norm(d[..., :-1, :], axis=-1)
-        if any_valid:
-            angle[..., 1:-1] = np.maximum(np.sum(d[..., 1:, :] * d[..., :-1, :], axis=-1), 1e-15) / np.maximum(norm, 1e-15)
-            angle[..., 1:-1] = np.arccos(angle[..., 1:-1])
-            angle[..., 0] = angle[..., 1]
-            angle[..., -1] = angle[..., -2]
-
-#        angle_term = stats.norm.logpdf(angle, loc=0, scale=interp_angle_width) + np.log(2)
-        angle_term = stats.expon.logpdf(angle, scale=interp_angle_width) + np.log(2)
-#         angle_term = -np.abs(angle) / np.pi
-        if any_valid:
-            np.put_along_axis(angle_term, np.argmin(np.abs(packed_rr), axis=-1)[..., np.newaxis], -np.log(2), axis=-1)
+        if any_valid and angle.shape[-1] > 1:
+            angle[..., 2:] = np.sum(d[..., 1:, :] * d[..., :-1, :], axis=-1) / np.maximum(norm, 1e-15)
+            angle = np.arccos(angle)
+            angle[..., 0] = 0
+            angle[..., 1] = 0
+            #angle[..., 0] = angle[..., 1]
+            #angle[..., -1] = angle[..., -2]
 
         # and now unpack profile pts
         rv_angle_term = np.zeros(valid_mask.shape)
-        np.place(rv_angle_term, valid_mask, angle_term[place_mask])
+        np.place(rv_angle_term, valid_mask, angle[place_mask])
 
-        return dqdx_term, rv_angle_term
+        #angle_term = stats.norm.logpdf(angle, loc=0, scale=interp_angle_width) + np.log(2)
+        rv_angle_term = stats.expon.logpdf(rv_angle_term, scale=interp_angle_width) + np.log(2)
+#         angle_term = -np.abs(angle) / np.pi
+        #if any_valid:
+        #    np.put_along_axis(angle_term, np.argmin(np.abs(packed_rr), axis=-1)[..., np.newaxis], -np.log(2), axis=-1)
+        if any_valid:
+            # don't count the last profile point towards score
+            np.put_along_axis(rv_angle_term, np.argmin(np.abs(profile_rr), axis=-1)[..., np.newaxis], -np.log(2), axis=-1)
+
+        return dqdx_term, rv_angle_term * mcs_weight
 
     @staticmethod
     def intersection(xyz, dxyz, pxyz, pnorm):
         '''
-            calculate the intersection of a set of lines with a plane
+            calculate the intersection of lines with planes
 
-            :param xyz: (N, 3) array representing line origins
-            :param dxyz: (N, 3) array representing line directions (unit norm)
-            :param pxyz: (3,) array representing a point on the plane
-            :param pnorm: (3,) array representing plane normal (unit norm)
+            :param xyz: (..., 3) array representing line origins
+            :param dxyz: (..., 3) array representing line directions (unit norm)
+            :param pxyz: (..., 3) array representing a point on the plane
+            :param pnorm: (..., 3) array representing plane normal (unit norm)
 
-            :returns: (N, 3) array representing the intersection point
+            :returns: (..., 3) array representing the intersection point
         '''
-        pxyz = np.expand_dims(pxyz, axis=0)
-        pnorm = np.expand_dims(pnorm, axis=0)
         d = np.sum((pxyz - xyz) * pnorm, axis=-1) / np.sum(dxyz * pnorm, axis=-1)
-        return xyz + dxyz * d[:, np.newaxis]
+        return xyz + dxyz * d[..., np.newaxis]
 
     def extrapolated_intersection(self, start, end):
         '''
@@ -465,7 +558,7 @@ class StoppingMuonSelection(H5FlowStage):
         for reg in resources['Geometry'].regions:
             for pxyz in reg:
                 for norm in [np.array([1, 0, 0]), np.array([0, 1, 0]), np.array([0, 0, 1])]:
-                    intersections.append(self.intersection(end, dxyz, pxyz, norm)[..., np.newaxis])
+                    intersections.append(self.intersection(end, dxyz, pxyz[np.newaxis,:], norm[np.newaxis,:])[..., np.newaxis])
         intersections = np.concatenate(intersections, axis=-1)
         end_intersection = np.take_along_axis(
             intersections,
@@ -574,6 +667,7 @@ class StoppingMuonSelection(H5FlowStage):
         ds = np.zeros((n, sample_points))
         pos = np.zeros((n, sample_points, 3))
         hit_prof_idx = np.full(hit_q.shape, -1, dtype=int)
+        hit_prof_s = np.full(hit_q.shape, 0, dtype=float)
 
         hit_mask = ~hit_q.mask
 
@@ -581,30 +675,48 @@ class StoppingMuonSelection(H5FlowStage):
         traj = np.zeros((n, sample_points, 3))
         start_pt = seed_pt[...,0:1,:]
         end_pt = start_pt.copy()
-        traj[...,0:1,:] = seed_pt
+        traj[...,0:1,:] = seed_pt.copy()
         local_mask = np.linalg.norm(hit_xyz - seed_pt, axis=-1, keepdims=True) < search_dx
         local_mask = np.broadcast_to(hit_mask[...,np.newaxis] & local_mask, hit_xyz.shape)
         curr_direction = ma.array(hit_xyz - seed_pt, mask=~local_mask).mean(axis=-2)
         curr_direction /= np.clip(np.linalg.norm(curr_direction, axis=-1, keepdims=True),1e-15,None)
-        s = np.zeros((n, sample_points))
+        hit_mask = hit_mask & ~local_mask[...,0]
 
+        disabled_channels = resources.get('DisabledChannels', None)
+        
         i = 0
         while (i < sample_points-1) and np.any(hit_mask):
             i += 1
             
-            # collect hits in local, forward direction
+            # collect hits in local region
             dr = (hit_xyz - traj[...,i-1,np.newaxis,:])
-            dl = np.linalg.norm(dr * curr_direction[...,np.newaxis,:], axis=-1, keepdims=True)
-            # forward = np.sum(dx * curr_direction[...,np.newaxis,:], axis=-1, keepdims=True) > 0
+            dl = np.sum(dr * curr_direction[...,np.newaxis,:], axis=-1, keepdims=True)
+            forward = dl > 0
             dt = np.linalg.norm(dr - dl * curr_direction[...,np.newaxis,:], axis=-1, keepdims=True)
-            local_mask = (dl < dx) & (dt < dx/2) & hit_mask[...,np.newaxis] # & forward
+            local_mask = (dl < dx) & (dt < dx/2) & hit_mask[...,np.newaxis] & forward
 
-            # if none found, expand search radius
-            search_factor = 1
-            while np.any(~(local_mask[...,0]).any(axis=-1) & hit_mask.any(axis=-1)):
+            # if none found, expand search
+            if np.any(~((local_mask[...,0]).any(axis=-1)) & hit_mask.any(axis=-1)):
                 r = np.linalg.norm(dr, axis=-1, keepdims=True)
-                local_mask = (local_mask | ((r < search_factor * search_dx) & hit_mask[...,np.newaxis] & ~(local_mask).any(axis=-2, keepdims=True)))
-                search_factor += 1
+
+                # if disabled channels list present and next step is a disabled region, search in a longer line first
+                if disabled_channels is not None:
+                    proposed_step = traj[...,i-1,:] + curr_direction * dx
+                    step_is_disabled = ~disabled_channels.is_active(proposed_step)
+                    local_mask = local_mask | (
+                        (dl < 2*dx) & (dt < 3*dx/4) & hit_mask[...,np.newaxis] & forward
+                        & step_is_disabled[...,np.newaxis,np.newaxis]
+                        & ~(local_mask).any(axis=-2, keepdims=True))
+
+                # then search in a sphere in ever expanding circles
+                search_factor = 1
+                while np.any(~(local_mask[...,0]).any(axis=-1) & hit_mask.any(axis=-1)):
+                    local_mask = (local_mask | (
+                        (r < search_factor * search_dx) & hit_mask[...,np.newaxis]
+                        & ~(local_mask).any(axis=-2, keepdims=True)))
+                    search_factor += 1
+                    if search_factor > 5:
+                        break
 
             # if no more hits found, continue
             if not np.any(local_mask):
@@ -620,9 +732,7 @@ class StoppingMuonSelection(H5FlowStage):
             curr_direction /= np.clip(np.linalg.norm(curr_direction, axis=-1, keepdims=True), 1e-15, None)
 
             # mask off used hits
-            hit_mask = hit_mask & ~local_mask[...,0]            
-
-            hit_prof_idx[local_mask[...,0]] = i
+            hit_mask = hit_mask & ~local_mask[...,0]
 
         # project hits onto trajectory segments
         dr = (hit_xyz[...,np.newaxis,:] - traj[...,np.newaxis,:-1,:]) # (ev, hit, traj-1, 3)
@@ -632,11 +742,14 @@ class StoppingMuonSelection(H5FlowStage):
         alpha = np.sum(dr * traj_dr, axis=-1) / traj_l[...,0] # (ev, hit, traj-1)
 
         # find closest segment
-        d = np.linalg.norm(dr - traj_dr * np.clip(alpha[...,np.newaxis],0,1) * traj_l, axis=-1) # (ev, hit, traj-1)
+        d = np.linalg.norm(dr - traj_dr * np.clip(alpha[...,np.newaxis], 0, 1) * traj_l, axis=-1) # (ev, hit, traj-1)
+        d = ma.array(d, mask=(hit_q.mask[...,np.newaxis] | (d > dx/2)))
+        d.mask[...,i-1:] = True # remove invalid segments
         iseg_min = np.argmin(d, axis=-1) # (ev, hit)
+        iseg_min[np.take_along_axis(d.mask, iseg_min[...,np.newaxis], axis=-1).reshape(iseg_min.shape)] = -1
 
         # calculate segment range
-        s = np.cumsum(traj_l, axis=-2) - traj_l[...,0:1,:] # (ev, 1, traj-1, 1)
+        s = np.concatenate([np.zeros(traj_l.shape[:-2] + (1,1)), np.cumsum(traj_l, axis=-2)], axis=-2) # (ev, 1, traj-1, 1)
         hit_s = np.take_along_axis(s, iseg_min[...,np.newaxis,np.newaxis], axis=-2)
         hit_s = hit_s + np.take_along_axis(traj_l * alpha[...,np.newaxis], iseg_min[...,np.newaxis,np.newaxis], axis=-2) # (ev, hit, 1, 1)
         hit_s = hit_s[...,0,0]
@@ -645,17 +758,44 @@ class StoppingMuonSelection(H5FlowStage):
         bins = np.linspace(0, max_range, sample_points)
         hit_prof_idx = np.clip(np.digitize(hit_s, bins=bins) - 1, 0, sample_points-1)
         hit_prof_idx[hit_q.mask] = -1
-        
+
+        sample_point_s = np.zeros_like(ds)
+        prev_pos = traj[...,0,:]
         for i in range(sample_points):
-            if not np.any(hit_prof_idx >= i):
-                break
-            hit_mask = hit_prof_idx == i
-            s = ma.array(hit_s, mask=~hit_mask)
-            ds[...,i] = np.max(s, axis=-1) - np.min(s, axis=-1)
-            dq[...,i] = np.sum(ma.array(hit_q, mask=~hit_mask), axis=-1)
-            dn[...,i] = np.sum(hit_mask, axis=-1)
-            pos[...,i,:] = ma.average(ma.array(hit_xyz, mask=~np.broadcast_to(hit_mask[...,np.newaxis], hit_xyz.shape)),
-                                      weights=np.broadcast_to(hit_q[...,np.newaxis], hit_xyz.shape), axis=-2)
+            #if not np.any(hit_prof_idx >= i):
+            #    break
+            
+            # grab hits from current trajectory point
+            hit_mask = (hit_prof_idx == i) & (~hit_q.mask)
+            any_hit_mask = hit_mask.any(axis=-1)
+            #if not np.any(any_hit_mask):
+            #    continue
+
+            # re-estimate position and only use "local" hits
+            traj_hit_s = ma.array(hit_s, mask=~hit_mask)
+            local_pos = (ma.average(ma.array(hit_xyz, mask=~np.broadcast_to(hit_mask[...,np.newaxis], hit_xyz.shape)),
+                                        weights=np.broadcast_to(hit_q[...,np.newaxis], hit_xyz.shape), axis=-2)
+                             * any_hit_mask[...,np.newaxis])
+            local_pos[~any_hit_mask,:] = prev_pos[~any_hit_mask,:]
+            prev_pos = local_pos
+            
+            hit_mask = hit_mask & (np.linalg.norm(hit_xyz - local_pos[...,np.newaxis,:], axis=-1) < dx)
+            any_hit_mask = hit_mask.any(axis=-1)
+
+            #if not np.any(any_hit_mask):
+            #    continue
+
+            # fill output arrays
+            pos[...,i,:] = local_pos
+            dq[...,i] = (np.sum(ma.array(hit_q, mask=~hit_mask), axis=-1)) * any_hit_mask
+            dn[...,i] = (np.sum(hit_mask, axis=-1)) * any_hit_mask            
+            local_dir = pos[...,i,:] - pos[...,i-1,:] if i > 0 else traj[...,1,:] - traj[...,0,:]
+            if i > 0:
+                sample_point_s[...,i:] += np.linalg.norm(local_dir, axis=-1)[...,np.newaxis]
+            local_dir /= np.clip(np.linalg.norm(local_dir, axis=-1, keepdims=True), 1e-15, None)
+            local_s = ma.array(np.sum((hit_xyz - pos[...,i:i+1,:]) * local_dir[...,np.newaxis,:], axis=-1), mask=~hit_mask)
+            hit_prof_s[hit_mask] = (local_s + sample_point_s[...,i:i+1])[hit_mask]
+            ds[...,i] = (np.max(local_s, axis=-1) - np.min(local_s, axis=-1)) * any_hit_mask
 
         r_dq = np.zeros((orig_len,) + dq.shape[1:])
         r_dn = np.zeros((orig_len,) + dn.shape[1:], dtype=int)
@@ -664,6 +804,7 @@ class StoppingMuonSelection(H5FlowStage):
         r_pos = np.zeros((orig_len,) + pos.shape[1:])
         r_ds = np.zeros((orig_len,) + ds.shape[1:])
         r_hit_prof_idx = np.zeros((orig_len,) + hit_prof_idx.shape[1:], dtype=int) - 1
+        r_hit_prof_s = np.zeros((orig_len,) + hit_prof_s.shape[1:], dtype=float)    
 
         np.place(r_dq, np.broadcast_to(mask[..., np.newaxis], r_dq.shape), dq)
         np.place(r_dn, np.broadcast_to(mask[..., np.newaxis], r_dn.shape), dn)
@@ -672,187 +813,9 @@ class StoppingMuonSelection(H5FlowStage):
         np.place(r_end_pt, np.broadcast_to(mask[..., np.newaxis, np.newaxis], r_end_pt.shape), end_pt)
         np.place(r_pos, np.broadcast_to(mask[..., np.newaxis, np.newaxis], r_pos.shape), pos)
         np.place(r_hit_prof_idx, np.broadcast_to(mask[..., np.newaxis], r_hit_prof_idx.shape), hit_prof_idx)
+        np.place(r_hit_prof_s, np.broadcast_to(mask[..., np.newaxis], r_hit_prof_s.shape), hit_prof_s)        
 
-        return r_dq, r_dn, r_ds, r_start_pt, r_end_pt, r_pos, r_hit_prof_idx
-
-    
-    @staticmethod
-    def profiled_dqdx(tracks, seed_pt, hit_xyz, hit_q, dx, max_range, search_dx, pixel_pitch, mask=None):
-        '''
-            Generate dQ/dx profile. Algorithm is the following:
-
-             1. Find track nearest to seed point
-
-             2. Orient track in direction away from seed point
-
-             3. Collect hits that lie within ``dx`` mm along the track trajectory
-
-             4. Assign hits an overall position along event according to the projection onto the track trajectory
-
-             5. Fill dQ/dx bins with hit charge according to hit position
-
-             6. Set next iteration seed point as current track end point
-
-             7. Repeat, removing previously used tracks from each iteration
-
-            The output array contains ``int(max_range / dx)`` bins with the
-            first and last bins being overflow bins.
-
-            This is an expensive operation so a ``mask`` can be provided to skip
-            the analysis of certain events. The returned array will not contain
-            meaningful values for these entries.
-
-            :param tracks: masked array, shape: (..., M)
-
-            :param seed_pt: masked array, shape: (..., 3)
-
-            :param hit_xyz: masked array, shape: (..., n, 3)
-
-            :param hit_q: masked array, shape: (..., n)
-
-            :param dx: float, bin size
-
-            :param search_dx: float, distance to look for next track
-
-            :param max_range: float, maximum bin
-
-            :param pixel_pitch: float, pixel pitch for dx correction
-
-            :returns: ``tuple`` of masked arrays, shape: (..., m). ``dq``, ``dn``, ``start_pt``, ``end_pt``, ``pos``, ``hit_prof_idx``
-        '''
-        orig_len = len(tracks)
-        if mask is not None:
-            tracks = tracks[mask]
-            seed_pt = seed_pt[mask]
-            hit_xyz = hit_xyz[mask]
-            hit_q = hit_q[mask]
-
-        seed_d = np.minimum(np.linalg.norm(tracks['trajectory'][..., 0, :] - seed_pt, axis=-1),
-                            np.linalg.norm(tracks['trajectory'][..., -1, :] - seed_pt, axis=-1))
-        seed_track = np.expand_dims(np.argmin(seed_d, axis=-1), axis=-1)
-
-        start_pt = seed_pt.copy()
-
-        dq = np.zeros((len(tracks), int(max_range / dx)))
-        dn = np.zeros((len(tracks), int(max_range / dx)), dtype=int)
-        pos = np.zeros((len(tracks), int(max_range / dx), 3))
-        hit_prof_idx = np.full((len(tracks), hit_q.shape[-1]), -1, dtype=int)
-        s_min = np.full((len(tracks), int(max_range / dx)), max_range + 1.)
-        s_max = np.full((len(tracks), int(max_range / dx)), -max_range - 1.)
-
-        track_mask = ~tracks['id'].mask.copy()  # True == include
-        iter_mask = np.zeros_like(~tracks['id'].mask)  # True == include
-        hit_mask = ~(hit_q.mask | np.any(hit_xyz.mask, axis=-1))  # True == include
-
-        np.put_along_axis(iter_mask, seed_track, True, axis=-1)
-
-        s = 0
-        bins = np.linspace(0, max_range, dq.shape[-1])
-        for _ in range(tracks.shape[-1]):
-
-            # find seed trajectory
-            traj = np.take_along_axis(tracks, seed_track, axis=-1)['trajectory'].copy()
-
-            # orient trajectory according to previous seed point
-            traj_start_d = np.linalg.norm(traj[..., 0, :] - seed_pt, axis=-1, keepdims=True)
-            traj_end_d = np.linalg.norm(traj[..., -1, :] - seed_pt, axis=-1, keepdims=True)
-            is_reversed_traj = (traj_end_d < traj_start_d)
-            is_reversed_traj = np.expand_dims(is_reversed_traj, axis=-1)
-            traj = np.where(is_reversed_traj, traj[..., ::-1, :], traj)
-            # (N, 1, npt, 3)
-
-            # get trajectory displacement vectors
-            traj_start = traj[..., :-1, :]
-            traj_end = traj[..., 1:, :]
-            traj_dx = traj_end - traj_start
-            traj_length = np.linalg.norm(traj_dx, axis=-1, keepdims=True)
-            traj_length = np.clip(traj_length, 1e-15, None)
-            traj_n = traj_dx / traj_length
-            # (N, 1, npt-1, 3)
-
-            # collect hits within dx of trajectory
-            hit_dx = np.expand_dims(hit_xyz, axis=-2) - traj_start
-            hit_td = np.linalg.norm(hit_dx - np.sum(hit_dx * traj_n, axis=-1, keepdims=True) * traj_n, axis=-1)
-            hit_alpha = np.sum(hit_dx * traj_n, axis=-1) / traj_length[..., 0]
-            hit_on_traj = (hit_alpha < 1) & (hit_alpha > 0)
-            hit_near_traj_pt = ((np.linalg.norm(np.expand_dims(hit_xyz, axis=-2) - traj_start, axis=-1) < dx)
-                                | (np.linalg.norm(np.expand_dims(hit_xyz, axis=-2) - traj_end, axis=-1) < dx))
-            itraj_min_td = np.expand_dims(np.argmin(
-                ma.array(hit_td, mask=~(hit_on_traj | hit_near_traj_pt)),
-                axis=-1), axis=-1)
-            hit_min_td = np.take_along_axis(hit_td, itraj_min_td, axis=-1)
-            traj_hit_mask = ((hit_min_td < dx/2)[..., 0] & hit_mask
-                             & (np.any(hit_on_traj, axis=-1) | np.any(hit_near_traj_pt, axis=-1)))
-            hit_mask = hit_mask & ~traj_hit_mask  # remove from next iteration
-            # (N, nhit)
-
-            # project hits onto track
-            traj_s = np.cumsum(traj_length[..., 0], axis=-1) + s - traj_length[..., 0]  # (N, 1, npts-1)
-            hit_s = hit_alpha * traj_length[..., 0] + traj_s  # (N, nhit, npts-1) * (N, 1, npt-1, 1)
-            hit_s = np.take_along_axis(hit_s, itraj_min_td, axis=-1)[..., 0]
-            # (N, nhit)
-
-            # and create a histogram
-            i_bin = np.expand_dims(np.clip(np.digitize(hit_s, bins=bins) - 1, 0, len(bins) - 1), axis=-1)
-            np.place(hit_prof_idx, traj_hit_mask, i_bin)
-            # (N, nhit, nbin)
-            q_mask = ((i_bin == np.expand_dims(np.indices(dq.shape)[-1], axis=-2))
-                      & np.expand_dims(traj_hit_mask, axis=-1)
-                      & np.expand_dims(np.take_along_axis(track_mask, seed_track, axis=-1), axis=-1)
-                      & np.expand_dims(np.take_along_axis(iter_mask, seed_track, axis=-1), axis=-1)
-                      )
-            masked_q = ma.array(np.broadcast_to(hit_q[..., np.newaxis], q_mask.shape), mask=~q_mask)
-            xyz_mask = np.broadcast_to(q_mask[..., np.newaxis], q_mask.shape + (3,))
-            masked_xyz = ma.array(np.broadcast_to(hit_xyz[..., np.newaxis, :], xyz_mask.shape), mask=~xyz_mask)
-            update_elem = np.any(~q_mask, axis=-2)
-            dq[update_elem] = dq[update_elem] + ma.sum(masked_q, axis=-2).filled(0)[update_elem]
-            dn[update_elem] = dn[update_elem] + ma.sum(~masked_q.mask, axis=-2).filled(0)[update_elem]
-            pos[update_elem] = pos[update_elem] + ma.sum(masked_xyz, axis=-3).filled(0)[update_elem]
-
-            masked_s = ma.array(np.broadcast_to(hit_s[..., np.newaxis], q_mask.shape), mask=~q_mask)
-            s_min[update_elem] = ma.minimum(
-                s_min[update_elem], ma.min(masked_s, axis=-2).filled(max_range + 1)[update_elem])
-            s_max[update_elem] = ma.maximum(
-                s_max[update_elem], ma.max(masked_s, axis=-2).filled(-max_range - 1)[update_elem])
-
-            # termination conditions
-            np.put_along_axis(track_mask, seed_track, False, axis=-1)
-            if (np.all([s > max_range]) or not np.any(track_mask) or not np.any(hit_mask)):
-                break
-
-            # update variables
-            s = s + np.sum(traj_length[..., 0], axis=-1)[..., np.newaxis]
-            seed_pt = traj[..., -1, :].copy()
-            traj_distance = np.sqrt(ma.sum((tracks['trajectory'] - np.expand_dims(seed_pt, axis=-2))**2, axis=-1))
-            traj_mask = np.any((traj_distance < search_dx) & track_mask[..., np.newaxis], axis=-1)
-            seed_track = np.expand_dims(np.argmax(traj_mask, axis=-1), axis=-1)
-
-            iter_mask[:] = False
-            np.put_along_axis(iter_mask, seed_track, np.take_along_axis(traj_mask, seed_track, axis=-1), axis=-1)
-
-            if not np.any(traj_mask):
-                break
-
-        pos /= np.maximum(dn[..., np.newaxis], 1e-15)
-        end_pt = np.take_along_axis(pos, np.argmax(dq / np.maximum(s_max - s_min, 1e-15) * (dn > 0), axis=-1)[..., np.newaxis, np.newaxis], axis=-2)
-
-        r_dq = np.zeros((orig_len,) + dq.shape[1:])
-        r_dn = np.zeros((orig_len,) + dn.shape[1:])
-        r_start_pt = np.zeros((orig_len,) + start_pt.shape[1:])
-        r_end_pt = np.zeros((orig_len,) + end_pt.shape[1:])
-        r_pos = np.zeros((orig_len,) + pos.shape[1:])
-        r_ds = np.zeros((orig_len,) + s_min.shape[1:])
-        r_hit_prof_idx = np.zeros((orig_len,) + hit_prof_idx.shape[1:]) - 1
-
-        np.place(r_dq, np.broadcast_to(mask[..., np.newaxis], r_dq.shape), dq)
-        np.place(r_dn, np.broadcast_to(mask[..., np.newaxis], r_dn.shape), dn)
-        np.place(r_ds, np.broadcast_to(mask[..., np.newaxis], r_ds.shape), (s_max - s_min))
-        np.place(r_start_pt, np.broadcast_to(mask[..., np.newaxis, np.newaxis], r_start_pt.shape), start_pt)
-        np.place(r_end_pt, np.broadcast_to(mask[..., np.newaxis, np.newaxis], r_end_pt.shape), end_pt)
-        np.place(r_pos, np.broadcast_to(mask[..., np.newaxis, np.newaxis], r_pos.shape), pos)
-        np.place(r_hit_prof_idx, np.broadcast_to(mask[..., np.newaxis], r_hit_prof_idx.shape), hit_prof_idx)
-
-        return r_dq, r_dn, r_ds, r_start_pt, r_end_pt, r_pos, r_hit_prof_idx
+        return r_dq, r_dn, r_ds, r_start_pt, r_end_pt, r_pos, r_hit_prof_idx, r_hit_prof_s
 
     @staticmethod
     def mean_neg_loglikelihood(r0, range_table, profile_n, profile_dqdx, profile_rr, profile_pos):
@@ -860,12 +823,11 @@ class StoppingMuonSelection(H5FlowStage):
         pt_likelihood_dqdx, pt_likelihood_mcs = StoppingMuonSelection.profile_likelihood(
             profile_rr, profile_dqdx, profile_pos, range_table)
         profile_n, profile_dqdx, profile_rr = np.broadcast_arrays(profile_n, profile_dqdx, profile_rr)
-        pt_likelihood_mcs = ma.masked_where((profile_n <= 0), pt_likelihood_mcs)
-        pt_likelihood_dqdx = ma.masked_where((profile_n <= 0), pt_likelihood_dqdx)
-        #pt_likelihood_dqdx = ma.masked_where((profile_n <= 0) | (profile_rr < 0), pt_likelihood_dqdx)
+        pt_likelihood_mcs = ma.masked_where((profile_n <= 0) | (profile_rr <= 0), pt_likelihood_mcs)
+        #pt_likelihood_dqdx = ma.masked_where((profile_rr <= 0), pt_likelihood_dqdx)
+        pt_likelihood_dqdx = ma.masked_where((profile_n <= 0) | (profile_rr <= 0), pt_likelihood_dqdx)
+
         mean_likelihood = -pt_likelihood_dqdx.mean(axis=-1) - pt_likelihood_mcs.mean(axis=-1)
-        # add a penalty for not using the profile end point
-#         mean_likelihood += 0.5 * np.sum((profile_n > 0) & (profile_rr < 0), axis=-1)**2
         return mean_likelihood
 
     def run(self, source_name, source_slice, cache):
@@ -957,46 +919,78 @@ class StoppingMuonSelection(H5FlowStage):
                              & (ma.sum(seed_track_mask, axis=-1) == 1))
 
         # now check the likelihood of a stopping muon
-        # first generated the dQ/dx profile
-        #dq, dn, ds, start_pt, end_pt, pos, hit_prof_idx = self.profiled_dqdx(
-        dq, dn, ds, start_pt, end_pt, pos, hit_prof_idx = self.profiled_dqdx_kalman(    
+        # first generate the dQ/dx profile
+        dq, dn, ds, start_pt, end_pt, pos, hit_prof_idx, hit_prof_s = self.profiled_dqdx_kalman(
             tracks, seed_pt, hit_xyz, hit_q, mask=event_is_stopping,
             dx=self.profile_dx, search_dx=self.profile_search_dx,
             max_range=self.profile_max_range, pixel_pitch=resources['Geometry'].pixel_pitch)
+        #ds += resources['Geometry'].pixel_pitch # correct for pixel edges
+        ds = self.dx_estimate(pos, hit_xyz, hit_prof_idx, resources['Geometry'].pixel_pitch)
         profile_n = dn
         profile_dqdx = dq / ma.maximum(ds, resources['Geometry'].pixel_pitch) * (dn > 0)
         profile_dqdx[dn <= 0] = 0
-        # make an initial guess for the stopping point (maximum dQ/dx)
-        profile_rr = ((np.expand_dims(np.argmax(profile_dqdx, axis=-1), axis=-1)
-                       - np.indices(profile_dqdx.shape)[-1]) * self.profile_dx)
+
+        # make an initial guess for the stopping point (maximum 2 dQ/dx bins)
+        profile_rr = np.linalg.norm(pos[...,1:,:] - pos[...,:-1,:], axis=-1)
+        profile_rr = np.concatenate((np.zeros(profile_rr.shape[:-1]+(1,)), profile_rr), axis=-1)
+        profile_rr = np.cumsum(profile_rr, axis=-1)
+        
+        i_max = np.argsort(profile_dqdx, axis=-1)[...,-2:]
+        profile_offset0 = np.take_along_axis(profile_rr, i_max[...,0:1], axis=-1)
+        profile_offset1 = np.take_along_axis(profile_rr, i_max[...,1:2], axis=-1)
+        
+        # refine guess by using the hit with the largest charge
+        hit_near_stop0 = (hit_prof_idx == i_max[...,0:1])
+        hit_near_stop1 = (hit_prof_idx == i_max[...,1:2])
+        profile_offset0[hit_near_stop0.any(axis=-1)] = np.take_along_axis(
+            hit_prof_s, np.argmax(ma.array(hit_q, mask=~hit_near_stop0), axis=-1)[...,np.newaxis], axis=-1)[hit_near_stop0.any(axis=-1)]
+        profile_offset1[hit_near_stop1.any(axis=-1)] = np.take_along_axis(
+            hit_prof_s, np.argmax(ma.array(hit_q, mask=~hit_near_stop1), axis=-1)[...,np.newaxis], axis=-1)[hit_near_stop1.any(axis=-1)]
+
+        profile_rr0 = profile_offset0 - profile_rr
+        profile_rr1 = profile_offset1 - profile_rr        
 
         # perform a fit for the stopping point assuming a muon or a proton
         muon_r0 = np.zeros(profile_dqdx.shape[:-1])
         proton_r0 = np.zeros(profile_dqdx.shape[:-1])
-        iteration_max_range = (250, self.profile_dx)  # first pass within 25cm of initial guess, second within 2 profile bins
-        iteration_sample_factor = (2, 20)  # first pass resolution is profile bin/2, second is profile bin/10
+        max_range = 0 #self.profile_dx  # within +/- 1 profile bins
+        sample_factor = 1 #20  # resolution is profile bin/10
         for i in range(muon_r0.shape[0]):
             if np.any((profile_n[i] > 0)):
                 valid_mask = profile_n[i] > 0
-                for max_range, sample_factor in zip(iteration_max_range, iteration_sample_factor):
-                    rr_range = (np.maximum(-max_range, profile_rr[i][valid_mask].min()),
-                                np.minimum(+max_range, profile_rr[i][valid_mask].max()))
+
+                muon_offset = []
+                proton_offset = []
+                muon_likelihood = []
+                proton_likelihood = []         
+                
+                for j,rr in enumerate([profile_rr0[i], profile_rr1[i]]):
+                    rr_range = (np.maximum(-max_range, rr[valid_mask].min()),
+                                np.minimum(+max_range, rr[valid_mask].max()))
                     rr_offset = np.expand_dims(
                         np.linspace(rr_range[0], rr_range[1],
-                                    sample_factor * int(np.diff(rr_range) / self.profile_dx)),
+                                    np.clip(sample_factor * int(np.diff(rr_range) / self.profile_dx),1,None)),
                         axis=-1)
-                    close_dqdx = np.take_along_axis(profile_dqdx[i:i + 1], np.argmin(np.abs(profile_rr[i:i + 1] - rr_offset), axis=-1)[..., np.newaxis], axis=-1)
-                    mask = (close_dqdx > self.dqdx_peak_cut)
-                    if not np.any(mask):
-                        continue
+                    close_dqdx = np.take_along_axis(profile_dqdx[i:i + 1], np.argmin(np.abs(rr[np.newaxis,...] - rr_offset), axis=-1)[..., np.newaxis], axis=-1)
+                    mask = np.ones_like((close_dqdx > self.dqdx_peak_cut)) # ignore dQ/dx mask
+                    #if not np.any(mask):
+                    #    continue
 
-                    muon_likelihood = self.mean_neg_loglikelihood(
-                        rr_offset + muon_r0[i], self.muon_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], profile_rr[i:i + 1], pos[i:i + 1])
-                    muon_r0[i] = rr_offset[ma.argmin(ma.array(muon_likelihood, mask=~mask), axis=0)] + muon_r0[i]
+                    muon_likelihood.append(self.mean_neg_loglikelihood(
+                        rr_offset + muon_r0[i], self.muon_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], rr[np.newaxis,...], pos[i:i + 1]))
+                    #muon_r0[i] = rr_offset[ma.argmin(ma.array(muon_likelihood, mask=~mask), axis=0)] + muon_r0[i]
+                    muon_offset.append(rr_offset[ma.argmin(ma.array(muon_likelihood[j], mask=~mask), axis=0)])
 
-                    proton_likelihood = self.mean_neg_loglikelihood(
-                        rr_offset + proton_r0[i], self.proton_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], profile_rr[i:i + 1], pos[i:i + 1])
-                    proton_r0[i] = rr_offset[ma.argmin(ma.array(proton_likelihood, mask=~mask), axis=0)] + proton_r0[i]
+                    proton_likelihood.append(self.mean_neg_loglikelihood(
+                        rr_offset + proton_r0[i], self.proton_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], rr[np.newaxis,...], pos[i:i + 1]))
+                    #proton_r0[i] = rr_offset[ma.argmin(ma.array(proton_likelihood, mask=~mask), axis=0)] + proton_r0[i]
+                    proton_offset.append(rr_offset[ma.argmin(ma.array(proton_likelihood[j], mask=~mask), axis=0)])
+
+                muon_j_min = np.argmin([np.min(ll) for ll in muon_likelihood])
+                proton_j_min = np.argmin([np.min(ll) for ll in proton_likelihood])   
+                muon_r0[i] = muon_offset[muon_j_min]
+                proton_r0[i] = proton_offset[proton_j_min]
+                profile_rr[i] = [profile_rr0[i], profile_rr1[i]][muon_j_min]
 
         # calculate likelihood scores for refined dQ/dx profile
         muon_likelihood_dqdx, muon_likelihood_mcs = self.profile_likelihood(
@@ -1010,13 +1004,13 @@ class StoppingMuonSelection(H5FlowStage):
             self.muon_range_table)
 
         muon_likelihood_mcs = ma.masked_where(
-            (dn == 0),
+            (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
             muon_likelihood_mcs)
         proton_likelihood_mcs = ma.masked_where(
-            (dn == 0),
+            (dn == 0) | (profile_rr - proton_r0[..., np.newaxis] <= 0),
             proton_likelihood_mcs)
         mip_likelihood_mcs = ma.masked_where(
-            (dn == 0),
+            (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
             mip_likelihood_mcs)
         muon_likelihood_dqdx = ma.masked_where(
             (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
@@ -1044,13 +1038,16 @@ class StoppingMuonSelection(H5FlowStage):
             end_pt.reshape(-1, 3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         end_pt_in_fid = end_pt_in_fid.reshape(tracks.shape[0])
 
+        # estimate residual range for each hit
+        hit_prof_rr = profile_rr.max(axis=-1, keepdims=True) - hit_prof_s     
+
         # calculate "additional" energy (all energy not associated to the parent muon) assuming nominal michel dE/dx
         q_sum = hit_q.sum(axis=-1) - ma.array(dq, mask=(np.around(profile_rr/self.profile_dx) * self.profile_dx < 0) | (profile_n <= 0)).sum(axis=-1)
         michel_dedx = resources['ParticleData'].landau_peak(50 * units.MeV, resources['ParticleData'].e_mass, resources['Geometry'].pixel_pitch)
         e = q_sum * resources['LArData'].ionization_w / resources['LArData'].ionization_recombination(michel_dedx)
 
         # apply a hit density correction
-        profile_dqdx = profile_dqdx * ds / ma.maximum(ds - self.density_dx_correction(profile_rr, *self.density_dx_correction_params), resources['Geometry'].pixel_pitch) * (dn > 0)
+        #profile_dqdx = profile_dqdx * ds / ma.maximum(ds - self.density_dx_correction(profile_rr, *self.density_dx_correction_params), resources['Geometry'].pixel_pitch) * (dn > 0)
         # apply a curvature correction
         profile_rr = profile_rr * self.curvature_rr_correction
 
@@ -1108,6 +1105,12 @@ class StoppingMuonSelection(H5FlowStage):
             event_profile['proton_likelihood'][..., 1] = proton_likelihood_mcs
             event_profile['mip_likelihood'][..., 1] = mip_likelihood_mcs
 
+        hit_profile = np.zeros_like(hit_prof_idx, dtype=self.hit_profile_dtype)
+        if len(hit_profile):
+            hit_profile['idx'] -= 1
+            hit_profile['idx'][~hits['id'].mask] = hit_prof_idx[~hits['id'].mask]
+            hit_profile['rr'][~hits['id'].mask] = hit_prof_rr[~hits['id'].mask]
+
         if self.is_mc:
             event_true_sel = np.zeros(len(tracks), dtype=self.event_sel_dtype)
             if len(event_true_sel):
@@ -1136,7 +1139,7 @@ class StoppingMuonSelection(H5FlowStage):
         self.data_manager.write_data(f'{self.path}/{self.event_profile_dset_name}',
                                      event_profile_slice, event_profile)
         self.data_manager.write_data(f'{self.path}/{self.hit_profile_dset_name}',
-                                     event_hits_slice, hit_prof_idx[~hits['id'].mask])
+                                     event_hits_slice, hit_profile[~hits['id'].mask])
         self.data_manager.write_ref(f'{self.path}/{self.hit_profile_dset_name}',
                 self.hits_dset_name, np.c_[event_hits_slice, hits['id'].compressed()])
         if self.is_mc:
