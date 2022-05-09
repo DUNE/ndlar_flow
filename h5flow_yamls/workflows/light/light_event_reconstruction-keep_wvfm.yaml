@@ -3,7 +3,7 @@
 
 flow:
   source: 'light/events'
-  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_sum] #, hit_finder]
+  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_sum, hit_finder]
   drop: ['light/wvfm']
 
 

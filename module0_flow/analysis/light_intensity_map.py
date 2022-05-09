@@ -9,6 +9,9 @@ from module0_flow.util import units
 
 
 class LightIntensityMapGenerator(H5FlowStage):
+    '''
+    Generates a 3D histogram of tracks not crossing the light detectors along with a 3+1D histogram of the light signal.
+    '''
     x_bins = np.linspace(-310.38,310.38,15)
     y_bins = np.linspace(-620.76,620.76,27)
     z_bins = np.linspace(-304.31,304.31,17)
@@ -37,6 +40,23 @@ class LightIntensityMapGenerator(H5FlowStage):
 
     @staticmethod
     def fill_hist(hist, x, y, z, d=None, weights=None, bins=None):
+        '''
+        Update the given histogram with new values
+
+        :param hist: ND array, ``shape: (nbins_x, nbins_y, nbins_z[, nbins_d])``
+
+        :param x: 1D array of x values
+
+        :param y: 1D array of y values
+
+        :param z: 1D array of z values
+
+        :param d: 1D array of detector index (optional)
+
+        :param weights: 1D array of entry weights
+
+        :param bins: ``tuple`` of x,y,z[,d] bin edges
+        '''
         if weights is None:
             weights = np.ones_like(x)
 
