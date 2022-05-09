@@ -1,0 +1,25 @@
+# Generates a 3D histogram of the charge signal observed, along with a 4D histogram of the
+# light signal observed on each detector (correcting for solid angle)
+
+flow:
+  source: events
+  stages: [light_map]
+
+resources:
+  - !include h5flow_yamls/resources/Geometry.yaml
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 1
+
+
+light_map:
+  classname: LightIntensityMapGenerator # analysis/light_intensity_map.py
+  requires:
+    - name: 'light/swvfm'
+      path: ['light/events', 'light/swvfm']
+    - 'charge/hits'
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']

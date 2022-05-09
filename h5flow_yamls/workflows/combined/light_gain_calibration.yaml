@@ -36,7 +36,7 @@ light_gain_calib:
     larpix_gain: 221 # e/mV
     fid_cut: 20.0 # mm
     vis_energy_cut: 100 # keV
-    sample_window: [90,100]
+    sample_window: [0,256]
     gain_prefactor: # ArcLights: 1/6, LCMs: 1/2
       0: { 2: 0.1667, 3: 0.1667, 4: 0.1667, 5: 0.1667, 6: 0.1667, 7: 0.1667,
            9: 0.5, 10: 0.5, 11: 0.5, 12: 0.5, 13: 0.0, 14: 1.0, # ch 13 shows odd behavior
