@@ -21,6 +21,7 @@ class DisabledChannels(H5FlowResource):
         Provides:
          - ``disabled_xy``: x,y coordinates of all disabled channels
          - ``disabled_channel_lut``: lookup table to find if a pixel x,y coordinate is disabled
+         - ``is_active()``: helper function for determining if a 3D point in in an active region
 
         Example usage::
 
@@ -88,6 +89,14 @@ class DisabledChannels(H5FlowResource):
             logging.info(f'Disabled channel LUT size: '
                          f'{self.disabled_channel_lut.nbytes/1024/1024:0.02f}MB')
 
+        self._pixel_pitch = resources['Geometry'].pixel_pitch
+        self._pixel_x_hi_edge = np.sort(np.unique(resources['Geometry'].pixel_xy.compress((0,)))) + self._pixel_pitch/2
+        self._pixel_y_hi_edge = np.sort(np.unique(resources['Geometry'].pixel_xy.compress((1,)))) + self._pixel_pitch/2
+        io_group,io_channel,_,_ = resources['Geometry'].pixel_xy.keys()
+        tile_id = resources['Geometry'].tile_id[(io_group,io_channel)]
+        self._anode_z, idx = np.unique(resources['Geometry'].anode_z[(tile_id,)], return_index=True)
+        self._tpc_lookup = io_group[idx]
+
     @property
     def disabled_xy(self):
         return self._disabled_xy
@@ -95,6 +104,21 @@ class DisabledChannels(H5FlowResource):
     @property
     def disabled_channel_lut(self):
         return self._disabled_channel_lut
+
+    def is_active(self, xyz):
+        '''
+        Lookup a specific position to determine if it would fall onto an active pixel
+
+        :param xyz: 3D position ``shape: (..., 3)``
+
+        :returns: boolean array with ``True == active``, ``shape: (...,)``
+
+        '''
+        pixel_x = self._pixel_x_hi_edge[np.clip(np.digitize(xyz[...,0], bins=self._pixel_x_hi_edge), 0, len(self._pixel_x_hi_edge)-1)] - self._pixel_pitch/2
+        pixel_y = self._pixel_y_hi_edge[np.clip(np.digitize(xyz[...,1], bins=self._pixel_y_hi_edge), 0, len(self._pixel_y_hi_edge)-1)] - self._pixel_pitch/2
+        tpc = self._tpc_lookup[np.argmin(np.abs(xyz[...,2:3] - self._anode_z.reshape([1,]*(xyz.ndim-1)+[-1])), axis=-1)]
+        disabled = self.disabled_channel_lut[(tpc.astype(int), pixel_x.astype(int), pixel_y.astype(int))]
+        return ~disabled
 
     @staticmethod
     def load_disabled_channels_lut(disabled_channels_list=None,

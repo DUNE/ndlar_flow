@@ -3,4 +3,4 @@ params:
   path: 'lar_info'
   electron_lifetime_file: 'h5flow_data/ElecLifetimeFit_Module0.root'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/electronLifetime/ElecLifetimeFit_Module0.root
-  electron_lifetime: 2200 # us
+  electron_lifetime: 2600 # us
