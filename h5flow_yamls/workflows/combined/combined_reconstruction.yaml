@@ -2,7 +2,7 @@
 
 flow:
   source: events
-  stages: [t0_reco, drift_reco] #, tracklet_reco, tracklet_merge]
+  stages: [t0_reco, drift_reco, tracklet_reco, tracklet_merge]
   drop: []
 
 events:
