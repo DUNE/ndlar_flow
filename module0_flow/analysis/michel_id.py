@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.ma as ma
+import os
 
 from h5flow import H5FLOW_MPI
 from h5flow.core import H5FlowStage, resources
@@ -8,9 +9,10 @@ from module0_flow.util import units
 
 
 def load_likelihood_pdf(filename):
-    pdf = np.load(filename).copy()
-    pdf['sig'] /= pdf['sig'].sum()
-    pdf['bkg'] /= pdf['bkg'].sum()
+    pdf = np.load(filename)
+    normed_pdf = dict()
+    for key in pdf.keys():
+        normed_pdf[key] = pdf[key] / pdf[key].sum()
     return pdf
 
 
@@ -64,6 +66,7 @@ class MichelID(H5FlowStage):
 
         likelihood_pdf_filename='michel_pdf-{version}.npz',
         generate_likelihood_pdf=False,
+        update_likelihood=True
         )
 
     michel_label_dtype = np.dtype([
@@ -123,6 +126,14 @@ class MichelID(H5FlowStage):
 
             # save to file
             if self.rank == 0:
+                if self.update_likelihood and os.path.exists(self.likelihood_pdf_filename):
+                    d = np.load(self.likelihood_pdf_filename)
+                    assert np.all(d['bins0'] == self.michel_likelihood_args[2])
+                    assert np.all(d['bins1'] == self.michel_likelihood_args[3])
+                    assert np.all(d['bins2'] == self.michel_likelihood_args[4])
+                    self.michel_likelihood_args[0] += d['sig']
+                    self.michel_likelihood_args[1] += d['bkg']
+                    
                 np.savez_compressed(self.likelihood_pdf_filename,
                                     sig=self.michel_likelihood_args[0],
                                     bkg=self.michel_likelihood_args[1],
@@ -133,94 +144,96 @@ class MichelID(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         super(MichelID, self).run(source_name, source_slice, cache)
         ev = cache[source_name]
-
-        # load hit xyz positions
         hits = cache[self.hits_dset_name]
-        hit_drift = cache[self.drift_dset_name].reshape(hits.shape)
-        hit_prof_idx = cache[self.hit_prof_idx_dset_name].reshape(hits.shape)
-        hit_xyz = np.concatenate([
-            np.expand_dims(hits['px'], -1), np.expand_dims(hits['py'], -1),
-            np.expand_dims(hit_drift['z'], -1)], axis=-1)
 
-        # load dQ/dx profile and stopping event selection
-        stopping_sel = self.data_manager[self.stopping_sel_dset_name, source_slice].reshape(ev.shape)
-        prof = self.data_manager[self.profile_dset_name, source_slice].reshape(ev.shape)
+        if ev.shape[0]:
+            # load hit xyz positions
+            hit_drift = cache[self.drift_dset_name].reshape(hits.shape)
+            hit_prof_idx = cache[self.hit_prof_idx_dset_name].reshape(hits.shape)
+            hit_xyz = np.concatenate([
+                np.expand_dims(hits['px'], -1), np.expand_dims(hits['py'], -1),
+                np.expand_dims(hit_drift['z'], -1)], axis=-1)
 
-        # find start and end points
-        mu_start = np.take_along_axis(
-            prof['profile_pos'], np.expand_dims(np.argmax(prof['profile_n'] > 0, axis=-1), (1, 2)), axis=1)
-        mu_end = stopping_sel['stop_pt'] - stopping_sel['stop_pt_corr']
-        gap_mask = (prof['profile_rr'] < 0) & (prof['profile_n'] > 0)
-        gap_mask[:-1] = gap_mask[:-1] & (prof['profile_n'][1:] == 0)
-        michel_end = np.take_along_axis(
-            prof['profile_pos'], np.expand_dims(np.argmax(gap_mask, axis=-1), (1,2)), axis=1)
+            # load dQ/dx profile and stopping event selection
+            stopping_sel = self.data_manager[self.stopping_sel_dset_name, source_slice].reshape(ev.shape)
+            prof = self.data_manager[self.profile_dset_name, source_slice].reshape(ev.shape)
 
-        mu_start = mu_start.reshape(ev.shape + (-1,))
-        mu_end = mu_end.reshape(ev.shape + (-1,))
-        michel_end = michel_end.reshape(ev.shape + (-1,))
+            # find start and end points
+            mu_start = np.take_along_axis(
+                prof['profile_pos'], np.expand_dims(np.argmax(prof['profile_n'] > 0, axis=-1), (1, 2)), axis=1)
+            mu_end = stopping_sel['stop_pt'] - stopping_sel['stop_pt_corr']
+            gap_mask = (prof['profile_rr'] < 0) & (prof['profile_n'] > 0)
+            gap_mask[:-1] = gap_mask[:-1] & (prof['profile_n'][1:] == 0)
+            michel_end = np.take_along_axis(
+                prof['profile_pos'], np.expand_dims(np.argmax(gap_mask, axis=-1), (1,2)), axis=1)
 
-        # find axes
-        mu_dir = mu_start - mu_end
-        mu_dir /= np.clip(np.linalg.norm(mu_dir, axis=-1, keepdims=True), 1e-15, None)
+            mu_start = mu_start.reshape(ev.shape + (-1,))
+            mu_end = mu_end.reshape(ev.shape + (-1,))
+            michel_end = michel_end.reshape(ev.shape + (-1,))
 
-        michel_dir = michel_end - mu_end
-        # special case: michel start and end are the same, use average non-profiled position
-        no_michel_mask = np.all(michel_end == mu_end, axis=-1)
-        hit_profile_mask = np.broadcast_to(np.expand_dims(
-            (hit_prof_idx == -1) | ((hit_prof_idx > np.argmax(gap_mask, axis=-1)[...,np.newaxis])
-                                    & np.any(gap_mask, axis=-1, keepdims=True))
-            , -1), hit_xyz.shape)
-        michel_dir[no_michel_mask] = (np.mean(ma.array(hit_xyz, mask=~hit_profile_mask), axis=1) - mu_end)[no_michel_mask]
-        michel_dir[no_michel_mask & ~hit_profile_mask.any(axis=-1).any(axis=-1)]
-        michel_dir /= np.clip(np.linalg.norm(michel_dir, axis=-1, keepdims=True), 1e-15, None)
+            # find axes
+            mu_dir = mu_start - mu_end
+            mu_dir /= np.clip(np.linalg.norm(mu_dir, axis=-1, keepdims=True), 1e-15, None)
 
-        # calculate likelihood parameters
-        hit_cos_mu = np.sum((hit_xyz - mu_end[:, np.newaxis, :])
-            * mu_dir[:, np.newaxis, :], axis=-1)
-        hit_cos_e = np.sum((hit_xyz - mu_end[:, np.newaxis, :])
-            * michel_dir[:, np.newaxis, :], axis=-1)
-        hit_d = np.sqrt(np.sum((hit_xyz - mu_end[:, np.newaxis, :])**2, axis=-1))
+            michel_dir = michel_end - mu_end
+            # special case: michel start and end are the same, use average non-profiled position
+            no_michel_mask = np.all(michel_end == mu_end, axis=-1)
+            hit_profile_mask = np.broadcast_to(np.expand_dims(
+                (hit_prof_idx == -1) | ((hit_prof_idx > np.argmax(gap_mask, axis=-1)[...,np.newaxis])
+                                        & np.any(gap_mask, axis=-1, keepdims=True))
+                , -1), hit_xyz.shape)
+            michel_dir[no_michel_mask] = (np.mean(ma.array(hit_xyz, mask=~hit_profile_mask), axis=1) - mu_end)[no_michel_mask]
+            michel_dir[no_michel_mask & ~hit_profile_mask.any(axis=-1).any(axis=-1)]
+            michel_dir /= np.clip(np.linalg.norm(michel_dir, axis=-1, keepdims=True), 1e-15, None)
+            
+            # calculate likelihood parameters
+            hit_cos_mu = np.sum((hit_xyz - mu_end[:, np.newaxis, :])
+                                * mu_dir[:, np.newaxis, :], axis=-1)
+            hit_cos_e = np.sum((hit_xyz - mu_end[:, np.newaxis, :])
+                               * michel_dir[:, np.newaxis, :], axis=-1)
+            hit_d = np.sqrt(np.sum((hit_xyz - mu_end[:, np.newaxis, :])**2, axis=-1))
 
-        # score hits
-        hit_score = michel_likelihood_score(hit_cos_e, hit_cos_mu, hit_d, *self.michel_likelihood_args)
-        if self.generate_likelihood_pdf and resources['RunData'].is_mc:
-            # FIXME: paths are hardcoded and loaded on each execution
-            event_truth = np.expand_dims(self.data_manager['analysis/muon_capture/truth_labels', source_slice], axis=-1)
-            hit_traj = self.data_manager[source_name, 'charge/hits',
-                                         'charge/packets', 'mc_truth/tracks',
-                                         'mc_truth/trajectories', source_slice]
-            hit_frac = self.data_manager[source_name, 'charge/hits',
-                                         'charge/packets',
-                                         'mc_truth/packet_fraction',
-                                         source_slice]
-            hit_traj = np.take_along_axis(
-                hit_traj, np.expand_dims(np.argmax(hit_frac, axis=-1), axis=(-2,-1)),
-                axis=-2)
-            hit_traj = hit_traj.reshape(hits.shape)
-            hit_label_truth = (
-                ((hit_traj['trackID'] == event_truth['michel_track_id'])
-                 | (hit_traj['parentID'] == event_truth['michel_track_id']))
-                & event_truth['michel'].astype(bool))
+            # score hits
+            hit_score = michel_likelihood_score(hit_cos_e, hit_cos_mu, hit_d, *self.michel_likelihood_args)
+            if self.generate_likelihood_pdf and resources['RunData'].is_mc:
+                # FIXME: paths are hardcoded and loaded on each execution
+                event_truth = np.expand_dims(self.data_manager['analysis/muon_capture/truth_labels', source_slice], axis=-1)
+                hit_traj = self.data_manager[source_name, 'charge/hits',
+                                             'charge/packets', 'mc_truth/tracks',
+                                             'mc_truth/trajectories', source_slice]
+                hit_frac = self.data_manager[source_name, 'charge/hits',
+                                             'charge/packets',
+                                             'mc_truth/packet_fraction',
+                                             source_slice]
+                hit_traj = np.take_along_axis(
+                    hit_traj, np.expand_dims(np.argmax(hit_frac, axis=-1), axis=(-2,-1)),
+                    axis=-2)
+                hit_traj = hit_traj.reshape(hits.shape)
+                hit_label_truth = (
+                    ((hit_traj['trackID'] == event_truth['michel_track_id'])
+                     | (hit_traj['parentID'] == event_truth['michel_track_id']))
+                    & event_truth['michel'].astype(bool))
+                
+                self.michel_likelihood_args[:2] = fill_likelihood_pdf(
+                    hit_cos_mu, hit_cos_e, hit_d, hit_label_truth,
+                    *self.michel_likelihood_args)
 
-            self.michel_likelihood_args[:2] = fill_likelihood_pdf(
-                hit_cos_mu, hit_cos_e, hit_d, hit_label_truth,
-                *self.michel_likelihood_args)
-
-        # grab michel energy (from stopping muon selection)
-        michel_e = stopping_sel['remaining_e']
-
-        # cut on variables
-        michel_flag = ((np.sum(hit_score > 0, axis=-1) > self.michel_nhit_cut)
-                       | (michel_e > self.michel_e_cut))
+            # grab michel energy (from stopping muon selection)
+            michel_e = stopping_sel['remaining_e']
+            
+            # cut on variables
+            michel_flag = ((np.sum(hit_score > 0, axis=-1) > self.michel_nhit_cut)
+                           | (michel_e > self.michel_e_cut))
 
         # create output arrays
         michel_label = np.empty(ev.shape, dtype=self.michel_label_dtype)
-        michel_label['michel_flag'] = michel_flag
-        michel_label['michel_nhit'] = np.sum(hit_score > 0, axis=-1)
-        michel_label['michel_e'] = michel_e
-        michel_label['michel_dir'] = michel_dir
-        michel_label['muon_dir'] = mu_dir
-        michel_label['stop_pt'] = mu_end
+        if ev.shape[0]:
+            michel_label['michel_flag'] = michel_flag
+            michel_label['michel_nhit'] = np.sum(hit_score > 0, axis=-1)
+            michel_label['michel_e'] = michel_e
+            michel_label['michel_dir'] = michel_dir
+            michel_label['muon_dir'] = mu_dir
+            michel_label['stop_pt'] = mu_end
 
         hit_mask = ~hits['id'].mask
         hit_label = np.empty(hit_mask.sum(), dtype=self.hit_label_dtype)
