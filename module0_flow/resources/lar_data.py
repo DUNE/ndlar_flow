@@ -84,6 +84,7 @@ class LArData(H5FlowResource):
         else:
             self.data = dict(self.data_manager.get_attrs(self.path))
             assert_compat_version(self.class_version, self.data['class_version'])
+            self._init_electron_lifetime()            
 
         if self.rank == 0:
             logging.info(f'v_drift: {self.v_drift}')
@@ -152,12 +153,6 @@ class LArData(H5FlowResource):
 
         :returns: ``lifetime, (lifetime_lower_bound, lifetime_upper_bound)``
         '''
-        if 'electron_lifetime_central_value' in self.data:
-            self._init_electron_lifetime()
-            return self._electron_lifetime_central_interp(unix_ts), (
-                self._electron_lifetime_lower_interp(unix_ts),
-                self._electron_lifetime_upper_interp(unix_ts)
-            )
         return self._electron_lifetime_central_interp(unix_ts), (
             self._electron_lifetime_lower_interp(unix_ts),
             self._electron_lifetime_upper_interp(unix_ts)

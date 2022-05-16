@@ -1,7 +1,6 @@
 import numpy as np
 import h5py
 import numpy.ma as ma
-import ROOT
 from collections import defaultdict
 import logging
 
@@ -104,6 +103,7 @@ class LightEventGenerator(H5FlowGenerator):
         self.event_dset_name = self.dset_name
 
         # set up input file
+        import ROOT
         self.root_file = ROOT.TFile(self.input_filename, 'r')
         self.rwf = self.root_file.Get('rwf')
         self.end_position = self.rwf.GetEntries() if self.end_position is None else min(self.end_position, self.rwf.GetEntries())
