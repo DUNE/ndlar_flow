@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.ma as ma
+import os
 import scipy.ndimage as ndimage
 import logging
 
@@ -70,6 +71,7 @@ class MichelID(H5FlowStage):
 
         likelihood_pdf_filename='michel_pdf-{version}.npz',
         generate_likelihood_pdf=False,
+        update_likelihood=True
         )
 
     michel_label_dtype = np.dtype([
@@ -139,6 +141,14 @@ class MichelID(H5FlowStage):
 
             # save to file
             if self.rank == 0:
+                if self.update_likelihood and os.path.exists(self.likelihood_pdf_filename):
+                    d = np.load(self.likelihood_pdf_filename)
+                    assert np.all(d['bins0'] == self.michel_likelihood_args[2])
+                    assert np.all(d['bins1'] == self.michel_likelihood_args[3])
+                    assert np.all(d['bins2'] == self.michel_likelihood_args[4])
+                    self.michel_likelihood_args[0] += d['sig']
+                    self.michel_likelihood_args[1] += d['bkg']
+                    
                 np.savez_compressed(self.likelihood_pdf_filename,
                                     sig=self.michel_likelihood_args[0],
                                     bkg=self.michel_likelihood_args[1],
@@ -231,6 +241,7 @@ class MichelID(H5FlowStage):
             # score hits
             hit_score = michel_likelihood_score(hit_cos_mu, hit_cos_e, hit_d, *self.michel_likelihood_args)
             hit_score = hit_score * (~no_hit_mask[...,np.newaxis])
+
             if self.generate_likelihood_pdf and resources['RunData'].is_mc:
                 # FIXME: paths are hardcoded and loaded on each execution
                 event_truth = np.expand_dims(self.data_manager['analysis/muon_capture/truth_labels', source_slice], axis=-1)

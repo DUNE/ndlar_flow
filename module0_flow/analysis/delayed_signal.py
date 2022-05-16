@@ -150,6 +150,8 @@ class DelayedSignal(H5FlowStage):
         hits = cache[self.hits_dset_name]
         if len(hits):
             hits = hits.reshape(len(np.r_[source_slice]),-1)
+        else:
+            hits = ma.array(np.empty((0,1), dtype=hits.dtype))
 
         # find prompt signal time and amplitude
         # definition:
