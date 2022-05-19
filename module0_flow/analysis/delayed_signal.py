@@ -35,8 +35,8 @@ class DelayedSignal(H5FlowStage):
 
     defaults = dict(
         hits_dset_name='light/hits',
-        prompt_dset_name='analysis/muon_capture/prompt',
-        delayed_dset_name='analysis/muon_capture/delayed',
+        prompt_dset_name='analysis/time_reco/prompt',
+        delayed_dset_name='analysis/time_reco/delayed',
         prompt_threshold_factor=1,
         prompt_window=[-350,-250], # ns
         delayed_window=[100,1600], # ns
@@ -167,13 +167,13 @@ class DelayedSignal(H5FlowStage):
             )
         hit_ns = hits['ns'] + hits['busy_ns'] + hits['ns_spline']
         hit_ns.mask = hit_ns.mask | ~prompt_hit_mask
-        prompt_ns = ma.average(hit_ns, axis=-1, weights=hits['max_spline'])
+        prompt_ns = ma.average(hit_ns, axis=-1, weights=hits['sum_spline'])
         prompt_ampl = np.zeros(hits.shape[0:1] + self.prompt_dtype['ampl'].shape)
         for i in range(prompt_ampl.shape[1]):
             for j in range(prompt_ampl.shape[2]):
                 hit_submask = (hits['tpc'] == i) & (hits['det'] == j) & prompt_hit_mask
                 if np.any(hit_submask):
-                    prompt_ampl[:,i,j] = (hit_submask * hits['max_spline']).sum(axis=-1)
+                    prompt_ampl[:,i,j] = (hit_submask * hits['sum_spline']).sum(axis=-1)
                     prompt_ampl[~np.any(hit_submask, axis=-1),i,j] = 0
 
         # calculate delayed parameters
@@ -196,7 +196,7 @@ class DelayedSignal(H5FlowStage):
                         + hits[hit_submask]['busy_ns']
                         + hits[hit_submask]['ns_spline']
                         - p_ns[hit_submask])
-                    hit_rel_ampl[hit_submask] = hits[hit_submask]['max_spline'] / np.clip(p_ampl[hit_submask],1e-15,None)
+                    hit_rel_ampl[hit_submask] = hits[hit_submask]['sum_spline'] / np.clip(p_ampl[hit_submask],1e-15,None)
                     hit_rel_valid[hit_submask] = (p_ampl[hit_submask] > 0)
 
         if self.calibration_flag:
@@ -229,7 +229,7 @@ class DelayedSignal(H5FlowStage):
             hit_in_window = (hit_mask[...,np.newaxis]
                              & (hit_rel_ns[...,np.newaxis] < sliding_center + self.delayed_hit_window)
                              & (hit_rel_ns[...,np.newaxis] >= sliding_center - self.delayed_hit_window))
-            sliding_score = np.sum(hit_in_window * hits['max_spline'][...,np.newaxis], axis=-2)
+            sliding_score = np.sum(hit_in_window * hits['sum_spline'][...,np.newaxis], axis=-2)
             if len(sliding_score):
                 delayed_ns_med = np.take_along_axis(sliding_center[0], np.argmax(sliding_score, axis=-1)[...,np.newaxis], axis=-1)
             else:
@@ -240,7 +240,7 @@ class DelayedSignal(H5FlowStage):
             # calculate delayed signal parameters
             hit_in_window = hit_mask & (hit_rel_ns < delayed_ns_max) & (hit_rel_ns >= delayed_ns_min)
             if np.any(hit_in_window):
-                delayed_time = ma.average(hit_rel_ns, axis=-1, weights=hit_in_window * hits['max_spline'])
+                delayed_time = ma.average(hit_rel_ns, axis=-1, weights=hit_in_window * hits['sum_spline'])
             else:
                 delayed_time = np.zeros(hit_rel_ns.shape[0])
             delayed_ns = prompt_ns + delayed_time
@@ -251,7 +251,7 @@ class DelayedSignal(H5FlowStage):
                 for j in range(delayed_ampl.shape[2]):
                     hit_submask = (hits['tpc'] == i) & (hits['det'] == j) & hit_in_window
                     if np.any(hit_submask):
-                        delayed_ampl[:,i,j] = (hit_submask * hits['max_spline']).sum(axis=-1)
+                        delayed_ampl[:,i,j] = (hit_submask * hits['sum_spline']).sum(axis=-1)
                         delayed_ampl[~np.any(hit_submask, axis=-1),i,j] = 0
 
             # save data to file
