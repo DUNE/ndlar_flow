@@ -2,8 +2,11 @@
 
 flow:
   source: events
-  # stages: [delayed_calibration] # uncomment to generate background calibration sample
-  stages: [delayed_analysis] # uncomment to analyze files
+  stages: [delayed_analysis]
+
+
+resources:
+ - !include h5flow_yamls/resources/RunData.yaml
 
 
 events:
@@ -13,26 +16,22 @@ events:
     chunk_size: 32
 
 
-delayed_calibration:
-  classname: DelayedSignal # analysis/delayed_signal.py
-  requires:
-    - name: 'light/hits'
-      path: ['light/events', 'light/hits']
-  params:
-    # inputs
-    hits_dset_name: 'light/hits'
-
-    # configuration parameters:
-    calibration_flag: True
-
-
 delayed_analysis:
   classname: DelayedSignal # analysis/delayed_signal.py
   requires:
     - name: 'light/hits'
       path: ['light/events', 'light/hits']
+    - name: 'light/swvfm'
+      path: ['light/events', 'light/swvfm']
+    - name: 'light/swvfm/alignment'
+      path: ['light/events', 'light/swvfm/alignment']
   params:
-    # inputs
+    # inputs:
     hits_dset_name: 'light/hits'
+
+    # configuration parameters:
+    fit_singlet: False
+    fit_triplet: False
+    fit_fraction: False
 
 
