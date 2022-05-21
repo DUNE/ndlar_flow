@@ -6,18 +6,17 @@ import scipy.interpolate as interpolate
 import logging
 import os
 
-from h5flow import H5FLOW_MPI
+from h5flow import H5FLOW_MPI, resources
 from h5flow.core import H5FlowStage
 
 import module0_flow.util.units as units
 
 
-def f_scint(t, singlet_fraction=0.3, tau_s=7, tau_t=750, smear=10):
+def f_scint(t, singlet_fraction=0.3, tau_s=7, tau_t=750, smear=1):
     t[t < 0] = -1
     f = (singlet_fraction / tau_s * np.exp(-t / tau_s) + (1 - singlet_fraction) / tau_t * np.exp(-t / tau_t))
     f[t < 0] = 0
     f = ndimage.gaussian_filter1d(f, sigma=smear, axis=-1)
-    f *= np.diff(t).mean()
     return f
 
 
@@ -32,8 +31,8 @@ class DelayedSignal(H5FlowStage):
 
     defaults = dict(
         hits_dset_name='light/hits',
-        wvfm_dset_name='light/deconv',
-        wvfm_align_dset_name='light/deconv/align',
+        wvfm_dset_name='light/swvfm',
+        wvfm_align_dset_name='light/swvfm/alignment',
         fit_dset_name='analysis/time_reco/fit',
         prompt_dset_name='analysis/time_reco/prompt',
         delayed_dset_name='analysis/time_reco/delayed',
@@ -47,11 +46,11 @@ class DelayedSignal(H5FlowStage):
         singlet_tau=7, # ns
         triplet_tau=750, # ns
         singlet_fraction=0.3, # ns
-        smearing=10 # ns
+        smearing=1 # samples
         )
 
     @staticmethod
-    def fit_dtype(fit_prompt, fit_triplet, fit_fraction):
+    def fit_dtype(fit_singlet, fit_triplet, fit_fraction):
         dtype_spec = [
             ('valid', 'u1'),
             ('prompt_a', 'f4'),
@@ -59,7 +58,7 @@ class DelayedSignal(H5FlowStage):
             ('delayed_a', 'f4'),
             ('delayed_ns', 'f4')]
         cov_size = 4
-        if fit_prompt:
+        if fit_singlet:
             dtype_spec += [('tau_s', 'f4')]
             cov_size += 1
         if fit_triplet:
@@ -68,6 +67,7 @@ class DelayedSignal(H5FlowStage):
         if fit_fraction:
             dtype_spec += [('fraction', 'f4')]
             cov_size += 1
+        dtype_spec += [('mse', 'f4')]
         dtype_spec += [('cov', 'f4', (cov_size,cov_size))]
         return np.dtype(dtype_spec)
 
@@ -109,24 +109,28 @@ class DelayedSignal(H5FlowStage):
         self.sample_rate = (resources['RunData'].lrs_ticks / units.ns)
 
         # create fit datatype
-        self.fit_dtype = self.fit_dtype(self.fit_prompt, self.fit_triplet, self.fit_fraction)
-            f_delayed(t, prompt_a, prompt_t, delayed_a, delayed_t,
-                singlet_fraction, tau_s, tau_t, smear=self.smearing)
-        fit_func = lambda prompt_a, prompt_t, delayed_a, delayed_t, singlet_fraction, tau_s, tau_t: f_delayed(t, prompt_a, prompt_t, delayed_a, delayed_t,
-                singlet_fraction=singlet_fraction, tau_s=tau_s, tau_t=tau_t, smear=self.smearing)
-        self.fit_func = fit_func
-        if not self.fit_singlet:
-            def fit_func(*args, **kwargs):
-                return fit_func(*args, tau_s=self.tau_s, **kwargs)
-            self.fit_func = fit_func
-        if not self.fit_triplet:
-            def fit_func(*args, **kwargs):
-                return fit_func(*args, tau_t=self.tau_t, **kwargs)
-            self.fit_func = fit_func
-        if not self.fit_fraction:
-            def fit_func(*args, **kwargs):
-                return fit_func(*args, singlet_fraction=self.singlet_fraction, **kwargs)
-            self.fit_func = fit_func
+        self.p0 = tuple()
+        self.fit_dtype = self.fit_dtype(self.fit_singlet, self.fit_triplet, self.fit_fraction)
+        self.fit_func = eval('lambda t, prompt_a, prompt_t, delayed_a, delayed_t, '
+                             + ('singlet_fraction, ' if self.fit_fraction else '')
+                             + ('tau_s, ' if self.fit_singlet else '')
+                             + ('tau_t, ' if self.fit_triplet else '')
+                             + ': '
+                             + 'f_delayed(t, prompt_a, prompt_t, delayed_a, delayed_t, '
+                             + 'singlet_fraction=' + (str(self.singlet_fraction) if not self.fit_fraction else 'singlet_fraction') + ', '
+                             + 'tau_s=' + (str(self.singlet_tau) if not self.fit_singlet else 'tau_s') + ', '
+                             + 'tau_t=' + (str(self.triplet_tau) if not self.fit_triplet else 'tau_t') + ', '
+                             + 'smear=' + str(self.smearing) + ')'
+                             )
+        if self.fit_fraction:
+            self.p0 = self.p0 + (self.singlet_fraction,)        
+        if self.fit_singlet:
+            self.p0 = self.p0 + (self.singlet_tau,)
+        if self.fit_triplet:
+            self.p0 = self.p0 + (self.triplet_tau,)
+
+        # test fit function
+        print(self.fit_func(np.arange(0,20), 100, 0, 10, 5, *self.p0))
 
         # set prompt signal thresholds
         thresholds = hit_attrs['thresholds']
@@ -158,12 +162,12 @@ class DelayedSignal(H5FlowStage):
         wvfm_align = cache[self.wvfm_align_dset_name]
         if len(hits):
             hits = hits.reshape(len(np.r_[source_slice]),-1)
-            wvfm = wvfm.reshape((len(np.r_[source_slice]),-1) + wvfm.shape[-3:])
-            wvfm_align = wvfm_align.reshape((len(np.r_[source_slice]),-1) + wvfm_align.shape[-1:] + (1,1))
+            wvfm = wvfm.reshape((len(np.r_[source_slice]),-1))['samples']
+            wvfm_align = wvfm_align.reshape((len(np.r_[source_slice]),-1))
         else:
             hits = ma.array(np.empty((0,1), dtype=hits.dtype))
-            wvfm = ma.array(np.empty((0,1) + wvfm.shape[-3:], dtype=wvfm.dtype))
-            wvfm_align = ma.array(np.empty((0,1) + wvfm_align.shape[-1:], dtype=wvfm_align.dtype))
+            wvfm = ma.array(np.empty((0,1,1,1,1), dtype=wvfm.dtype['samples']))
+            wvfm_align = ma.array(np.empty((0,1), dtype=wvfm_align.dtype))
 
         # find prompt signal time and amplitude
         # definition:
@@ -211,119 +215,136 @@ class DelayedSignal(H5FlowStage):
                     hit_rel_ampl[hit_submask] = hits[hit_submask]['sum_spline'] / np.clip(p_ampl[hit_submask],1e-15,None)
                     hit_rel_valid[hit_submask] = (p_ampl[hit_submask] > 0)
 
+        # look for delayed signal
+
+        # find best delayed time interval
+        # definition:
+        #  - create a sliding window
+        #  - find window with largest energy
+        #  - use weighted mean of relative hit time of hits within window
+        hit_mask = (hit_rel_valid)
+
+        sliding_center = np.linspace(
+            self.delayed_window[0]+self.delayed_hit_window,
+            self.delayed_window[1]-self.delayed_hit_window,
+            2*int(np.ceil((self.delayed_window[1] - self.delayed_window[0] - 2*self.delayed_hit_window)/self.delayed_hit_window)))
+        sliding_center = sliding_center[np.newaxis,np.newaxis,:]
+        hit_in_window = (hit_mask[...,np.newaxis]
+                         & (hit_rel_ns[...,np.newaxis] < sliding_center + self.delayed_hit_window)
+                         & (hit_rel_ns[...,np.newaxis] >= sliding_center - self.delayed_hit_window))
+        sliding_score = np.sum(hit_in_window * hits['sum_spline'][...,np.newaxis], axis=-2)
+        if len(sliding_score):
+            delayed_ns_med = np.take_along_axis(sliding_center[0], np.argmax(sliding_score, axis=-1)[...,np.newaxis], axis=-1)
         else:
-            # look for delayed signal
+            delayed_ns_med = np.empty((0,1))
+        delayed_ns_min = delayed_ns_med - self.delayed_hit_window
+        delayed_ns_max = delayed_ns_med + self.delayed_hit_window
 
-            # find best delayed time interval
-            # definition:
-            #  - create a sliding window
-            #  - find window with largest energy
-            #  - use weighted mean of relative hit time of hits within window
-            hit_mask = (hit_rel_valid)
+        # calculate delayed signal parameters
+        hit_in_window = hit_mask & (hit_rel_ns < delayed_ns_max) & (hit_rel_ns >= delayed_ns_min)
+        if np.any(hit_in_window):
+            delayed_time = ma.average(hit_rel_ns, axis=-1, weights=hit_in_window * hits['sum_spline'])
+        else:
+            delayed_time = np.zeros(hit_rel_ns.shape[0])
+        delayed_ns = prompt_ns + delayed_time
+        delayed_valid = np.any(hit_in_window, axis=-1)
+        delayed_ampl = np.zeros_like(prompt_ampl)
+        for i in range(delayed_ampl.shape[1]):
+            for j in range(delayed_ampl.shape[2]):
+                hit_submask = (hits['tpc'] == i) & (hits['det'] == j) & hit_in_window
+                if np.any(hit_submask):
+                    delayed_ampl[:,i,j] = (hit_submask * hits['sum_spline']).sum(axis=-1)
+                    delayed_ampl[~np.any(hit_submask, axis=-1),i,j] = 0
 
-            sliding_center = np.linspace(
-                self.delayed_window[0]+self.delayed_hit_window,
-                self.delayed_window[1]-self.delayed_hit_window,
-                2*int(np.ceil((self.delayed_window[1] - self.delayed_window[0] - 2*self.delayed_hit_window)/self.delayed_hit_window)))
-            sliding_center = sliding_center[np.newaxis,np.newaxis,:]
-            hit_in_window = (hit_mask[...,np.newaxis]
-                             & (hit_rel_ns[...,np.newaxis] < sliding_center + self.delayed_hit_window)
-                             & (hit_rel_ns[...,np.newaxis] >= sliding_center - self.delayed_hit_window))
-            sliding_score = np.sum(hit_in_window * hits['sum_spline'][...,np.newaxis], axis=-2)
-            if len(sliding_score):
-                delayed_ns_med = np.take_along_axis(sliding_center[0], np.argmax(sliding_score, axis=-1)[...,np.newaxis], axis=-1)
-            else:
-                delayed_ns_med = np.empty((0,1))
-            delayed_ns_min = delayed_ns_med - self.delayed_hit_window
-            delayed_ns_max = delayed_ns_med + self.delayed_hit_window
+        # do fit
+        # reconstruct the sample timestamp (relative to first trigger)
+        wvfm_ns = wvfm_align['ns'][...,np.newaxis,np.newaxis,np.newaxis] - (wvfm_align['sample_idx'][...,np.newaxis] - np.arange(wvfm.shape[-1])) * self.sample_rate
+        
+        fit_data = np.zeros(hits.shape[0], dtype=self.fit_dtype)
 
-            # calculate delayed signal parameters
-            hit_in_window = hit_mask & (hit_rel_ns < delayed_ns_max) & (hit_rel_ns >= delayed_ns_min)
-            if np.any(hit_in_window):
-                delayed_time = ma.average(hit_rel_ns, axis=-1, weights=hit_in_window * hits['sum_spline'])
-            else:
-                delayed_time = np.zeros(hit_rel_ns.shape[0])
-            delayed_ns = prompt_ns + delayed_time
-            delayed_valid = np.any(hit_in_window, axis=-1)
-            delayed_ampl = np.zeros_like(prompt_ampl)
-            for i in range(delayed_ampl.shape[1]):
-                for j in range(delayed_ampl.shape[2]):
-                    hit_submask = (hits['tpc'] == i) & (hits['det'] == j) & hit_in_window
-                    if np.any(hit_submask):
-                        delayed_ampl[:,i,j] = (hit_submask * hits['sum_spline']).sum(axis=-1)
-                        delayed_ampl[~np.any(hit_submask, axis=-1),i,j] = 0
+        for iev in range(wvfm.shape[0]):
+            if np.all(wvfm[i].mask) or np.all(wvfm_ns[iev].mask) or not delayed_valid[iev]:
+                continue
+            min_ns = np.min(wvfm_ns[iev])
+            n_ticks = int(np.ceil((np.max(wvfm_ns[iev]) - min_ns) / self.sample_rate))
+            xdata = np.linspace(min_ns, min_ns + self.sample_rate * n_ticks, n_ticks)
+            ydata = np.zeros_like(xdata)
+            mask = np.zeros_like(xdata, dtype=bool)
+            p0 = (prompt_ampl[iev].sum() * self.sample_rate / self.singlet_fraction, prompt_ns[iev],
+                  delayed_ampl[iev].sum() * self.sample_rate / self.singlet_fraction, delayed_ns[iev]) + self.p0
+            for itrig in range(wvfm.shape[1]):
+                for itpc in range(wvfm.shape[2]):
+                    for idet in range(wvfm.shape[3]):
+                        if np.any(~wvfm[iev,itrig,itpc,idet,:].mask) or np.any(~wvfm_ns[iev,itrig,itpc,idet,:].mask):
+                            subset = (xdata >= wvfm_ns[iev,itrig,itpc,idet,0]) & (xdata <= wvfm_ns[iev,itrig,itpc,idet,-1])
+                            mask[subset] = True
+                            ydata[subset] += np.interp(xdata[subset], wvfm_ns[iev,itrig,itpc,idet,:], wvfm[iev,itrig,itpc,idet,:], left=0, right=0)
+            xdata = xdata[mask]
+            ydata = ydata[mask]
 
-            # do fit
-            # reconstruct the sample timestamp (relative to first trigger)
-            wvfm_ns = wvfm_align['ns'][...,np.newaxis,np.newaxis,np.newaxis] + (wvfm_align['sample_idx'][...,np.newaxis] - np.arange(wvfm.shape[-1])) * self.sample_rate
+            try:
+                p,cov = optimize.curve_fit(self.fit_func, xdata, ydata, p0=p0)
+                fit_data[iev]['valid'] = True
+                fit_data[iev]['prompt_a'] = p[0]
+                fit_data[iev]['prompt_ns'] = p[1]
+                fit_data[iev]['delayed_a'] = p[2]
+                fit_data[iev]['delayed_ns'] = p[3]
+                fit_data[iev]['cov'] = cov
+                fit_data[iev]['mse'] = np.sum((ydata - self.fit_func(xdata, *p))**2)
+                if self.fit_fraction:
+                    fit_data[iev]['fraction'] = p[4]
+                if self.fit_singlet:
+                    fit_data[iev]['tau_s'] = p[4 + self.fit_fraction]
+                if self.fit_triplet:
+                    fit_data[iev]['tau_t'] = p[4 + self.fit_fraction + self.fit_singlet]
 
-            fit_data = np.zeros(hits.shape[0], dtype=self.fit_dtype)
+                '''import matplotlib.pyplot as plt
+                plt.figure(num=1)
+                plt.plot(xdata, ydata, '.', label='waveform sum')
+                plt.plot(xdata, self.fit_func(xdata, *p0), 'r--', label='fit initialization')
+                plt.plot(xdata, self.fit_func(xdata, *p), 'r', label='best fit')
+                plt.legend()
+                plt.waitforbuttonpress(60)
+                plt.clf()'''
+            except Exception as e:
+                print(f'Fitting error: {e}')
+                continue
 
-            for iev in range(wvfm.shape[0]):
-                if np.all(wvfm[i].mask):
-                    continue
-                min_ns = np.min(wvfm_ns[iev])
-                n_ticks = ceil((np.max(wvfm_ns[iev]) - min_ns) / self.sample_rate)
-                xdata = np.linspace(min_ns, min_ns + self.sample_rate * n_ticks, n_ticks)
-                ydata = np.zeros_like(xdata)
-                for itrig in range(wvfm.shape[1]):
-                    for itpc in range(wvfm.shape[2]):
-                        for idet in range(wvfm.shape[3]):
-                            ydata += np.interp1d(xdata, wvfm_ns[iev,itrig,itpc,idet,:], wvfm[iev,itrig,itpc,idet,:], left=0, right=0)
+        # save data to file
+        prompt_data = np.zeros(hits.shape[0], dtype=self.prompt_dtype)
+        delayed_data = np.zeros(hits.shape[0], dtype=self.delayed_dtype)
+        
+        if len(prompt_data):
+            prompt_data['ns'] = prompt_ns
+            prompt_data['valid'] = np.any(prompt_ampl > 0)
+            prompt_data['ampl'] = prompt_ampl
 
-                p0 = (p_ampl[iev], p_ns[iev], delayed_ampl[iev], delayed_ns[iev]) + self.p0
-                try:
-                    p,cov = optimize.curve_fit(self.fit_func, xdata, ydata, p0=p0)
-                    fit_data[iev]['valid'] = True
-                    fit_data[iev]['prompt_a'] = p[0]
-                    fit_data[iev]['prompt_ns'] = p[1]
-                    fit_data[iev]['delayed_a'] = p[2]
-                    fit_data[iev]['delayed_ns'] = p[3]
-                    fit_data[iev]['cov'] = cov
-                    if self.fit_fraction:
-                        fit_data[iev]['fraction'] = p[4]
-                    if self.fit_singlet:
-                        fit_data[iev]['tau_s'] = p[4 + self.fit_fraction]
-                    if self.fit_triplet:
-                        fit_data[iev]['tau_t'] = p[4 + self.fit_fraction + self.fit_singlet]
-                except:
-                    continue
+        if len(delayed_data):
+            delayed_data['ns'] = delayed_ns
+            delayed_data['delay'] = delayed_time
+            delayed_data['ampl'] = delayed_ampl
+            delayed_data['valid'] = delayed_valid
+            
+        fit_slice = self.data_manager.reserve_data(
+            self.fit_dset_name, len(fit_data))
+        self.data_manager.write_data(self.fit_dset_name, fit_slice, fit_data)
+        ref = np.c_[source_slice, fit_slice][fit_data['valid'].astype(bool)]
+        if len(ref) == 0:
+            ref = np.empty((0,2), int)
+        self.data_manager.write_ref(source_name, self.fit_dset_name, ref)
 
-            # save data to file
-            prompt_data = np.zeros(hits.shape[0], dtype=self.prompt_dtype)
-            delayed_data = np.zeros(hits.shape[0], dtype=self.delayed_dtype)
+        prompt_slice = self.data_manager.reserve_data(
+            self.prompt_dset_name, len(prompt_data))
+        self.data_manager.write_data(self.prompt_dset_name, prompt_slice, prompt_data)
+        ref = np.c_[source_slice, prompt_slice][np.any(prompt_hit_mask, axis=-1)]
+        if len(ref) == 0:
+            ref = np.empty((0,2), int)
+        self.data_manager.write_ref(source_name, self.prompt_dset_name, ref)
 
-            if len(prompt_data):
-                prompt_data['ns'] = prompt_ns
-                prompt_data['valid'] = np.any(prompt_ampl > 0)
-                prompt_data['ampl'] = prompt_ampl
-
-            if len(delayed_data):
-                delayed_data['ns'] = delayed_ns
-                delayed_data['delay'] = delayed_time
-                delayed_data['ampl'] = delayed_ampl
-                delayed_data['valid'] = delayed_valid
-
-            fit_slice = self.data_manager.reserve_data(
-                self.fit_dset_name, len(fit_data))
-            self.data_manager.write_data(self.fit_dset_name, fit_slice, fit_data)
-            ref = np.c_[source_slice, fit_slice][fit_data['valid'].astype(bool)]
-            if len(ref) == 0:
-                ref = np.empty((0,2), int)
-            self.data_manager.write_ref(source_name, self.fit_dset_name, ref)
-
-            prompt_slice = self.data_manager.reserve_data(
-                self.prompt_dset_name, len(prompt_data))
-            self.data_manager.write_data(self.prompt_dset_name, prompt_slice, prompt_data)
-            ref = np.c_[source_slice, prompt_slice][np.any(prompt_hit_mask, axis=-1)]
-            if len(ref) == 0:
-                ref = np.empty((0,2), int)
-            self.data_manager.write_ref(source_name, self.prompt_dset_name, ref)
-
-            delayed_slice = self.data_manager.reserve_data(
-                self.delayed_dset_name, len(delayed_data))
-            self.data_manager.write_data(self.delayed_dset_name, delayed_slice, delayed_data)
-            ref = np.c_[prompt_slice, delayed_slice][delayed_valid]
-            if len(ref) == 0:
-                ref = np.empty((0,2), int)
-            self.data_manager.write_ref(self.prompt_dset_name, self.delayed_dset_name, ref)
+        delayed_slice = self.data_manager.reserve_data(
+            self.delayed_dset_name, len(delayed_data))
+        self.data_manager.write_data(self.delayed_dset_name, delayed_slice, delayed_data)
+        ref = np.c_[prompt_slice, delayed_slice][delayed_valid]
+        if len(ref) == 0:
+            ref = np.empty((0,2), int)
+        self.data_manager.write_ref(self.prompt_dset_name, self.delayed_dset_name, ref)
