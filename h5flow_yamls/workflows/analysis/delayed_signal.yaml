@@ -19,8 +19,8 @@ events:
 delayed_analysis:
   classname: DelayedSignal # analysis/delayed_signal.py
   requires:
-    - name: 'light/hits'
-      path: ['light/events', 'light/hits']
+    #- name: 'light/hits'
+    #  path: ['light/events', 'light/hits']
     - name: 'light/swvfm'
       path: ['light/events', 'light/swvfm']
     - name: 'light/swvfm/alignment'
@@ -30,8 +30,8 @@ delayed_analysis:
     hits_dset_name: 'light/hits'
 
     # configuration parameters:
-    fit_singlet: False
-    fit_triplet: False
-    fit_fraction: False
+    fit_singlet: True
+    fit_triplet: True
+    fit_fraction: True
 
 

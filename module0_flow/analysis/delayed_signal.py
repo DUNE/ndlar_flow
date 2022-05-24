@@ -22,7 +22,7 @@ def f_scint(t, singlet_fraction=0.3, tau_s=7, tau_t=750, smear=1):
 
 def f_delayed(t, prompt_a, prompt_t, delayed_a, delayed_t, *args, **kwargs):
     prompt_model = prompt_a * f_scint(t - prompt_t, *args, **kwargs)
-    delayed_model = delayed_a * f_scint(t - delayed_t, *args, **kwargs)
+    delayed_model = delayed_a * f_scint(t - prompt_t - delayed_t, *args, **kwargs)
     return prompt_model + delayed_model
 
 
@@ -38,8 +38,8 @@ class DelayedSignal(H5FlowStage):
         delayed_dset_name='analysis/time_reco/delayed',
         prompt_threshold_factor=1,
         prompt_window=[-350,-250], # ns
-        delayed_window=[100,10240], # ns
-        delayed_hit_window=10, # ns
+        delayed_window=[100,20000], # ns
+        delayed_hit_window=50, # ns
         fit_singlet=False,
         fit_triplet=False,
         fit_fraction=False,
@@ -76,7 +76,7 @@ class DelayedSignal(H5FlowStage):
         return np.dtype([
             ('valid', 'u1'),
             ('ns', 'f8'),
-            ('ampl', 'f8', (ntpc, ndet)),
+            ('ampl', 'f8')
             ])
 
 
@@ -85,7 +85,7 @@ class DelayedSignal(H5FlowStage):
         return np.dtype([
             ('ns', 'f8'),
             ('delay', 'f8'),
-            ('ampl', 'f8', (ntpc, ndet)),
+            ('ampl', 'f8',),
             ('valid', 'u1')
             ])
 
@@ -122,15 +122,19 @@ class DelayedSignal(H5FlowStage):
                              + 'tau_t=' + (str(self.triplet_tau) if not self.fit_triplet else 'tau_t') + ', '
                              + 'smear=' + str(self.smearing) + ')'
                              )
+        self.fit_func_prompt = eval('lambda t, prompt_a, prompt_t : '
+                             + 'f_delayed(t, prompt_a, prompt_t, delayed_a=0, delayed_t=0, '
+                             + 'singlet_fraction=' + str(self.singlet_fraction) + ', '
+                             + 'tau_s=' + str(self.singlet_tau) + ', '
+                             + 'tau_t=' + str(self.triplet_tau) + ', '
+                             + 'smear=' + str(self.smearing) + ')'
+                             )
         if self.fit_fraction:
             self.p0 = self.p0 + (self.singlet_fraction,)        
         if self.fit_singlet:
             self.p0 = self.p0 + (self.singlet_tau,)
         if self.fit_triplet:
             self.p0 = self.p0 + (self.triplet_tau,)
-
-        # test fit function
-        print(self.fit_func(np.arange(0,20), 100, 0, 10, 5, *self.p0))
 
         # set prompt signal thresholds
         thresholds = hit_attrs['thresholds']
@@ -157,121 +161,32 @@ class DelayedSignal(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         super(DelayedSignal, self).run(source_name, source_slice, cache)
         # load from cache
-        hits = cache[self.hits_dset_name]
+        #hits = cache[self.hits_dset_name]
         wvfm = cache[self.wvfm_dset_name]
         wvfm_align = cache[self.wvfm_align_dset_name]
-        if len(hits):
-            hits = hits.reshape(len(np.r_[source_slice]),-1)
+        if len(wvfm):
+            #hits = hits.reshape(len(np.r_[source_slice]),-1)
             wvfm = wvfm.reshape((len(np.r_[source_slice]),-1))['samples']
             wvfm_align = wvfm_align.reshape((len(np.r_[source_slice]),-1))
         else:
-            hits = ma.array(np.empty((0,1), dtype=hits.dtype))
+            #hits = ma.array(np.empty((0,1), dtype=hits.dtype))
             wvfm = ma.array(np.empty((0,1,1,1,1), dtype=wvfm.dtype['samples']))
             wvfm_align = ma.array(np.empty((0,1), dtype=wvfm_align.dtype))
 
-        # find prompt signal time and amplitude
-        # definition:
-        #  - hit falls within trigger window
-        #  - hit occurs in first event light trigger
-        #  - largest hit amplitude on each channel (meeting above criteria)
-        first_trigger_ns = np.around(hits['ns']).min(axis=-1, keepdims=True)
-        prompt_hit_mask = (
-            (hits['busy_ns'] + hits['ns_spline'] >= self.prompt_window[0])
-            & (hits['busy_ns'] + hits['ns_spline'] < self.prompt_window[1])
-            & (np.around(hits['ns']) == first_trigger_ns)
-            & (hits['max_spline'] >= self.prompt_thresholds[hits['tpc'].filled(0), hits['det'].filled(0)].reshape(hits.shape))
-            )
-        hit_ns = hits['ns'] + hits['busy_ns'] + hits['ns_spline']
-        hit_ns.mask = hit_ns.mask | ~prompt_hit_mask
-        prompt_ns = ma.average(hit_ns, axis=-1, weights=hits['sum_spline'])
-        prompt_ampl = np.zeros(hits.shape[0:1] + self.prompt_dtype['ampl'].shape)
-        for i in range(prompt_ampl.shape[1]):
-            for j in range(prompt_ampl.shape[2]):
-                hit_submask = (hits['tpc'] == i) & (hits['det'] == j) & prompt_hit_mask
-                if np.any(hit_submask):
-                    prompt_ampl[:,i,j] = (hit_submask * hits['sum_spline']).sum(axis=-1)
-                    prompt_ampl[~np.any(hit_submask, axis=-1),i,j] = 0
-
-        # calculate delayed parameters
-        # definition:
-        #  - relative time: time between prompt signal and hit
-        #  - relative ampl: ratio of hit amplitude and prompt signal on given detector
-        hit_rel_ns = np.zeros(hits.shape)
-        hit_rel_ampl = np.zeros(hits.shape)
-        hit_rel_valid = np.zeros(hits.shape, dtype=bool)
-        for i in range(prompt_ampl.shape[1]):
-            for j in range(prompt_ampl.shape[2]):
-                hit_submask = ((hits['tpc'] == i) & (hits['det'] == j)
-                    & ~prompt_hit_mask
-                    & (hits['ns'] + hits['busy_ns'] + hits['ns_spline'] - prompt_ns[:,np.newaxis] < self.delayed_window[1])
-                    & (hits['ns'] + hits['busy_ns'] + hits['ns_spline'] - prompt_ns[:,np.newaxis] >= self.delayed_window[0]))
-                if np.any(hit_submask):
-                    p_ns = np.broadcast_to(prompt_ns[:,np.newaxis], hit_submask.shape)
-                    p_ampl = np.broadcast_to(prompt_ampl.sum(axis=-1).sum(axis=-1)[...,np.newaxis], hit_submask.shape)
-                    hit_rel_ns[hit_submask] = (hits[hit_submask]['ns']
-                        + hits[hit_submask]['busy_ns']
-                        + hits[hit_submask]['ns_spline']
-                        - p_ns[hit_submask])
-                    hit_rel_ampl[hit_submask] = hits[hit_submask]['sum_spline'] / np.clip(p_ampl[hit_submask],1e-15,None)
-                    hit_rel_valid[hit_submask] = (p_ampl[hit_submask] > 0)
-
-        # look for delayed signal
-
-        # find best delayed time interval
-        # definition:
-        #  - create a sliding window
-        #  - find window with largest energy
-        #  - use weighted mean of relative hit time of hits within window
-        hit_mask = (hit_rel_valid)
-
-        sliding_center = np.linspace(
-            self.delayed_window[0]+self.delayed_hit_window,
-            self.delayed_window[1]-self.delayed_hit_window,
-            2*int(np.ceil((self.delayed_window[1] - self.delayed_window[0] - 2*self.delayed_hit_window)/self.delayed_hit_window)))
-        sliding_center = sliding_center[np.newaxis,np.newaxis,:]
-        hit_in_window = (hit_mask[...,np.newaxis]
-                         & (hit_rel_ns[...,np.newaxis] < sliding_center + self.delayed_hit_window)
-                         & (hit_rel_ns[...,np.newaxis] >= sliding_center - self.delayed_hit_window))
-        sliding_score = np.sum(hit_in_window * hits['sum_spline'][...,np.newaxis], axis=-2)
-        if len(sliding_score):
-            delayed_ns_med = np.take_along_axis(sliding_center[0], np.argmax(sliding_score, axis=-1)[...,np.newaxis], axis=-1)
-        else:
-            delayed_ns_med = np.empty((0,1))
-        delayed_ns_min = delayed_ns_med - self.delayed_hit_window
-        delayed_ns_max = delayed_ns_med + self.delayed_hit_window
-
-        # calculate delayed signal parameters
-        hit_in_window = hit_mask & (hit_rel_ns < delayed_ns_max) & (hit_rel_ns >= delayed_ns_min)
-        if np.any(hit_in_window):
-            delayed_time = ma.average(hit_rel_ns, axis=-1, weights=hit_in_window * hits['sum_spline'])
-        else:
-            delayed_time = np.zeros(hit_rel_ns.shape[0])
-        delayed_ns = prompt_ns + delayed_time
-        delayed_valid = np.any(hit_in_window, axis=-1)
-        delayed_ampl = np.zeros_like(prompt_ampl)
-        for i in range(delayed_ampl.shape[1]):
-            for j in range(delayed_ampl.shape[2]):
-                hit_submask = (hits['tpc'] == i) & (hits['det'] == j) & hit_in_window
-                if np.any(hit_submask):
-                    delayed_ampl[:,i,j] = (hit_submask * hits['sum_spline']).sum(axis=-1)
-                    delayed_ampl[~np.any(hit_submask, axis=-1),i,j] = 0
-
-        # do fit
-        # reconstruct the sample timestamp (relative to first trigger)
         wvfm_ns = wvfm_align['ns'][...,np.newaxis,np.newaxis,np.newaxis] - (wvfm_align['sample_idx'][...,np.newaxis] - np.arange(wvfm.shape[-1])) * self.sample_rate
-        
-        fit_data = np.zeros(hits.shape[0], dtype=self.fit_dtype)
+
+        prompt_data = np.zeros(wvfm.shape[0], dtype=self.prompt_dtype)
+        delayed_data = np.zeros(wvfm.shape[0], dtype=self.delayed_dtype)        
+        fit_data = np.zeros(wvfm.shape[0], dtype=self.fit_dtype)
 
         for iev in range(wvfm.shape[0]):
-            if np.all(wvfm[i].mask) or np.all(wvfm_ns[iev].mask) or not delayed_valid[iev]:
+            if np.all(wvfm[iev].mask) or np.all(wvfm_ns[iev].mask):
                 continue
             min_ns = np.min(wvfm_ns[iev])
             n_ticks = int(np.ceil((np.max(wvfm_ns[iev]) - min_ns) / self.sample_rate))
             xdata = np.linspace(min_ns, min_ns + self.sample_rate * n_ticks, n_ticks)
             ydata = np.zeros_like(xdata)
             mask = np.zeros_like(xdata, dtype=bool)
-            p0 = (prompt_ampl[iev].sum() * self.sample_rate / self.singlet_fraction, prompt_ns[iev],
-                  delayed_ampl[iev].sum() * self.sample_rate / self.singlet_fraction, delayed_ns[iev]) + self.p0
             for itrig in range(wvfm.shape[1]):
                 for itpc in range(wvfm.shape[2]):
                     for idet in range(wvfm.shape[3]):
@@ -279,18 +194,68 @@ class DelayedSignal(H5FlowStage):
                             subset = (xdata >= wvfm_ns[iev,itrig,itpc,idet,0]) & (xdata <= wvfm_ns[iev,itrig,itpc,idet,-1])
                             mask[subset] = True
                             ydata[subset] += np.interp(xdata[subset], wvfm_ns[iev,itrig,itpc,idet,:], wvfm[iev,itrig,itpc,idet,:], left=0, right=0)
+            avg_samples = int(self.delayed_hit_window/self.sample_rate)
+            ydata_sliding_window = np.convolve(ydata, np.ones(avg_samples)/avg_samples, 'same')
             xdata = xdata[mask]
             ydata = ydata[mask]
-
+            ydata_sliding_window = ydata_sliding_window[mask]
+            
+            # find prompt signal time and amplitude
+            # definition:
+            #  - largest sample of sliding sum
+            #  - refined with prompt-only fit
+            first_trigger_ns = np.around(wvfm_align[iev]['ns'].min())
+            prompt_mask = ((xdata - first_trigger_ns >= self.prompt_window[0])
+                           & (xdata - first_trigger_ns < self.prompt_window[1]))
+            if not np.any(prompt_mask):
+                continue
+            else:
+                prompt_data[iev]['valid'] = True
+            prompt_ns = xdata[prompt_mask][np.argmax(ydata_sliding_window[prompt_mask])]
+            prompt_ampl = np.max(ydata_sliding_window[prompt_mask])
+            prompt_data[iev]['ns'] = prompt_ns
+            prompt_data[iev]['ampl'] = prompt_ampl
             try:
-                p,cov = optimize.curve_fit(self.fit_func, xdata, ydata, p0=p0)
+                p0 = (prompt_ampl * self.sample_rate / self.singlet_fraction * avg_samples, prompt_ns)
+                                               
+                p,cov = optimize.curve_fit(self.fit_func_prompt, xdata, ydata, p0=p0, bounds=(0,np.inf))
+
+                prompt_ampl = p[0]
+                prompt_ns = p[1]
+            except Exception as e:
+                print(f'Prompt fitting error: {e}')                
+                pass
+
+            # find delayed signal time and amplitude
+            # definition:
+            #  - largest positive deviation from prompt fit, within delayed window
+            #  - refined with prompt + delayed fit
+            delayed_mask = ((xdata - prompt_ns >= self.delayed_window[0])
+                            & (xdata - prompt_ns < self.delayed_window[1]))
+            if not np.any(delayed_mask):
+                continue
+            else:
+                delayed_data[iev]['valid'] = True
+            delayed_sig = ydata_sliding_window[delayed_mask] - self.fit_func_prompt(xdata[delayed_mask],
+                                                                                    prompt_ampl, prompt_ns)
+            delayed_ns = xdata[delayed_mask][np.argmax(delayed_sig)]
+            delayed_ampl = np.max(delayed_sig)
+            delayed_data[iev]['ns'] = delayed_ns
+            delayed_data[iev]['ampl'] = delayed_ampl
+            delayed_data[iev]['delay'] = delayed_ns - prompt_ns
+            delayed_data[iev]['valid'] = 1
+            try:
+                p0 = (prompt_ampl, prompt_ns,
+                  delayed_ampl * self.sample_rate / self.singlet_fraction * avg_samples, delayed_ns - prompt_ns) + self.p0
+
+                p,cov = optimize.curve_fit(self.fit_func, xdata, ydata, p0=p0, bounds=(0,np.inf))
                 fit_data[iev]['valid'] = True
                 fit_data[iev]['prompt_a'] = p[0]
                 fit_data[iev]['prompt_ns'] = p[1]
                 fit_data[iev]['delayed_a'] = p[2]
                 fit_data[iev]['delayed_ns'] = p[3]
                 fit_data[iev]['cov'] = cov
-                fit_data[iev]['mse'] = np.sum((ydata - self.fit_func(xdata, *p))**2)
+                fit_data[iev]['mse'] = np.mean((ydata - self.fit_func(xdata, *p))**2)
                 if self.fit_fraction:
                     fit_data[iev]['fraction'] = p[4]
                 if self.fit_singlet:
@@ -307,24 +272,10 @@ class DelayedSignal(H5FlowStage):
                 plt.waitforbuttonpress(60)
                 plt.clf()'''
             except Exception as e:
-                print(f'Fitting error: {e}')
+                print(f'Delayed fitting error: {e}')
                 continue
 
         # save data to file
-        prompt_data = np.zeros(hits.shape[0], dtype=self.prompt_dtype)
-        delayed_data = np.zeros(hits.shape[0], dtype=self.delayed_dtype)
-        
-        if len(prompt_data):
-            prompt_data['ns'] = prompt_ns
-            prompt_data['valid'] = np.any(prompt_ampl > 0)
-            prompt_data['ampl'] = prompt_ampl
-
-        if len(delayed_data):
-            delayed_data['ns'] = delayed_ns
-            delayed_data['delay'] = delayed_time
-            delayed_data['ampl'] = delayed_ampl
-            delayed_data['valid'] = delayed_valid
-            
         fit_slice = self.data_manager.reserve_data(
             self.fit_dset_name, len(fit_data))
         self.data_manager.write_data(self.fit_dset_name, fit_slice, fit_data)
@@ -336,7 +287,7 @@ class DelayedSignal(H5FlowStage):
         prompt_slice = self.data_manager.reserve_data(
             self.prompt_dset_name, len(prompt_data))
         self.data_manager.write_data(self.prompt_dset_name, prompt_slice, prompt_data)
-        ref = np.c_[source_slice, prompt_slice][np.any(prompt_hit_mask, axis=-1)]
+        ref = np.c_[source_slice, prompt_slice][prompt_data['valid'].astype(bool)]
         if len(ref) == 0:
             ref = np.empty((0,2), int)
         self.data_manager.write_ref(source_name, self.prompt_dset_name, ref)
@@ -344,7 +295,7 @@ class DelayedSignal(H5FlowStage):
         delayed_slice = self.data_manager.reserve_data(
             self.delayed_dset_name, len(delayed_data))
         self.data_manager.write_data(self.delayed_dset_name, delayed_slice, delayed_data)
-        ref = np.c_[prompt_slice, delayed_slice][delayed_valid]
+        ref = np.c_[prompt_slice, delayed_slice][delayed_data['valid'].astype(bool)]
         if len(ref) == 0:
             ref = np.empty((0,2), int)
         self.data_manager.write_ref(self.prompt_dset_name, self.delayed_dset_name, ref)
