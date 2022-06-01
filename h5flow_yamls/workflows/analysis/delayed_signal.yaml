@@ -26,6 +26,7 @@ delayed_analysis:
     - name: 'analysis/michel_id/hit_label'
       path: ['charge/hits', 'analysis/michel_id/hit_michel_label']
     - 'analysis/michel_id/michel_label'
+    - 'analysis/stopping_muons/event_sel_reco'
     - name: 'light/swvfm'
       path: ['light/events', 'light/swvfm']
     - name: 'light/swvfm/alignment'
