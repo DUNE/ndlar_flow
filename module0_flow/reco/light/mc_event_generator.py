@@ -218,7 +218,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
             event_arr['sn'] = self.adc_sn.reshape(1,-1)
             event_arr['ch'] = np.arange(self.n_channels).reshape(1,1,-1)
             event_arr['utime_ms'] = next_trig['ts_s'].reshape(-1,1,1) * units.s / units.ms
-            event_arr['tai_ns'] = next_trig['ts_sync'].reshape(-1,1,1) * resources['RunData'].crs_ticks / units.ns
+            event_arr['tai_ns'] = (next_trig['ts_sync'].reshape(-1,1,1) * resources['RunData'].crs_ticks + np.fmod(event_arr['utime_ms'] * units.ms, resources['RunData'].crs_ticks)) / units.ns
             event_arr['wvfm_valid'] = (self.channel_map != -1)[np.newaxis,:,:]
         self.data_manager.write_data(self.event_dset_name, event_slice, event_arr)
 
