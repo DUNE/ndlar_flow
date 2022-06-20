@@ -38,19 +38,16 @@ jobs:
         auto-update-conda: true
         activate-environment: test
         python-version: "3.9"
-	environment-file: test/env.yml
+        environment-file: test/env.yml
 
     - name: setup conda (no mpi)
       uses: conda-incubator/setup-miniconda@v2
       if: matrix.mpi_enabled == 0
-      env:
-        CC: mpicc
-        HDF5_MPI: "ON"
       with:
         auto-update-conda: true
         activate-environment: test
         python-version: "3.9"
-	environment-file: test/env.yml
+        environment-file: test/env-nompi.yml
 
     - name: install h5flow (mpi)
       if: matrix.mpi_enabled == 1
