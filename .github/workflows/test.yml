@@ -62,13 +62,13 @@ jobs:
     - name: install module0_flow (mpi)
       if: matrix.mpi_enabled == 1
       run: |
-        conda env update -vvv --file env.yaml
+        conda env update -vvv --file test/env.yaml
         pip install .
 
     - name: install module0_flow (no mpi)
       if: matrix.mpi_enabled == 0
       run: |
-        conda env update -vvv --file env-nompi.yaml
+        conda env update -vvv --file test/env-nompi.yaml
         pip install .
 
     - name: lint

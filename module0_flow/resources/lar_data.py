@@ -102,8 +102,9 @@ class LArData(H5FlowResource):
             lower_bound_y = self.data['electron_lifetime_lower_bound']['lt_us']
         elif (self.electron_lifetime_file is not None
               and os.path.exists(self.electron_lifetime_file)
+              and self.electron_lifetime_file[-5:] == '.root'
               and not resources['RunData'].is_mc):
-            # handle case when electron lifetime file is specified
+            # handle case when electron lifetime root file is specified
             import ROOT
             f = ROOT.TFile(self.electron_lifetime_file, 'READ')
             central_value = f.Get('CentralValue')
@@ -115,6 +116,18 @@ class LArData(H5FlowResource):
             upper_bound_y = np.array(upper_bound.GetY()) * units.ms
             lower_bound_x = np.array(lower_bound.GetX())
             lower_bound_y = np.array(lower_bound.GetY()) * units.ms
+        elif (self.electron_lifetime_file is not None
+              and os.path.exists(self.electron_lifetime_file)
+              and self.electron_lifetime_file[-4:] == '.npz'
+              and not resources['RunData'].is_mc):
+            # handle case when electron lifetime numpy file is specified
+            d = np.load(self.electron_lifetime_file)
+            central_value_x = d['electron_lifetime_central_value']['unix_s']
+            central_value_y = d['electron_lifetime_central_value']['lt_us']
+            upper_bound_x = d['electron_lifetime_upper_bound']['unix_s']
+            upper_bound_y = d['electron_lifetime_upper_bound']['lt_us']
+            lower_bound_x = d['electron_lifetime_lower_bound']['unix_s']
+            lower_bound_y = d['electron_lifetime_lower_bound']['lt_us']
         else:
             central_value_x = np.array([0, 1])
             central_value_y = np.array([self._electron_lifetime] * 2)
@@ -167,12 +180,25 @@ class LArData(H5FlowResource):
         self.data['ionization_w'] = 23.6 * units.eV / units.e
         return self.ionization_w
 
+    @property
+    def scintillation_w(self):
+        ''' Scintillation W-value in LAr in keV/photon. Fixed value of 0.0195 '''
+        if 'scintillation_w' in self.data:
+            return self.data['scintillation_w']
+        
+        self.data['scintillation_w'] = 19.5 * units.eV
+        return self.scintillation_w
+        
     def ionization_recombination(self, dedx):
         '''
-            Calculate recombination factor using Birks Model with parameters:
+            Calculate charge recombination factor using Birks Model with parameters:
 
              - ``A = 0.8``
              - ``K = 0.0486`` (units = g/(MeV cm^2) kV/cm)
+
+            Defined by::
+
+                R_i = dQ * W_i / dE
 
         '''
         A = 0.8
@@ -181,6 +207,15 @@ class LArData(H5FlowResource):
 
         rv = A / (1 + (K / eps) * dedx)
         return rv
+
+    def scintillation_recombination(self, dedx):
+        '''
+            Calculate photon recombination factor using Birks Model (see ``ionization_recombination()``).
+            Defined by::
+
+                R_s = dQ * W_s / dE
+        '''
+        return 1 - self.ionization_recombination(self, dedx) * self.scintillation_w()/self.ionization_w()
 
     @property
     def A(self):

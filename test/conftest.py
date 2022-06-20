@@ -151,7 +151,7 @@ def electron_lifetime_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
                                       'data/Module0/electronLifetime/'
-                                      'ElecLifetimeFit_Module0.root')))
+                                      'ElecLifetimeFit_Module0.npz')))
 
 
 @ pytest.fixture
