@@ -15,11 +15,8 @@ import module0_flow.util.units as units
 
 
 def f_scint(t, singlet_fraction=0.3, tau_t=750, tau_s=7, smearing=1):
-    nonzero_mask = t >= 0
-    f = np.zeros_like(t)
-    t_nonzero = t[nonzero_mask]
-    f[nonzero_mask] = (singlet_fraction / tau_s * np.exp(-t_nonzero / tau_s) + (1 - singlet_fraction) / tau_t * np.exp(-t_nonzero / tau_t))
-    f = ndimage.gaussian_filter1d(f, sigma=np.clip(smearing, 1e-9, None), mode='nearest', axis=-1)
+    f = np.where(t >= 0, (singlet_fraction / tau_s * np.exp(-t / tau_s) + (1 - singlet_fraction) / tau_t * np.exp(-t / tau_t)), 0)
+    ndimage.gaussian_filter1d(f, output=f, sigma=smearing, mode='nearest', axis=-1)
     return f
 
 
@@ -37,17 +34,17 @@ def loss(x, *args):
     noise = args[4] # shape (trig x tpc x det)
     prompt_weight = args[5] # bool (True if weight by prompt acceptance, False if weight by delayed acceptance)
 
-    prompt_r = x[0]    
+    prompt_f = x[0]
     prompt_t = x[1]
     delayed_t = x[2]
     singlet_fraction = x[3]
     tau_t = x[4]
     model_args = (singlet_fraction, tau_t)
 
-    total_sum = y.sum() * np.diff(t).mean()
+    total_sum = y.sum() * (t[0,1] - t[0,0])
     model = total_sum * f_delayed(t,
-                      prompt_r * prompt_acceptance[...,np.newaxis], prompt_t,
-                      (1 - prompt_r) * delayed_acceptance[...,np.newaxis], delayed_t,
+                      prompt_f * prompt_acceptance[...,np.newaxis], prompt_t,
+                      (1 - prompt_f) * delayed_acceptance[...,np.newaxis], delayed_t,
                       *model_args)
 
     err = np.mean((model - y)**2 / np.clip(noise[...,np.newaxis],1e-15,None)**2, axis=(0,-1))
@@ -76,6 +73,7 @@ class DelayedSignal(H5FlowStage):
         prompt_window=[-350,-250], # ns
         delayed_window=[100,20000], # ns
         sig_avg_window=50, # ns
+        edge_effect_window=3, # samples
         acceptance_threshold=1e-3,
         noise=None
         )
@@ -87,9 +85,9 @@ class DelayedSignal(H5FlowStage):
             ('valid', 'u1'),
             ('prompt_acc', 'f4', (ntpc,ndet)),
             ('delayed_acc', 'f4', (ntpc,ndet)),            
-            ('prompt_r', 'f4'),
+            ('prompt_f', 'f4'),
             ('prompt_ns', 'f4'),
-            ('e_vis', 'f4'),
+            ('pe_vis', 'f4'),
             ('delayed_ns', 'f4'),
             ('fraction', 'f4'),
             ('tau_t', 'f4'),
@@ -160,7 +158,9 @@ class DelayedSignal(H5FlowStage):
         else:
             wvfm = ma.array(np.empty((0,1,1,1,1), dtype=wvfm.dtype['samples']))
             wvfm_align = ma.array(np.empty((0,1), dtype=wvfm_align.dtype))
-        wvfm_ns = wvfm_align['ns'][...,np.newaxis,np.newaxis,np.newaxis] - (wvfm_align['sample_idx'][...,np.newaxis] - np.arange(wvfm.shape[-1])) * self.sample_rate
+        # remove samples near end of waveform
+        wvfm = wvfm[...,self.edge_effect_window:-self.edge_effect_window]
+        wvfm_ns = wvfm_align['ns'][...,np.newaxis,np.newaxis,np.newaxis] - (wvfm_align['sample_idx'][...,np.newaxis] - self.edge_effect_window - np.arange(wvfm.shape[-1])) * self.sample_rate
 
         # prep output arrays
         prompt_data = np.zeros(wvfm.shape[0], dtype=self.prompt_dtype)
@@ -248,7 +248,7 @@ class DelayedSignal(H5FlowStage):
                 
                 prompt_acc_norm = prompt_acc[iev,tpc,det].sum()
                 delayed_acc_norm = delayed_acc[iev,tpc,det].sum()
-                e_vis = wvfm[iev,trig,tpc,det].sum() * self.sample_rate
+                pe_vis = wvfm[iev,trig,tpc,det].sum() * self.sample_rate # PE/tick -> PE
                 
                 # guess delayed signal time and amplitude
                 # definition:
@@ -271,7 +271,7 @@ class DelayedSignal(H5FlowStage):
                                 # prompt model assumes 100% of waveform energy contained in prompt signal
                                 subset = (xdata >= wvfm_ns[iev,itrig,itpc,idet,0]) & (xdata <= wvfm_ns[iev,itrig,itpc,idet,-1])
                                 yinterp = (np.interp(xdata[delayed_mask], wvfm_ns[iev,itrig,itpc,idet,:].compressed(), wvfm[iev,itrig,itpc,idet,:].compressed(), left=0, right=0)
-                                           - f_delayed(xdata[delayed_mask], e_vis * prompt_acc[iev,itpc,idet]/prompt_acc_norm, prompt_ns, 0, 0))
+                                           - f_delayed(xdata[delayed_mask], pe_vis * prompt_acc[iev,itpc,idet]/prompt_acc_norm, prompt_ns, 0, 0))
                                 delayed_sig += np.sign(yinterp) * (yinterp)**2 / (self.noise[itpc,idet] * self.noise_factor if self.noise.ndim > 1 else self.noise*self.noise_factor)**2
                 delayed_sig = np.convolve(delayed_sig, np.ones(avg_samples)/avg_samples, 'same')
                 delayed_sample = np.argmax(delayed_sig)
@@ -284,7 +284,7 @@ class DelayedSignal(H5FlowStage):
 
                 p0 = (prompt_ampl / (prompt_ampl + delayed_ampl), prompt_ns, delayed_ns - prompt_ns) + self.p0
                 fit_result = optimize.minimize(loss, p0, args=(
-                    wvfm_ns[iev,trig,tpc,det,:], wvfm[iev,trig,tpc,det,:], prompt_acc[iev,tpc,det]/prompt_acc_norm, delayed_acc[iev,tpc,det]/delayed_acc_norm,
+                    np.array(wvfm_ns[iev,trig,tpc,det,:], dtype='f4'), np.array(wvfm[iev,trig,tpc,det,:], dtype='f4'), prompt_acc[iev,tpc,det]/prompt_acc_norm, delayed_acc[iev,tpc,det]/delayed_acc_norm,
                     self.noise[tpc,det] * self.noise_factor if self.noise.ndim > 1 else self.noise*self.noise_factor, False),
                                                bounds=[(0,1)]+[(0,np.inf) for _ in p0[1:]], options=dict(disp=False))
 
@@ -292,9 +292,9 @@ class DelayedSignal(H5FlowStage):
                 fit_data[iev]['prompt_acc'] = prompt_acc[iev] * (np.arange(wvfm.shape[-2]) % 4 != 0) # exclude arclight
                 fit_data[iev]['delayed_acc'] = delayed_acc[iev] * (np.arange(wvfm.shape[-2]) % 4 != 0) # exclude arclight
                 fit_data[iev]['valid'] = fit_result.success
-                fit_data[iev]['prompt_r'] = p[0]
+                fit_data[iev]['prompt_f'] = p[0]
                 fit_data[iev]['prompt_ns'] = p[1]
-                fit_data[iev]['e_vis'] = e_vis
+                fit_data[iev]['pe_vis'] = pe_vis
                 fit_data[iev]['delayed_ns'] = p[2]
                 fit_data[iev]['cov'] = fit_result.jac.T @ fit_result.jac * fit_result.fun**2
                 fit_data[iev]['mse'] = fit_result.fun
@@ -342,9 +342,9 @@ class DelayedSignal(H5FlowStage):
                         y = y[order]
 
                         plt.plot(t, y + offset * 1000, '.', color=f'C{offset}', label='largest waveform')
-                        plt.plot(t, e_vis * f_delayed(t, *pinit) + offset * 1000, ':', color=f'C{offset}', label='fit initialization')
+                        plt.plot(t, pe_vis * f_delayed(t, *pinit) + offset * 1000, ':', color=f'C{offset}', label='fit initialization')
                         #plt.plot(t, f_delayed(t, *pinit) + offset * 1000, '--', color=f'C{offset}', label='fit (prompt)')                    
-                        plt.plot(t, e_vis * f_delayed(t, *pbest) + offset * 1000, color=f'C{offset}', label='fit (both)')
+                        plt.plot(t, pe_vis * f_delayed(t, *pbest) + offset * 1000, color=f'C{offset}', label='fit (both)')
 
                     plt.legend()
                     plt.figure(num=4, dpi=50, figsize=(1,1))
