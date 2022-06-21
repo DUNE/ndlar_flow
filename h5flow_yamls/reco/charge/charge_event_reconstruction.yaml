@@ -36,11 +36,12 @@ timestamp_corrector:
 
     # configuration parameters
     correction:
-      1: [0, 0]
-      2: [0, 0]
+      ## single cube?
+      #1: [0, 0]
+      #2: [0, 0]
 
-#      1: [-9.597, 4.0021e-6]
-#      2: [-9.329, 1.1770e-6]
+      1: [-9.597, 4.0021e-6]
+      2: [-9.329, 1.1770e-6]
 
 
 ext_trig_finder:
@@ -77,9 +78,9 @@ hit_builder:
     hits_dset_name: 'charge/hits'
 
     # configuration parameters
-    pedestal_file: '/sdf/group/neutrino/larpix/evd/pedestal/2022-02-23_vdda1860_vref185_vcm41/pedestal_2022_02_23_00_09_22_PST____bad_channels_2022-02-14evd_ped.json'
+    pedestal_file: 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
     # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/datalog_2021_04_02_19_00_46_CESTevd_ped.json
-    configuration_file: '/sdf/group/neutrino/cyifan/slacube_ana/util/2022-02-22/evd_config_22-03-15_09-58-53_vdda1860_vref185_vcm41.json'
+    configuration_file: 'evd_config_21-03-31_12-36-13.json'
     # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/evd_config_21-03-31_12-36-13.json
 
 

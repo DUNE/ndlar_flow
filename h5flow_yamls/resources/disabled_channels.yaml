@@ -1,7 +1,8 @@
 classname: DisabledChannels # resources/disabled_channels.py
 params:
   path: 'disabled_channels'
-  disabled_channels_list: '/sdf/group/neutrino/cyifan/slacube_ana/util/2022-02-22/bad_channels_2022-02-14.json'
+  disabled_channels_list: 'module0-run1-selftrigger-disabled-list.json'
+
   # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/badChannelLists/selftrigger_masked/module0-run1-selftrigger-disabled-list.json
-  missing_asic_list: '/sdf/group/neutrino/cyifan/slacube_ana/util/slacube-network-absent-ASICs.json'
+  missing_asic_list: 'module0-network-absent-ASICs.json'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/badChannelLists/module0-network-absent-ASICs.json

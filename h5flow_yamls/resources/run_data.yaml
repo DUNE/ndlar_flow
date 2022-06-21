@@ -1,13 +1,13 @@
 classname: RunData # resources/run_data.py
 params:
   path: 'run_info'
-  #runlist_file: '/sdf/group/neutrino/larpix/dataset/dummy_runlist.txt'
+  runlist_file: 'runlist.txt'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/runlist.txt
   defaults:
     charge_filename: '-'
     light_filename: '-'
     mode: 1 # choices of vdrift models: 1. LArSoft 2.BNL mobility measurement 
-    e_field: 0.05 # kV/mm
+    e_field: 0.02477 # kV/mm
     temp: 90 # K
     is_singlecube: True
     light_samples: 256

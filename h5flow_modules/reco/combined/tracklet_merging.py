@@ -143,7 +143,6 @@ class TrackletMerger(H5FlowStage):
         self.pixel_y = np.unique(resources['Geometry'].pixel_xy.compress((1,)))
 
     def run(self, source_name, source_slice, cache):
-        print("Merging!")
         super(TrackletMerger, self).run(source_name, source_slice, cache)
 
         track_hit_drift = cache[self.hit_drift_dset_name]

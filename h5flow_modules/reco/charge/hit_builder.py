@@ -68,8 +68,6 @@ class HitBuilder(H5FlowStage):
     configuration = defaultdict(lambda: dict(
         vref_mv=1300,
         vcm_mv=288
-        #vref_mv=1344.14,
-        #vcm_mv=297.89
     ))
 
     #: pixel pedestal value
