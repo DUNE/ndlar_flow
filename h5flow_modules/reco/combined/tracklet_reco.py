@@ -278,9 +278,6 @@ class TrackletReconstruction(H5FlowStage):
                     np.broadcast_to(hits[i][mask]['q'][np.newaxis, :],
                                     min_edge_mask.shape),
                     mask=min_edge_mask, shrink=False), axis=-1)  # (npts-1,)
-                    np.broadcast_to(hits[i][mask]['q'][np.newaxis, :],
-                                    min_edge_mask.shape),
-                    mask=min_edge_mask, shrink=False))
                 edge_res = ma.mean(ma.array(d, mask=min_edge_mask,
                                             shrink=False), axis=-1)  # (npts-1,)
 
