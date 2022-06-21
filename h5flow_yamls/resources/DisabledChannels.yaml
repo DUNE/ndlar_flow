@@ -1,4 +1,5 @@
 classname: DisabledChannels # resources/disabled_channels.py
+path: module0_flow.resources.disabled_channels
 params:
   path: 'disabled_channels'
   disabled_channels_list: 'h5flow_data/module0-run1-selftrigger-disabled-list.json'

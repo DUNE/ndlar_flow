@@ -1,4 +1,5 @@
-classname: WaveformHitFinder # light/hit_finder.py
+classname: WaveformHitFinder
+path: module0_flow.reco.light.hit_finder
 requires:
   - 'light/swvfm'
   - 'light/swvfm/alignment'

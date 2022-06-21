@@ -1,4 +1,5 @@
-classname: RunData # resources/run_data.py
+classname: RunData
+path: module0_flow.resources.run_data
 params:
   path: 'run_info'
   runlist_file: 'h5flow_data/runlist.txt'

@@ -1,4 +1,5 @@
-classname: WaveformDeconvolution # light/wvfm_deconv.py
+classname: WaveformDeconvolution 
+path: module0_flow.reco.light.wvfm_deconv
 requires:
   - 'light/fwvfm'
 params:

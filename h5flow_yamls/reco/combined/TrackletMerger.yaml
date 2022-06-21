@@ -1,4 +1,5 @@
-classname: TrackletMerger # reco/combined/tracklet_merging.py
+classname: TrackletMerger
+path: module0_flow.reco.combined.tracklet_merging
 requires:
  - 'combined/tracklets'
  - name: 'combined/track_hits'

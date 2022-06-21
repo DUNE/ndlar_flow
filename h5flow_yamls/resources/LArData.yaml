@@ -1,4 +1,5 @@
-classname: LArData # resources/lar_data.py
+classname: LArData
+path: module0_flow.resources.lar_data
 params:
   path: 'lar_info'
   electron_lifetime_file: 'h5flow_data/ElecLifetimeFit_Module0.npz'

@@ -1,4 +1,5 @@
-classname: WaveformSum # light/wvfm_sum.py
+classname: WaveformSum
+path: module0_flow.reco.light.wvfm_sum
 requires:
   - 'light/events'
   - 'light/deconv'

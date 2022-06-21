@@ -12,13 +12,15 @@ resources:
 
 events:
   classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
   dset_name: 'charge/events'
   params:
     chunk_size: 32
 
 
 delayed_analysis:
-  classname: DelayedSignal # analysis/delayed_signal.py
+  classname: DelayedSignal
+  path: module0_flow.analysis.delayed_signal
   requires:
     - 'charge/hits'
     - name: 'combined/hit_drift'

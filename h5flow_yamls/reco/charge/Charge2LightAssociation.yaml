@@ -1,4 +1,5 @@
 classname: Charge2LightAssociation # reco/charge/charge2light.py
+path: module0_flow.reco.charge.charge2light
 requires:
   - 'charge/ext_trigs'
   - name: 'charge/ext_trigs_idcs'
