@@ -19,6 +19,7 @@ class Geometry(H5FlowResource):
          - ``lrs_geometry_file``: ``str``, path to yaml file describing light readout system
 
         Provides (for charge geometry):
+         - ``is_singlecube``: boolean flag, ``True`` if detector is a "SingleCube"
          - ``pixel_pitch``: pixel pitch in mm
          - ``pixel_xy``: lookup table for pixel (x,y) coordinates
          - ``tile_id``: lookup table for io channel tile ids
@@ -55,6 +56,7 @@ class Geometry(H5FlowResource):
     default_path = 'geometry_info'
     default_crs_geometry_file = '-'
     default_lrs_geometry_file = '-'
+    default_is_singlecube = False
 
 
     def __init__(self, **params):
@@ -64,6 +66,7 @@ class Geometry(H5FlowResource):
         self.crs_geometry_file = params.get('crs_geometry_file', self.default_crs_geometry_file)
         self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
         self._regions = None  # active TPC regions
+        self._is_singlecube = params.get('is_singlecube', self.default_is_singlecube)
 
 
     def init(self, source_name):
@@ -82,7 +85,8 @@ class Geometry(H5FlowResource):
                                         classname=self.classname,
                                         class_version=self.class_version,
                                         pixel_pitch=self.pixel_pitch,
-                                        crs_geometry_file=self.crs_geometry_file
+                                        crs_geometry_file=self.crs_geometry_file,
+                                        is_singlecube=self.is_singlecube
                                         )
             write_lut(self.data_manager, self.path, self.pixel_xy, 'pixel_xy')
             write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
@@ -96,6 +100,7 @@ class Geometry(H5FlowResource):
             assert_compat_version(self.class_version, self.data['class_version'])
 
             # load geometry from file
+            self._is_singlecube = self.data['is_singlecube']
             self._pixel_pitch = self.data['pixel_pitch']
             self._pixel_xy = read_lut(self.data_manager, self.path, 'pixel_xy')
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
@@ -133,6 +138,12 @@ class Geometry(H5FlowResource):
 
             self._regions.append(np.array([[min_x, min_y, min_z],
                                            [max_x, max_y, max_z]]))
+
+
+    @property
+    def is_singlecube(self):
+        ''' Single readout tile flag, ``True`` if the detector has only one readout tile '''
+        return self._is_singlecube
 
 
     @property
@@ -398,8 +409,8 @@ class Geometry(H5FlowResource):
         with open(self.crs_geometry_file) as gf:
             geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
 
-        if 'multitile_layout_version' in geometry_yaml.keys() == resources['RunData'].is_singlecube:
-            raise ValueError("The tile layout yaml and is_singlecube flag in run_data yaml is incompatible.")
+        if 'multitile_layout_version' in geometry_yaml.keys() == self.is_singlecube:
+            raise ValueError("The tile layout yaml and is_singlecube flag is incompatible.")
 
         if 'multitile_layout_version' not in geometry_yaml.keys():
 #            raise RuntimeError('Only multi-tile geometry configurations are accepted')

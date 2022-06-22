@@ -208,24 +208,9 @@ class RunData(H5FlowResource):
         return self.data['light_filename']
 
     @property
-    def mode(self):
-        ''' choices for vdrift models '''
-        return self.data['mode']
-
-    @property
     def e_field(self):
         ''' TPC electric field in kV/mm '''
         return self.data['e_field']
-
-    @property
-    def temp(self):
-        ''' LAr temperature in K '''
-        return self.data['temp']
-
-    @property
-    def is_singlecube(self):
-        ''' Single readout tile flag, ``True`` if the detector has only one readout tile '''
-        return self.data['is_singlecube']
 
     @property
     def light_samples(self):
