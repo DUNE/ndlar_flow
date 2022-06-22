@@ -51,7 +51,7 @@ class Geometry(H5FlowResource):
                     lrs_geometry_file: 'h5flow_data/light_module_desc-0.0.0.yaml'
 
     '''
-    class_version = '0.1.0'
+    class_version = '0.2.0'
 
     default_path = 'geometry_info'
     default_crs_geometry_file = '-'

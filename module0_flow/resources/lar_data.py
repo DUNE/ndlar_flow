@@ -47,7 +47,7 @@ class LArData(H5FlowResource):
                     path: 'lar_info'
 
     '''
-    class_version = '0.2.0'
+    class_version = '0.3.0'
 
     default_path = 'lar_info'
     default_electron_mobility_params = np.array([551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053])
