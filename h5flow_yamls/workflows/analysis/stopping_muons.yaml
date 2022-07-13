@@ -15,13 +15,15 @@ resources:
 
 events:
   classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
   dset_name: 'charge/events'
   params:
     chunk_size: 32
 
 
 truth_labels:
-  classname: MuonCaptureTruthLabels # analysis/muon_capture_truth_labels.py
+  classname: MuonCaptureTruthLabels
+  path: module0_flow.analysis.muon_capture_truth_labels
   requires:
     - name: 'mc_truth/trajectories'
       path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories']
@@ -41,6 +43,7 @@ truth_labels:
 
 stopping_muon_sel:
   classname: StoppingMuonSelection # analysis/stopping_muon_selection.py
+  path: module0_flow.analysis.stopping_muon_selection  
   requires:
     - 'combined/tracklets/merged'
     - 'combined/t0'
@@ -73,13 +76,10 @@ stopping_muon_sel:
       mc: 1.0
       medm: 1.0
       high: 1.0
-    density_dx_correction_params:
-      medm: [  1.28,   1.41, 85.9 ]
-      mc:   [  1.06,   1.24, 112  ]
-      high: [1.06938198,  1.52281043, 122.37072575]
 
 michel_id:
   classname: MichelID
+  path: module0_flow.analysis.michel_id  
   requires:
     - 'charge/hits'
     - name: 'combined/hit_drift'
@@ -94,3 +94,4 @@ michel_id:
     generate_likelihood_pdf: False
     #generate_likelihood_pdf: True
     likelihood_pdf_filename: h5flow_data/michel_pdf-0.1.0.npz
+    # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/michel_pdf-0.1.0.npz

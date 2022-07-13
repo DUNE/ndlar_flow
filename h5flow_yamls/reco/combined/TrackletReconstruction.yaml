@@ -1,4 +1,5 @@
-classname: TrackletReconstruction # reco/combined/tracklet_reco.py
+classname: TrackletReconstruction
+path: module0_flow.reco.combined.tracklet_reco
 requires:
   - 'charge/hits'
   - name: 'combined/hit_drift'

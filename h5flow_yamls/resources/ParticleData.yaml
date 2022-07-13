@@ -1,4 +1,5 @@
-classname: ParticleData # resources/particle_data.py
+classname: ParticleData
+path: module0_flow.resources.particle_data
 params:
   path: 'particle_info'
   muon_range_table_path: 'h5flow_data/PDG_muon_range_table_Ar.txt'

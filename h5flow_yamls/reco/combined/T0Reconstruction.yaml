@@ -1,4 +1,5 @@
-classname: T0Reconstruction # reco/combined/t0_reco.py
+classname: T0Reconstruction
+path: module0_flow.reco.combined.t0_reco
 requires:
   - 'charge/ext_trigs'
 params:

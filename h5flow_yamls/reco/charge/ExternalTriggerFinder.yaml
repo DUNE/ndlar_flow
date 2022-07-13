@@ -1,4 +1,5 @@
-classname: ExternalTriggerFinder # reco/charge/external_trigger_finder.py
+classname: ExternalTriggerFinder
+path: module0_flow.reco.charge.external_trigger_finder
 requires:
   - 'charge/packets'
   - name: 'charge/packets_corr_ts'

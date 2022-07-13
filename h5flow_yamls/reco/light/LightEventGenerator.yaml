@@ -1,4 +1,5 @@
 classname: LightEventGenerator # light/raw_event_generator.py
+path: module0_flow.reco.light.raw_event_generator
 dset_name: 'light/events'
 params:
   # secondary output

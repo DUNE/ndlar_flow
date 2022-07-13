@@ -1,4 +1,5 @@
-classname: WaveformNoiseFilter # light/wvfm_noise_filter.py
+classname: WaveformNoiseFilter
+path: module0_flow.reco.light.wvfm_noise_filter
 requires:
   - 'light/wvfm'
 params:

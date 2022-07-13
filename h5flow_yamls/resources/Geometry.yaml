@@ -1,4 +1,5 @@
 classname: Geometry # resources/geometry.py
+path: module0_flow.resources.geometry
 params:
   path: 'geometry_info'
   is_singlecube: False

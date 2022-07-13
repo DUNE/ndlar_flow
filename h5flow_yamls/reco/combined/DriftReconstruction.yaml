@@ -1,4 +1,5 @@
-classname: DriftReconstruction # reco/combined/drift_reco.py
+classname: DriftReconstruction
+path: module0_flow.reco.combined.drift_reco
 requires:
   - 'combined/t0'
   - 'charge/hits'
