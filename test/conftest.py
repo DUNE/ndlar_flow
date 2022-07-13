@@ -137,6 +137,13 @@ def track_merging_pdf_file(pytestconfig, tmp_path_factory):
                                       'data/Module0/merged/reco_data/'
                                       'joint_pdf-3_0_0.npz')))
 
+@pytest.fixture
+def michel_pdf_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/merged/reco_data/'
+                                      'michel_pdf-0.1.0.npz')))
+
 
 @ pytest.fixture
 def proton_range_table(pytestconfig, tmp_path_factory):
