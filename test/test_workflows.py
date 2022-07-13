@@ -7,7 +7,7 @@ import h5flow
 from .conftest import maybe_fetch_from_url
 
 
-def check_dsets(filename, datasets, check_empty=True):
+def check_dsets(filename, datasets, check_empty=False):
     with h5py.File(filename, 'r') as f:
         assert all([d in f for d in datasets]), ('Missing dataset(s)',
                                                  f.visit(print))
