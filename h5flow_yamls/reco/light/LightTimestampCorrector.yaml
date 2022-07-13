@@ -1,4 +1,5 @@
-classname: LightTimestampCorrector # light/timestamp_corrector.py
+classname: LightTimestampCorrector
+path: module0_flow.reco.light.timestamp_corrector
 params:
   # output
   t_ns_dset_name: 'light/t_ns'

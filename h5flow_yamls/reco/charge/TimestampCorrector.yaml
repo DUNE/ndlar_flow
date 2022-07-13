@@ -1,4 +1,5 @@
-classname: TimestampCorrector # reco/charge/timestamp_corrector.py
+classname: TimestampCorrector
+path: module0_flow.reco.charge.timestamp_corrector
 requires:
   - 'charge/packets'
   - name: 'charge/packets_index'

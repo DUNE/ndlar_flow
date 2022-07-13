@@ -1,4 +1,5 @@
 classname: WaveformAlign
+path: module0_flow.reco.light.wvfm_align
 requires:
     - 'light/deconv'
 params:

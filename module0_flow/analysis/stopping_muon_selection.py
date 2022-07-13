@@ -69,6 +69,8 @@ class StoppingMuonSelection(H5FlowStage):
                                 ('stop', 'u1'),
                                 ('remaining_e', 'f8'),
                                 ('d_to_edge', 'f8'),
+                                ('veto_q', 'f4'),
+                                ('max_dqdx', 'f4'),                                
                                 ('muon_loglikelihood_mean', 'f8'),
                                 ('proton_loglikelihood_mean', 'f8'),
                                 ('mip_loglikelihood_mean', 'f8'),
@@ -1089,6 +1091,8 @@ class StoppingMuonSelection(H5FlowStage):
             event_sel['stop_pt_corr'] = end_pt_corr.reshape(event_sel['stop_pt_corr'].shape)            
             event_sel['remaining_e'] = e
             event_sel['d_to_edge'] = ma.sum(is_stopping * d_to_edge, axis=-1)
+            event_sel['veto_q'] = veto_q
+            event_sel['max_dqdx'] = max_dqdx
 
         event_profile = np.zeros(len(tracks), dtype=self.event_profile_dtype)
         if len(event_profile):

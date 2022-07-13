@@ -1,4 +1,5 @@
-classname: EventBuilder # reco/charge/event_builder.py
+classname: EventBuilder
+path: module0_flow.reco.charge.event_builder
 requires:
   - 'charge/hits'
   - 'charge/ext_trigs'

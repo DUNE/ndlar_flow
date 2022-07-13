@@ -34,10 +34,10 @@ def test_lut_init(lut):
     assert np.all(lut[0].min_max_keys == np.array([(min(k), max(k)) for k in lut[1][0]]))
     assert np.all(lut[0].lengths == np.array([max(k) - min(k) + 1 for k in lut[1][0]]))
     assert lut[0].max_hash == lut[0].hash(*[max(k) for k in lut[1][0]])
-    assert np.all(lut[0].default == lut[1][2]) or lut[1][2] is None
+    assert lut[1][2] is None or np.all(lut[0].default == lut[1][2])
 
     assert lut[0]._data.shape[0] == lut[0].max_hash + 1
-    assert lut[0]._data.shape[1:] == lut[1][3] or lut[1][3] is None
+    assert lut[1][3] is None or lut[0]._data.shape[1:] == lut[1][3]
 
 
 def test_lut_array(lut):

@@ -70,7 +70,7 @@ class DisabledChannels(H5FlowResource):
             self.data['missing_asic_list'] = (self.missing_asic_list
                                               if self.missing_asic_list is not None
                                               else '')
-#             self.data_manager.set_attrs(self.path, **self.data)
+            self.data_manager.set_attrs(self.path, **self.data)
             xy_dtype = np.dtype([('x', self._disabled_xy.dtype), ('y', self._disabled_xy.dtype)])
             self.data_manager.create_dset(self.path + '/xy', dtype=xy_dtype)
             sl = self.data_manager.reserve_data(self.path + '/xy', slice(0, len(self._disabled_xy)))
@@ -83,6 +83,7 @@ class DisabledChannels(H5FlowResource):
 
             self._disabled_channel_lut = read_lut(self.data_manager, self.path,
                                                   'lut')
+            self._disabled_xy = np.c_[self.data_manager[self.path+'/xy/data']['x'], self.data_manager[self.path+'/xy/data']['y']]
 
         if self.rank == 0:
             logging.info(f'N disabled channels: {len(self.disabled_xy)}')

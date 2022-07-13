@@ -28,19 +28,26 @@ jobs:
         cd ..
         git clone https://github.com/peter-madigan/h5flow.git
 
-    - name: conda cache
-      uses: actions/cache@v2
-      with:
-        path: ~/conda_pkgs_dir
-        key: ${{ runner.OS }}-conda-${{ hashFiles('**/env*.y*l') }}-${{ matrix.mpi_enabled }}-1
-
-    - name: setup conda
+    - name: setup conda (mpi)
       uses: conda-incubator/setup-miniconda@v2
+      if: matrix.mpi_enabled == 1
+      env:
+        CC: mpicc
+        HDF5_MPI: "ON"
       with:
         auto-update-conda: true
         activate-environment: test
         python-version: "3.9"
-        use-only-tar-bz2: true
+        environment-file: test/env.yaml
+
+    - name: setup conda (no mpi)
+      uses: conda-incubator/setup-miniconda@v2
+      if: matrix.mpi_enabled == 0
+      with:
+        auto-update-conda: true
+        activate-environment: test
+        python-version: "3.9"
+        environment-file: test/env-nompi.yaml
 
     - name: install h5flow (mpi)
       if: matrix.mpi_enabled == 1
@@ -59,25 +66,18 @@ jobs:
         conda env update --file environment-nompi.yml
         pip install .
 
-    - name: install module0_flow (mpi)
-      if: matrix.mpi_enabled == 1
+    - name: install
       run: |
-        conda env update -vvv --file env.yaml
-        pip install .
-
-    - name: install module0_flow (no mpi)
-      if: matrix.mpi_enabled == 0
-      run: |
-        conda env update -vvv --file env-nompi.yaml
         pip install .
 
     - name: lint
       run: |
         conda install flake8
         # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        python -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        python -m flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
     - name: test
       run: |
         pytest -vv --log-level=DEBUG

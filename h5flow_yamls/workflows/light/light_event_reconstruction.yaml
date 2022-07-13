@@ -6,7 +6,7 @@ flow:
   stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_sum, hit_finder]
 
   # remove waveforms from output file
-  drop: ['light/wvfm', 'light/fwvfm', 'light/deconv', 'light/swvfm']
+  drop: ['light/wvfm', 'light/fwvfm', 'light/deconv']
 
 
 resources:

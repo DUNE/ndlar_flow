@@ -1,4 +1,5 @@
 classname: HitBuilder # reco/charge/hit_builder.py
+path: module0_flow.reco.charge.hit_builder
 requires:
   - 'charge/packets'
   - name: 'charge/packets_corr_ts'

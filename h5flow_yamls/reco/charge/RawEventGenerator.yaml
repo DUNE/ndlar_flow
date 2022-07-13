@@ -1,4 +1,5 @@
-classname: RawEventGenerator # reco/charge/raw_event_generator.py
+classname: RawEventGenerator
+path: module0_flow.reco.charge.raw_event_generator
 dset_name: 'charge/raw_events'
 params:
   # secondary output
