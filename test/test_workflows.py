@@ -260,8 +260,9 @@ def delayed_signal_analysis_file(stopping_muon_analysis_file, tmp_h5_file):
                verbose=2)
 
     check_dsets(tmp_h5_file, (
-        'analysis/muon_capture/prompt/data',
-        'analysis/muon_capture/delayed/data'
+        'analysis/time_reco/prompt/data',
+        'analysis/time_reco/delayed/data',
+        'analysis/time_reco/fit/data'
     ))
 
     return tmp_h5_file
