@@ -69,6 +69,8 @@ class DelayedSignal(H5FlowStage):
         fit_dset_name='analysis/time_reco/fit',
         prompt_dset_name='analysis/time_reco/prompt',
         delayed_dset_name='analysis/time_reco/delayed',
+        singlet_fraction=0.3,
+        triplet_time=750, # ns
         noise_factor=1,
         prompt_window=[-350,-250], # ns
         delayed_window=[100,20000], # ns
@@ -86,9 +88,9 @@ class DelayedSignal(H5FlowStage):
             ('prompt_acc', 'f4', (ntpc,ndet)),
             ('delayed_acc', 'f4', (ntpc,ndet)),            
             ('prompt_f', 'f4'),
-            ('prompt_ns', 'f4'),
+            ('prompt_ns', 'f8'),
             ('pe_vis', 'f4'),
-            ('delayed_ns', 'f4'),
+            ('delayed_ns', 'f8'),
             ('fraction', 'f4'),
             ('tau_t', 'f4'),
             ('mse', 'f4'),
@@ -128,7 +130,7 @@ class DelayedSignal(H5FlowStage):
 
         # create fit datatype
         self.fit_dtype = self.fit_dtype(*self.data_manager[self.wvfm_dset_name+'/data'].dtype['samples'].shape[:-1])
-        self.p0 = (0.3, 750) # fraction, triplet time
+        self.p0 = (self.singlet_fraction, self.triplet_time) # fraction, triplet time
 
         # format output file
         attrs = dict(class_version=self.class_version, classname=self.classname)
@@ -284,7 +286,7 @@ class DelayedSignal(H5FlowStage):
 
                 p0 = (prompt_ampl / (prompt_ampl + delayed_ampl), prompt_ns, delayed_ns - prompt_ns) + self.p0
                 fit_result = optimize.minimize(loss, p0, args=(
-                    np.array(wvfm_ns[iev,trig,tpc,det,:], dtype='f4'), np.array(wvfm[iev,trig,tpc,det,:], dtype='f4'), prompt_acc[iev,tpc,det]/prompt_acc_norm, delayed_acc[iev,tpc,det]/delayed_acc_norm,
+                    np.array(wvfm_ns[iev,trig,tpc,det,:], dtype='f8'), np.array(wvfm[iev,trig,tpc,det,:], dtype='f4'), prompt_acc[iev,tpc,det]/prompt_acc_norm, delayed_acc[iev,tpc,det]/delayed_acc_norm,
                     self.noise[tpc,det] * self.noise_factor if self.noise.ndim > 1 else self.noise*self.noise_factor, False),
                                                bounds=[(0,1)]+[(0,np.inf) for _ in p0[1:]], options=dict(disp=False))
 
@@ -324,7 +326,7 @@ class DelayedSignal(H5FlowStage):
                     plt.ylabel('y [mm]')
                     #plt.colorbar(label='z [mm]')
                     plt.gca().set_aspect('equal')
-                    plt.waitforbuttonpress(0.001)
+                    plt.show()
 
                     plt.figure(num=1, dpi=100)
                     if 'mc_truth' in self.data_manager['/']:
@@ -335,8 +337,8 @@ class DelayedSignal(H5FlowStage):
                     for offset,i_max in enumerate((imax0,imax1)):
                         pinit = (p0[0] * prompt_acc[iev].ravel()[i_max]/prompt_acc_norm, p0[1], (1-p0[0]) * delayed_acc[iev].ravel()[i_max]/delayed_acc_norm, p0[2], p0[3], p0[4])
                         pbest = (p[0] * prompt_acc[iev].ravel()[i_max]/prompt_acc_norm, p[1], (1-p[0]) * delayed_acc[iev].ravel()[i_max]/delayed_acc_norm, p[2], p[3], p[4])
-                        t = wvfm_ns[iev].reshape(-1,32,256)[:,i_max,:].compressed()
-                        y = wvfm[iev].reshape(-1,32,256)[:,i_max,:].compressed()
+                        t = wvfm_ns[iev].reshape(-1,32,250)[:,i_max,:].compressed()
+                        y = wvfm[iev].reshape(-1,32,250)[:,i_max,:].compressed()
                         order = np.argsort(t)
                         t = t[order]
                         y = y[order]
@@ -348,7 +350,7 @@ class DelayedSignal(H5FlowStage):
 
                     plt.legend()
                     plt.figure(num=4, dpi=50, figsize=(1,1))
-                    plt.waitforbuttonpress(60)
+                    plt.show(block=True)
 
                     for i in range(1,5):
                         plt.figure(num=i)
