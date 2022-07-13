@@ -10,7 +10,6 @@ flow:
 resources:
   - !include h5flow_yamls/resources/RunData.yaml
   - !include h5flow_yamls/resources/Geometry.yaml
-  - !include h5flow_yamls/resources/LArData.yaml
 
 
 raw_events:

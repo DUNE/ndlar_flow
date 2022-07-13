@@ -76,10 +76,6 @@ stopping_muon_sel:
       mc: 1.0
       medm: 1.0
       high: 1.0
-    density_dx_correction_params:
-      medm: [  1.28,   1.41, 85.9 ]
-      mc:   [  1.06,   1.24, 112  ]
-      high: [1.06938198,  1.52281043, 122.37072575]
 
 michel_id:
   classname: MichelID
