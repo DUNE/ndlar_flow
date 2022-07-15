@@ -37,8 +37,8 @@ class WaveformHitFinder(H5FlowStage):
             tpc         u1,             tpc index
             det         u1,             detector index
             sample_idx  u2,             sample index of peak within waveform
-            ns          f8,             PPS timestamp of peak [ns]
-            busy_ns     f8,             timestamp of peak relative to busy rising edge [ns]
+            ns          f8,             PPS timestamp of waveform [ns]
+            busy_ns     f8,             timestamp of peak relative to busy rising edge (aka when the waveform was triggered) [ns]
             samples     f4(2*near+1,),  sample adc value around peak
             sum         f4,             sum of sample adc values (out to ±near_samples)
             max         f4,             peak adc value

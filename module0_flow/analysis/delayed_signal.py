@@ -15,6 +15,7 @@ import module0_flow.util.units as units
 
 
 def f_scint(t, singlet_fraction=0.3, tau_t=750, tau_s=7, smearing=1):
+
     f = np.where(t >= 0, (singlet_fraction / tau_s * np.exp(-t.clip(0,tau_s*10) / tau_s) + (1 - singlet_fraction) / tau_t * np.exp(-t.clip(0,tau_t*10) / tau_t)), 0)
     ndimage.gaussian_filter1d(f, output=f, sigma=smearing, mode='nearest', axis=-1)
     return f
@@ -312,7 +313,10 @@ class DelayedSignal(H5FlowStage):
                 fit_data[iev]['prompt_ns'] = p[1] + t_offset_ns
                 fit_data[iev]['pe_vis'] = pe_vis
                 fit_data[iev]['delayed_ns'] = p[2]
-                #fit_data[iev]['cov'] = fit_result.jac.T @ fit_result.jac * fit_result.fun**2
+                fit_data[iev]['prompt_ns'] = p[1]
+                fit_data[iev]['pe_vis'] = pe_vis
+                fit_data[iev]['delayed_ns'] = p[2]
+                fit_data[iev]['cov'] = fit_result.jac.T @ fit_result.jac * fit_result.fun**2
                 fit_data[iev]['mse'] = fit_result.fun
                 fit_data[iev]['fraction'] = p[3]
                 fit_data[iev]['tau_t'] = p[4]
@@ -321,6 +325,7 @@ class DelayedSignal(H5FlowStage):
                     print('prompt', prompt_data[iev])
                     print('delayed', delayed_data[iev])
                     print('fit', fit_data[iev])
+
                     imax0,imax1 = ma.argsort((wvfm[iev] * delayed_acc[iev,...,np.newaxis] * (np.arange(wvfm.shape[-2]) % 4 != 0)[...,np.newaxis]).sum(axis=(0,-1)).ravel())[-2:].tolist()
                     import matplotlib.pyplot as plt
                     plt.ion()
