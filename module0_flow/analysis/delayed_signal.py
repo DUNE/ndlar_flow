@@ -15,7 +15,7 @@ import module0_flow.util.units as units
 
 
 def f_scint(t, singlet_fraction=0.3, tau_t=750, tau_s=7, smearing=1):
-    f = np.where(t >= 0, (singlet_fraction / tau_s * np.exp(-t / tau_s) + (1 - singlet_fraction) / tau_t * np.exp(-t / tau_t)), 0)
+    f = np.where(t >= 0, (singlet_fraction / tau_s * np.exp(-t.clip(0,tau_s*10) / tau_s) + (1 - singlet_fraction) / tau_t * np.exp(-t.clip(0,tau_t*10) / tau_t)), 0)
     ndimage.gaussian_filter1d(f, output=f, sigma=smearing, mode='nearest', axis=-1)
     return f
 
@@ -33,9 +33,10 @@ def loss(x, *args):
     delayed_acceptance = args[3] # shape (trig x tpc x det)
     noise = args[4] # shape (trig x tpc x det)
     prompt_weight = args[5] # bool (True if weight by prompt acceptance, False if weight by delayed acceptance)
+    time_offset = args[6] # constant factor to add to prompt time
 
     prompt_f = x[0]
-    prompt_t = x[1]
+    prompt_t = x[1] + time_offset
     delayed_t = x[2]
     singlet_fraction = x[3]
     tau_t = x[4]
@@ -47,7 +48,7 @@ def loss(x, *args):
                       (1 - prompt_f) * delayed_acceptance[...,np.newaxis], delayed_t,
                       *model_args)
 
-    err = np.mean((model - y)**2 / np.clip(noise[...,np.newaxis],1e-15,None)**2, axis=(0,-1))
+    err = np.sum((model - y)**2 / np.clip(noise[...,np.newaxis],1e-15,None)**2, axis=(0,-1))
     if not prompt_weight:
         weight = 1
     else:
@@ -72,7 +73,7 @@ class DelayedSignal(H5FlowStage):
         singlet_fraction=0.3,
         triplet_time=750, # ns
         noise_factor=1,
-        prompt_window=[-350,-250], # ns
+        prompt_window=[-400,200], # ns
         delayed_window=[100,20000], # ns
         sig_avg_window=50, # ns
         edge_effect_window=3, # samples
@@ -202,14 +203,14 @@ class DelayedSignal(H5FlowStage):
 
                 min_ns = np.min(wvfm_ns[iev])
                 n_ticks = int(np.ceil((np.max(wvfm_ns[iev]) - min_ns) / self.sample_rate))
-                xdata = np.linspace(min_ns, min_ns + self.sample_rate * (n_ticks + 1), n_ticks)
+                xdata = np.linspace(min_ns, min_ns + self.sample_rate * n_ticks, n_ticks+1)
                 ydata = np.zeros_like(xdata)
                 ysig = np.zeros_like(xdata)        
                 mask = np.zeros_like(xdata, dtype=bool)
                 for itrig in range(wvfm.shape[1]):
                     for itpc in range(wvfm.shape[2]):
                         for idet in range(wvfm.shape[3]):
-                            if idet%4 == 0:
+                            if idet%4 == 0: # skip ArcLights
                                 continue
                             if np.any(~wvfm[iev,itrig,itpc,idet,:].mask) or np.any(~wvfm_ns[iev,itrig,itpc,idet,:].mask):
                                 subset = (xdata >= wvfm_ns[iev,itrig,itpc,idet,0]) & (xdata <= wvfm_ns[iev,itrig,itpc,idet,-1])
@@ -241,7 +242,7 @@ class DelayedSignal(H5FlowStage):
                 prompt_data[iev]['ampl'] = prompt_ampl
                 prompt_data[iev]['sig'] = ydata_sliding_window[prompt_mask][prompt_sample]
 
-                # skip fit on detectors with little expected signal (or ArcLights
+                # skip fit on detectors with little expected signal (or ArcLights)
                 trig,tpc,det = np.where(~np.any(wvfm_ns[iev].mask, axis=-1) & ((prompt_acc[iev] > self.acceptance_threshold) | (delayed_acc[iev] > self.acceptance_threshold))[np.newaxis])
                 mask = det%4 != 0 # exclude ArcLights from analysis
                 trig = trig[mask]
@@ -284,26 +285,42 @@ class DelayedSignal(H5FlowStage):
                 delayed_data[iev]['delay'] = delayed_ns - prompt_ns
                 delayed_data[iev]['sig'] = delayed_sig[delayed_sample]
 
-                p0 = (prompt_ampl / (prompt_ampl + delayed_ampl), prompt_ns, delayed_ns - prompt_ns) + self.p0
-                fit_result = optimize.minimize(loss, p0, args=(
-                    np.array(wvfm_ns[iev,trig,tpc,det,:], dtype='f8'), np.array(wvfm[iev,trig,tpc,det,:], dtype='f4'), prompt_acc[iev,tpc,det]/prompt_acc_norm, delayed_acc[iev,tpc,det]/delayed_acc_norm,
-                    self.noise[tpc,det] * self.noise_factor if self.noise.ndim > 1 else self.noise*self.noise_factor, False),
-                                               bounds=[(0,1)]+[(0,np.inf) for _ in p0[1:]], options=dict(disp=False))
+                t_offset_ns = xdata.min()
+                p0 = (prompt_ampl / (prompt_ampl + delayed_ampl), prompt_ns - t_offset_ns, delayed_ns - prompt_ns) + self.p0
+                fit_result = optimize.minimize(
+                    loss, p0, args=(
+                        np.array(wvfm_ns[iev,trig,tpc,det,:], dtype='f8'),
+                        np.array(wvfm[iev,trig,tpc,det,:], dtype='f4'),
+                        prompt_acc[iev,tpc,det]/prompt_acc_norm,
+                        delayed_acc[iev,tpc,det]/delayed_acc_norm,
+                        self.noise[tpc,det] * self.noise_factor if self.noise.ndim > 1
+                            else self.noise*self.noise_factor,
+                        False,
+                        t_offset_ns
+                    ),
+                    #method='Powell',
+                    bounds=[(0,1)]+[(0,np.inf) for _ in p0[1:-2]] + [(0,1), (0,np.inf)],
+                    options=dict(disp=False))
+                if not fit_result.success:
+                    print('fit failed on ',np.r_[source_slice][iev],'because',fit_result.message)
 
                 p = tuple(fit_result.x)
                 fit_data[iev]['prompt_acc'] = prompt_acc[iev] * (np.arange(wvfm.shape[-2]) % 4 != 0) # exclude arclight
                 fit_data[iev]['delayed_acc'] = delayed_acc[iev] * (np.arange(wvfm.shape[-2]) % 4 != 0) # exclude arclight
                 fit_data[iev]['valid'] = fit_result.success
                 fit_data[iev]['prompt_f'] = p[0]
-                fit_data[iev]['prompt_ns'] = p[1]
+                fit_data[iev]['prompt_ns'] = p[1] + t_offset_ns
                 fit_data[iev]['pe_vis'] = pe_vis
                 fit_data[iev]['delayed_ns'] = p[2]
-                fit_data[iev]['cov'] = fit_result.jac.T @ fit_result.jac * fit_result.fun**2
+                #fit_data[iev]['cov'] = fit_result.jac.T @ fit_result.jac * fit_result.fun**2
                 fit_data[iev]['mse'] = fit_result.fun
                 fit_data[iev]['fraction'] = p[3]
                 fit_data[iev]['tau_t'] = p[4]
 
-                if False:
+                if False: #(not fit_result.success and resources['RunData'].is_mc):
+                    print('prompt', prompt_data[iev])
+                    print('delayed', delayed_data[iev])
+                    print('fit', fit_data[iev])
                     imax0,imax1 = ma.argsort((wvfm[iev] * delayed_acc[iev,...,np.newaxis] * (np.arange(wvfm.shape[-2]) % 4 != 0)[...,np.newaxis]).sum(axis=(0,-1)).ravel())[-2:].tolist()
                     import matplotlib.pyplot as plt
                     plt.ion()
@@ -328,33 +345,60 @@ class DelayedSignal(H5FlowStage):
                     plt.gca().set_aspect('equal')
                     plt.show()
 
-                    plt.figure(num=1, dpi=100)
+                    fig,axes = plt.subplots(2, 4, num=1, dpi=100, figsize=(12,6), sharex='all')
                     if 'mc_truth' in self.data_manager['/']:
                         true_parent = self.data_manager['analysis/muon_capture/truth_labels/stopping_track','mc_truth/tracks', np.r_[source_slice][iev]]['t0'].ravel()[0]
                         true_decay = self.data_manager['analysis/muon_capture/truth_labels/michel_track','mc_truth/tracks', np.r_[source_slice][iev]]['t0'].ravel()[0]
                         if true_decay > 0:
-                            plt.axvline((true_decay - true_parent)*1e3 + p[1], color='k', ls=':', label='true decay')
-                    for offset,i_max in enumerate((imax0,imax1)):
-                        pinit = (p0[0] * prompt_acc[iev].ravel()[i_max]/prompt_acc_norm, p0[1], (1-p0[0]) * delayed_acc[iev].ravel()[i_max]/delayed_acc_norm, p0[2], p0[3], p0[4])
-                        pbest = (p[0] * prompt_acc[iev].ravel()[i_max]/prompt_acc_norm, p[1], (1-p[0]) * delayed_acc[iev].ravel()[i_max]/delayed_acc_norm, p[2], p[3], p[4])
-                        t = wvfm_ns[iev].reshape(-1,32,250)[:,i_max,:].compressed()
-                        y = wvfm[iev].reshape(-1,32,250)[:,i_max,:].compressed()
-                        order = np.argsort(t)
-                        t = t[order]
-                        y = y[order]
+                            for ax in axes:
+                                for a in ax:
+                                    a.axvline((true_decay - true_parent)*1e3 + p[1] + t_offset_ns, color='k', ls=':', label='true decay')
+                    for itpc in range(prompt_acc[iev].shape[0]):
+                        for idet in range(prompt_acc[iev].shape[1]):
+                            pinit = (p0[0] * prompt_acc[iev,itpc,idet]/prompt_acc_norm, p0[1] + t_offset_ns, (1-p0[0]) * delayed_acc[iev,itpc,idet]/delayed_acc_norm, p0[2], p0[3], p0[4])
+                            pbest = (p[0] * prompt_acc[iev,itpc,idet]/prompt_acc_norm, p[1] + t_offset_ns, (1-p[0]) * delayed_acc[iev,itpc,idet]/delayed_acc_norm, p[2], p[3], p[4])
+                            t = wvfm_ns[iev,:,itpc,idet,:].reshape(-1,250).compressed()
+                            y = wvfm[iev,:,itpc,idet,:].reshape(-1,250).compressed()
+                            order = np.argsort(t)
+                            t = t[order]
+                            y = y[order]
 
-                        plt.plot(t, y + offset * 1000, '.', color=f'C{offset}', label='largest waveform')
-                        plt.plot(t, pe_vis * f_delayed(t, *pinit) + offset * 1000, ':', color=f'C{offset}', label='fit initialization')
-                        #plt.plot(t, f_delayed(t, *pinit) + offset * 1000, '--', color=f'C{offset}', label='fit (prompt)')                    
-                        plt.plot(t, pe_vis * f_delayed(t, *pbest) + offset * 1000, color=f'C{offset}', label='fit (both)')
+                            offset = idet//4
+                            
+                            axes[itpc,idet%4].plot(t, y, '.', color=f'C{offset}', label='largest waveform')
+                            axes[itpc,idet%4].plot(t, pe_vis * f_delayed(t, *pinit), ':', color=f'C{offset}', label='fit initialization')
+                            axes[itpc,idet%4].plot(t, pe_vis * f_delayed(t, *pbest), color=f'C{offset}', label='fit (both)')
+                            axes[itpc,idet%4].axvline(prompt_data[iev]['ns'], color=f'C{offset}', lw=1, ls=':')
+                            axes[itpc,idet%4].axvline(delayed_data[iev]['ns'], color=f'C{offset}', lw=1, ls=':')
+                            axes[itpc,idet%4].axvline(fit_data[iev]['prompt_ns'], color=f'C{offset}', lw=1, ls='-')
+                            axes[itpc,idet%4].axvline(fit_data[iev]['prompt_ns']+fit_data[iev]['delayed_ns'], color=f'C{offset}', lw=1, ls='-')
+                            axes[itpc,idet%4].axvline(first_trigger_ns + self.prompt_window[0], color='k', lw=1, ls='--', label='prompt window')
+                            axes[itpc,idet%4].axvline(first_trigger_ns + self.prompt_window[1], color='k', lw=1, ls='--')
 
-                    plt.legend()
-                    plt.figure(num=4, dpi=50, figsize=(1,1))
+                    fig,axes = plt.subplots(2, 4, num=4, dpi=100, figsize=(12,6), sharex='all')
+                    if 'mc_truth' in self.data_manager['/']:
+                        true_parent = self.data_manager['analysis/muon_capture/truth_labels/stopping_track','mc_truth/tracks', np.r_[source_slice][iev]]['t0'].ravel()[0]
+                        true_decay = self.data_manager['analysis/muon_capture/truth_labels/michel_track','mc_truth/tracks', np.r_[source_slice][iev]]['t0'].ravel()[0]
+                        if true_decay > 0:
+                            for ax in axes:
+                                for a in ax:
+                                    a.axvline((true_decay - true_parent)*1e3 + p[1] + t_offset_ns, color='k', ls=':', label='true decay', zorder=np.inf)
+                    for itpc in range(prompt_acc[iev].shape[0]):
+                        for idet in range(prompt_acc[iev].shape[1]):
+                            pinit = (p0[0] * prompt_acc[iev,itpc,idet]/prompt_acc_norm, p0[1] + t_offset_ns, (1-p0[0]) * delayed_acc[iev,itpc,idet]/delayed_acc_norm, p0[2], p0[3], p0[4])
+                            pbest = (p[0] * prompt_acc[iev,itpc,idet]/prompt_acc_norm, p[1] + t_offset_ns, (1-p[0]) * delayed_acc[iev,itpc,idet]/delayed_acc_norm, p[2], p[3], p[4])
+                            t = wvfm_ns[iev,:,itpc,idet,:].reshape(-1,250).compressed()
+                            y = wvfm[iev,:,itpc,idet,:].reshape(-1,250).compressed()
+                            order = np.argsort(t)
+                            t = t[order]
+                            y = y[order]
+
+                            offset = idet//4
+                            axes[itpc,idet%4].plot(t, np.cumsum(y), '.', color=f'C{offset}', label='largest waveform')
+                            axes[itpc,idet%4].plot(t, np.cumsum(pe_vis * f_delayed(t, *pinit)), ':', color=f'C{offset}', label='fit initialization')
+                            axes[itpc,idet%4].plot(t, np.cumsum(pe_vis * f_delayed(t, *pbest)), color=f'C{offset}', label='fit (both)')
+
                     plt.show(block=True)
-
-                    for i in range(1,5):
-                        plt.figure(num=i)
-                        plt.clf()
 
         # save data to file
         fit_slice = self.data_manager.reserve_data(
