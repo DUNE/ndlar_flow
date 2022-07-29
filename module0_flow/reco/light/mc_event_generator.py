@@ -1,7 +1,6 @@
 import numpy as np
 import h5py
 import numpy.ma as ma
-import ROOT
 from collections import defaultdict
 import logging
 from math import ceil
