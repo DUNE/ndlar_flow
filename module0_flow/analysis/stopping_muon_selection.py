@@ -46,7 +46,7 @@ class StoppingMuonSelection(H5FlowStage):
         larpix_noise=500,  # e/mm
         proton_classifier_cut=0.05,
         muon_classifier_cut=0.08,
-        dqdx_peak_cut=12e3, # e/mm
+        dqdx_peak_cut=5e3, # e/mm
         profile_search_dx=22, # mm
         remaining_e_cut=85e3, # keV
 

@@ -3,6 +3,10 @@
 flow:
   source: events
   stages: [delayed_analysis]
+  #drop: [
+  #  'charge/hits', 'charge/packets', 'charge/packets_corr_ts',
+  #  'light/hits','light/swvfm','light/t_ns',
+  #  'combined/hit_drift']
 
 
 resources:
