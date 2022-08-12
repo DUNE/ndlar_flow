@@ -6,6 +6,7 @@ workflow documentation
 .. toctree::
 
    workflows
+   inputs
 
 module documentation
 ====================
