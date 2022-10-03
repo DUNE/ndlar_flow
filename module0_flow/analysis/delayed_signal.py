@@ -87,7 +87,8 @@ class DelayedSignal(H5FlowStage):
         sig_avg_window=50, # ns
         edge_effect_window=3, # samples
         acceptance_threshold=1e-3,
-        noise=None
+        noise=None,
+        model_fit=False
         )
 
     @staticmethod
@@ -157,7 +158,7 @@ class DelayedSignal(H5FlowStage):
         d = np.load(self.prompt_response_model)
         self.template = d['template'][:self.response_model_terms]
         self.template_align = d['alignment'][:self.response_model_terms]
-        self.res_dev = d['res_dev'][-1]
+        self.res_dev = d['res_dev'][self.response_model_terms-1]
         self.res_dev[self.res_dev == 0] = 1e9
 
         # create datatypes
@@ -310,8 +311,8 @@ class DelayedSignal(H5FlowStage):
                         prompt_trigger = False
                     for itpc in range(wvfm.shape[2]):
                         for idet in range(wvfm.shape[3]):
-                            #if idet%4 == 0: # skip ArcLights
-                            #    continue
+                            if idet%4 == 0: # skip ArcLights
+                                continue
                             if np.any(~wvfm_clipped[itrig,itpc,idet,:].mask) or np.any(~wvfm_ns_clipped[itrig,itpc,idet,:].mask):
                                 subset = (xdata >= wvfm_ns_clipped[itrig,itpc,idet,0]) & (xdata < wvfm_ns_clipped[itrig,itpc,idet,-1] + self.sample_rate)
                                 mask[subset] = True
@@ -422,34 +423,42 @@ class DelayedSignal(H5FlowStage):
                     False,
                     t_offset_ns
                 )
-                fit_result = optimize.minimize(
-                    loss, p0, args=fit_args,
-                    method='Powell',
-                    #method='Nelder-Mead',
-                    bounds=[(0,1)]+[(0,np.inf) for _ in p0[1:-2]] + [(0,1), (0,np.inf)],
-                    options=dict(disp=False)
+                if self.model_fit:
+                    fit_result = optimize.minimize(
+                        loss, p0, args=fit_args,
+                        method='Powell',
+                        #method='Nelder-Mead',
+                        bounds=[(0,1)]+[(0,np.inf) for _ in p0[1:-2]] + [(0,1), (0,np.inf)],
+                        options=dict(disp=False)
                     )
-                p = tuple(fit_result.x)
-                pnull = list(fit_result.x)
+                    p = tuple(fit_result.x)
+                    pnull = list(fit_result.x)
+                else:
+                    p = tuple(p0)
+                    pnull = list(p)
                 pnull[2] = np.inf # push delayed time to infinity
-                mse0 = loss(p0, *fit_args)
-                if not fit_result.success:
+                mse0 = loss(p0, *fit_args) if fit_args[0].size else 0
+                    
+                if self.model_fit and not fit_result.success:
                     print('fit failed on ',np.r_[source_slice][iev],'because',fit_result.message)
 
                 fit_data[iev]['prompt_acc'] = prompt_acc[iev] * (np.arange(wvfm.shape[-2]) % 4 != 0) # exclude arclight
                 fit_data[iev]['delayed_acc'] = delayed_acc[iev] * (np.arange(wvfm.shape[-2]) % 4 != 0) # exclude arclight
-                fit_data[iev]['valid'] = fit_result.success
+                fit_data[iev]['valid'] = fit_result.success if self.model_fit else False
                 fit_data[iev]['prompt_f'] = p[0]
                 fit_data[iev]['prompt_ns'] = p[1] + t_offset_ns
                 fit_data[iev]['delayed_ns'] = p[2]
                 fit_data[iev]['pe_vis'] = pe_vis
                 #fit_data[iev]['cov'] = fit_result.jac.T @ fit_result.jac * fit_result.fun**2
-                fit_data[iev]['mse'] = fit_result.fun
+                fit_data[iev]['mse'] = fit_result.fun if self.model_fit else loss(p, *fit_args)
                 fit_data[iev]['mse0'] = mse0
                 fit_data[iev]['ndf'] = wvfm_ns[iev,trig,tpc,det,:].size - len(p)
                 fit_data[iev]['fraction'] = p[3]
                 fit_data[iev]['tau_t'] = p[4]
 
+
+                ## FOR DEBUG ONLY!
+                # plots each analyzed event
                 if False: #(not fit_result.success and resources['RunData'].is_mc):
                     print('prompt', prompt_data[iev])
                     print('delayed', delayed_data[iev])
@@ -475,15 +484,18 @@ class DelayedSignal(H5FlowStage):
                     axes[1].legend()                    
                     axes[1].set_yscale('log')
                     
-                    plt.figure(num=2, dpi=100)
+                    fig,axes = plt.subplots(1,2,num=2, dpi=100, sharey='all')
                     mask = hit_label[iev]['michel_flag'].astype(bool).ravel()
-                    plt.scatter(xyz[iev][mask,0].compressed(), xyz[iev][mask,1].compressed(), c='r', s=1, marker='s')
+                    axes[0].scatter(xyz[iev][mask,0].compressed(), xyz[iev][mask,1].compressed(), c='r', s=1, marker='s')
+                    axes[1].scatter(xyz[iev][mask,2].compressed(), xyz[iev][mask,1].compressed(), c='r', s=1, marker='s')                    
                     mask = hit_label[iev]['muon_flag'].astype(bool).ravel()
-                    plt.scatter(xyz[iev][mask,0].compressed(), xyz[iev][mask,1].compressed(), c='b', s=1, marker='s')
-                    plt.xlabel('x [mm]')
-                    plt.ylabel('y [mm]')
-                    #plt.colorbar(label='z [mm]')
-                    plt.gca().set_aspect('equal')
+                    axes[0].scatter(xyz[iev][mask,0].compressed(), xyz[iev][mask,1].compressed(), c='b', s=1, marker='s')
+                    axes[1].scatter(xyz[iev][mask,2].compressed(), xyz[iev][mask,1].compressed(), c='b', s=1, marker='s')                    
+                    axes[0].set_xlabel('x [mm]')
+                    axes[1].set_xlabel('z [mm]')                    
+                    axes[1].set_ylabel('y [mm]')
+                    axes[0].set_aspect('equal')
+                    axes[1].set_aspect('equal')                    
                     plt.show()
 
                     fig,axes = plt.subplots(2, 4, num=1, dpi=100, figsize=(12,6), sharex='all')
@@ -498,8 +510,8 @@ class DelayedSignal(H5FlowStage):
                         for idet in range(prompt_acc[iev].shape[1]):
                             pinit = (p0[0] * prompt_acc[iev,itpc,idet]/prompt_acc_norm, p0[1] + t_offset_ns, (1-p0[0]) * delayed_acc[iev,itpc,idet]/delayed_acc_norm, p0[2], p0[3], p0[4])
                             pbest = (p[0] * prompt_acc[iev,itpc,idet]/prompt_acc_norm, p[1] + t_offset_ns, (1-p[0]) * delayed_acc[iev,itpc,idet]/delayed_acc_norm, p[2], p[3], p[4])
-                            t = wvfm_ns[iev,:,itpc,idet,:].reshape(-1,250).compressed()
-                            y = wvfm[iev,:,itpc,idet,:].reshape(-1,250).compressed()
+                            t = wvfm_ns[iev,:,itpc,idet,:].reshape(-1,wvfm_ns.shape[-1]).compressed()
+                            y = wvfm[iev,:,itpc,idet,:].reshape(-1,wvfm_ns.shape[-1]).compressed()
                             order = np.argsort(t)
                             t = t[order]
                             y = y[order]
@@ -528,8 +540,8 @@ class DelayedSignal(H5FlowStage):
                         for idet in range(prompt_acc[iev].shape[1]):
                             pinit = (p0[0] * prompt_acc[iev,itpc,idet]/prompt_acc_norm, p0[1] + t_offset_ns, (1-p0[0]) * delayed_acc[iev,itpc,idet]/delayed_acc_norm, p0[2], p0[3], p0[4])
                             pbest = (p[0] * prompt_acc[iev,itpc,idet]/prompt_acc_norm, p[1] + t_offset_ns, (1-p[0]) * delayed_acc[iev,itpc,idet]/delayed_acc_norm, p[2], p[3], p[4])
-                            t = wvfm_ns[iev,:,itpc,idet,:].reshape(-1,250).compressed()
-                            y = wvfm[iev,:,itpc,idet,:].reshape(-1,250).compressed()
+                            t = wvfm_ns[iev,:,itpc,idet,:].reshape(-1,wvfm_ns.shape[-1]).compressed()
+                            y = wvfm[iev,:,itpc,idet,:].reshape(-1,wvfm_ns.shape[-1]).compressed()
                             order = np.argsort(t)
                             t = t[order]
                             y = y[order]
