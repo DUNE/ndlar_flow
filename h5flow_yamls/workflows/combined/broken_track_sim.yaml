@@ -32,4 +32,4 @@ broken_track_sim:
       index_only: True
     - 'combined/tracklets'
   params:
-    generate_2track_joint_pdf: True
+    generate_2track_joint_pdf: False

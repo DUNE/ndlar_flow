@@ -61,12 +61,8 @@ stopping_muon_sel:
     truth_trajectories_dset_name: 'mc_truth/trajectories'
 
     # configuration parameters
-    fid_cut: 20 # mm
-    cathode_fid_cut: 20 # mm
-
-    proton_classifier_cut: 0.2576
-    muon_classifier_cut: -0.0152
-
+    fid_cut: 22 # mm
+    cathode_fid_cut: 22 # mm
     profile_dx: 22 # mm
     larpix_gain:
       mc: 250 # e/mV

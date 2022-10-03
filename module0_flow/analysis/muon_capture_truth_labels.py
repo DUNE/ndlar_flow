@@ -98,12 +98,17 @@ class MuonCaptureTruthLabels(H5FlowStage):
             # check if a trajectory stops in detector
             is_traj_stop = (~resources['Geometry'].in_fid(traj['xyz_start'].reshape(-1, 3))
                             & resources['Geometry'].in_fid(traj['xyz_end'].reshape(-1, 3))).reshape(traj.shape)
+            stopping_event = np.any(is_traj_stop, axis=-1)
+            # get largest momentum trajectory that stops in detector (mask if none stopping)
             i_traj_stop = ma.argmax(ma.array(np.linalg.norm(traj['pxyz_start'], axis=-1), mask=~is_traj_stop), axis=-1)
             traj_stop = np.take_along_axis(traj, i_traj_stop[..., np.newaxis], axis=-1).ravel()
+            traj_stop = ma.array(traj_stop, mask=traj_stop.mask['trackID'] | ~stopping_event)
             track_stop = np.take_along_axis(tracks, i_traj_stop[..., np.newaxis, np.newaxis], axis=-2).reshape(traj.shape[0],-1)
+            track_stop = ma.array(track_stop, mask=track_stop.mask['trackID'] | ~stopping_event[..., np.newaxis])
             track_idx_stop = np.take_along_axis(tracks_idx, i_traj_stop[..., np.newaxis, np.newaxis], axis=-2).reshape(traj.shape[0],-1)
-            track_idx_stop.mask = track_idx_stop.mask | ~is_traj_stop[..., np.newaxis, np.newaxis]
-            track_d_from_start = np.sqrt(
+            track_idx_stop.mask = track_idx_stop.mask | ~stopping_event[..., np.newaxis]
+            # get first segment from track that stops in detector
+            track_d_from_start = ma.sqrt(
                 (track_stop['x_start'] - traj_stop['xyz_start'][...,0:1])**2
                 + (track_stop['y_start'] - traj_stop['xyz_start'][...,1:2])**2
                 + (track_stop['z_start'] - traj_stop['xyz_start'][...,2:3])**2)
@@ -111,7 +116,7 @@ class MuonCaptureTruthLabels(H5FlowStage):
                 track_stop, ma.argmin(track_d_from_start, axis=-1)[..., np.newaxis],
                 axis=-1).ravel()
             track_stop_first_xyz = np.c_[track_stop_first['x_start'], track_stop_first['y_start'], track_stop_first['z_start']]
-            truth_label['stopping_event'] = np.any(is_traj_stop, axis=-1)
+            truth_label['stopping_event'] = stopping_event
             truth_label['pileup_flag'] = pileup
             truth_label['stopping_pdg_id'] = traj_stop['pdgId'] * (truth_label['stopping_event'])
             truth_label['xyz_stop'] = traj_stop['xyz_end'] * np.expand_dims(truth_label['stopping_event'],-1)

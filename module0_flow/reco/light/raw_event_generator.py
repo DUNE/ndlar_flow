@@ -59,7 +59,6 @@ class LightEventGenerator(H5FlowGenerator):
     '''
     default_n_adcs = 2
     default_n_channels = 64
-    default_n_samples = 256
     default_chunk_size = 128
     default_utime_ms_window = 1000
     default_tai_ns_window = 1000

@@ -39,16 +39,16 @@ class StoppingMuonSelection(H5FlowStage):
         cathode_fid_cut=20, # mm
         anode_fid_cut=20, # mm
         projected_length_cut=30, # mm
-        veto_charge_cut=100e3, # e-
+        veto_charge_cut=2e6, # e-
         profile_dx=22, # mm
         profile_max_range=2000, # mm
         larpix_gain=250, # e/mV
         larpix_noise=500,  # e/mm
-        proton_classifier_cut=0.05,
-        muon_classifier_cut=0.08,
-        dqdx_peak_cut=12e3, # e/mm
+        proton_classifier_cut=-1.0,
+        muon_classifier_cut=-1.0,
+        dqdx_peak_cut=5e3, # e/mm
         profile_search_dx=22, # mm
-        remaining_e_cut=85e3, # keV
+        remaining_e_cut=85e9, # keV
 
         curvature_rr_correction=22.6647 / 22,
         density_dx_correction_params=[0.78497819, -3.41826874, 198.93022888],
@@ -286,49 +286,55 @@ class StoppingMuonSelection(H5FlowStage):
         range_table['dqdx'] = 0.5 * (high_val_interp(np.clip(rr[2:], _min, _max)) + low_val_interp(np.clip(rr[2:], _min, _max)))
         range_table['dqdx_width'] = 0.5 * (high_val_interp(np.clip(rr[2:], _min, _max)) - low_val_interp(np.clip(rr[2:], _min, _max)))
 
-    def stopping(self, start_xyz, end_xyz):
+    def stopping(self, start_xyz, end_xyz, include_cathode=False):
         '''
             :param start_xyz: array ``shape: (N,3)``
 
             :param end_xyz: array ``shape: (N,3)``
 
+            :param include_cathode: if True, consider the cathode region as outside the fid
+
             :returns: array ``shape: (N,)``
 
         '''
         start_in_fid = resources['Geometry'].in_fid(
-            start_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+            start_xyz, cathode_fid=self.cathode_fid_cut * (include_cathode==True), field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         end_in_fid = resources['Geometry'].in_fid(
-            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+            end_xyz, cathode_fid=self.cathode_fid_cut * (include_cathode==True), field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         track_stopping = (~start_in_fid & end_in_fid) | (start_in_fid & ~end_in_fid)
         return track_stopping
 
-    def through_going(self, start_xyz, end_xyz):
+    def through_going(self, start_xyz, end_xyz, include_cathode=False):
         '''
             :param start_xyz: array ``shape: (N,3)``
 
             :param end_xyz: array ``shape: (N,3)``
+
+            :param include_cathode: if True, consider the cathode region as outside the fid  
 
             :returns: array ``shape: (N,)``
 
         '''
         start_in_fid = resources['Geometry'].in_fid(
-            start_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+            start_xyz, cathode_fid=self.cathode_fid_cut * (include_cathode==True), field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         end_in_fid = resources['Geometry'].in_fid(
-            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+            end_xyz, cathode_fid=self.cathode_fid_cut * (include_cathode==True), field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         track_through_going = ~start_in_fid & ~end_in_fid
         return track_through_going
 
-    def downward(self, start_xyz, end_xyz):
+    def downward(self, start_xyz, end_xyz, include_cathode=False):
         '''
             :param start_xyz: array ``shape: (N,3)``
 
             :param end_xyz: array ``shape: (N,3)``
 
+            :param include_cathode: if True, consider the cathode region as outside the fid
+
             :returns: array ``shape: (N,)``
 
         '''
         end_in_fid = resources['Geometry'].in_fid(
-            end_xyz, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+            end_xyz, cathode_fid=self.cathode_fid_cut * (include_cathode==True), field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
         dy = end_xyz[:, 1] - start_xyz[:, 1]
         return ((end_in_fid & (dy < 0)) | (~end_in_fid & (dy > 0)))
 
@@ -545,8 +551,9 @@ class StoppingMuonSelection(H5FlowStage):
 
             :returns: (..., 3) array representing the intersection point
         '''
-        d = np.sum((pxyz - xyz) * pnorm, axis=-1) / np.sum(dxyz * pnorm, axis=-1)
-        return xyz + dxyz * d[..., np.newaxis]
+        with np.errstate(divide='ignore', invalid='ignore'):
+            d = np.sum((pxyz - xyz) * pnorm, axis=-1) / np.sum(dxyz * pnorm, axis=-1)
+            return xyz + dxyz * d[..., np.newaxis]
 
     def extrapolated_intersection(self, start, end):
         '''
@@ -835,260 +842,301 @@ class StoppingMuonSelection(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         super(StoppingMuonSelection, self).run(source_name, source_slice, cache)
         events = cache[source_name]
-        hits = cache[self.hits_dset_name]
-        tracks = cache[self.merged_dset_name]
+        hits = ma.array(cache[self.hits_dset_name], shrink=False)
+        tracks = ma.array(cache[self.merged_dset_name], shrink=False)
         t0 = cache[self.t0_dset_name].reshape(cache[source_name].shape)
-        hit_drift = cache[self.hit_drift_dset_name].reshape(hits.shape)
+        hit_drift = ma.array(cache[self.hit_drift_dset_name].reshape(hits.shape), shrink=False)
 
-        # calculate hit positions and charge
-        lifetime = resources['LArData'].electron_lifetime(events['unix_ts'].astype(float))[0]
-        lifetime = lifetime[..., np.newaxis]
-        hit_q = self.larpix_gain * hits['q'] / np.exp(-hit_drift['t_drift'] * resources['RunData'].crs_ticks / lifetime)  # convert mV -> ke
-        hit_xyz = np.concatenate([
-            hits['px'][..., np.newaxis], hits['py'][..., np.newaxis],
-            hit_drift['z'][..., np.newaxis]], axis=-1)
+        if events.shape[0]:
 
-        # find all tracks that end in the fiducial volume
-        track_start = tracks.ravel()['trajectory'][..., 0, :]
-        track_stop = tracks.ravel()['trajectory'][..., -1, :]
-        track_length = tracks.ravel()['length']
-        is_stopping = self.stopping(track_start, track_stop)  # track enters and stops
+            # calculate hit positions and charge
+            lifetime = resources['LArData'].electron_lifetime(events['unix_ts'].astype(float))[0]
+            lifetime = lifetime[..., np.newaxis]
+            hit_q = self.larpix_gain * hits['q'] / np.exp(-hit_drift['t_drift'] * resources['RunData'].crs_ticks / lifetime)  # convert mV -> ke
+            # filter out bad channel ids            
+            hit_mask = (hits['px'] != 0.0) & (hits['py'] != 0.0) & ~hit_q.mask & ~hit_drift['t_drift'].mask            
+            hit_q.mask = hit_q.mask | ~hit_mask
+            hit_xyz = ma.array(np.concatenate([
+                hits['px'][..., np.newaxis], hits['py'][..., np.newaxis],
+                hit_drift['z'][..., np.newaxis]], axis=-1), shrink=False, mask=np.zeros(hits['px'].shape + (3,), dtype=bool) | hit_q.mask[...,np.newaxis] | ~hit_mask[...,np.newaxis])
 
-        is_throughgoing = self.through_going(track_start, track_stop)
-        is_downward = self.downward(track_start, track_stop)
-        d_to_edge = self.extrapolated_intersection(track_start, track_stop)
-        is_near_edge = d_to_edge < self.fid_cut
+            # find all tracks that end in the fiducial volume
+            track_start = tracks.ravel()['trajectory'][..., 0, :]
+            track_stop = tracks.ravel()['trajectory'][..., -1, :]
+            track_length = tracks.ravel()['length']
+            is_stopping = self.stopping(track_start, track_stop)  # track enters detector volume
 
-        is_stopping = is_stopping.reshape(tracks.shape)
-        is_throughgoing = is_throughgoing.reshape(tracks.shape)
-        is_downward = is_downward.reshape(tracks.shape)
-        d_to_edge = d_to_edge.reshape(tracks.shape)
-        is_near_edge = is_near_edge.reshape(tracks.shape)
+            is_throughgoing = self.through_going(track_start, track_stop)
+            is_downward = self.downward(track_start, track_stop)
+            d_to_edge = self.extrapolated_intersection(track_start, track_stop)
+            is_near_edge = d_to_edge < self.fid_cut
 
-        if self.is_mc:
-            # lookup the track's true trajectory
-            track_traj = cache[self.truth_trajectories_dset_name]
+            is_stopping = is_stopping.reshape(tracks.shape)
+            is_throughgoing = is_throughgoing.reshape(tracks.shape)
+            is_downward = is_downward.reshape(tracks.shape)
+            d_to_edge = d_to_edge.reshape(tracks.shape)
+            is_near_edge = is_near_edge.reshape(tracks.shape)
 
-            if track_traj.shape[0]:
-                track_traj = track_traj.reshape(tracks.shape[0:1] + (-1,))
-                track_traj = condense_array(track_traj, track_traj['trackID'].mask)
+            if self.is_mc:
+                # lookup the track's true trajectory
+                track_traj = cache[self.truth_trajectories_dset_name]
 
-                i_primary_traj = np.argmin(track_traj['trackID'], axis=-1)
-                track_true_traj = np.take_along_axis(track_traj, i_primary_traj[..., np.newaxis], axis=-1)
-                track_true_traj = track_true_traj.reshape(-1)
-                true_xyz_start = track_true_traj['xyz_start']
-                true_xyz_end = track_true_traj['xyz_end']
+                if track_traj.shape[0]:
+                    track_traj = track_traj.reshape(tracks.shape[0:1] + (-1,))
+                    track_traj = condense_array(track_traj, track_traj['trackID'].mask)
 
-                # find if trajectory ends in the fiducial volume
-                is_muon = ma.abs(track_true_traj['pdgId']) == 13
-                is_proton = track_true_traj['pdgId'] == 2212
-                is_true_stopping = self.stopping(true_xyz_start, true_xyz_end)
-            else:
-                track_true_traj = np.empty(tracks.shape[0], dtype=track_traj.dtype)
-                is_muon = np.zeros(track_true_traj.shape, dtype=bool)
-                is_proton = np.zeros(track_true_traj.shape, dtype=bool)
-                is_true_stopping = np.zeros(track_true_traj.shape, dtype=bool)
-                true_xyz_start = track_true_traj['xyz_start']
-                true_xyz_end = track_true_traj['xyz_end']
+                    i_primary_traj = np.argmin(track_traj['trackID'], axis=-1)
+                    track_true_traj = np.take_along_axis(track_traj, i_primary_traj[..., np.newaxis], axis=-1)
+                    track_true_traj = track_true_traj.reshape(-1)
+                    true_xyz_start = track_true_traj['xyz_start']
+                    true_xyz_end = track_true_traj['xyz_end']
 
-        # define a stopping event as one with exclusively 1 track that enters from the outer boundary,
-        # going downward, with little activity in the outer veto region and no through-going tracks
-        start_in_fid = resources['Geometry'].in_fid(
-            track_start, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
-        seed_pt = np.where(np.expand_dims(start_in_fid, axis=-1),
-                           track_stop, track_start).reshape(tracks.shape + (3,))
-        seed_near_cathode = (resources['Geometry'].in_fid(
+                    # find if trajectory ends in the fiducial volume
+                    is_muon = ma.abs(track_true_traj['pdgId']) == 13
+                    is_proton = track_true_traj['pdgId'] == 2212
+                    is_true_stopping = self.stopping(true_xyz_start, true_xyz_end, include_cathode=True)
+                else:
+                    track_true_traj = np.empty(tracks.shape[0], dtype=track_traj.dtype)
+                    is_muon = np.zeros(track_true_traj.shape, dtype=bool)
+                    is_proton = np.zeros(track_true_traj.shape, dtype=bool)
+                    is_true_stopping = np.zeros(track_true_traj.shape, dtype=bool)
+                    true_xyz_start = track_true_traj['xyz_start']
+                    true_xyz_end = track_true_traj['xyz_end']
+
+            # define a stopping event as one with exclusively 1 track that enters from the outer boundary,
+            # going downward, with little activity in the outer veto region and no through-going tracks
+            start_in_fid = resources['Geometry'].in_fid(
+                track_start, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+            seed_pt = np.where(np.expand_dims(start_in_fid, axis=-1),
+                               track_stop, track_start).reshape(tracks.shape + (3,))
+            seed_near_cathode = (resources['Geometry'].in_fid(
                 seed_pt.reshape(-1,3), cathode_fid=0, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
-            & ~resources['Geometry'].in_fid(
-                seed_pt.reshape(-1,3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut))
-        seed_near_cathode = seed_near_cathode.reshape(tracks.shape)
-        seed_track_mask = is_stopping & ~seed_near_cathode & is_downward
-        seed_pt = np.take_along_axis(seed_pt, np.argmax(seed_track_mask, axis=-1)[..., np.newaxis, np.newaxis], axis=-2)
+                                 & ~resources['Geometry'].in_fid(
+                                     seed_pt.reshape(-1,3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut))
+            seed_near_cathode = seed_near_cathode.reshape(tracks.shape)
+            seed_track_mask = is_stopping & ~seed_near_cathode & is_downward
+            max_seed_pts = max(np.sum(seed_track_mask, axis=-1).max(), 1)
+            seed_pt_idx = ma.argsort(ma.array(seed_track_mask, mask=~seed_track_mask | seed_track_mask.mask), axis=-1, fill_value=0)[..., ::-1, np.newaxis]
+            seed_pt = np.take_along_axis(seed_pt, seed_pt_idx, axis=1)[...,:max_seed_pts,:]
+            seed_pt = ma.array(seed_pt, mask=np.indices(seed_pt.shape)[1] >= np.sum(seed_track_mask, axis=-1, keepdims=True)[...,np.newaxis])
 
-        hit_in_fid = resources['Geometry'].in_fid(
-            hit_xyz.reshape(-1, 3), cathode_fid=0, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut).reshape(hit_xyz.shape[:-1])
-        hit_in_veto = (~hit_in_fid & ~hits.mask['id'] & (np.sum((hit_xyz - seed_pt)**2, axis=-1) > 25*self.profile_search_dx**2))
-        veto_q = np.sum(hits['q'] * self.larpix_gain * hit_in_veto, axis=-1)
+            hit_in_fid = resources['Geometry'].in_fid(
+                hit_xyz.reshape(-1, 3), cathode_fid=0, field_cage_fid=0, anode_fid=0).reshape(hit_xyz.shape[:-1])
+            hit_in_veto = (~hit_in_fid & ~hits.mask['id'])
+            veto_q = np.sum(hits['q'] * self.larpix_gain * hit_in_veto, axis=-1)
 
-        active_proj_length = self.extrapolated_intersection(tracks.ravel()['trajectory'][..., -2, :], tracks.ravel()['trajectory'][..., -1, :])
-        active_proj_length = active_proj_length.reshape(tracks.shape)
-        active_proj_length = np.take_along_axis(active_proj_length, np.argmax(seed_track_mask, axis=-1)[...,np.newaxis], axis=-1).reshape(events.shape)
+            active_proj_length = self.extrapolated_intersection(tracks.ravel()['trajectory'][..., -2, :], tracks.ravel()['trajectory'][..., -1, :])
+            active_proj_length = active_proj_length.reshape(tracks.shape)
+            active_proj_length = np.take_along_axis(active_proj_length, np.argmax(seed_track_mask, axis=-1)[...,np.newaxis], axis=-1).reshape(events.shape)
 
-        event_is_stopping = ((t0['type'] != 0)
-                             & (veto_q < self.veto_charge_cut)
-                             & (active_proj_length > self.projected_length_cut)
-                             & (ma.sum(is_throughgoing, axis=-1) == 0)
-                             & (ma.sum(seed_track_mask, axis=-1) == 1))
+            event_is_stopping = ((t0['type'] != 0)
+                                 #& (veto_q < self.veto_charge_cut)
+                                 #& (active_proj_length > self.projected_length_cut)
+                                 #& (ma.sum(is_throughgoing, axis=-1) == 0)
+                                 & (ma.sum(seed_track_mask, axis=-1) >= 1))
+            
+            # now check the likelihood of a stopping muon
 
-        # now check the likelihood of a stopping muon
-        # first generate the dQ/dx profile
-        dq, dn, ds, start_pt, end_pt, pos, hit_prof_idx, hit_prof_s = self.profiled_dqdx_kalman(
-            tracks, seed_pt, hit_xyz, hit_q, mask=event_is_stopping,
-            dx=self.profile_dx, search_dx=self.profile_search_dx,
-            max_range=self.profile_max_range, pixel_pitch=resources['Geometry'].pixel_pitch)
-        #ds += resources['Geometry'].pixel_pitch # correct for pixel edges
-        ds = self.dx_estimate(pos, hit_xyz, hit_prof_idx, resources['Geometry'].pixel_pitch)
-        profile_n = dn
-        profile_dqdx = dq / ma.maximum(ds, resources['Geometry'].pixel_pitch) * (dn > 0)
-        profile_dqdx[dn <= 0] = 0
-
-        # make an initial guess for the stopping point (maximum 2 dQ/dx bins)
-        profile_rr = np.linalg.norm(pos[...,1:,:] - pos[...,:-1,:], axis=-1)
-        profile_rr = np.concatenate((np.zeros(profile_rr.shape[:-1]+(1,)), profile_rr), axis=-1)
-        profile_rr = np.cumsum(profile_rr, axis=-1)
+            # broadcast into appropriate shape for kalman fit
+            tracks_km = np.broadcast_to(tracks[:,np.newaxis], (tracks.shape[0], max_seed_pts, tracks.shape[1]), subok=True).reshape(-1, tracks.shape[1])
+            tracks_km.mask = np.broadcast_to(tracks.mask[:,np.newaxis], (tracks.shape[0], max_seed_pts, tracks.shape[1]), subok=True).reshape(-1, tracks.shape[1])
+            hit_xyz_km = np.broadcast_to(hit_xyz[:,np.newaxis], (hit_xyz.shape[0], max_seed_pts) + hit_xyz.shape[1:], subok=True).reshape(-1, *hit_xyz.shape[1:])
+            hit_xyz_km.mask = np.broadcast_to(hit_xyz.mask[:,np.newaxis], (hit_xyz.shape[0], max_seed_pts) + hit_xyz.shape[1:], subok=True).reshape(-1, *hit_xyz.shape[1:])
+            hit_q_km = np.broadcast_to(hit_q[:,np.newaxis], (hit_q.shape[0], max_seed_pts) + hit_q.shape[1:], subok=True).reshape(-1, *hit_q.shape[1:])
+            hit_q_km.mask = np.broadcast_to(hit_q.mask[:,np.newaxis], (hit_q.shape[0], max_seed_pts) + hit_q.shape[1:], subok=True).reshape(-1, *hit_q.shape[1:])
+            kalman_mask = (event_is_stopping[...,np.newaxis] & ~seed_pt.mask[...,0]).ravel()
         
-        i_max = np.argsort(profile_dqdx, axis=-1)[...,-2:]
-        profile_offset0 = np.take_along_axis(profile_rr, i_max[...,0:1], axis=-1)
-        profile_offset1 = np.take_along_axis(profile_rr, i_max[...,1:2], axis=-1)
+            # first generate the dQ/dx profile
+            dq, dn, ds, start_pt, end_pt, pos, hit_prof_idx, hit_prof_s = self.profiled_dqdx_kalman(
+                tracks_km, seed_pt.reshape(-1, 1, 3), hit_xyz_km, hit_q_km,
+                mask=kalman_mask,
+                dx=self.profile_dx, search_dx=self.profile_search_dx,
+                max_range=self.profile_max_range, pixel_pitch=resources['Geometry'].pixel_pitch)
+            #ds += resources['Geometry'].pixel_pitch # correct for pixel edges
+            ds = self.dx_estimate(pos, hit_xyz_km, hit_prof_idx, resources['Geometry'].pixel_pitch)
+            profile_n = dn
+            profile_dqdx = dq / ma.maximum(ds, resources['Geometry'].pixel_pitch) * (dn > 0)
+            profile_dqdx[dn <= 0] = 0
+
+            # make an initial guess for the stopping point (maximum 2 dQ/dx bins)
+            profile_rr = np.linalg.norm(pos[...,1:,:] - pos[...,:-1,:], axis=-1)
+            profile_rr = np.concatenate((np.zeros(profile_rr.shape[:-1]+(1,)), profile_rr), axis=-1)
+            profile_rr = np.cumsum(profile_rr, axis=-1)
         
-        # refine guess by using the hit with the largest charge
-        hit_near_stop0 = (hit_prof_idx == i_max[...,0:1])
-        hit_near_stop1 = (hit_prof_idx == i_max[...,1:2])
-        profile_offset0[hit_near_stop0.any(axis=-1)] = np.take_along_axis(
-            hit_prof_s, np.argmax(ma.array(hit_q, mask=~hit_near_stop0), axis=-1)[...,np.newaxis], axis=-1)[hit_near_stop0.any(axis=-1)]
-        profile_offset1[hit_near_stop1.any(axis=-1)] = np.take_along_axis(
-            hit_prof_s, np.argmax(ma.array(hit_q, mask=~hit_near_stop1), axis=-1)[...,np.newaxis], axis=-1)[hit_near_stop1.any(axis=-1)]
+            i_max = np.argsort(profile_dqdx, axis=-1)[...,-2:]
+            profile_offset0 = np.take_along_axis(profile_rr, i_max[...,0:1], axis=-1)
+            profile_offset1 = np.take_along_axis(profile_rr, i_max[...,1:2], axis=-1)
+        
+            # refine guess by using the hit with the largest charge
+            hit_near_stop0 = (hit_prof_idx == i_max[...,0:1])
+            hit_near_stop1 = (hit_prof_idx == i_max[...,1:2])
+            profile_offset0[hit_near_stop0.any(axis=-1)] = np.take_along_axis(
+                hit_prof_s, np.argmax(ma.array(hit_q_km, mask=~hit_near_stop0), axis=-1)[...,np.newaxis], axis=-1)[hit_near_stop0.any(axis=-1)]
+            profile_offset1[hit_near_stop1.any(axis=-1)] = np.take_along_axis(
+                hit_prof_s, np.argmax(ma.array(hit_q_km, mask=~hit_near_stop1), axis=-1)[...,np.newaxis], axis=-1)[hit_near_stop1.any(axis=-1)]
 
-        profile_rr0 = profile_offset0 - profile_rr
-        profile_rr1 = profile_offset1 - profile_rr        
+            profile_rr0 = profile_offset0 - profile_rr
+            profile_rr1 = profile_offset1 - profile_rr
 
-        # perform a fit for the stopping point assuming a muon or a proton
-        muon_r0 = np.zeros(profile_dqdx.shape[:-1])
-        proton_r0 = np.zeros(profile_dqdx.shape[:-1])
-        max_range = 0 #self.profile_dx  # within +/- 1 profile bins
-        sample_factor = 1 #20  # resolution is profile bin/10
-        for i in range(muon_r0.shape[0]):
-            if np.any((profile_n[i] > 0)):
-                valid_mask = profile_n[i] > 0
+            # perform a fit for the stopping point assuming a muon or a proton
+            muon_score = np.full(profile_dqdx.shape[:-1], 1e+303)
+            muon_r0 = np.zeros(profile_dqdx.shape[:-1])
+            proton_r0 = np.zeros(profile_dqdx.shape[:-1])
+            max_range = 0 #self.profile_dx  # within +/- 1 profile bins
+            sample_factor = 1 #20  # resolution is profile bin/10
 
-                muon_offset = []
-                proton_offset = []
-                muon_likelihood = []
-                proton_likelihood = []         
+            for i in range(muon_r0.shape[0]):
+                if np.any((profile_n[i] > 0)):
+                    valid_mask = profile_n[i] > 0
+
+                    muon_offset = []
+                    proton_offset = []
+                    muon_likelihood = []
+                    proton_likelihood = []         
                 
-                for j,rr in enumerate([profile_rr0[i], profile_rr1[i]]):
-                    rr_range = (np.maximum(-max_range, rr[valid_mask].min()),
-                                np.minimum(+max_range, rr[valid_mask].max()))
-                    rr_offset = np.expand_dims(
-                        np.linspace(rr_range[0], rr_range[1],
-                                    np.clip(sample_factor * int(np.diff(rr_range) / self.profile_dx),1,None)),
-                        axis=-1)
-                    close_dqdx = np.take_along_axis(profile_dqdx[i:i + 1], np.argmin(np.abs(rr[np.newaxis,...] - rr_offset), axis=-1)[..., np.newaxis], axis=-1)
-                    mask = np.ones_like((close_dqdx > self.dqdx_peak_cut)) # ignore dQ/dx mask
-                    #if not np.any(mask):
-                    #    continue
+                    for j,rr in enumerate([profile_rr0[i], profile_rr1[i]]):
+                        rr_range = (np.maximum(-max_range, rr[valid_mask].min()),
+                                    np.minimum(+max_range, rr[valid_mask].max()))
+                        rr_offset = np.expand_dims(
+                            np.linspace(rr_range[0], rr_range[1],
+                                        np.clip(sample_factor * int(np.diff(rr_range) / self.profile_dx),1,None)),
+                            axis=-1)
+                        close_dqdx = np.take_along_axis(profile_dqdx[i:i + 1], np.argmin(np.abs(rr[np.newaxis,...] - rr_offset), axis=-1)[..., np.newaxis], axis=-1)
+                        mask = np.ones_like((close_dqdx > self.dqdx_peak_cut)) # ignore dQ/dx mask
+                        #if not np.any(mask):
+                        #    continue
 
-                    muon_likelihood.append(self.mean_neg_loglikelihood(
-                        rr_offset + muon_r0[i], self.muon_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], rr[np.newaxis,...], pos[i:i + 1]))
-                    #muon_r0[i] = rr_offset[ma.argmin(ma.array(muon_likelihood, mask=~mask), axis=0)] + muon_r0[i]
-                    muon_offset.append(rr_offset[ma.argmin(ma.array(muon_likelihood[j], mask=~mask), axis=0)])
+                        muon_likelihood.append(self.mean_neg_loglikelihood(
+                            rr_offset + muon_r0[i], self.muon_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], rr[np.newaxis,...], pos[i:i + 1]))
+                        #muon_r0[i] = rr_offset[ma.argmin(ma.array(muon_likelihood, mask=~mask), axis=0)] + muon_r0[i]
+                        muon_offset.append(rr_offset[ma.argmin(ma.array(muon_likelihood[j], mask=~mask), axis=0)])
 
-                    proton_likelihood.append(self.mean_neg_loglikelihood(
-                        rr_offset + proton_r0[i], self.proton_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], rr[np.newaxis,...], pos[i:i + 1]))
-                    #proton_r0[i] = rr_offset[ma.argmin(ma.array(proton_likelihood, mask=~mask), axis=0)] + proton_r0[i]
-                    proton_offset.append(rr_offset[ma.argmin(ma.array(proton_likelihood[j], mask=~mask), axis=0)])
+                        proton_likelihood.append(self.mean_neg_loglikelihood(
+                            rr_offset + proton_r0[i], self.proton_range_table, profile_n[i:i + 1], profile_dqdx[i:i + 1], rr[np.newaxis,...], pos[i:i + 1]))
+                        #proton_r0[i] = rr_offset[ma.argmin(ma.array(proton_likelihood, mask=~mask), axis=0)] + proton_r0[i]
+                        proton_offset.append(rr_offset[ma.argmin(ma.array(proton_likelihood[j], mask=~mask), axis=0)])
 
-                muon_j_min = np.argmin([np.min(ll) for ll in muon_likelihood])
-                proton_j_min = np.argmin([np.min(ll) for ll in proton_likelihood])   
-                muon_r0[i] = muon_offset[muon_j_min]
-                proton_r0[i] = proton_offset[proton_j_min]
-                profile_rr[i] = [profile_rr0[i], profile_rr1[i]][muon_j_min]
+                    muon_j_min = np.argmin([np.min(ll) if ll is not np.nan else 1e+303 for ll in muon_likelihood])
+                    proton_j_min = np.argmin([np.min(ll) if ll is not np.nan else 1e+303 for ll in proton_likelihood])
+                    muon_score[i] = muon_likelihood[muon_j_min]
+                    muon_r0[i] = muon_offset[muon_j_min]
+                    proton_r0[i] = proton_offset[proton_j_min]
+                    profile_rr[i] = [profile_rr0[i], profile_rr1[i]][muon_j_min]
 
-        # calculate likelihood scores for refined dQ/dx profile
-        muon_likelihood_dqdx, muon_likelihood_mcs = self.profile_likelihood(
-            (profile_rr - muon_r0[..., np.newaxis]), profile_dqdx, pos,
-            self.muon_range_table)
-        proton_likelihood_dqdx, proton_likelihood_mcs = self.profile_likelihood(
-            (profile_rr - proton_r0[..., np.newaxis]), profile_dqdx, pos,
-            self.proton_range_table)
-        mip_likelihood_dqdx, mip_likelihood_mcs = self.profile_likelihood(
-            np.clip(profile_rr, 1500, 1500), profile_dqdx, pos,
-            self.muon_range_table)
+            # use only the dQ/dx profile from the most "stopping muon"-like seed point
+            ibest_seed = ma.argmin(ma.array(muon_score, mask=np.all(profile_n == 0, axis=-1)).reshape(-1, max_seed_pts), axis=-1)[...,np.newaxis]
+            profile_dqdx = np.take_along_axis(profile_dqdx.reshape(ibest_seed.shape[0], max_seed_pts, -1), ibest_seed[...,np.newaxis], axis=1)[:,0]
+            profile_n = np.take_along_axis(profile_n.reshape(ibest_seed.shape[0], max_seed_pts, -1), ibest_seed[...,np.newaxis], axis=1)[:,0]
+            pos = np.take_along_axis(pos.reshape(ibest_seed.shape[0], max_seed_pts, -1, 3), ibest_seed[...,np.newaxis,np.newaxis], axis=1)[:,0]
+            profile_rr = np.take_along_axis(profile_rr.reshape(ibest_seed.shape[0], max_seed_pts, -1), ibest_seed[...,np.newaxis], axis=1)[:,0]
+            muon_r0 = np.take_along_axis(muon_r0.reshape(ibest_seed.shape[0], max_seed_pts), ibest_seed, axis=1)[:,0]
+            proton_r0 = np.take_along_axis(proton_r0.reshape(ibest_seed.shape[0], max_seed_pts), ibest_seed, axis=1)[:,0]
+            dq = np.take_along_axis(dq.reshape(ibest_seed.shape[0], max_seed_pts, -1), ibest_seed[...,np.newaxis], axis=1)[:,0]
+            dn = np.take_along_axis(dn.reshape(ibest_seed.shape[0], max_seed_pts, -1), ibest_seed[...,np.newaxis], axis=1)[:,0]
+            ds = np.take_along_axis(ds.reshape(ibest_seed.shape[0], max_seed_pts, -1), ibest_seed[...,np.newaxis], axis=1)[:,0]
+            start_pt = np.take_along_axis(start_pt.reshape(ibest_seed.shape[0], max_seed_pts, -1, 3), ibest_seed[...,np.newaxis,np.newaxis], axis=1)[:,0]
+            end_pt = np.take_along_axis(end_pt.reshape(ibest_seed.shape[0], max_seed_pts, -1, 3), ibest_seed[...,np.newaxis,np.newaxis], axis=1)[:,0]
+            hit_prof_idx = np.take_along_axis(hit_prof_idx.reshape(ibest_seed.shape[0], max_seed_pts, -1), ibest_seed[...,np.newaxis], axis=1)[:,0]
+            hit_prof_s = np.take_along_axis(hit_prof_s.reshape(ibest_seed.shape[0], max_seed_pts, -1), ibest_seed[...,np.newaxis], axis=1)[:,0]
 
-        muon_likelihood_mcs = ma.masked_where(
-            (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
-            muon_likelihood_mcs)
-        proton_likelihood_mcs = ma.masked_where(
-            (dn == 0) | (profile_rr - proton_r0[..., np.newaxis] <= 0),
-            proton_likelihood_mcs)
-        mip_likelihood_mcs = ma.masked_where(
-            (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
-            mip_likelihood_mcs)
-        muon_likelihood_dqdx = ma.masked_where(
-            (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
-            muon_likelihood_dqdx)
-        proton_likelihood_dqdx = ma.masked_where(
-            (dn == 0) | (profile_rr - proton_r0[..., np.newaxis] <= 0),
-            proton_likelihood_dqdx)
-        mip_likelihood_dqdx = ma.masked_where(
-            (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
-            mip_likelihood_dqdx)
+            # calculate likelihood scores for refined dQ/dx profile
+            muon_likelihood_dqdx, muon_likelihood_mcs = self.profile_likelihood(
+                (profile_rr - muon_r0[..., np.newaxis]), profile_dqdx, pos,
+                self.muon_range_table)
+            proton_likelihood_dqdx, proton_likelihood_mcs = self.profile_likelihood(
+                (profile_rr - proton_r0[..., np.newaxis]), profile_dqdx, pos,
+                self.proton_range_table)
+            mip_likelihood_dqdx, mip_likelihood_mcs = self.profile_likelihood(
+                np.clip(profile_rr, 1500, 1500), profile_dqdx, pos,
+                self.muon_range_table)
 
-        # get end point (for stopping muon assumption)
-        profile_rr = ma.array(profile_rr - muon_r0[..., np.newaxis], mask=(profile_n <= 0))
-        i_stop = np.argmin(np.abs(profile_rr), axis=-1)[..., np.newaxis, np.newaxis]
-        end_pt = np.take_along_axis(pos, i_stop, axis=-2)
+            muon_likelihood_mcs = ma.masked_where(
+                (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
+                muon_likelihood_mcs)
+            proton_likelihood_mcs = ma.masked_where(
+                (dn == 0) | (profile_rr - proton_r0[..., np.newaxis] <= 0),
+                proton_likelihood_mcs)
+            mip_likelihood_mcs = ma.masked_where(
+                (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
+                mip_likelihood_mcs)
+            muon_likelihood_dqdx = ma.masked_where(
+                (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
+                muon_likelihood_dqdx)
+            proton_likelihood_dqdx = ma.masked_where(
+                (dn == 0) | (profile_rr - proton_r0[..., np.newaxis] <= 0),
+                proton_likelihood_dqdx)
+            mip_likelihood_dqdx = ma.masked_where(
+                (dn == 0) | (profile_rr - muon_r0[..., np.newaxis] <= 0),
+                mip_likelihood_dqdx)
 
-        # correct for rounding error
-        stop_rr = np.take_along_axis(profile_rr, i_stop[...,0], axis=-1)[...,np.newaxis]
-        n = end_pt - np.take_along_axis(pos, np.clip(i_stop-1,0,None), axis=-2)
-        n /= np.clip(np.linalg.norm(n, axis=-1, keepdims=True), 1e-15, None)
-        end_pt_corr = stop_rr * n
+            # get end point (for stopping muon assumption)
+            profile_rr = ma.array(profile_rr - muon_r0[..., np.newaxis], mask=(profile_n <= 0))
+            i_stop = np.argmin(np.abs(profile_rr), axis=-1)[..., np.newaxis, np.newaxis]
+            end_pt = np.take_along_axis(pos, i_stop, axis=-2)
 
-        # check if endpoint in fiducial volume
-        end_pt_in_fid = resources['Geometry'].in_fid(
-            end_pt.reshape(-1, 3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
-        end_pt_in_fid = end_pt_in_fid.reshape(tracks.shape[0])
+            # correct for rounding error
+            stop_rr = np.take_along_axis(profile_rr, i_stop[...,0], axis=-1)[...,np.newaxis]
+            n = end_pt - np.take_along_axis(pos, np.clip(i_stop-1,0,None), axis=-2)
+            n /= np.clip(np.linalg.norm(n, axis=-1, keepdims=True), 1e-15, None)
+            end_pt_corr = stop_rr * n
 
-        # estimate residual range for each hit
-        hit_prof_rr = profile_rr.max(axis=-1, keepdims=True) - hit_prof_s     
+            # check if endpoint in fiducial volume
+            end_pt_in_fid = resources['Geometry'].in_fid(
+                end_pt.reshape(-1, 3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+            end_pt_in_fid = end_pt_in_fid.reshape(tracks.shape[0])
 
-        # calculate "additional" energy (all energy not associated to the parent muon) assuming nominal michel dE/dx
-        q_sum = hit_q.sum(axis=-1) - ma.array(dq, mask=(np.around(profile_rr/self.profile_dx) * self.profile_dx < 0) | (profile_n <= 0)).sum(axis=-1)
-        michel_dedx = resources['ParticleData'].landau_peak(50 * units.MeV, resources['ParticleData'].e_mass, resources['Geometry'].pixel_pitch)
-        e = q_sum * resources['LArData'].ionization_w / resources['LArData'].ionization_recombination(michel_dedx)
+            # estimate residual range for each hit
+            hit_prof_rr = profile_rr.max(axis=-1, keepdims=True) - hit_prof_s     
+            
+            # calculate "additional" energy (all energy not associated to the parent muon) assuming nominal michel dE/dx
+            q_sum = hit_q.sum(axis=-1) - ma.array(dq, mask=(np.around(profile_rr/self.profile_dx) * self.profile_dx < 0) | (profile_n <= 0)).sum(axis=-1)
+            michel_dedx = resources['ParticleData'].landau_peak(50 * units.MeV, resources['ParticleData'].e_mass, resources['Geometry'].pixel_pitch)
+            e = q_sum * resources['LArData'].ionization_w / resources['LArData'].ionization_recombination(michel_dedx)
 
-        # apply a hit density correction
-        #profile_dqdx = profile_dqdx * ds / ma.maximum(ds - self.density_dx_correction(profile_rr, *self.density_dx_correction_params), resources['Geometry'].pixel_pitch) * (dn > 0)
-        # apply a curvature correction
-        profile_rr = profile_rr * self.curvature_rr_correction
+            # calculate active distance to exit detector
+            active_proj_length = self.extrapolated_intersection(pos[...,0,:], end_pt.reshape(-1,3))
 
-        # find max dqdx
-        max_dqdx = profile_dqdx.max(axis=-1)
+            # apply a hit density correction
+            #profile_dqdx = profile_dqdx * ds / ma.maximum(ds - self.density_dx_correction(profile_rr, *self.density_dx_correction_params), resources['Geometry'].pixel_pitch) * (dn > 0)
+            # apply a curvature correction
+            profile_rr = profile_rr * self.curvature_rr_correction
 
-        # select stopping muons
-        event_is_stopping_muon = (event_is_stopping & end_pt_in_fid  # stops in fiducial volume
-                                  & (e < self.remaining_e_cut)  # has additional energy consistent with a Michel or less
-                                  & (max_dqdx > self.dqdx_peak_cut)  # has a prominent dQ/dx peak
-                                  & (ma.sum(is_stopping & ~is_near_edge, axis=-1) == 1)  # only one track stopping in fiducial volume
-                                  & (np.mean(muon_likelihood_dqdx, axis=-1)
-                                     + np.mean(muon_likelihood_mcs, axis=-1) * 0
-                                     - np.mean(proton_likelihood_dqdx, axis=-1)
-                                     - np.mean(proton_likelihood_mcs, axis=-1) * 0 > self.proton_classifier_cut)  # dQ/dx profile more consistent with stopping muon than proton
-                                  & (np.mean(muon_likelihood_dqdx, axis=-1)
-                                     + np.mean(muon_likelihood_mcs, axis=-1) * 0
-                                     - np.mean(mip_likelihood_dqdx, axis=-1)
-                                     - np.mean(mip_likelihood_mcs, axis=-1) * 0 > self.muon_classifier_cut))  # dQ/dx profile more consistent with stopping muon than MIP
+            # find max dqdx
+            max_dqdx = profile_dqdx.max(axis=-1)
 
-        if self.is_mc and len(is_muon):
-            # define true stopping events as events with at least 1 muon that ends in fid.
-            event_is_true_stopping = is_muon & is_true_stopping
-            true_xyz_start_in_fid = resources['Geometry'].in_fid(
-                true_xyz_start, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
-            true_stop_pt = np.where(np.expand_dims(true_xyz_start_in_fid, axis=-1),
-                                    true_xyz_start, true_xyz_end).reshape((-1, 3))
+            # select stopping muons
+            event_is_stopping_muon = (event_is_stopping & end_pt_in_fid  # stops in fiducial volume
+                                      & (e < self.remaining_e_cut)  # has additional energy consistent with a Michel or less
+                                      & (max_dqdx > self.dqdx_peak_cut)  # has a prominent dQ/dx peak
+                                      #& (ma.sum(is_stopping & ~is_near_edge, axis=-1) == 1)  # only one track stopping in fiducial volume
+                                      & (np.mean(muon_likelihood_dqdx, axis=-1)
+                                         + np.mean(muon_likelihood_mcs, axis=-1) * 0
+                                         - np.mean(proton_likelihood_dqdx, axis=-1)
+                                         - np.mean(proton_likelihood_mcs, axis=-1) * 0 > self.proton_classifier_cut)  # dQ/dx profile more consistent with stopping muon than proton
+                                      & (np.mean(muon_likelihood_dqdx, axis=-1)
+                                         + np.mean(muon_likelihood_mcs, axis=-1) * 0
+                                         - np.mean(mip_likelihood_dqdx, axis=-1)
+                                         - np.mean(mip_likelihood_mcs, axis=-1) * 0 > self.muon_classifier_cut))  # dQ/dx profile more consistent with stopping muon than MIP
+
+            if self.is_mc and len(is_muon):
+                # define true stopping events as events with at least 1 muon that ends in fid.
+                event_is_true_stopping = is_muon & is_true_stopping
+                true_xyz_start_in_fid = resources['Geometry'].in_fid(
+                    true_xyz_start, cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+                true_stop_pt = np.where(np.expand_dims(true_xyz_start_in_fid, axis=-1),
+                                        true_xyz_start, true_xyz_end).reshape((-1, 3))
 
         # prep arrays to write to file
         event_sel = np.zeros(len(tracks), dtype=self.event_sel_dtype)
 
         if len(event_sel):
             event_sel['sel'] = event_is_stopping_muon
-            event_sel['stop'] = event_is_stopping# & end_pt_in_fid
+            event_sel['stop'] = event_is_stopping & end_pt_in_fid
             event_sel['muon_loglikelihood_mean'] = np.mean(muon_likelihood_mcs, axis=-1) * 0 + np.mean(muon_likelihood_dqdx, axis=-1)
             event_sel['proton_loglikelihood_mean'] = np.mean(proton_likelihood_mcs, axis=-1) * 0 + np.mean(proton_likelihood_dqdx, axis=-1)
             event_sel['mip_loglikelihood_mean'] = np.mean(mip_likelihood_mcs, axis=-1) * 0 + np.mean(mip_likelihood_dqdx, axis=-1)
             event_sel['stop_pt'] = end_pt.reshape(event_sel['stop_pt'].shape)
-            event_sel['stop_pt_corr'] = end_pt_corr.reshape(event_sel['stop_pt_corr'].shape)            
+            event_sel['stop_pt_corr'] = end_pt_corr.reshape(event_sel['stop_pt_corr'].shape)
             event_sel['remaining_e'] = e
             event_sel['d_to_edge'] = ma.sum(is_stopping * d_to_edge, axis=-1)
             event_sel['veto_q'] = veto_q
@@ -1108,8 +1156,8 @@ class StoppingMuonSelection(H5FlowStage):
             event_profile['muon_likelihood'][..., 1] = muon_likelihood_mcs
             event_profile['proton_likelihood'][..., 1] = proton_likelihood_mcs
             event_profile['mip_likelihood'][..., 1] = mip_likelihood_mcs
-
-        hit_profile = np.zeros_like(hit_prof_idx, dtype=self.hit_profile_dtype)
+            
+        hit_profile = np.zeros(hits.shape, dtype=self.hit_profile_dtype)
         if len(hit_profile):
             hit_profile['idx'] -= 1
             hit_profile['idx'][~hits['id'].mask] = hit_prof_idx[~hits['id'].mask]

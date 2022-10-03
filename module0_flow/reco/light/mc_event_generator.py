@@ -1,7 +1,6 @@
 import numpy as np
 import h5py
 import numpy.ma as ma
-import ROOT
 from collections import defaultdict
 import logging
 from math import ceil
@@ -208,6 +207,9 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         # zero out disabled channels
         remapped_wvfms[:, self.disabled_channels[...,0], self.disabled_channels[...,1]] = 0.
+
+        # clip to ensure within datatype bounds
+        remapped_wvfms = remapped_wvfms.clip(np.iinfo(self.wvfm_dtype['samples'].base).min, np.iinfo(self.wvfm_dtype['samples'].base).max)
 
         # write event to file
         event_slice = self.data_manager.reserve_data(self.event_dset_name, next_trig.shape[0])
