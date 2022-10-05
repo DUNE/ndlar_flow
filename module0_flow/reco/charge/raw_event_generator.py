@@ -263,7 +263,8 @@ class RawEventGenerator(H5FlowGenerator):
 
             traj_trackid = self.mc_trajectories['trackID'][:]
             tracks_trackid = self.mc_tracks['trackID'][:]
-            for i in tqdm(range(truth_slice.start, truth_slice.stop), smoothing=1, desc='generating truth references'):
+            iter_ = tqdm(range(truth_slice.start, truth_slice.stop), smoothing=1, desc='generating truth references') if self.rank == 0 else range(truth_slice.start, truth_slice.stop)
+            for i in iter_:
                 if i < len(evs):
                     ev = evs[i]
                     traj_start, traj_end = ev_traj_start[i], ev_traj_end[i]

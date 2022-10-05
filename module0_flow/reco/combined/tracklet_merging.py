@@ -700,7 +700,8 @@ class TrackletMerger(H5FlowStage):
 
         sig_norm = np.sum(pdf[sig_key])
         bkg_norm = np.sum(pdf[bkg_key])
-        r = 1 - np.exp(-(pdf[sig_key] / sig_norm) / (pdf[bkg_key] / bkg_norm))
+        with np.errstate(divide='ignore', invalid='ignore'):
+            r = 1 - np.exp(-(pdf[sig_key] / sig_norm) / (pdf[bkg_key] / bkg_norm))
         r_inf_mask = (pdf[bkg_key] == 0) & (pdf[sig_key] > 0)
         r[r_inf_mask] = 1
         r_zero_mask = (pdf[sig_key] == 0) & (pdf[bkg_key] > 0)
