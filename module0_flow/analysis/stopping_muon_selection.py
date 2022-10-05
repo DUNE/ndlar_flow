@@ -1018,7 +1018,7 @@ class StoppingMuonSelection(H5FlowStage):
 
                     muon_j_min = np.argmin([np.min(ll) if ll is not np.nan else 1e+303 for ll in muon_likelihood])
                     proton_j_min = np.argmin([np.min(ll) if ll is not np.nan else 1e+303 for ll in proton_likelihood])
-                    muon_score[i] = muon_likelihood[muon_j_min]
+                    muon_score[i] = muon_likelihood[muon_j_min].filled(1e+303)
                     muon_r0[i] = muon_offset[muon_j_min]
                     proton_r0[i] = proton_offset[proton_j_min]
                     profile_rr[i] = [profile_rr0[i], profile_rr1[i]][muon_j_min]
