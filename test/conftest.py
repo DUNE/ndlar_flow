@@ -144,6 +144,30 @@ def michel_pdf_file(pytestconfig, tmp_path_factory):
                                       'data/Module0/merged/reco_data/'
                                       'michel_pdf-0.1.0.npz')))
 
+@pytest.fixture
+def triplet_response_data_256_file(pytestconfig, tmp_path_factory):
+    rv = next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/merged/reco_data/'
+                                      'mod0_response.v0.data.256.npz')))
+    try:
+        os.symlink(rv, 'h5flow_data/mod0_response.data.256.npz')
+    except OSError:
+        pass
+    return rv
+
+@pytest.fixture
+def triplet_response_sim_256_file(pytestconfig, tmp_path_factory):
+    rv = next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/merged/reco_data/'
+                                      'mod0_response.v1.sim.256.npz')))
+    try:
+        os.symlink(rv, 'h5flow_data/mod0_response.sim.256.npz')
+    except OSError:
+        pass
+    return rv
+
 
 @ pytest.fixture
 def proton_range_table(pytestconfig, tmp_path_factory):
