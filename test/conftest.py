@@ -150,8 +150,8 @@ def triplet_response_data_256_file(pytestconfig, tmp_path_factory):
                                      ('https://portal.nersc.gov/project/dune/'
                                       'data/Module0/merged/reco_data/'
                                       'mod0_response.v0.data.256.npz')))
-    if not os.path.exists('h5flow_data/mod0_response.sim.256.npz'):
-        os.rename(rv, 'h5flow_data/mod0_response.sim.256.npz')    
+    if not os.path.exists('h5flow_data/mod0_response.data.256.npz'):
+        os.rename(rv, 'h5flow_data/mod0_response.data.256.npz')    
     return rv
 
 @pytest.fixture
