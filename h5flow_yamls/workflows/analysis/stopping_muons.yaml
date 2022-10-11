@@ -2,7 +2,7 @@
 
 flow:
   source: events
-  stages: [truth_labels, stopping_muon_sel, michel_id]
+  stages: [truth_labels, noise_overlay, stopping_muon_sel, michel_id]
 
 
 resources:
@@ -39,6 +39,39 @@ truth_labels:
 
     # output
     truth_labels_dset_name: 'analysis/muon_capture/truth_labels'
+
+
+noise_overlay:
+  classname: MCNoiseModelOverlay
+  path: module0_flow.analysis.mc_noise_model_overlay
+  requires:
+    - 'charge/hits'
+  params:
+    hits_name: 'charge/hits'
+    model_params:
+      medm:
+        type: 'scale_plus_binomial_noise'
+      
+        # best fit to Module 0 medium threshold good runs on 4/10/2021
+        # <5% single channel dQ/dx shape residual for medium threshold runs btw 2-10ke/mm
+        scale_factor: 1.007
+        scale_width: 0.0667
+        binom_noise_scale: 9.946 # mV
+        binom_noise_width: 14.60 # mV
+        binom_noise_prob: 0.2431
+        binom_noise_asymm: 0.5425
+
+      high:
+        type: 'scale_plus_binomial_noise'
+      
+        # best fit to Module 0 high threshold good runs on 4/10/2021
+        # <5% single channel dQ/dx shape residual for high threshold runs btw 2-10ke/mm
+        scale_factor: 1.021
+        scale_width: 0.04898
+        binom_noise_scale: 15.376 # mV
+        binom_noise_width: 17.676 # mV
+        binom_noise_prob: 0.2471
+        binom_noise_asymm: 0.6020
 
 
 stopping_muon_sel:

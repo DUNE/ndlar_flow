@@ -252,7 +252,8 @@ def stopping_muon_analysis_file(combined_file, geometry_file, light_geometry_fil
 
 
 @pytest.fixture
-def delayed_signal_analysis_file(stopping_muon_analysis_file, tmp_h5_file):
+def delayed_signal_analysis_file(stopping_muon_analysis_file, triplet_response_data_256_file,
+                                 triplet_response_sim_256_file, tmp_h5_file):
     print('Stopping muon analysis...')
     h5flow.run(['h5flow_yamls/workflows/analysis/delayed_signal.yaml'],
                tmp_h5_file,
