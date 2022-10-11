@@ -283,11 +283,12 @@ class BrokenTrackSim(H5FlowStage):
             label_array['neighbor'] = neighbor.flat[~broken.mask.ravel()]
             label_array['hit_frac'] = hit_frac.compressed()
             label_array['true_endpoint_d'] = np.c_[endpoint_distance_1.compressed(), endpoint_distance_2.compressed()]
-            label_array['neighbor_deflection_angle'] = track2_deflection_angle.flat[~broken.mask.ravel()]
-            label_array['neighbor_transverse_sin2theta'] = track2_transverse_sin2theta.flat[~broken.mask.ravel()]
-            label_array['neighbor_missing_length'] = track2_missing_length.flat[~broken.mask.ravel()]
-            label_array['neighbor_overlap'] = track2_overlap.flat[~broken.mask.ravel()]
-            label_array['neighbor_sin2theta'] = track2_sin2theta.flat[~broken.mask.ravel()]
+            if self.generate_2track_joint_pdf:
+                label_array['neighbor_deflection_angle'] = track2_deflection_angle.flat[~broken.mask.ravel()]
+                label_array['neighbor_transverse_sin2theta'] = track2_transverse_sin2theta.flat[~broken.mask.ravel()]
+                label_array['neighbor_missing_length'] = track2_missing_length.flat[~broken.mask.ravel()]
+                label_array['neighbor_overlap'] = track2_overlap.flat[~broken.mask.ravel()]
+                label_array['neighbor_sin2theta'] = track2_sin2theta.flat[~broken.mask.ravel()]
             self.data_manager.write_data(f'{self.path}/label', label_slice, label_array)
 
             ref = np.c_[np.indices(new_tracks.shape)[0][~new_tracks['id'].mask] + source_slice.start, new_tracks['id'].compressed()]

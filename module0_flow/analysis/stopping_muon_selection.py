@@ -915,7 +915,7 @@ class StoppingMuonSelection(H5FlowStage):
                                      seed_pt.reshape(-1,3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut))
             seed_near_cathode = seed_near_cathode.reshape(tracks.shape)
             seed_track_mask = is_stopping & ~seed_near_cathode & is_downward
-            max_seed_pts = max(np.sum(seed_track_mask, axis=-1).max(), 1)
+            max_seed_pts = int(max(np.sum(seed_track_mask.filled(0), axis=-1).max(), 1))
             seed_pt_idx = ma.argsort(ma.array(seed_track_mask, mask=~seed_track_mask | seed_track_mask.mask), axis=-1, fill_value=0)[..., ::-1, np.newaxis]
             seed_pt = np.take_along_axis(seed_pt, seed_pt_idx, axis=1)[...,:max_seed_pts,:]
             seed_pt = ma.array(seed_pt, mask=np.indices(seed_pt.shape)[1] >= np.sum(seed_track_mask, axis=-1, keepdims=True)[...,np.newaxis])
