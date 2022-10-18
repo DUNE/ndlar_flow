@@ -11,6 +11,7 @@ class WaveformAlign(H5FlowStage):
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, input dataset path
          - ``busy_channel``: ``dict`` of ``int`` of ``<adc #>: <channel number>
+         - ``align_dset_name`` : ``str``, optional, output dataset path
 
         ``wvfm_dset_name`` is required in the data cache.
 
@@ -29,7 +30,8 @@ class WaveformAlign(H5FlowStage):
 
         ``alignment`` datatype::
 
-            offset  f4(n_adc,),   sample offset relative to the first trigger in event
+            ns          f8            timestamp corresponding to trigger edge
+            sample_idx  f4(n_adc,),   sample offset relative to the first trigger in event
 
     '''
     class_version = '0.0.0'
