@@ -49,9 +49,32 @@ production jobs.
 usage
 =====
 
+There is no "executable" for ``module0_flow``, instead, it uses ``h5flow`` 
+workflow yaml files and one of the entry points to ``h5flow``: 
+``python -m h5flow -c ...``, ``run_h5flow.py -c ...``, or ``h5flow -c ...``.
+When this is run, it will set up a loop using the yaml file and
+following the ``h5flow`` specification, namely,
+a loop dataset, a series of "stages" to run on that dataset, and a set of 
+"resources" to make available to each stage. ``h5flow`` handles the 
+instantiation of python objects, the access to the data file, and the workflow 
+sequencing, while ``module0_flow`` provides workflow descriptions (under 
+``h5flow_yamls/workflows/``), module configurations (under 
+``h5flow_yamls/{reco,resources,...}``), and the source code for each module 
+for those workflows (under ``module0_flow/``). The intention behind using
+``h5flow`` and separating the reconstruction and calibration into modules is 
+to allow for:
+
+ 1. flexibility - a purely modular workflow has better separation of code which enables easier collaboration between multiple developers and can allow for code reuse by making modules generic and re-usable for different purposes.
+ 2. portability - the only dependency for reading ``h5flow`` files is HDF5 which makes interfacing with ``module0_flow`` files easier, module-wise versioning makes developers think about compatiblitity early and often, and module-wise persistency makes adding new data objects easier and often with no reprocessing of data
+ 3. incrementalism - intermediate data objects can be saved and built upon, so development can occur from any intermediate step and data processing can be checkpointed at any stage.
+ 
+That is the intention at any rate - if you have questions/comments/suggestions
+for improvement, please feel welcome to open an issue at
+[https://github.com/peter-madigan/module0_flow/issues] :)
+
 There is a tutorial repo at
 [https://github.com/peter-madigan/module0_flow_tutorial] that should help you
-get started.
+get started, but below are the basic building blocks for ``module0_flow``:
 
 The ``module0_flow`` reconstruction chain breaks up the reconstruction into the
 following steps for each component of the reconstruction. For charge-only
