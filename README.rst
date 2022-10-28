@@ -49,9 +49,32 @@ production jobs.
 usage
 =====
 
+There is no "executable" for ``module0_flow``, instead, it uses ``h5flow``
+workflow yaml files and one of the entry points to ``h5flow``:
+``python -m h5flow -c ...``, ``run_h5flow.py -c ...``, or ``h5flow -c ...``.
+When this is run, it will set up a loop using the yaml file and
+following the ``h5flow`` specification, namely,
+a loop dataset, a series of "stages" to run on that dataset, and a set of
+"resources" to make available to each stage. ``h5flow`` handles the
+instantiation of python objects, the access to the data file, and the workflow
+sequencing, while ``module0_flow`` provides workflow descriptions (under
+``h5flow_yamls/workflows/``), module configurations (under
+``h5flow_yamls/{reco,resources,...}``), and the source code for each module
+for those workflows (under ``module0_flow/``). The intention behind using
+``h5flow`` and separating the reconstruction and calibration into modules is
+to allow for:
+
+ 1. flexibility - a purely modular workflow has better separation of code which enables easier collaboration between multiple developers and can allow for code reuse by making modules generic and re-usable for different purposes.
+ 2. portability - the only dependency for reading ``h5flow`` files is HDF5 which makes interfacing with ``module0_flow`` files easier, module-wise versioning makes developers think about compatiblitity early and often, and module-wise persistency makes adding new data objects easier and often with no reprocessing of data
+ 3. incrementalism - intermediate data objects can be saved and built upon, so development can occur from any intermediate step and data processing can be checkpointed at any stage.
+
+That is the intention at any rate - if you have questions/comments/suggestions
+for improvement, please feel welcome to open an issue at
+[https://github.com/peter-madigan/module0_flow/issues] :)
+
 There is a tutorial repo at
 [https://github.com/peter-madigan/module0_flow_tutorial] that should help you
-get started.
+get started, but below are the basic building blocks for ``module0_flow``:
 
 The ``module0_flow`` reconstruction chain breaks up the reconstruction into the
 following steps for each component of the reconstruction. For charge-only
@@ -76,7 +99,7 @@ charge event building
 
 To run charge event builder::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/reco/charge/charge_event_building.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/charge/charge_event_building.yaml \
         -i <input file> -o <output file>
 
 This generates the ``charge/raw_events`` and ``charge/packets`` datasets. The
@@ -87,7 +110,7 @@ charge event reconstruction
 
 To run charge reconstruction::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/reco/charge/charge_event_reconstruction.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/charge/charge_event_reconstruction.yaml \
         -i <input file> -o <output file>
 
 This generates ``charge/packets_corr_ts``, ``charge/ext_trigs``, ``charge/hits``,
@@ -99,7 +122,7 @@ light event building
 
 To run light event builder::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/reco/light/light_event_building.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/light/light_event_building.yaml \
         -i <input file> -o <output file>
 
 This generates the ``light/events`` and ``light/wvfm`` datasets. The input file
@@ -111,7 +134,7 @@ light event reconstruction
 
 To run light reconstruction::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/reco/light/light_event_reconstruction.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/light/light_event_reconstruction.yaml \
         -i <input file> -o <output file>
 
 This generates ``light/t_ns`` and ``light/hits`` datasets. The input file is a light event built ``module0_flow``
@@ -122,7 +145,7 @@ charge-to-light association
 
 To associate charge events to light events, run::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/reco/charge/charge_light_association.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/charge/charge_light_association.yaml \
         -i <input file> -o <output file>
 
 This creates references between ``charge/ext_trigs`` and ``light/events`` as well
@@ -144,7 +167,7 @@ merged event reconstruction
 
 To generate T0s and tracks, run::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/reco/combined/combined_reconstruction.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/combined/combined_reconstruction.yaml \
         -i <input file> -o <output file>
 
 minimal staging
@@ -156,16 +179,16 @@ version 0.1.8, you can combine them into only two commands::
     output_file=<output file>
 
     mpiexec h5flow -c \
-        h5flow_yamls/workflows/reco/light/light_event_building.yaml \
-        h5flow_yamls/workflows/reco/light/light_event_reconstruction.yaml \
+        h5flow_yamls/workflows/light/light_event_building.yaml \
+        h5flow_yamls/workflows/light/light_event_reconstruction.yaml \
         -i <input light file> \
         -o $output_file
 
     mpiexec h5flow -c \
-        h5flow_yamls/workflows/reco/charge/charge_event_building.yaml \
-        h5flow_yamls/workflows/reco/charge/charge_event_reconstruction.yaml \
-        h5flow_yamls/workflows/reco/charge/charge_light_association.yaml \
-        h5flow_yamls/workflows/reco/combined/combined_reconstruction.yaml \
+        h5flow_yamls/workflows/charge/charge_event_building.yaml \
+        h5flow_yamls/workflows/charge/charge_event_reconstruction.yaml \
+        h5flow_yamls/workflows/charge/charge_light_association.yaml \
+        h5flow_yamls/workflows/combined/combined_reconstruction.yaml \
         -i <input charge file> \
         -o $output_file
 
@@ -173,10 +196,14 @@ version 0.1.8, you can combine them into only two commands::
 file structure and access
 =========================
 
-Let's walk through a simple example of how to access and use the hdf5
-file format containing both light `and` charge data. As an example, we will
+Let's walk through an example of how to access and use the hdf5
+file format containing both light `and` charge data using two different approaches:
+the first is much more verbose, but is more flexible, while the second requires
+minimal code, but has some limitations. As an example, we will
 perform a mock analysis to compare the light system waveform integrals to the
-larpix charge sum. First, we'll open up the file::
+larpix charge sum.
+
+So let's start with the first approach, we'll open up the file using ``h5py``::
 
     import h5py
     f = h5py.File('<example file>.h5','r')
@@ -383,6 +410,53 @@ And we plot the correlation between the charge and light systems::
         bins=(1000,1000))
     plt.xlabel('Charge sum [mV]')
     plt.ylabel('Light integral [ADC]')
+
+``h5flow`` also has the capability of traversing multiple references using
+the ``dereference_chain`` helper function. I will leave it to you to visit the
+``h5flow`` docs and to play around with this functionality.
+
+Ok, so that's how to access data using the verbose and flexible approach. Now
+let's do it the quick and easy way.
+
+We'll use an ``H5FlowDataManager`` object to help::
+
+    from h5flow.data import H5FlowDataManager
+    dm = H5FlowDataManager('<input file>', 'r', mpi=False)
+
+This object has built-in smart reference traversal via the ``__getitem__``
+special method. If one argument is specified, it acts as a pass-through to an
+underlying ``h5py.File``::
+
+    dm['light/events/data'] # get the light events dataset
+    dm['light/events'] # get the light events group
+    dm['light/events'].attrs # get light event attributes
+
+But when using multiple arguments, it will load references::
+
+    # again lets get the first 1000 charge events
+    charge_events = dm['charge/events/data', sel]
+    # (event index,)
+
+    # and now we use the fancy access method
+    light_events = dm['charge/events','light/events',sel]
+    # (event index, light event index)
+
+    # and we can also get the waveforms, but only if the light/events -> light/wvfm references exist
+    light_wvfm = dm['charge/events','light/events','light/wvfm',sel]
+    # (event index, light event index, light waveform index)
+
+That's certainly much cleaner! But in this case, you are limited in only traversing
+references that are explicitly defined so references can't do double duty for
+multiple datasets. You also are not able to just load the reference index by
+itself. So, this approach might not be suited for every situation.
+
+There is also a plotting script at ``scripts/map_file.py`` which will generate
+a map of all of the references included in the file. You will need ``networkx``
+installed in order to run this. Run with::
+
+    python scripts/map_file.py <file>
+
+And that concludes the intro into the data access!
 
 For more details on what different fields in the datatypes mean, look at the
 module-specific documentation. For more details on how to use the dereferencing
