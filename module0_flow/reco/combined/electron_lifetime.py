@@ -23,7 +23,7 @@ class ElectronLifetimeCalib(H5FlowStage):
          - ``hits_dset_name``: ``str``, path to input hits dataset
          - ``drift_dset_name``: ``str``, path to input drift dataset
          - ``mode``: ``str``, one of "generate" or "calibration"
-         - ``electron_lifetime_file``: ``str``, path to .npz file to update with new electron lifetime values (only applies to "generate" mode)
+         - ``electron_lifetime_file``: ``str``, path to .npz file to update with new electron lifetime values (only applies to "generate" mode), will name with the measured unix timestamp
          - ``tracks_dset_name``: ``str``, path to input tracks dataset (only applies to generate mode)
          - ``calib_dset_name``: ``str``, path to output dataset (only applies to "calibration" mode)
 
@@ -52,6 +52,21 @@ class ElectronLifetimeCalib(H5FlowStage):
             f           f4,     calibration factor (q_calib = f * q)
             q           f4,     resulting calibrated value [mV]
 
+        The output electron lifetime file is a .npz collection containing:
+
+         - ``drift_bins``:      1D array of drift time bin edges
+         - ``dqdx_bins``:       1D array of dQ/dx bin edges
+         - ``timestamp``:       averaged unix time across run [s]
+         - ``hist``:            2D array of bin counts for track dQ/dx
+         - ``lifetime``:        best fit electron lifetime
+         - ``lifetime_err``:    best fit electron lifetime error
+         - ``dqdx0``:           best fit dQ/dx(t=0)
+         - ``dqdx0_err``:       best fit dQ/dx(t=0) error
+         - ``other_fit_p``:     1D array of power law best fit parameters
+         - ``other_fit_p_err``: 1D array of power lay best fit parameter errors
+         - ``dqdx_p``:          2D array of peak value extracted from each drift bin for each bootstrap sample
+         - ``dqdx_p_valid``:    2D boolean array, ``True`` if peak value extraction was successful
+
     '''
     class_version = '0.0.0'
 
@@ -77,11 +92,13 @@ class ElectronLifetimeCalib(H5FlowStage):
     
     def __init__(self, **params):
         super(ElectronLifetimeCalib, self).__init__(**params)
+        # set up dataset names
         self.drift_dset_name = params.get('drift_dset_name', self.default_drift_dset_name)
         self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
         self.tracks_dset_name = params.get('tracks_dset_name', self.default_tracks_dset_name)
         self.calib_dset_name = params.get('calib_dset_name', self.default_calib_dset_name)
 
+        # declare run mode
         self.mode = params['mode']
         if self.mode.lower()[:len(self.GENERATE)] == self.GENERATE:
             self.mode = self.GENERATE
@@ -144,10 +161,12 @@ class ElectronLifetimeCalib(H5FlowStage):
             
     @staticmethod
     def f_poly(dqdx, *args):
+        ''' Polynomial function of arbitrary complexity (``= args[0] + args[1] * dqdx + args[2] * dqdx^2 + ...``)'''
         return sum([args[i] * (dqdx)**i for i in range(len(args))])
 
     @staticmethod
     def f_decay(t, max_, tau, power, power_scale):
+        ''' Power-law modified exponential to account for electron lifetime and signal truncation close to anode '''
         return max_ * np.exp(-t/tau) * (1 - 1 / (1 + np.power(np.abs(t/power_scale), power)))
 
     def finish(self, source_name):
@@ -164,6 +183,8 @@ class ElectronLifetimeCalib(H5FlowStage):
                 dqdx_bin_center = (self.dqdx_bins[:-1] + self.dqdx_bins[1:])/2
                 dqdx_p = np.zeros((self.dqdx_hist.shape[0], bootstrap_count))
                 dqdx_p_valid = np.zeros((self.dqdx_hist.shape[0], bootstrap_count))
+
+                # fit each drift time bin
                 for ibin in range(len(self.drift_bins)-1):
                     print(f'drift time: {self.drift_bins[1:][ibin]:0.02f}us')
                     mask = self.dqdx_hist[ibin] > 0
@@ -171,22 +192,24 @@ class ElectronLifetimeCalib(H5FlowStage):
                         print(f'\t*** {ibstrp} not enough non-zero bins to fit ***')
                         continue                    
 
+                    # scale factor to increase errors on each bootstrap fit in order to account for any systematic biases in fit
                     systematic_factor = 1
 
+                    # use +/- 1 sigma region around each peak for polynomial fit
                     max_ = self.weighted_percentile(dqdx_bin_center, self.dqdx_hist[ibin], 0.84)
                     min_ = self.weighted_percentile(dqdx_bin_center, self.dqdx_hist[ibin], 0.16)
                     fit_mask = mask & (dqdx_bin_center >= min_) & (dqdx_bin_center <= max_)
-                    
+
+                    # calculate bootstrap errors
                     for ibstrp in range(bootstrap_count):
-                        # perform the fit
+                        # apply boostrap statistical fluctuations assuming bins random normally distributed
+                        # also includes the adaptive systematic factor
                         dqdx_hist = self.dqdx_hist[ibin] + np.random.normal(size=self.dqdx_hist[ibin].shape, loc=0, scale=np.sqrt(self.dqdx_hist[ibin].clip(1,None))) * fit_mask * systematic_factor
                         try:
-                            # get fit region (+/- 1 sigma from median)
+                            # perform the polynomial fit to the peak
                             p0 = (dqdx_hist[fit_mask].mean(),) + (0,) * (n_poly_terms - 1)
-
                             err = np.sqrt(dqdx_hist[fit_mask]) * systematic_factor
                             fit_func = self.f_poly
-                        
                             p, cov = optimize.curve_fit(fit_func, dqdx_bin_center[fit_mask],
                                                         dqdx_hist[fit_mask],
                                                         p0=p0, sigma=err)
@@ -194,11 +217,13 @@ class ElectronLifetimeCalib(H5FlowStage):
                             chi2 = ((dqdx_hist[fit_mask] - fit_func(dqdx_bin_center[fit_mask], *p))**2 / err**2).sum()
                             ndf = fit_mask.sum() - len(p)
                             print(f'\t{ibstrp} chi2/ndf = {chi2:0.02f}/{ndf:d} ({chi2/ndf:0.04f}) [f={systematic_factor:0.2f}]')
+
+                            # update the systematic factor using rolling average
                             systematic_factor = (0.75 * systematic_factor + 0.25 * chi2 / ndf)
                             #for iparam,param in enumerate(p):
                             #    print(f'\t  {iparam}: {param:0.03f}')
 
-                            # find peak
+                            # find peak for use in lifetime fit using a spline of the best fit polynomial
                             spline = interpolate.CubicSpline(dqdx_bin_center[fit_mask], fit_func(dqdx_bin_center[fit_mask], *p))
                             extrema = spline.derivative(1).roots(extrapolate=False)
                             maximum = extrema[np.argmax(spline(extrema))]
@@ -214,13 +239,16 @@ class ElectronLifetimeCalib(H5FlowStage):
                 # fit the electron lifetime
                 try:
                     print('Final result')
-                    # only use second half of drift to avoid apparent anode effects
+                    # skip the last drift time bin to avoid dQ/dx for portion of track that crosses cathode
                     subset = slice(0,-1)
 
+                    # create fit data
                     peak_fit = dqdx_p.mean(axis=-1) * (dqdx_p_valid.sum(axis=-1) > 1)
                     peak_err = dqdx_p.std(axis=-1) * (dqdx_p_valid.sum(axis=-1) > 3)
+                    # if polynomial fit was bad, apply huge error bars
                     peak_err[peak_err == 0] = peak_fit.max()
 
+                    # do drift time response fit
                     lt_pnames = ('dQ/dx(0) [mV/mm]','lifetime [us]','decay power','decay scale [us]')
                     p0 = (peak_fit[1], 2e3, 2, 2)
                     p, cov = optimize.curve_fit(self.f_decay, drift_bin_center[subset],
@@ -228,26 +256,7 @@ class ElectronLifetimeCalib(H5FlowStage):
                                                 p0=p0, sigma=peak_err[subset],
                                                 bounds=[(0,)*len(p0), (np.inf,)*len(p0)],
                                                 absolute_sigma=True)
-
-                    # properly calculate errors using delta chi2
                     perr = np.sqrt(np.diag(cov))
-                    '''
-                    lt_arr = np.linspace(p[1]-perr[1].clip(1,None), p[1]+perr[1].clip(1,None), 100)
-                    chi2 = [((peak_fit[subset] - self.f_decay(drift_bin_center[subset], p[0], lt, *p[2:]))**2 / peak_err[subset]**2).sum() for lt in lt_arr]
-                    spline = interpolate.CubicSpline(lt_arr, chi2)
-                    lt_extrema = spline.derivative(1).roots(extrapolate=False)
-                    chi2_minimum = np.min(spline(lt_extrema))
-                    lt_min = lt_extrema[np.argmin(spline(lt_extrema))]
-
-                    delta_chi2 = np.array(chi2) - chi2_minimum
-                    spline = interpolate.CubicSpline(lt_arr, delta_chi2 - 1)
-                    lt_bounds = np.sort(spline.roots(extrapolate=False))[:2]
-
-                    p[1] = lt_min
-                    perr = np.repeat(perr[:,np.newaxis], 2, axis=-1) * np.array([-1,1])
-                    perr[1] = lt_bounds - lt_min
-                    '''
-
                     chi2 = ((peak_fit[subset] - self.f_decay(drift_bin_center[subset], *p))**2 / peak_err[subset]**2)
                     ndf = len(peak_fit[subset]) - len(lt_pnames)
                     print(f'included bins [us]: {drift_bin_center[subset].astype(int)}')
@@ -257,19 +266,20 @@ class ElectronLifetimeCalib(H5FlowStage):
                     for iparam,p_name in enumerate(lt_pnames):
                         print(f'{p_name}: {p[iparam]:0.03f} +/- {perr[iparam]}')
 
-                        np.savez_compressed(self.electron_lifetime_file[:-3]+f'{int(self.timestamp)}.npz',
-                                            drift_bins=self.drift_bins,
-                                            dqdx_bins=self.dqdx_bins,
-                                            timestamp=self.timestamp,
-                                            hist=self.dqdx_hist,
-                                            lifetime=p[1],
-                                            lifetime_err=perr[1],
-                                            dqdx0=p[0],
-                                            dqdx0_err=perr[0],
-                                            other_fit_p=p[2:],
-                                            other_fit_p_err=perr[2:],
-                                            dqdx_p=dqdx_p,
-                                            dqdx_p_valid=dqdx_p_valid,
+                    # save results to an output file
+                    np.savez_compressed(self.electron_lifetime_file[:-3]+f'{int(self.timestamp)}.npz',
+                                        drift_bins=self.drift_bins,
+                                        dqdx_bins=self.dqdx_bins,
+                                        timestamp=self.timestamp,
+                                        hist=self.dqdx_hist,
+                                        lifetime=p[1],
+                                        lifetime_err=perr[1],
+                                        dqdx0=p[0],
+                                        dqdx0_err=perr[0],
+                                        other_fit_p=p[2:],
+                                        other_fit_p_err=perr[2:],
+                                        dqdx_p=dqdx_p,
+                                        dqdx_p_valid=dqdx_p_valid,
                         )
                 except Exception as e:
                     print(f'ERROR: {e}')
@@ -344,7 +354,7 @@ class ElectronLifetimeCalib(H5FlowStage):
             i_track = np.broadcast_to(i_track[:,np.newaxis], i_track.shape + hits.shape[-1:])
 
             max_length = tracks['length'].max()
-            s_bins = np.linspace(0, max_length, int(np.ceil(max_length/self.DX))+1)
+            s_bins,dx = np.linspace(0, max_length, int(np.ceil(max_length/self.DX))+1, retstep=True)
             
             dq = np.histogramdd((i_track.ravel(), hit_s.ravel()),
                                 weights=(hits['q'] * hit_mask).ravel(),
@@ -357,7 +367,7 @@ class ElectronLifetimeCalib(H5FlowStage):
                                 bins=(np.arange(i_track[-1,-1] + 2), s_bins))[0]
 
             # calculate dq/dx
-            dqdx = dq/self.DX
+            dqdx = dq/dx
             dqdx_mask = track_mask.ravel()[:,np.newaxis] & (dn > int(self.DX/(np.sqrt(3) * resources['Geometry'].pixel_pitch)))
 
             # exclude the end-points (which can be biased)
