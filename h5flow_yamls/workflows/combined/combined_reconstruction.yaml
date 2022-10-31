@@ -2,11 +2,12 @@
 
 flow:
   source: events
-  stages: [t0_reco, drift_reco, tracklet_reco, tracklet_merge]
+  stages: [t0_reco, drift_reco, electron_lifetime_corr, tracklet_reco, tracklet_merge]
   drop: []
 
 events:
   classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
   dset_name: 'charge/events'
   params:
     chunk_size: 32
@@ -23,6 +24,10 @@ t0_reco:
 
 drift_reco:
   !include h5flow_yamls/reco/combined/DriftReconstruction.yaml
+
+
+electron_lifetime_corr:
+  !include h5flow_yamls/reco/combined/ElectronLifetimeCalib.yaml
 
 
 tracklet_reco:
