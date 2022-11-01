@@ -177,7 +177,7 @@ class ElectronLifetimeCalib(H5FlowStage):
 
             if self.rank == 0:
                 # set up fits
-                n_poly_terms = 7
+                n_poly_terms = 5
                 bootstrap_count = 30
                 drift_bin_center = (self.drift_bins[:-1] + self.drift_bins[1:])/2
                 dqdx_bin_center = (self.dqdx_bins[:-1] + self.dqdx_bins[1:])/2
@@ -337,11 +337,6 @@ class ElectronLifetimeCalib(H5FlowStage):
             hit_mask = resources['Geometry'].in_fid(xyz) # require hits to be contained in detector (remove noise)
             hit_mask = hit_mask.reshape(hits['id'].shape) & ~hits.mask['id']
             hit_mask = hit_mask & track_mask[...,np.newaxis]
-            # skip hits in other TPCs
-            hit_mask = hit_mask & (hits['iogroup'] == np.take_along_axis(
-                np.sort(hits['iogroup'], axis=-1),
-                hit_mask.sum(axis=-1, keepdims=True) // 2,
-                axis=-1))
 
             # bin hits onto track length
             track_dir = tracks['start'] - tracks['end']
@@ -372,7 +367,7 @@ class ElectronLifetimeCalib(H5FlowStage):
 
             # exclude the end-points (which can be biased)
             dqdx_mask[:,0] = False
-            dqdx_mask[:,-1] = False
+            np.put_along_axis(dqdx_mask, dqdx_mask.shape[-1] - 1 - np.argmax(dn[...,::-1] > 0, axis=-1)[:,np.newaxis], False, axis=-1)
 
             # calculate drift
             dqdx_drift = t_drift / dn.clip(1, None)
