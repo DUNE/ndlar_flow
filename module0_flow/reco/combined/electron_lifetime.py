@@ -189,7 +189,7 @@ class ElectronLifetimeCalib(H5FlowStage):
                     print(f'drift time: {self.drift_bins[1:][ibin]:0.02f}us')
                     mask = self.dqdx_hist[ibin] > 0
                     if np.sum(mask) < 4:
-                        print(f'\t*** {ibstrp} not enough non-zero bins to fit ***')
+                        print(f'\t*** {ibin} not enough non-zero bins to fit ***')
                         continue                    
 
                     # scale factor to increase errors on each bootstrap fit in order to account for any systematic biases in fit
