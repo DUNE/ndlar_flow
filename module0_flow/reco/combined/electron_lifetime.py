@@ -304,12 +304,12 @@ class ElectronLifetimeCalib(H5FlowStage):
         
         # apply calibration to hits
         if self.mode == self.CALIBRATE:
-            f = np.exp((drift['t_drift'] * tick_size) / (resources['LArData'].electron_lifetime(events['unix_ts'])[0]))
+            f = np.exp((drift['t_drift'] * tick_size) / (resources['LArData'].electron_lifetime(events['unix_ts'])[0])[:,np.newaxis])
             q = f * hits['q']
 
             calib_array = np.empty(hits['id'].compressed().shape, dtype=self.calib_dtype)
-            calib_array['q'] = q
-            calib_array['f'] = f
+            calib_array['q'] = q.compressed()
+            calib_array['f'] = f.compressed()
 
             # save data
             calib_slice = self.data_manager.reserve_data(self.calib_dset_name, len(calib_array))
