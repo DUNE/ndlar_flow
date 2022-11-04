@@ -86,7 +86,7 @@ reconstruction, there are two workflows:
 which are run in sequence. For light-only reconstruction, there are
 corresponding workflows:
 
-    1. light_event_building.yaml
+    1. light_event_building_adc64.yaml (and light_event_building_mc.yaml)
     2. light_event_recontruction.yaml
 
 Finally, to perform the combined reconstruction using information from both
@@ -103,7 +103,8 @@ To run charge event builder::
         -i <input file> -o <output file>
 
 This generates the ``charge/raw_events`` and ``charge/packets`` datasets. The
-input file is a "datalog"- (a.k.a "packet"-) formatted LArPix data file.
+input file is a "datalog"- (a.k.a "packet"-) formatted LArPix data file. This
+workflow step is the same for data and simulation.
 
 charge event reconstruction
 ---------------------------
@@ -120,14 +121,21 @@ file.
 light event building
 --------------------
 
-To run light event builder::
+To run light event builder on data::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/light/light_event_building.yaml \
+    mpiexec h5flow -c h5flow_yamls/workflows/light/light_event_building_adc64.yaml \
         -i <input file> -o <output file>
 
 This generates the ``light/events`` and ``light/wvfm`` datasets. The input file
-is a PPS-timestamp corrected "rwf_XX" root file produced by the adapted ADCViewer
-code here [https://github.com/peter-madigan/ADCViewer64-Module0].
+is a raw ADC64-formatted .data file.
+
+To run light event builder on simulation::
+
+    mpiexec h5flow -c h5flow_yamls/workflows/light/light_event_building_adcmc.yaml \
+        -i <input file> -o <output file>
+
+This generates the same ``light/events`` and ``light/wvfm`` datasets as the data, but the input file
+is a larnd-sim HDF5 file.
 
 light event reconstruction
 --------------------------
@@ -179,7 +187,7 @@ version 0.1.8, you can combine them into only two commands::
     output_file=<output file>
 
     mpiexec h5flow -c \
-        h5flow_yamls/workflows/light/light_event_building.yaml \
+        h5flow_yamls/workflows/light/light_event_building_adc64.yaml \
         h5flow_yamls/workflows/light/light_event_reconstruction.yaml \
         -i <input light file> \
         -o $output_file

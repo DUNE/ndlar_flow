@@ -1,6 +1,16 @@
 light event building
 ====================
 
+.. autoapimodule:: module0_flow.reco.light.adc64_event_generator
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
+.. autoapimodule:: module0_flow.reco.light.mc_event_generator
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
 .. autoapimodule:: module0_flow.reco.light.raw_event_generator
    :undoc-members:
    :members:
@@ -62,6 +72,11 @@ waveform summary
 
 light detector calibration
 --------------------------
+
+.. autoapimodule:: module0_flow.combined.light_intensity_map
+   :undoc-members:
+   :members:
+   :show-inheritance:
 
 .. autoapimodule:: module0_flow.misc.light_calib
    :undoc-members:

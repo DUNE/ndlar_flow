@@ -17,6 +17,13 @@ drift reconstruction
    :members:
    :show-inheritance:
 
+electron lifetime calibration
+-----------------------------
+.. autoapimodule:: module0_flow.reco.combined.electron_lifetime
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
 tracklet reconstruction
 -----------------------
 

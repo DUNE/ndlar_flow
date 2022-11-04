@@ -13,7 +13,7 @@ charge event reconstruction
 light event building
 ====================
 
-.. include:: ../../h5flow_yamls/workflows/light/light_event_building.yaml
+.. include:: ../../h5flow_yamls/workflows/light/light_event_building_adc64.yaml
     :literal:
 
 light event reconstruction
@@ -34,8 +34,3 @@ combined reconstruction
 .. include:: ../../h5flow_yamls/workflows/combined/combined_reconstruction.yaml
     :literal:
 
-stopping muon analysis
-======================
-
-.. include:: ../../h5flow_yamls/workflows/analysis/stopping_muons.yaml
-    :literal:
