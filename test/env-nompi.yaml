@@ -3,6 +3,10 @@ channels:
   - defaults
 dependencies:
   - python=3.9
+  - h5py<=3.2
+  - pyyaml
+  - tqdm
+  - pytest
   - scipy
   - scikit-image
   - scikit-learn
