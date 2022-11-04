@@ -7,3 +7,5 @@ dependencies:
   - scikit-image
   - scikit-learn
   - pip
+  - pip:
+    - adc64format>=0.0.2

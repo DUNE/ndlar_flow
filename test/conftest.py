@@ -57,8 +57,8 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
 ])
 def charge_source_file(pytestconfig, tmp_path_factory, request):
     charge_source_file_url_lookup = {
-        'data': ('https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/'
-                 'dataRuns/packetData/datalog_2021_04_04_00_41_40_CEST.h5'),
+        'data': ('https://portal.nersc.gov/project/dune/data/Module0/test/'
+                 'charge/datalog_2021_04_04_00_41_40_CEST.trunc.h5'),
         'sim': ('https://portal.nersc.gov/project/dune/data/Module0/'
                 'simulation/stopping_muons/stopping_muons.test.h5')
     }
@@ -66,12 +66,15 @@ def charge_source_file(pytestconfig, tmp_path_factory, request):
                                      charge_source_file_url_lookup[request.param]))
 
 
-@ pytest.fixture
+@pytest.fixture
 def light_source_file(pytestconfig, tmp_path_factory):
-    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+    filename = next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0/LRS/Converted/'
-                                      'rwf_20210404_004206.data.root')))
+                                      'data/Module0/test/light/0a7a314c_20210404_004206.trunc.data')))
+    next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/test/light/0a7b54bd_20210404_004206.trunc.data')))
+    return filename
 
 
 @ pytest.fixture

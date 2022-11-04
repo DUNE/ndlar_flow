@@ -55,19 +55,11 @@ def charge_reco_file(charge_event_built_file, geometry_file, light_geometry_file
 @pytest.fixture
 def light_event_built_file(pytestconfig, tmp_path_factory, light_source_file, runlist_file,
                            electron_lifetime_file, tmp_h5_file):
-    filename = next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
-                                     ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0/LRS/0a7b54bd_20210404_004206.data')))
-    next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
-                              ('https://portal.nersc.gov/project/dune/'
-                               'data/Module0/LRS/0a7a314c_20210404_004206.data')))
     print('Light event building...')
     h5flow.run(['h5flow_yamls/workflows/light/light_event_building_adc64.yaml'],
                tmp_h5_file,
                light_source_file,
-               verbose=2,
-               start_position=153840,
-               end_position=153840 + 10000)
+               verbose=2)
 
     check_dsets(tmp_h5_file, (
         'light/events/data',
