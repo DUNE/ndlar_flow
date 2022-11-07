@@ -20,6 +20,6 @@ params:
   noise_spectrum_filename: 'h5flow_data/events_2021_04_10_04_21_27_CEST.fwvfm.noise_power.npz'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/events_2021_04_10_04_21_27_CEST.fwvfm.noise_power.npz
   signal_spectrum_filename: 'h5flow_data/wvfm_deconv_signal_power.npz'
-  # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/wvfm_deconv_signal_power.npz
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/wvfm_deconv_signal_power.npz
   signal_impulse_filename: 'h5flow_data/wvfm_deconv_signal_impulse.fit.npz'
-  # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/prod2/light_noise_filtered/wvfm_deconv_signal_impulse.fit.npz
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/wvfm_deconv_signal_impulse.fit.npz

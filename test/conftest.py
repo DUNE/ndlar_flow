@@ -200,19 +200,17 @@ def light_noise_file(pytestconfig, tmp_path_factory):
                                       'events_2021_04_10_04_21_27_CEST.fwvfm.noise_power.npz')))
 
 
-@ pytest.fixture
+@pytest.fixture
 def light_signal_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0/merged/prod2/'
-                                      'light_noise_filtered/'
+                                      'data/Module0/merged/reco_data/'
                                       'wvfm_deconv_signal_power.npz')))
 
 
-@ pytest.fixture
+@pytest.fixture
 def light_impulse_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0/merged/prod2/'
-                                      'light_noise_filtered/'
+                                      'data/Module0/merged/reco_data/'
                                       'wvfm_deconv_signal_impulse.fit.npz')))
