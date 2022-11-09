@@ -228,11 +228,6 @@ class RunData(H5FlowResource):
         return self.data['is_mc']
 
     @property
-    def cds_ticks(self):
-        ''' Charge readout system clock cycle (us) '''
-        return self.data['cds_ticks']
-
-    @property
     def crs_ticks(self):
         ''' Charge readout system clock cycle (us) '''
         return self.data['crs_ticks']
