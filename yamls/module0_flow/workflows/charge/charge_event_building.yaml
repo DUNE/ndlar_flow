@@ -8,9 +8,9 @@ flow:
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
 
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files
-  !include h5flow_yamls/reco/charge/RawEventGenerator.yaml
+  !include yamls/module0_flow/reco/charge/RawEventGenerator.yaml
 

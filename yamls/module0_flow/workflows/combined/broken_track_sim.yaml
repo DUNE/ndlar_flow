@@ -9,20 +9,22 @@ flow:
 
 events:
   classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
   dset_name: 'charge/events'
   params:
     chunk_size: 32
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
-  - !include h5flow_yamls/resources/Geometry.yaml
-  - !include h5flow_yamls/resources/LArData.yaml
-  - !include h5flow_yamls/resources/DisabledChannels.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/DisabledChannels.yaml
 
 
 broken_track_sim:
   classname: BrokenTrackSim # misc/broken_track_sim.py
+  path: module0_flow.misc.broken_track_sim
   requires:
     - name: 'combined/hit_drift'
       path: ['charge/hits', 'combined/hit_drift']

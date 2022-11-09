@@ -72,11 +72,11 @@ class DelayedSignal(H5FlowStage):
         prompt_dset_name='analysis/time_reco/prompt',
         delayed_dset_name='analysis/time_reco/delayed',
         prompt_response_model=dict(
-            data={256: 'h5flow_data/mod0_response.data.256.npz',
-                  1024: 'h5flow_data/mod0_response.data.1024.npz',
-                  2048: 'h5flow_data/mod0_response.data.2048.npz'},
-            mc={256: 'h5flow_data/mod0_response.sim.256.npz',
-                1024: 'h5flow_data/mod0_response.sim.1024.npz'}
+            data={256: 'data/module0_flow/mod0_response.data.256.npz',
+                  1024: 'data/module0_flow/mod0_response.data.1024.npz',
+                  2048: 'data/module0_flow/mod0_response.data.2048.npz'},
+            mc={256: 'data/module0_flow/mod0_response.sim.256.npz',
+                1024: 'data/module0_flow/mod0_response.sim.1024.npz'}
         ),
         response_model_terms=3,
         singlet_fraction=0.3,

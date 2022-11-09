@@ -58,8 +58,8 @@ a loop dataset, a series of "stages" to run on that dataset, and a set of
 "resources" to make available to each stage. ``h5flow`` handles the
 instantiation of python objects, the access to the data file, and the workflow
 sequencing, while ``module0_flow`` provides workflow descriptions (under
-``h5flow_yamls/workflows/``), module configurations (under
-``h5flow_yamls/{reco,resources,...}``), and the source code for each module
+``yamls/module0_flow/workflows/``), module configurations (under
+``yamls/module0_flow/{reco,resources,...}``), and the source code for each module
 for those workflows (under ``module0_flow/``). The intention behind using
 ``h5flow`` and separating the reconstruction and calibration into modules is
 to allow for:
@@ -99,7 +99,7 @@ charge event building
 
 To run charge event builder::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/charge/charge_event_building.yaml \
+    mpiexec h5flow -c yamls/module0_flow/workflows/charge/charge_event_building.yaml \
         -i <input file> -o <output file>
 
 This generates the ``charge/raw_events`` and ``charge/packets`` datasets. The
@@ -111,7 +111,7 @@ charge event reconstruction
 
 To run charge reconstruction::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/charge/charge_event_reconstruction.yaml \
+    mpiexec h5flow -c yamls/module0_flow/workflows/charge/charge_event_reconstruction.yaml \
         -i <input file> -o <output file>
 
 This generates ``charge/packets_corr_ts``, ``charge/ext_trigs``, ``charge/hits``,
@@ -123,7 +123,7 @@ light event building
 
 To run light event builder on data::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/light/light_event_building_adc64.yaml \
+    mpiexec h5flow -c yamls/module0_flow/workflows/light/light_event_building_adc64.yaml \
         -i <input file> -o <output file>
 
 This generates the ``light/events`` and ``light/wvfm`` datasets. The input file
@@ -131,7 +131,7 @@ is a raw ADC64-formatted .data file.
 
 To run light event builder on simulation::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/light/light_event_building_adcmc.yaml \
+    mpiexec h5flow -c yamls/module0_flow/workflows/light/light_event_building_adcmc.yaml \
         -i <input file> -o <output file>
 
 This generates the same ``light/events`` and ``light/wvfm`` datasets as the data, but the input file
@@ -142,7 +142,7 @@ light event reconstruction
 
 To run light reconstruction::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/light/light_event_reconstruction.yaml \
+    mpiexec h5flow -c yamls/module0_flow/workflows/light/light_event_reconstruction.yaml \
         -i <input file> -o <output file>
 
 This generates ``light/t_ns`` and ``light/hits`` datasets. The input file is a light event built ``module0_flow``
@@ -153,7 +153,7 @@ charge-to-light association
 
 To associate charge events to light events, run::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/charge/charge_light_association.yaml \
+    mpiexec h5flow -c yamls/module0_flow/workflows/charge/charge_light_association.yaml \
         -i <input file> -o <output file>
 
 This creates references between ``charge/ext_trigs`` and ``light/events`` as well
@@ -175,7 +175,7 @@ merged event reconstruction
 
 To generate T0s and tracks, run::
 
-    mpiexec h5flow -c h5flow_yamls/workflows/combined/combined_reconstruction.yaml \
+    mpiexec h5flow -c yamls/module0_flow/workflows/combined/combined_reconstruction.yaml \
         -i <input file> -o <output file>
 
 minimal staging
@@ -187,16 +187,16 @@ version 0.1.8, you can combine them into only two commands::
     output_file=<output file>
 
     mpiexec h5flow -c \
-        h5flow_yamls/workflows/light/light_event_building_adc64.yaml \
-        h5flow_yamls/workflows/light/light_event_reconstruction.yaml \
+        yamls/module0_flow/workflows/light/light_event_building_adc64.yaml \
+        yamls/module0_flow/workflows/light/light_event_reconstruction.yaml \
         -i <input light file> \
         -o $output_file
 
     mpiexec h5flow -c \
-        h5flow_yamls/workflows/charge/charge_event_building.yaml \
-        h5flow_yamls/workflows/charge/charge_event_reconstruction.yaml \
-        h5flow_yamls/workflows/charge/charge_light_association.yaml \
-        h5flow_yamls/workflows/combined/combined_reconstruction.yaml \
+        yamls/module0_flow/workflows/charge/charge_event_building.yaml \
+        yamls/module0_flow/workflows/charge/charge_event_reconstruction.yaml \
+        yamls/module0_flow/workflows/charge/charge_light_association.yaml \
+        yamls/module0_flow/workflows/combined/combined_reconstruction.yaml \
         -i <input charge file> \
         -o $output_file
 

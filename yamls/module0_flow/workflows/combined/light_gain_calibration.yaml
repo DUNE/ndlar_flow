@@ -8,19 +8,21 @@ flow:
 
 events:
   classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
   dset_name: 'charge/events'
   params:
     chunk_size: 32
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
-  - !include h5flow_yamls/resources/Geometry.yaml
-  - !include h5flow_yamls/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
 
 
 light_gain_calib:
   classname: LightCalibration # misc/light_calib.py
+  path: module0_flow.misc.light_calib
   requires:
     - 'light/events'
     - 'charge/hits'

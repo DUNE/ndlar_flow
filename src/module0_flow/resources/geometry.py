@@ -46,8 +46,8 @@ class Geometry(H5FlowResource):
                 - classname: Geometry
                   params:
                     path: 'geometry_info'
-                    crs_geometry_file: 'h5flow_data/multi_tile_layout-2.2.16.yaml'
-                    lrs_geometry_file: 'h5flow_data/light_module_desc-0.0.0.yaml'
+                    crs_geometry_file: 'data/module0_flow/multi_tile_layout-2.2.16.yaml'
+                    lrs_geometry_file: 'data/module0_flow/light_module_desc-0.0.0.yaml'
 
     '''
     class_version = '0.1.0'

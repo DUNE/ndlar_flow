@@ -7,31 +7,31 @@ flow:
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
-  - !include h5flow_yamls/resources/Geometry.yaml
-  - !include h5flow_yamls/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
 
 
 timestamp_corrector:
-  !include h5flow_yamls/reco/light/LightTimestampCorrector.yaml
+  !include yamls/module0_flow/reco/light/LightTimestampCorrector.yaml
 
 
 wvfm_filt:
-  !include h5flow_yamls/reco/light/WaveformNoiseFilter.yaml
+  !include yamls/module0_flow/reco/light/WaveformNoiseFilter.yaml
 
 
 wvfm_deconv:
-  !include h5flow_yamls/reco/light/WaveformDeconvolution.yaml
+  !include yamls/module0_flow/reco/light/WaveformDeconvolution.yaml
 
 
 wvfm_align:
-  !include h5flow_yamls/reco/light/WaveformAlign.yaml
+  !include yamls/module0_flow/reco/light/WaveformAlign.yaml
 
 
 wvfm_sum:
-  !include h5flow_yamls/reco/light/WaveformSum.yaml
+  !include yamls/module0_flow/reco/light/WaveformSum.yaml
 
 
 hit_finder:
-  !include h5flow_yamls/reco/light/WaveformHitFinder.yaml
+  !include yamls/module0_flow/reco/light/WaveformHitFinder.yaml
 

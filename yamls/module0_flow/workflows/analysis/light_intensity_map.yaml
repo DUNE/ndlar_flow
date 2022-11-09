@@ -6,10 +6,11 @@ flow:
   stages: [light_map]
 
 resources:
-  - !include h5flow_yamls/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
 
 events:
   classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
   dset_name: 'charge/events'
   params:
     chunk_size: 1
@@ -17,6 +18,7 @@ events:
 
 light_map:
   classname: LightIntensityMapGenerator # analysis/light_intensity_map.py
+  path: module0_flow.analysis.light_intensity_map
   requires:
     - name: 'light/swvfm'
       path: ['light/events', 'light/swvfm']

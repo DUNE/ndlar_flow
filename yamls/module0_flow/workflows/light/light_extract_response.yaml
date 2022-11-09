@@ -6,12 +6,13 @@ flow:
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
-  - !include h5flow_yamls/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
 
 
 event_loop:
   classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
   dset_name: 'light/events'
   params:
     chunk_size: 128
@@ -19,6 +20,7 @@ event_loop:
 
 wvfm_extract_sig_noise:
   classname: WaveformDeconvolution
+  path: module0_flow.reco.light.wvfm_deconv
   requires:
     - 'light/wvfm'
   params:

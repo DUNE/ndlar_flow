@@ -13,26 +13,26 @@ events:
     chunk_size: 32
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
-  - !include h5flow_yamls/resources/Geometry.yaml
-  - !include h5flow_yamls/resources/LArData.yaml
-  - !include h5flow_yamls/resources/DisabledChannels.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/DisabledChannels.yaml
 
 t0_reco:
-  !include h5flow_yamls/reco/combined/T0Reconstruction.yaml
+  !include yamls/module0_flow/reco/combined/T0Reconstruction.yaml
 
 
 drift_reco:
-  !include h5flow_yamls/reco/combined/DriftReconstruction.yaml
+  !include yamls/module0_flow/reco/combined/DriftReconstruction.yaml
 
 
 electron_lifetime_corr:
-  !include h5flow_yamls/reco/combined/ElectronLifetimeCalib.yaml
+  !include yamls/module0_flow/reco/combined/ElectronLifetimeCalib.yaml
 
 
 tracklet_reco:
-  !include h5flow_yamls/reco/combined/TrackletReconstruction.yaml
+  !include yamls/module0_flow/reco/combined/TrackletReconstruction.yaml
 
 
 tracklet_merge:
-  !include h5flow_yamls/reco/combined/TrackletMerger.yaml
+  !include yamls/module0_flow/reco/combined/TrackletMerger.yaml
