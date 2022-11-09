@@ -106,11 +106,11 @@ def larpix_pedestal_config_file(pytestconfig, tmp_path_factory):
                                       'datalog_2021_04_02_19_00_46_CESTevd_ped.json')))
 
 
-@ pytest.fixture
+@pytest.fixture
 def runlist_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0/runlist.txt')))
+                                      'data/Module0/runlist-mod0-run1.txt')))
 
 
 @ pytest.fixture
