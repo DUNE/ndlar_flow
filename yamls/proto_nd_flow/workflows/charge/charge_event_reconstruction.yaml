@@ -3,8 +3,8 @@
 
 flow:
   source: raw_events
-  #stages: [timestamp_corrector, ext_trig_finder, hit_builder, event_builder]
-  stages: [ext_trig_finder, hit_builder, event_builder] # don't need to correct timestamp for mc
+  stages: [timestamp_corrector, ext_trig_finder, hit_builder, event_builder]
+  #stages: [timestamp_corrector, ext_trig_finder]
   drop: []
 
 
@@ -22,8 +22,8 @@ raw_events:
 
 
 # not implemented for proto_nd yet
-#timestamp_corrector:
-#  !include yamls/proto_nd_flow/reco/charge/TimestampCorrector.yaml
+timestamp_corrector:
+  !include yamls/proto_nd_flow/reco/charge/TimestampCorrector.yaml
 
 
 ext_trig_finder:

@@ -46,8 +46,9 @@ class Geometry(H5FlowResource):
                 - classname: Geometry
                   params:
                     path: 'geometry_info'
-                    crs_geometry_file: 'data/module0_flow/multi_tile_layout-2.2.16.yaml'
-                    lrs_geometry_file: 'data/module0_flow/light_module_desc-0.0.0.yaml'
+                    det_geometry_file: 'data/prot_nd_flow/2x2.yaml'
+                    crs_geometry_file: 'data/proto_nd_flow/multi_tile_layout-3.0.40.yaml'
+                    lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-0.0.0.yaml'
 
     '''
     class_version = '0.1.0'
@@ -62,7 +63,7 @@ class Geometry(H5FlowResource):
         super(Geometry, self).__init__(**params)
 
         self.path = params.get('path', self.default_path)
-        self.det_geometry_file = params.get('det_geometry_file', self.default_det_geometry_file)
+        self.det_geometry_file = params.get('det_geometry_file', self.default_crs_geometry_file)
         self.crs_geometry_file = params.get('crs_geometry_file', self.default_crs_geometry_file)
         self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
         self._regions = None  # active TPC regions
@@ -400,6 +401,9 @@ class Geometry(H5FlowResource):
         with open(self.crs_geometry_file) as gf:
             geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
 
+        with open(self.det_geometry_file) as dgf:
+            det_geometry_yaml = yaml.load(dgf, Loader=yaml.FullLoader)
+
         if 'multitile_layout_version' not in geometry_yaml.keys():
             raise RuntimeError('Only multi-tile geometry configurations are accepted')
 
@@ -409,77 +413,159 @@ class Geometry(H5FlowResource):
         tile_positions = geometry_yaml['tile_positions']
         tpc_centers = geometry_yaml['tpc_centers']
         tile_indeces = geometry_yaml['tile_indeces']
-        xs = np.array(list(chip_channel_to_position.values()))[
-            :, 0] * self.pixel_pitch
-        ys = np.array(list(chip_channel_to_position.values()))[
-            :, 1] * self.pixel_pitch
+        mod_centers = det_geometry_yaml['tpc_offsets']
+        tile_chip_to_io = geometry_yaml['tile_chip_to_io']
+
+        xs = np.array(list(chip_channel_to_position.values()))[:, 0] * self.pixel_pitch
+        ys = np.array(list(chip_channel_to_position.values()))[:, 1] * self.pixel_pitch
         x_size = max(xs) - min(xs) + self.pixel_pitch
         y_size = max(ys) - min(ys) + self.pixel_pitch
 
+        tile_geometry = {}
+
+        tpc_offsets = det_geometry_yaml['tpc_offsets']
+
         tiles = [tile for tile in geometry_yaml['tile_chip_to_io']]
         io_groups = [
-            geometry_yaml['tile_chip_to_io'][tile][chip] // 1000
+            geometry_yaml['tile_chip_to_io'][tile][chip] // 1000 * (mod-1)*2
             for tile in geometry_yaml['tile_chip_to_io']
             for chip in geometry_yaml['tile_chip_to_io'][tile]
+            for mod in det_geometry_yaml['module_to_io_groups']
         ]
         io_channels = [
             geometry_yaml['tile_chip_to_io'][tile][chip] % 1000
             for tile in geometry_yaml['tile_chip_to_io']
             for chip in geometry_yaml['tile_chip_to_io'][tile]
+            for mod in det_geometry_yaml['module_to_io_groups']
         ]
         chip_ids = [
             chip_channel // 1000
             for chip_channel in geometry_yaml['chip_channel_to_position']
+            for mod in det_geometry_yaml['module_to_io_groups']
         ]
         channel_ids = [
             chip_channel % 1000
             for chip_channel in geometry_yaml['chip_channel_to_position']
+            for mod in det_geometry_yaml['module_to_io_groups']
         ]
-
+    
         pixel_xy_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
         self._pixel_xy = LUT('f4', *pixel_xy_min_max, shape=(2,))
         self._pixel_xy.default = 0.
-
+    
         tile_min_max = [(min(v), max(v)) for v in (io_groups, io_channels)]
         self._tile_id = LUT('i4', *tile_min_max)
         self._tile_id.default = -1
-
+    
         anode_min_max = [(min(tiles), max(tiles))]
         self._anode_z = LUT('f4', *anode_min_max)
         self._anode_z.default = 0.
         self._drift_dir = LUT('i1', *anode_min_max)
         self._drift_dir.default = 0.
-
+    
         self._anode_z[(tiles,)] = [tile_positions[tile][0] for tile in tiles]
         self._drift_dir[(tiles,)] = [tile_orientations[tile][0] for tile in tiles]
 
-        for tile in geometry_yaml['tile_chip_to_io']:
-            tile_orientation = tile_orientations[tile]
-            for chip in geometry_yaml['tile_chip_to_io'][tile]:
-                io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
-                io_group = io_group_io_channel // 1000
-                io_channel = io_group_io_channel % 1000
-                self._tile_id[([io_group], [io_channel])] = tile
+        for module_id in det_geometry_yaml['module_to_io_groups']:
 
-            for chip_channel in geometry_yaml['chip_channel_to_position']:
-                chip = chip_channel // 1000
-                channel = chip_channel % 1000
-                try:
-                    io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
-                except KeyError:
-                    continue
+            for tile in tile_chip_to_io:
+                tile_orientation = tile_orientations[tile]
+                tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
 
-                io_group = io_group_io_channel // 1000
-                io_channel = io_group_io_channel % 1000
-                x = chip_channel_to_position[chip_channel][0] * \
-                    self.pixel_pitch + self.pixel_pitch / 2 - x_size / 2
-                y = chip_channel_to_position[chip_channel][1] * \
-                    self.pixel_pitch + self.pixel_pitch / 2 - y_size / 2
+                for chip in tile_chip_to_io[tile]:
+                    io_group_io_channel = tile_chip_to_io[tile][chip]
+                    io_group = io_group_io_channel//1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
+                    io_channel = io_group_io_channel % 1000
+                    self._tile_id[([io_group], [io_channel])] = tile
 
-                x, y = self._rotate_pixel((x, y), tile_orientation)
-                x += tile_positions[tile][2] + \
-                    tpc_centers[tile_indeces[tile][1]][0]
-                y += tile_positions[tile][1] + \
-                    tpc_centers[tile_indeces[tile][1]][1]
+                for chip_channel in chip_channel_to_position:
+                    chip = chip_channel // 1000
+                    channel = chip_channel % 1000
 
-                self._pixel_xy[([io_group], [io_channel], [chip], [channel])] = np.array([x, y])
+                    try:
+                        io_group_io_channel = tile_chip_to_io[tile][chip]
+                    except KeyError:
+                        continue
+
+                    io_group = io_group_io_channel // 1000 + (module_id-1)*2
+                    io_channel = io_group_io_channel % 1000
+                    x = chip_channel_to_position[chip_channel][0] * \
+                        self.pixel_pitch - x_size / 2 + self.pixel_pitch / 2
+                    y = chip_channel_to_position[chip_channel][1] * \
+                        self.pixel_pitch - y_size / 2 + self.pixel_pitch / 2
+
+                    x, y = self._rotate_pixel((x, y), tile_orientation)
+                    x += tile_positions[tile][2]
+                    y += tile_positions[tile][1]
+                    self._pixel_xy[(io_group, io_channel, chip, channel)] = x, y
+
+
+
+#
+#            tiles = [tile for tile in geometry_yaml['tile_chip_to_io']]
+#            io_groups = [
+#                geometry_yaml['tile_chip_to_io'][tile][chip] // 1000
+#                for tile in geometry_yaml['tile_chip_to_io']
+#                for chip in geometry_yaml['tile_chip_to_io'][tile]
+#            ]
+#            io_channels = [
+#                geometry_yaml['tile_chip_to_io'][tile][chip] % 1000
+#                for tile in geometry_yaml['tile_chip_to_io']
+#                for chip in geometry_yaml['tile_chip_to_io'][tile]
+#            ]
+#            chip_ids = [
+#                chip_channel // 1000
+#                for chip_channel in geometry_yaml['chip_channel_to_position']
+#            ]
+#            channel_ids = [
+#                chip_channel % 1000
+#                for chip_channel in geometry_yaml['chip_channel_to_position']
+#            ]
+#    
+#            pixel_xy_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
+#            self._pixel_xy = LUT('f4', *pixel_xy_min_max, shape=(2,))
+#            self._pixel_xy.default = 0.
+#    
+#            tile_min_max = [(min(v), max(v)) for v in (io_groups, io_channels)]
+#            self._tile_id = LUT('i4', *tile_min_max)
+#            self._tile_id.default = -1
+#    
+#            anode_min_max = [(min(tiles), max(tiles))]
+#            self._anode_z = LUT('f4', *anode_min_max)
+#            self._anode_z.default = 0.
+#            self._drift_dir = LUT('i1', *anode_min_max)
+#            self._drift_dir.default = 0.
+#    
+#            self._anode_z[(tiles,)] = [tile_positions[tile][0] for tile in tiles]
+#            self._drift_dir[(tiles,)] = [tile_orientations[tile][0] for tile in tiles]
+#    
+#            for tile in geometry_yaml['tile_chip_to_io']:
+#                tile_orientation = tile_orientations[tile]
+#                for chip in geometry_yaml['tile_chip_to_io'][tile]:
+#                    io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
+#                    io_group = io_group_io_channel // 1000
+#                    io_channel = io_group_io_channel % 1000
+#                    self._tile_id[([io_group], [io_channel])] = tile
+#    
+#                for chip_channel in geometry_yaml['chip_channel_to_position']:
+#                    chip = chip_channel // 1000
+#                    channel = chip_channel % 1000
+#                    try:
+#                        io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
+#                    except KeyError:
+#                        continue
+#    
+#                    io_group = io_group_io_channel // 1000
+#                    io_channel = io_group_io_channel % 1000
+#                    x = chip_channel_to_position[chip_channel][0] * \
+#                        self.pixel_pitch + self.pixel_pitch / 2 - x_size / 2
+#                    y = chip_channel_to_position[chip_channel][1] * \
+#                        self.pixel_pitch + self.pixel_pitch / 2 - y_size / 2
+#    
+#                    x, y = self._rotate_pixel((x, y), tile_orientation)
+#                    x += tile_positions[tile][2] + \
+#                        tpc_centers[tile_indeces[tile][1]][0]
+#                    y += tile_positions[tile][1] + \
+#                        tpc_centers[tile_indeces[tile][1]][1]
+#    
+#                    self._pixel_xy[([io_group], [io_channel], [chip], [channel])] = np.array([x, y])

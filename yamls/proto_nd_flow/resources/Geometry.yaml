@@ -3,7 +3,7 @@ path: proto_nd_flow.resources.geometry
 params:
   path: 'geometry_info'
   det_geometry_file: 'data/proto_nd_flow/2x2.yaml'
-  crs_geometry_file: 'data/proto_nd_flow/multi_tile_layout-3.0.40.yaml'
+  crs_geometry_file: 'data/proto_nd_flow/multi_tile_layout-2.3.16.yaml'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/multi_tile_layout-2.2.16.yaml
   lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-0.0.0.yaml'
   # download link: -
