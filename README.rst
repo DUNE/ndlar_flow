@@ -443,7 +443,7 @@ underlying ``h5py.File``::
 But when using multiple arguments, it will load references::
 
     # again lets get the first 1000 charge events
-    charge_events = dm['charge/events/data', sel]
+    charge_events = dm['charge/events', sel]
     # (event index,)
 
     # and now we use the fancy access method
