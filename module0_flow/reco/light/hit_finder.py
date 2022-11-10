@@ -240,9 +240,29 @@ class WaveformHitFinder(H5FlowStage):
             hit_data['det'] = wvfm_det[peaks[:3]].ravel()
             hit_data['ns'] = wvfm_align['ns'][peaks[0]].ravel()
             hit_data['sample_idx'] = peaks[-1].ravel() + 1
-            hit_data['busy_ns'] = (peaks[-1] + 1 - wvfm_align['sample_idx'][peaks[:3]]).ravel() * self.sample_rate
-            hit_data['samples'] = peak_samples.reshape(
-                -1, 2 * self.near_samples + 1)
+
+            # =================================================================
+            # 2022-05-17 kvtsang
+            # -----------------------------------------------------------------
+            # The original version was designed for swvfm/alignment, which 
+            # assumes a shape of (n_batch, n_tpc, n_ch)
+            #
+            # For deconv/alignment, shape = (n_batch, n_tpc)
+            # Here is a simple fix to expand the dim 
+            # =================================================================
+            align_sample_idx = wvfm_align['sample_idx']
+            if align_sample_idx.ndim == 2:
+                target_shape = wvfms.shape[:-1] #(n_batch, n_tpc, n_ch)
+                n_ch = target_shape[-1]
+                align_sample_idx = np.reshape(
+                    np.repeat(align_sample_idx, n_ch), target_shape
+                )
+
+            hit_data['busy_ns'] = (
+                (peaks[-1] + 1 - align_sample_idx[peaks[:3]]).ravel() 
+                * self.sample_rate
+            )
+            hit_data['samples'] = peak_samples.reshape(-1, 2 * self.near_samples + 1)
             hit_data['sum'] = peak_sum.ravel()
             hit_data['max'] = peak_max.ravel()
             hit_data['sum_spline'] = peak_sum_spline.ravel()
