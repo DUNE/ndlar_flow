@@ -77,7 +77,7 @@ def light_reco_file(light_event_built_file, light_noise_file, light_signal_file,
                light_event_built_file,
                verbose=2,
                start_position=0,
-               end_position=1000)
+               end_position=200)
 
     check_dsets(tmp_h5_file, (
         'light/hits/data',
@@ -96,7 +96,7 @@ def light_reco_wvfm_file(light_event_built_file, light_noise_file, light_signal_
                light_event_built_file,
                verbose=2,
                start_position=0,
-               end_position=1000)
+               end_position=200)
 
     check_dsets(tmp_h5_file, (
         'light/hits/data',

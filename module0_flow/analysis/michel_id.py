@@ -165,7 +165,7 @@ class MichelID(H5FlowStage):
         if len(ev):
             # load hit xyz positions
             hit_drift = cache[self.drift_dset_name].reshape(hits.shape)
-            hit_q = cache[self.charge_dset_name].reshape(hits.shape)        
+            hit_q = cache[self.charge_dset_name].reshape(hits.shape)['q']
             hit_prof = cache[self.hit_prof_dset_name].reshape(hits.shape)
             hit_prof.mask = hit_prof.mask['idx'] | (hit_prof['idx'] == -1) # ignore non-profiled hits
             hit_prof_idx = hit_prof['idx']
@@ -275,8 +275,7 @@ class MichelID(H5FlowStage):
                 self.michel_likelihood_args[1] = bkg
 
             # use michel tag to reconstruct energy
-            hit_q = self.larpix_gain * hits_q
-            hit_e = hit_q * resources['LArData'].ionization_w * self.recomb_factor
+            hit_e = hit_q * resources['LArData'].ionization_w * self.recomb_factor * self.larpix_gain
             michel_tagged_e = (((hit_score > 0) & ~muon_flag) * hit_e).sum(axis=-1)
             michel_e = (hit_e * ~muon_flag).sum(axis=-1)
 

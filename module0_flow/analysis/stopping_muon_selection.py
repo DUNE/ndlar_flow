@@ -852,7 +852,7 @@ class StoppingMuonSelection(H5FlowStage):
 
         if events.shape[0]:
             # calculate hit positions and charge
-            hit_q = self.larpix_gain * q # convert mV -> ke
+            hit_q = self.larpix_gain * q['q'] # convert mV -> ke
             # filter out bad channel ids            
             hit_mask = (hits['px'] != 0.0) & (hits['py'] != 0.0) & ~hit_q.mask & ~hit_drift['t_drift'].mask            
             hit_q.mask = hit_q.mask | ~hit_mask

@@ -246,7 +246,7 @@ class TrackletMerger(H5FlowStage):
             # recalculate track parameters
             calc_shape = (track_grp_id.shape[0], -1)
             merged_tracks = TrackletReconstruction.calc_tracks(
-                track_grp_hits.reshape(calc_shape), track_grp_hit_q.reshape(calc_shape), track_grp_hit_drift['z'].reshape(calc_shape),
+                track_grp_hits.reshape(calc_shape), track_grp_hit_q['q'].reshape(calc_shape), track_grp_hit_drift['z'].reshape(calc_shape),
                 track_grp_id.reshape(calc_shape), self.trajectory_pts,
                 self.trajectory_dx)
         else:
