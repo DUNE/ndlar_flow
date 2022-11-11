@@ -170,10 +170,13 @@ def triplet_response_sim_256_file(pytestconfig, tmp_path_factory):
 
 @pytest.fixture
 def time_dependent_gain_file(pytestconfig, tmp_path_factory):
-    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
-                                     ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0/merged/reco_data/'
-                                      'module0_time_dependent_gain_v0.npz')))
+    rv = next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                   ('https://portal.nersc.gov/project/dune/'
+                                    'data/Module0/merged/reco_data/'
+                                    'module0_time_dependent_gain_v0.npz')))
+    if not os.path.exists('h5flow_data/module0_time_dependent_gain.npz'):
+        os.rename(rv, 'h5flow_data/module0_time_dependent_gain.npz')
+    return 'h5flow_data/module0_time_dependent_gain.npz'
 
 
 @pytest.fixture
