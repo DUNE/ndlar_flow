@@ -168,7 +168,15 @@ def triplet_response_sim_256_file(pytestconfig, tmp_path_factory):
     return rv
 
 
-@ pytest.fixture
+@pytest.fixture
+def time_dependent_gain_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/merged/reco_data/'
+                                      'module0_time_dependent_gain_v0.npz')))
+
+
+@pytest.fixture
 def proton_range_table(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
@@ -176,7 +184,7 @@ def proton_range_table(pytestconfig, tmp_path_factory):
                                       'NIST_proton_range_table_Ar.txt')))
 
 
-@ pytest.fixture
+@pytest.fixture
 def electron_lifetime_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
@@ -184,7 +192,7 @@ def electron_lifetime_file(pytestconfig, tmp_path_factory):
                                       'ElecLifetimeFit_Module0.npz')))
 
 
-@ pytest.fixture
+@pytest.fixture
 def muon_range_table(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'

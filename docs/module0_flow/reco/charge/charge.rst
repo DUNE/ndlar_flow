@@ -44,6 +44,14 @@ external trigger finder
    :members:
    :show-inheritance:
 
+time dependent gain calibration
+-------------------------------
+
+.. autoapimodule:: module0_flow.reco.charge.time_dependent_gain
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
 event builder
 -------------
 

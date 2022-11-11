@@ -1,0 +1,8 @@
+classname: TimeDependentGain
+path: module0_flow.reco.charge.time_dependent_gain
+requires:                                                                          
+  - 'charge/hits'
+params:
+  hits_dset_name: 'charge/hits'
+  calib_dset_name: 'charge/q_calib_tdg'
+  gain_file: 'module0_time_dependent_gain.npz'
