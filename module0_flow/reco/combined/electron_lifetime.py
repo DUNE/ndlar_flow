@@ -313,7 +313,7 @@ class ElectronLifetimeCalib(H5FlowStage):
             v_drift = resources['LArData'].v_drift
             electron_lifetime = resources['LArData'].electron_lifetime(events['unix_ts'])[0]
             tpc_regions = np.array(resources['Geometry'].regions)
-            max_drift = np.max(np.abs(np.diff(tpc_regions, axis=1))[:,2])
+            max_drift = np.max(np.abs(np.diff(tpc_regions, axis=1))[:,:,2])
             max_drift = max_drift * 1.02
             # allows a small fudge factor near the cathode to apply the correct calibration
             # even if hits are slightly late (i.e. in the case of multiple self-triggers on
