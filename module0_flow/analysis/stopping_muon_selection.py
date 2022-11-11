@@ -54,6 +54,7 @@ class StoppingMuonSelection(H5FlowStage):
         density_dx_correction_params=[0.78497819, -3.41826874, 198.93022888],
 
         hits_dset_name='charge/hits',
+        charge_dset_name='combined/q_calib_el',
         merged_dset_name='combined/tracklets/merged',
         t0_dset_name='combined/t0',
         hit_drift_dset_name='combined/hit_drift',
@@ -843,16 +844,15 @@ class StoppingMuonSelection(H5FlowStage):
         super(StoppingMuonSelection, self).run(source_name, source_slice, cache)
         events = cache[source_name]
         hits = ma.array(cache[self.hits_dset_name], shrink=False)
+        q = ma.array(cache[self.charge_dset_name], shrink=False)
+        q = q.reshape(hits.shape)
         tracks = ma.array(cache[self.merged_dset_name], shrink=False)
         t0 = cache[self.t0_dset_name].reshape(cache[source_name].shape)
         hit_drift = ma.array(cache[self.hit_drift_dset_name].reshape(hits.shape), shrink=False)
 
         if events.shape[0]:
-
             # calculate hit positions and charge
-            lifetime = resources['LArData'].electron_lifetime(events['unix_ts'].astype(float))[0]
-            lifetime = lifetime[..., np.newaxis]
-            hit_q = self.larpix_gain * hits['q'] / np.exp(-hit_drift['t_drift'] * resources['RunData'].crs_ticks / lifetime)  # convert mV -> ke
+            hit_q = self.larpix_gain * q # convert mV -> ke
             # filter out bad channel ids            
             hit_mask = (hits['px'] != 0.0) & (hits['py'] != 0.0) & ~hit_q.mask & ~hit_drift['t_drift'].mask            
             hit_q.mask = hit_q.mask | ~hit_mask
@@ -923,7 +923,7 @@ class StoppingMuonSelection(H5FlowStage):
             hit_in_fid = resources['Geometry'].in_fid(
                 hit_xyz.reshape(-1, 3), cathode_fid=0, field_cage_fid=0, anode_fid=0).reshape(hit_xyz.shape[:-1])
             hit_in_veto = (~hit_in_fid & ~hits.mask['id'])
-            veto_q = np.sum(hits['q'] * self.larpix_gain * hit_in_veto, axis=-1)
+            veto_q = np.sum(hit_q * hit_in_veto, axis=-1)
 
             active_proj_length = self.extrapolated_intersection(tracks.ravel()['trajectory'][..., -2, :], tracks.ravel()['trajectory'][..., -1, :])
             active_proj_length = active_proj_length.reshape(tracks.shape)
