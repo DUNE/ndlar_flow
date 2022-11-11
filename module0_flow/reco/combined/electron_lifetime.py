@@ -322,7 +322,7 @@ class ElectronLifetimeCalib(H5FlowStage):
             f = np.where(
                 (drift['t_drift'] >= 0) & (drift['t_drift'] * tick_size * v_drift <= max_drift),
                 np.exp((drift['t_drift'] * tick_size) / electron_lifetime[:,np.newaxis]),
-                1)[:,np.newaxis]
+                1)
             q = f * q
 
             # save data
