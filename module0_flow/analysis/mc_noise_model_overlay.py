@@ -11,7 +11,7 @@ class MCNoiseModelOverlay(H5FlowStage):
 
     Only runs on simulation.
 
-    Note that only data in the cache is modified, so changes are not propogated to the output file.
+    Note that ``save_result == False`` only data in the cache is modified, so changes are not propogated to the output file.
 
     Requires ``RunData`` resource.
 
@@ -22,8 +22,15 @@ class MCNoiseModelOverlay(H5FlowStage):
         path: module0_flow.analysis.mc_noise_model_overlay
         requires:
           - 'charge/hits' # should mimic description used by downstream stages
+          - name: 'charge/hits_idx' # optional, only required if save_result == True
+            path: ['charge/hits']
+            index_only: True
         params:
           hits_name: 'charge/hits'
+          hit_charge_name: 'charge/hits' # dataset to grab 'q' from
+          hits_idx_name: 'charge/hits_idx' # optional, only required if save_result == True
+          smear_name: 'charge/hits_q_smear' # optional, only required if save_result == True
+          save_result: False
           model_params:
             medm:
               type: 'scale_plus_binomial_noise'
@@ -37,7 +44,11 @@ class MCNoiseModelOverlay(H5FlowStage):
     '''
     class_version = '0.0.0'
     defaults = dict(
+        save_result = False,
         hits_name = 'charge/hits',
+        hit_charge_name = 'charge/hits',
+        hits_idx_name = 'charge/hits_idx',
+        smear_name = 'charge/hit_q_smear',
         model_params = dict(
             type = 'scale_plus_binomial_noise',
             scale_factor = 1.,
@@ -49,6 +60,8 @@ class MCNoiseModelOverlay(H5FlowStage):
             )
         )
 
+    smear_dtype = np.dtype('f4')
+
     def __init__(self, **params):
         super(MCNoiseModelOverlay, self).__init__(**params)
         self.is_mc = False
@@ -58,6 +71,11 @@ class MCNoiseModelOverlay(H5FlowStage):
     def init(self, source_name):
         super(MCNoiseModelOverlay, self).init(source_name)
         self.is_mc = resources['RunData'].is_mc
+
+        if self.save_result:
+            self.data_manager.create_dset(self.smear_name, dtype=self.smear_dtype)
+            self.data_manager.create_ref(self.hits_name, self.smear_name)
+        
         if not self.is_mc:
             return
 
@@ -122,10 +140,11 @@ class MCNoiseModelOverlay(H5FlowStage):
 
     def run(self, source_name, source_slice, cache):
         super(MCNoiseModelOverlay, self).run(source_name, source_slice, cache)
-        if not self.is_mc:
+        if not self.is_mc and not self.save_result:
             return
-        
+
         hits = cache[self.hits_name]
+        hit_q = cache[self.hit_charge_name]
 
         # get unique identifier
         unique_id = (((hits['iogroup'].astype(int) * 100
@@ -133,7 +152,15 @@ class MCNoiseModelOverlay(H5FlowStage):
                       + hits['chipid'].astype(int)) * 100
                      + hits['channelid'].astype(int))
 
-        smeared_q = getattr(self, self.model_params['type'])(hits['q'].ravel(), unique_id.ravel(), **self.model_params)
-        hits['q'] = smeared_q.reshape(hits['q'].shape)
+        smeared_q = getattr(self, self.model_params['type'])(hit_q['q'].ravel(), unique_id.ravel(), **self.model_params)
 
-        cache[self.hits_name] = hits
+        if self.is_mc:
+            hit_q['q'] = smeared_q.reshape(hit_q.shape)
+            cache[self.hit_charge_name] = hit_q
+
+        if self.save_result:
+            hits_idx = cache[self.hits_idx_name].reshape(hits.shape)
+
+            self.data_manager.reserve_data(self.smear_name, hits_idx.compressed())
+            self.data_manager.write_data(self.smear_name, hits_idx.compressed(), smeared_q.ravel()[~hits_idx.mask])
+            self.data_manager.write_ref(self.hits_name, self.smear_name, np.c_[(hits_idx.compressed(),)*2])

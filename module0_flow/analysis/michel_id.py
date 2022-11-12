@@ -58,6 +58,7 @@ class MichelID(H5FlowStage):
 
     defaults = dict(
         hits_dset_name='charge/hits',
+        charge_dset_name='charge/hits',
         drift_dset_name='combined/hit_drift',
         profile_dset_name='analysis/stopping_muons/event_profile',
         stopping_sel_dset_name='analysis/stopping_muons/event_sel_reco',
@@ -164,6 +165,7 @@ class MichelID(H5FlowStage):
         if len(ev):
             # load hit xyz positions
             hit_drift = cache[self.drift_dset_name].reshape(hits.shape)
+            hit_q = cache[self.charge_dset_name].reshape(hits.shape)['q']
             hit_prof = cache[self.hit_prof_dset_name].reshape(hits.shape)
             hit_prof.mask = hit_prof.mask['idx'] | (hit_prof['idx'] == -1) # ignore non-profiled hits
             hit_prof_idx = hit_prof['idx']
@@ -181,7 +183,7 @@ class MichelID(H5FlowStage):
             #mu_end = stopping_sel['stop_pt'] + stopping_sel['stop_pt_corr']
             hit_stop_d = np.linalg.norm(hit_xyz - (stopping_sel['stop_pt'] + stopping_sel['stop_pt_corr'])[...,np.newaxis,:], axis=-1)
             mu_end = np.take_along_axis(
-                hit_xyz, np.expand_dims(np.argmax(hits['q'] * (hit_stop_d < 22), axis=-1), (1,2)), axis=1)
+                hit_xyz, np.expand_dims(np.argmax(hit_q * (hit_stop_d < 22), axis=-1), (1,2)), axis=1)
             mu_end = mu_end.reshape(ev.shape + (3,))
             no_near_hits_mask = ~((hit_stop_d < 22).any(axis=-1))
             mu_end[no_near_hits_mask] = (stopping_sel['stop_pt'] + stopping_sel['stop_pt_corr'])[no_near_hits_mask]
@@ -220,9 +222,9 @@ class MichelID(H5FlowStage):
             muon_range_mask = np.broadcast_to(np.expand_dims(muon_flag & (hit_d < 200), axis=-1), hit_xyz.shape)
             michel_range_mask = np.broadcast_to(np.expand_dims((hit_prof_rr < 0) & (hit_d < 200), axis=-1), hit_xyz.shape)
             
-            michel_dir = ma.average(ma.array(hit_dr, mask=~michel_range_mask), weights=np.broadcast_to(hits['q'][...,np.newaxis], hit_dr.shape), axis=1)
+            michel_dir = ma.average(ma.array(hit_dr, mask=~michel_range_mask), weights=np.broadcast_to(hit_q[...,np.newaxis], hit_dr.shape), axis=1)
             michel_dir /= np.clip(np.linalg.norm(michel_dir, axis=-1, keepdims=True), 1e-15, None)
-            mu_dir = ma.average(ma.array(hit_dr, mask=~muon_range_mask), weights=np.broadcast_to(hits['q'][...,np.newaxis], hit_dr.shape), axis=1)
+            mu_dir = ma.average(ma.array(hit_dr, mask=~muon_range_mask), weights=np.broadcast_to(hit_q[...,np.newaxis], hit_dr.shape), axis=1)
             mu_dir /= np.clip(np.linalg.norm(mu_dir, axis=-1, keepdims=True), 1e-15, None)
 
             # special case: michel start and end are the same, and no non-profiled hits (will call all of these non-michel hits)
@@ -273,10 +275,7 @@ class MichelID(H5FlowStage):
                 self.michel_likelihood_args[1] = bkg
 
             # use michel tag to reconstruct energy
-            lifetime = resources['LArData'].electron_lifetime(ev['unix_ts'].astype(float))[0]
-            lifetime = lifetime[..., np.newaxis]
-            hit_q = self.larpix_gain * hits['q'] / np.exp(-hit_drift['t_drift'] * resources['RunData'].crs_ticks / lifetime)
-            hit_e = hit_q * resources['LArData'].ionization_w * self.recomb_factor
+            hit_e = hit_q * resources['LArData'].ionization_w * self.recomb_factor * self.larpix_gain
             michel_tagged_e = (((hit_score > 0) & ~muon_flag) * hit_e).sum(axis=-1)
             michel_e = (hit_e * ~muon_flag).sum(axis=-1)
 

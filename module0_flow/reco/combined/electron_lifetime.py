@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.ma as ma
 import scipy.optimize as optimize
 import scipy.stats as stats
 import scipy.interpolate as interpolate
@@ -21,6 +22,7 @@ class ElectronLifetimeCalib(H5FlowStage):
 
         Parameters:
          - ``hits_dset_name``: ``str``, path to input hits dataset
+         - ``charge_dset_name``: ``str``, path to input charge dataset (must have ``"q"`` field and be 1:1 with hits dataset)
          - ``drift_dset_name``: ``str``, path to input drift dataset
          - ``mode``: ``str``, one of "generate" or "calibration"
          - ``electron_lifetime_file``: ``str``, path to .npz file to update with new electron lifetime values (only applies to "generate" mode), will name with the measured unix timestamp
@@ -82,6 +84,7 @@ class ElectronLifetimeCalib(H5FlowStage):
     DX = 30 # mm
 
     default_hits_dset_name = 'charge/hits'
+    default_charge_dset_name = 'charge/hits'    
     default_drift_dset_name = 'combined/hit_drift'
     default_calib_dset_name = 'combined/q_calib'
     default_tracks_dset_name = 'combined/tracklets'
@@ -95,6 +98,7 @@ class ElectronLifetimeCalib(H5FlowStage):
         # set up dataset names
         self.drift_dset_name = params.get('drift_dset_name', self.default_drift_dset_name)
         self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
+        self.charge_dset_name = params.get('charge_dset_name', self.default_charge_dset_name)
         self.tracks_dset_name = params.get('tracks_dset_name', self.default_tracks_dset_name)
         self.calib_dset_name = params.get('calib_dset_name', self.default_calib_dset_name)
 
@@ -133,6 +137,7 @@ class ElectronLifetimeCalib(H5FlowStage):
                                         class_version=self.class_version,
                                         source_dset=source_name,
                                         hits_dset=self.hits_dset_name,
+                                        charge_dset=self.charge_dset_name,
                                         drift_dset=self.drift_dset_name,
                                         mode=self.mode)
 
@@ -290,7 +295,9 @@ class ElectronLifetimeCalib(H5FlowStage):
         # fetch data
         events = cache[source_name]
         hits = cache[self.hits_dset_name]
-        drift = cache[self.drift_dset_name]        
+        q = cache[self.charge_dset_name]['q']
+        q = q.reshape(hits.shape)
+        drift = cache[self.drift_dset_name]
         drift = drift.reshape(hits.shape)
         tick_size = resources['RunData'].crs_ticks
 
@@ -304,14 +311,29 @@ class ElectronLifetimeCalib(H5FlowStage):
         
         # apply calibration to hits
         if self.mode == self.CALIBRATE:
-            f = np.exp((drift['t_drift'] * tick_size) / (resources['LArData'].electron_lifetime(events['unix_ts'])[0])[:,np.newaxis])
-            q = f * hits['q']
+            v_drift = resources['LArData'].v_drift
+            electron_lifetime = resources['LArData'].electron_lifetime(events['unix_ts'])[0]
+            tpc_regions = np.array(resources['Geometry'].regions)
+            max_drift = np.max(np.abs(np.diff(tpc_regions, axis=1))[:,:,2])
+            max_drift = max_drift * 1.02
+            # allows a small fudge factor near the cathode to apply the correct calibration
+            # even if hits are slightly late (i.e. in the case of multiple self-triggers on
+            # a channel from a track crossing the cathode)
 
+            f = ma.masked_where(
+                drift['t_drift'].mask,
+                np.where(
+                    (drift['t_drift'] >= 0) & (drift['t_drift'] * tick_size * v_drift <= max_drift),
+                    np.exp((drift['t_drift'] * tick_size) / electron_lifetime[:,np.newaxis]),
+                    1)
+                )
+            q = f * q
+
+            # save data
             calib_array = np.empty(hits['id'].compressed().shape, dtype=self.calib_dtype)
             calib_array['q'] = q.compressed()
             calib_array['f'] = f.compressed()
 
-            # save data
             calib_slice = self.data_manager.reserve_data(self.calib_dset_name, len(calib_array))
             calib_array['id'] = np.r_[calib_slice]
             self.data_manager.write_data(self.calib_dset_name, calib_slice, calib_array)
@@ -352,7 +374,7 @@ class ElectronLifetimeCalib(H5FlowStage):
             s_bins,dx = np.linspace(0, max_length, int(np.ceil(max_length/self.DX))+1, retstep=True)
             
             dq = np.histogramdd((i_track.ravel(), hit_s.ravel()),
-                                weights=(hits['q'] * hit_mask).ravel(),
+                                weights=(q * hit_mask).ravel(),
                                 bins=(np.arange(i_track[-1,-1] + 2), s_bins))[0]
             t_drift = np.histogramdd((i_track.ravel(), hit_s.ravel()),
                                      weights=(drift['t_drift'] * hit_mask * tick_size).ravel(),
