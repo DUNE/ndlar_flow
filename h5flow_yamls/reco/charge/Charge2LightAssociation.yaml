@@ -13,3 +13,5 @@ params:
   # configuration parameters
   unix_ts_window: 3
   ts_window: 10
+
+  allow_matching_without_marker: True
