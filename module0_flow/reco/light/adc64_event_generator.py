@@ -12,8 +12,9 @@ import adc64format
 
 class LightADC64EventGenerator(H5FlowGenerator):
     '''
-        Light system event builder - converts multiple hdf5-formatted light files to an event-packed
-        h5flow-readable format. Identifies SYNC events to 
+        Light system event builder - converts multiple ADC64-formatted light files to an event-packed
+        h5flow-readable format. Uses the ``adc64format`` library to synchronize and align the
+        events in multiple files.
 
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, path to dataset to store raw waveforms
