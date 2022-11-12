@@ -40,12 +40,15 @@ class Charge2LightAssociation(H5FlowStage):
             ext_trigs_dset_name: 'charge/ext_trigs'
             unix_ts_window: 3
             ts_window: 10
+            allow_matching_without_marker: False # allows for matches against the event start time (as well as external triggers)
 
     '''
-    class_version = '0.0.1'
+    class_version = '0.0.2'
 
     default_unix_ts_window = 1  # how big of a symmetric window to use with unix timestamps (0=exact match, 1=±1 second, ...) [s]
     default_ts_window = 1000  # how big of a symmetric window to use with PPS timestamps (0=exact match, 10=±10 ticks, ...) [ticks]
+
+    default_allow_matching_without_marker = False
 
     def __init__(self, **params):
         super(Charge2LightAssociation, self).__init__(**params)
@@ -57,6 +60,8 @@ class Charge2LightAssociation(H5FlowStage):
         self.unix_ts_window = params.get('unix_ts_window', self.default_unix_ts_window)
         self.ts_window = params.get('ts_window', self.default_ts_window)
 
+        self.allow_matching_without_marker = params.get('allow_matching_without_marker', self.default_allow_matching_without_marker)
+
     def init(self, source_name):
         super(Charge2LightAssociation, self).init(source_name)
 
@@ -67,7 +72,8 @@ class Charge2LightAssociation(H5FlowStage):
                                     charge_to_light_assoc_class_version=self.class_version,
                                     light_event_dset=self.light_event_dset_name,
                                     charge_to_light_assoc_unix_ts_window=self.unix_ts_window,
-                                    charge_to_light_assoc_ts_window=self.ts_window
+                                    charge_to_light_assoc_ts_window=self.ts_window,
+                                    allow_matching_without_marker=self.allow_matching_without_marker
                                     )
 
         # then set up new datasets
@@ -87,59 +93,68 @@ class Charge2LightAssociation(H5FlowStage):
         self.light_unix_ts_start = self.light_unix_ts.min()
         self.light_unix_ts_end = self.light_unix_ts.max()
 
+    def match_on_timestamp(self, charge_unix_ts, charge_pps_ts):
+        unix_ts_start = charge_unix_ts.min()
+        unix_ts_end = charge_unix_ts.max()
+
+        if self.light_unix_ts_start >= unix_ts_end + self.unix_ts_window or \
+           self.light_unix_ts_end <= unix_ts_start - self.unix_ts_window:
+            # no overlap, short circuit
+            return np.empty((0, 2), dtype=int)
+
+        # subselect only portion of light events that overlaps with timestamps
+        i_min = np.argmax((self.light_unix_ts >= unix_ts_start - self.unix_ts_window))
+        i_max = len(self.light_unix_ts) - 1 - np.argmax((self.light_unix_ts <= unix_ts_end + self.unix_ts_window)[::-1])
+        sl = slice(i_min, i_max)
+
+        assoc_mat = (np.abs(self.light_unix_ts[sl].reshape(1, -1) - charge_unix_ts.reshape(-1, 1)) <= self.unix_ts_window) \
+                     & (np.abs(self.light_ts[sl].reshape(1, -1) - charge_ts.reshape(-1, 1)) <= self.ts_window)
+        idcs = np.argwhere(assoc_mat)
+
+        if len(idcs):
+            idcs[:, 1] = self.light_event_id[sl][idcs[:, 1]]  # idcs now contains ext trigger index <-> global light event id
+        else:
+            idcs = np.empty((0,2), dtype=int)
+
+        return idcs
+        
+
     def run(self, source_name, source_slice, cache):
         super(Charge2LightAssociation, self).run(source_name, source_slice, cache)
 
         event_data = cache[self.events_dset_name]
+        ev_id = np.r_[source_slice]
         ext_trigs_data = cache[self.ext_trigs_dset_name]
         ext_trigs_idcs = cache[self.ext_trigs_dset_name + '_idcs']
-        ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
 
         nevents = len(event_data)
+        ext_trig_ref = np.empty((0,2), dtype=int)
+        ev_ref = np.empty((0, 2), dtype=int)        
 
-        lengths = np.count_nonzero(ext_trigs_mask, axis=-1)
-        ext_trigs_all = ext_trigs_data.data[ext_trigs_mask]
-        ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
-        ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1, 1), ext_trigs_data.shape)[ext_trigs_mask]
-
-        if nevents and len(ext_trigs_all):
-            unix_ts_start = ext_trigs_unix_ts.min()
-            unix_ts_end = ext_trigs_unix_ts.max()
-
-            if self.light_unix_ts_start >= unix_ts_end + self.unix_ts_window or \
-                    self.light_unix_ts_end <= unix_ts_start - self.unix_ts_window:
-                # no overlap, short circuit
-                idcs = np.empty((0, 2), dtype=int)
-
-            else:
-                # find relevant region of light array
-                i_min = np.argmax((self.light_unix_ts >= unix_ts_start - self.unix_ts_window))
-                i_max = len(self.light_unix_ts) - 1 - np.argmax((self.light_unix_ts <= unix_ts_end + self.unix_ts_window)[::-1])
-                sl = slice(i_min, i_max)
-
-                # perform matching
-                charge_unix_ts = ext_trigs_unix_ts.astype(int)
-                charge_ts = ext_trigs_all['ts']
-
-                assoc_mat = \
-                    (np.abs(self.light_unix_ts[sl].reshape(1, -1) - charge_unix_ts.reshape(-1, 1)) <= self.unix_ts_window) \
-                    & (np.abs(self.light_ts[sl].reshape(1, -1) - charge_ts.reshape(-1, 1)) <= self.ts_window)
-                idcs = np.argwhere(assoc_mat)
+        # check match on external triggers
+        if nevents:
+            ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
+            if np.any(ext_trigs_mask):
+                ext_trigs_all = ext_trigs_data.data[ext_trigs_mask]
+                ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
+                ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1, 1), ext_trigs_data.shape)[ext_trigs_mask]
+                ext_trigs_ts = ext_trigs_all['ts']
+            
+                idcs = self.match_on_timestamp(ext_trigs_unix_ts, ext_trigs_ts)
 
                 if len(idcs):
-                    idcs[:, 1] = self.light_event_id[sl][idcs[:, 1]]  # idcs now contains ext trigger index <-> global light event id
-        else:
-            idcs = np.empty((0, 2), dtype=int)
+                    ext_trig_ref = np.append(ext_trig_ref, np.c_[ext_trigs_idcs[idcs[:, 0]], idcs[:, 1]])
+                    ev_ref = np.unique(np.append(ev_ref, np.c_[ev_id[ext_trigs_mask][idcs[:, 0]], idcs[:, 1]]), axis=0)
 
-        ext_trig_ref = np.c_[ext_trigs_idcs[idcs[:, 0]], idcs[:, 1]]
+        # check match on first hit timestamp
+        if nevents and self.allow_matching_without_marker:
+            ev_unix_ts = event_data['unix_ts']
+            ev_ts = event_data['ts_start']
 
-        ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1, 1)
-        ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
+            idcs = self.match_on_timestamp(ext_unix_ts, ev_ts)
 
-        if len(idcs):
-            ev_ref = np.unique(np.c_[ev_id[ext_trigs_mask][idcs[:, 0]], idcs[:, 1]], axis=0)
-        else:
-            ev_ref = np.empty((0, 2), dtype=int)
+            if len(idcs):
+                ev_ref = np.unique(np.append(ev_ref, np.c_[ev_id[idcs[:, 0]], idcs[:, 1]]), axis=0)
 
         # write references
         # ext trig -> light event
