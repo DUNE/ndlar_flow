@@ -1,0 +1,10 @@
+classname: T0Reconstruction
+path: module0_flow.reco.combined.t0_reco
+requires:
+  - 'charge/ext_trigs'
+params:
+  # input
+  ext_trigs_dset_name: 'charge/ext_trigs'
+
+  # output
+  t0_dset_name: 'combined/t0'

@@ -1,0 +1,14 @@
+# Generates associations between charge events and light events
+
+flow:
+  source: 'charge/events'
+  stages: [charge_light_associator]
+  drop: []
+
+
+resources:
+  - !include h5flow_yamls/resources/RunData.yaml
+
+
+charge_light_associator:
+  !include h5flow_yamls/reco/charge/Charge2LightAssociation.yaml

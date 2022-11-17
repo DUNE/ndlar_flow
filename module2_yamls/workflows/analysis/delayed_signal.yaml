@@ -1,0 +1,51 @@
+# Performs delayed signal selection on light signals
+
+flow:
+  source: events
+  stages: [delayed_analysis]
+  #drop: [
+  #  'charge/hits', 'charge/packets', 'charge/packets_corr_ts',
+  #  'light/hits','light/swvfm','light/t_ns',
+  #  'combined/hit_drift']
+
+
+resources:
+ - !include h5flow_yamls/resources/RunData.yaml
+ - !include h5flow_yamls/resources/Geometry.yaml
+
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 32
+
+
+delayed_analysis:
+  classname: DelayedSignal
+  path: module0_flow.analysis.delayed_signal
+  requires:
+    - 'charge/hits'
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
+    - name: 'analysis/michel_id/hit_label'
+      path: ['charge/hits', 'analysis/michel_id/hit_michel_label']
+    - 'analysis/michel_id/michel_label'
+    - 'analysis/stopping_muons/event_sel_reco'
+    - name: 'light/swvfm'
+      path: ['light/events', 'light/swvfm']
+    - name: 'light/swvfm/alignment'
+      path: ['light/events', 'light/swvfm/alignment']
+      
+  params:
+    noise_factor: 1
+    noise:
+      # For LED integral calibration, scale factor noise_factor = 1) [units: PE/tick]
+      - [0.1843, 0.6726, 0.6582, 0.4691, 0.1706, 0.6973, 0.6832, 0.6595, 1.0e+9, 0.5497, 0.5045, 0.6269, 0.2046, 0.7337, 0.5579, 0.5313, ]
+      - [0.1514, 0.5406, 0.5690, 0.3926, 0.2475, 0.5500, 0.5433, 0.5298, 0.0144, 0.5744, 0.5187, 0.5483, 0.1765, 0.5163, 0.5358, 0.5811, ]
+
+      # For charge amplitude calibration, scale factor noise_factor = 1/3) [units: keV]
+      #- [605.2062, 136.5390, 167.1929, 189.0789, 600.7896, 140.3284, 165.0596, 182.7784, 555.9109, 218.7787, 394.6519, 129.7704, 531.8600, 136.5708, 177.3912, 338.6423]
+      #- [513.9062, 148.8334, 170.2456, 145.7354, 432.4131, 138.3909, 194.3165, 171.2630, 1.000e+9, 137.1913, 173.1882, 148.2387, 435.9421, 179.9740, 228.2152, 157.5978]
+

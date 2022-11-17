@@ -1,0 +1,16 @@
+# Generates the low-level event built data for charge data (i.e. grouped
+# packets)
+
+flow:
+  source: raw_event_generator
+  stages: [] # just generate events, no analysis stages
+  drop: []
+
+
+resources:
+  - !include h5flow_yamls/resources/RunData.yaml
+
+
+raw_event_generator: # groups time-sorted data packets from larpix datalog files
+  !include h5flow_yamls/reco/charge/RawEventGenerator.yaml
+

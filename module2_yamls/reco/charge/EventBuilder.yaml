@@ -1,0 +1,12 @@
+classname: EventBuilder
+path: module0_flow.reco.charge.event_builder
+requires:
+  - 'charge/hits'
+  - 'charge/ext_trigs'
+params:
+  # inputs
+  hits_dset_name: 'charge/hits'
+  ext_trigs_dset_name: 'charge/ext_trigs'
+
+  # output
+  events_dset_name: 'charge/events'
