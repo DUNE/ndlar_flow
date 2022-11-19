@@ -172,7 +172,7 @@ class DisabledChannels(H5FlowResource):
                         start_io_channel = ((io_channel_-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
                         for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
                             io_group.append(int(io_group_))
-                            io_channel.append(int(io_channel)))
+                            io_channel.append(int(io_channel))
                             chip_id.append(int(chip_id_))
                             channel_id.append(int(ch))
 
