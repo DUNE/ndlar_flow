@@ -13,6 +13,7 @@ params:
   hits_dset_name: 'charge/hits'
 
   # configuration parameters
-  pedestal_file: '/global/cfs/projectdirs/dune/www/data/Module2/flow_configs/h5flow_data/ped-evd-2022_11_18_04_35_CET.json'
+  network_agnostic: True
+  pedestal_file: '/global/cfs/projectdirs/dune/www/data/Module2/flow_configs/ped-evd-2022_11_18_04_35_CET.json'
   configuration_file: '/global/cfs/projectdirs/dune/www/data/Module2/flow_configs/config-evd-2022_11_18_04_35_CET.json'
   # download link: https://portal.nersc.gov/project/dune/global/cfs/projectdirs/dune/www/data/Module2/flow_configs
