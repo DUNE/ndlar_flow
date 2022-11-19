@@ -15,6 +15,4 @@ params:
   # configuration parameters
   pedestal_file: '/global/cfs/projectdirs/dune/www/data/Module2/flow_configs/h5flow_data/ped-evd-2022_11_18_04_35_CET.json'
   configuration_file: '/global/cfs/projectdirs/dune/www/data/Module2/flow_configs/config-evd-2022_11_18_04_35_CET.json'
-
-# download link: https://portal.nersc.gov/project/dune/global/cfs/projectdirs/dune/www/data/Module2/flow_configs
-
+  # download link: https://portal.nersc.gov/project/dune/global/cfs/projectdirs/dune/www/data/Module2/flow_configs

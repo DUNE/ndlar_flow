@@ -472,7 +472,7 @@ class Geometry(H5FlowResource):
                 if self.network_agnostic == True:
                     # if we don't care about the network configuration, then we
                     # can just loop over every N io channels and add them to the LUT
-                    start_io_channel = (io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
+                    start_io_channel = ((io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
                     for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
                         self._tile_id[([io_group], [io_channel])] = tile
                         
@@ -507,6 +507,6 @@ class Geometry(H5FlowResource):
                 if self.network_agnostic == True:
                     # if we don't care about the network configuration, then we
                     # can just loop over every N io channels and add them to the LUT
-                    start_io_channel = (io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
+                    start_io_channel = ((io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
                     for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
                         self._pixel_xy[([io_group], [io_channel], [chip], [channel])] = np.array([x, y])

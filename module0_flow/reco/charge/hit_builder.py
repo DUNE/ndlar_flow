@@ -187,7 +187,7 @@ class HitBuilder(H5FlowStage):
         return dw / 256. * (vref - vcm) + vcm - ped
 
     def unique_id(self, iogroup, iochannel, chipid, channelid):
-        id_ = ((io_group * 256 + iochannel) * 256 + chipid) * 64 + channelid
+        id_ = ((iogroup * 256 + iochannel) * 256 + chipid) * 64 + channelid
         if self.network_agnostic == True:
             return self._remap_unique_id(id_)
         return id_
@@ -195,8 +195,8 @@ class HitBuilder(H5FlowStage):
     def _remap_unique_id(self, unique_id):
         ''' Remaps unique id for being agnostic to the network configuration io channel 1-4 -> 1, 5-8 -> 5, ... '''
         io_channel =  (unique_id // (256 * 64)) % 256
-        io_channel_remap = (io_channel - 1) // self.n_io_channels_per_tile) * self.n_io_channels_per_tile + 1
-        return (unique_id // (256 * 64 * 256)) * 256 + io_channel_remap) * 256 + unique_id % (64 * 256)
+        io_channel_remap = ((io_channel - 1) // self.n_io_channels_per_tile) * self.n_io_channels_per_tile + 1
+        return ((unique_id // (256 * 64 * 256)) * 256 + io_channel_remap) * 256 * 64 + unique_id % (64 * 256)
 
     def load_pedestals(self):
         if self.pedestal_file != '' and not resources['RunData'].is_mc:
