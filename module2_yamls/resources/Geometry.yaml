@@ -2,9 +2,10 @@ classname: Geometry # resources/geometry.py
 path: module0_flow.resources.geometry
 params:
   path: 'geometry_info'
+  network_agnostic: True
   #crs_geometry_file: 'h5flow_data/multi_tile_layout-2.5.16-2.5.1.yaml'
   #crs_geometry_file: 'h5flow_data/multi_tile_layout-2.5.16-2.5.0.yaml'
   #crs_geometry_file: 'h5flow_data/multi_tile_layout-2.5.16-2.5.1-2022_11_16_16_04_CET.yaml'
-  crs_geometry_file: 'h5flow_data/multi_tile_layout-2.5.16-2.5.1-2022_11_16_16_04_CET.yaml'
+  crs_geometry_file: 'h5flow_data/multi_tile_layout-2.5.16.yaml'
   lrs_geometry_file: 'h5flow_data/light_module_desc-0.0.0.yaml'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/light_module_desc-0.0.0.yaml
