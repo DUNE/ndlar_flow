@@ -496,11 +496,13 @@ class Geometry(H5FlowResource):
                 y = chip_channel_to_position[chip_channel][1] * \
                     self.pixel_pitch + self.pixel_pitch / 2 - y_size / 2
 
+                tpc_center = tpc_centers[tile_indeces[tile][0]] if len(tile_indeces[tile]) == 2 else tpc_centers[tile_indeces[tile][1]]
+                
                 x, y = self._rotate_pixel((x, y), tile_orientation)
                 x += tile_positions[tile][2] + \
-                    tpc_centers[tile_indeces[tile][1]][0]
+                    tpc_center[0]
                 y += tile_positions[tile][1] + \
-                    tpc_centers[tile_indeces[tile][1]][1]
+                    tpc_center[1]
 
                 self._pixel_xy[([io_group], [io_channel], [chip], [channel])] = np.array([x, y])
 
