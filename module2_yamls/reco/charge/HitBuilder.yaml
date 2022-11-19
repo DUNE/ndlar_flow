@@ -13,5 +13,7 @@ params:
   hits_dset_name: 'charge/hits'
 
   # configuration parameters
-  pedestal_file: 'h5flow_data/pedestal3_everything_on-packet-2022_11_17_02_06_CET.json'
-  configuration_file: 'h5flow_data/evd_config_21-03-31_12-36-13.json'
+  pedestal_file: 'h5flow_data/h5flow_data/ped-evd-2022_11_18_04_35_CET.json'
+  configuration_file: 'h5flow_data/h5flow_data/config-evd-2022_11_18_04_35_CET.json'
+
+
