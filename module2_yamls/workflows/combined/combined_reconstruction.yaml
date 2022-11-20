@@ -27,7 +27,7 @@ drift_reco:
 
 
 electron_lifetime_corr:
-  !include h5flow_yamls/reco/combined/ElectronLifetimeCalib.yaml
+  !include module2_yamls/reco/combined/ElectronLifetimeCalib.yaml
 
 
 tracklet_reco:

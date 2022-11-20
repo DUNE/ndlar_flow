@@ -4,11 +4,9 @@ requires:
   - name: 'combined/hit_drift'
     path: ['charge/hits', 'combined/hit_drift']
   - 'charge/hits'
-  - name: 'charge/q_calib_tdg'
-    path: ['charge/hits', 'charge/q_calib_tdg']
 params:
   hits_dset_name: 'charge/hits'
-  charge_dset_name: 'charge/q_calib_tdg'
+  charge_dset_name: 'charge/hits'
   drift_dset_name: 'combined/hit_drift'
   calib_dset_name: 'combined/q_calib_el'
   mode: 'calibration'
