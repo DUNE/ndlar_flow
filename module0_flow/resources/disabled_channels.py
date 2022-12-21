@@ -169,8 +169,9 @@ class DisabledChannels(H5FlowResource):
 
                     if resources['Geometry'].network_agnostic == True:
                         # add additional entries for each io channel
-                        start_io_channel = ((io_channel_-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
-                        for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
+                        n_io_channels_per_tile = resources['Geometry'].n_io_channels_per_tile
+                        start_io_channel = ((io_channel_-1)//n_io_channels_per_tile)*n_io_channels_per_tile + 1
+                        for io_channel in range(start_io_channel, start_io_channel+n_io_channels_per_tile):
                             io_group.append(int(io_group_))
                             io_channel.append(int(io_channel))
                             chip_id.append(int(chip_id_))
