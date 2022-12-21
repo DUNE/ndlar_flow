@@ -6,7 +6,7 @@ params:
     charge_filename: '-'
     light_filename: '-'
     e_field: 0.05 # kV/mm
-    light_samples: 256
+    light_samples: 1024
     charge_thresholds: 'medm'
     is_mc: False
     crs_ticks: 0.1 # us
