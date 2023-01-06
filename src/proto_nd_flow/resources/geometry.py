@@ -423,8 +423,6 @@ class Geometry(H5FlowResource):
 
         tile_geometry = {}
 
-        tpc_offsets = det_geometry_yaml['tpc_offsets']
-
         tiles = [tile for tile in geometry_yaml['tile_chip_to_io']]
         io_groups = [
             geometry_yaml['tile_chip_to_io'][tile][chip] // 1000 * (mod-1)*2
@@ -466,8 +464,10 @@ class Geometry(H5FlowResource):
         self._anode_z[(tiles,)] = [tile_positions[tile][0] for tile in tiles]
         self._drift_dir[(tiles,)] = [tile_orientations[tile][0] for tile in tiles]
 
-        for module_id in det_geometry_yaml['module_to_io_groups']:
+        print(mod_centers)
 
+        for module_id in det_geometry_yaml['module_to_io_groups']:
+            print('module_id',module_id)
             for tile in tile_chip_to_io:
                 tile_orientation = tile_orientations[tile]
                 tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
@@ -487,7 +487,7 @@ class Geometry(H5FlowResource):
                     except KeyError:
                         continue
 
-                    io_group = io_group_io_channel // 1000 + (module_id-1)*2
+                    io_group = io_group_io_channel // 1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
                     x = chip_channel_to_position[chip_channel][0] * \
                         self.pixel_pitch - x_size / 2 + self.pixel_pitch / 2
@@ -497,9 +497,9 @@ class Geometry(H5FlowResource):
                     x, y = self._rotate_pixel((x, y), tile_orientation)
                     x += tile_positions[tile][2]
                     y += tile_positions[tile][1]
+                    x += mod_centers[module_id-1][2]*10
+                    y += mod_centers[module_id-1][1]*10
                     self._pixel_xy[(io_group, io_channel, chip, channel)] = x, y
-
-
 
 #
 #            tiles = [tile for tile in geometry_yaml['tile_chip_to_io']]
