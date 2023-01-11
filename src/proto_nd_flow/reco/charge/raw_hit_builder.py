@@ -149,7 +149,7 @@ class RawHitBuilder(H5FlowStage):
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
             print(min(tile_id), max(tile_id))
-            z = resources['Geometry'].anode_z[tile_id]
+            z = resources['Geometry'].anode_z[(tile_id,)]
             #vref = np.array(
             #    [self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
             #vcm = np.array([self.configuration[unique_id]['vcm_mv']
