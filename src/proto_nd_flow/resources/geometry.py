@@ -113,7 +113,8 @@ class Geometry(H5FlowResource):
         lut_size = (self.pixel_xy.nbytes + self.tile_id.nbytes
                     + self.anode_z.nbytes + self.drift_dir.nbytes
                     + self.tpc_id.nbytes + self.det_id.nbytes
-                    + self.det_bounds.nbytes)
+                    + self.det_bounds.nbytes) * 4
+
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
 
@@ -424,7 +425,11 @@ class Geometry(H5FlowResource):
 
         tile_geometry = {}
 
-        tiles = [tile for tile in geometry_yaml['tile_chip_to_io']]
+        tiles = [
+            tile*mod
+			for tile in geometry_yaml['tile_chip_to_io']
+            for mod in det_geometry_yaml['module_to_io_groups']
+        ]
         io_groups = [
             geometry_yaml['tile_chip_to_io'][tile][chip] // 1000 * (mod-1)*2
             for tile in geometry_yaml['tile_chip_to_io']
@@ -458,18 +463,19 @@ class Geometry(H5FlowResource):
         self._pixel_xy = LUT('f4', *pixel_xy_min_max, shape=(2,))
         self._pixel_xy.default = 0.
     
-        tile_min_max = [(min(v), max(v)) for v in (io_groups, io_channels)]
+        tile_min_max = [(min(v), len(det_geometry_yaml['module_to_io_groups'])*max(v)) for v in (io_groups, io_channels)]
+        print("tile_min_max = ",tile_min_max)
         self._tile_id = LUT('i4', *tile_min_max)
         self._tile_id.default = -1
     
-        anode_min_max = [(min(tiles), max(tiles))]
+        anode_min_max = [(min(tiles), len(det_geometry_yaml['module_to_io_groups'])*max(tiles))]
         self._anode_z = LUT('f4', *anode_min_max)
         self._anode_z.default = 0.
         self._drift_dir = LUT('i1', *anode_min_max)
         self._drift_dir.default = 0.
     
-        self._anode_z[(tiles,)] = [tile_positions[tile][0] for tile in tiles]
-        self._drift_dir[(tiles,)] = [tile_orientations[tile][0] for tile in tiles]
+        self._anode_z[(tiles,)] = [tile_positions[(tile-1)%16+1][0]+mod_centers[(tile-1)//16][0] for tile in tiles]
+        self._drift_dir[(tiles,)] = [tile_orientations[(tile-1)%16+1][0] for tile in tiles]
 
         print(mod_centers)
 
@@ -483,7 +489,7 @@ class Geometry(H5FlowResource):
                     io_group_io_channel = tile_chip_to_io[tile][chip]
                     io_group = io_group_io_channel//1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
-                    self._tile_id[([io_group], [io_channel])] = tile
+                    self._tile_id[([io_group], [io_channel])] = tile+module_id*len(tile_chip_to_io)
 
                 for chip_channel in chip_channel_to_position:
                     chip = chip_channel // 1000
