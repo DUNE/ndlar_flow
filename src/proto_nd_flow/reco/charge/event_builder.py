@@ -48,7 +48,7 @@ class EventBuilder(H5FlowStage):
     events_dtype = np.dtype([
         ('id', 'u8'),
         ('nhit', 'u4'),
-        ('q', 'f8'),
+        ('ADC', 'f8'),
         ('ts_start', 'f8'), ('ts_end', 'f8'),
         ('n_ext_trigs', 'u4'),
         ('unix_ts', 'u8'),
@@ -95,8 +95,8 @@ class EventBuilder(H5FlowStage):
         events_arr['id'] = raw_event_data['id']
         events_arr['unix_ts'] = raw_event_data['unix_ts']
         events_arr['nhit'] = np.count_nonzero(hits_mask, axis=-1)
-        events_arr['q'] = hits_data['q'].sum(axis=-1)
-        ts = ma.concatenate((hits_data['ts'], ext_trigs_data['ts']), axis=-1)
+        events_arr['ADC'] = hits_data['ADC'].sum(axis=-1)
+        ts = ma.concatenate((hits_data['ts_pps'], ext_trigs_data['ts']), axis=-1)
         events_arr['ts_start'] = ts.min(axis=-1)
         events_arr['ts_end'] = ts.max(axis=-1)
         events_arr['n_ext_trigs'] = np.count_nonzero(ext_trigs_mask, axis=-1)
