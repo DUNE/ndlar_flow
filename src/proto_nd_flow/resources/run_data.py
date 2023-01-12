@@ -5,8 +5,8 @@ import h5py
 from h5flow.core import H5FlowResource
 from h5flow import H5FLOW_MPI
 
-from module0_flow.util.compat import assert_compat_version
-import module0_flow.util.units as units
+from proto_nd_flow.util.compat import assert_compat_version
+import proto_nd_flow.util.units as units
 
 
 class RunData(H5FlowResource):
