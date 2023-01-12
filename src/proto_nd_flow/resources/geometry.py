@@ -247,7 +247,6 @@ class Geometry(H5FlowResource):
         return z_anode.reshape(drift.shape) + \
             drift_direction.reshape(drift.shape) * drift
 
-
     @staticmethod
     def _rotate_pixel(pixel_pos, tile_orientation):
         return pixel_pos[0] * tile_orientation[2], pixel_pos[1] * tile_orientation[1]
@@ -425,11 +424,7 @@ class Geometry(H5FlowResource):
 
         tile_geometry = {}
 
-        tiles = [
-            tile*mod
-			for tile in geometry_yaml['tile_chip_to_io']
-            for mod in det_geometry_yaml['module_to_io_groups']
-        ]
+        tiles = np.arange(1,len(geometry_yaml['tile_chip_to_io'])*len(det_geometry_yaml['module_to_io_groups'])+1)
         io_groups = [
             geometry_yaml['tile_chip_to_io'][tile][chip] // 1000 * (mod-1)*2
             for tile in geometry_yaml['tile_chip_to_io']
@@ -452,19 +447,12 @@ class Geometry(H5FlowResource):
             for chip_channel in geometry_yaml['chip_channel_to_position']
             for mod in det_geometry_yaml['module_to_io_groups']
         ]
-   
-        #print("proto_nd geometry.py gives io_groups = ", io_groups)
-        #print("proto_nd geometry.py gives io_channels = ", io_channels)
-        #print("proto_nd geometry.py gives chip_ids = ", chip_ids)
-        #print("proto_nd geometry.py gives channel_ids = ", channel_ids)
-        print("tiles =",tiles)
  
         pixel_xy_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
         self._pixel_xy = LUT('f4', *pixel_xy_min_max, shape=(2,))
         self._pixel_xy.default = 0.
     
         tile_min_max = [(min(v), len(det_geometry_yaml['module_to_io_groups'])*max(v)) for v in (io_groups, io_channels)]
-        print("tile_min_max = ",tile_min_max)
         self._tile_id = LUT('i4', *tile_min_max)
         self._tile_id.default = -1
     
@@ -473,14 +461,11 @@ class Geometry(H5FlowResource):
         self._anode_z.default = 0.
         self._drift_dir = LUT('i1', *anode_min_max)
         self._drift_dir.default = 0.
-    
-        self._anode_z[(tiles,)] = [tile_positions[(tile-1)%16+1][0]+mod_centers[(tile-1)//16][0] for tile in tiles]
+
+        self._anode_z[(tiles,)] = [tile_positions[(tile-1)%16+1][0]+10.*mod_centers[((tile-1)//16)%4][0] for tile in tiles]
+
         self._drift_dir[(tiles,)] = [tile_orientations[(tile-1)%16+1][0] for tile in tiles]
-
-        print(mod_centers)
-
         for module_id in det_geometry_yaml['module_to_io_groups']:
-            print('module_id',module_id)
             for tile in tile_chip_to_io:
                 tile_orientation = tile_orientations[tile]
                 tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
@@ -489,7 +474,7 @@ class Geometry(H5FlowResource):
                     io_group_io_channel = tile_chip_to_io[tile][chip]
                     io_group = io_group_io_channel//1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
-                    self._tile_id[([io_group], [io_channel])] = tile+module_id*len(tile_chip_to_io)
+                    self._tile_id[([io_group], [io_channel])] = tile+(module_id-1)*len(tile_chip_to_io)
 
                 for chip_channel in chip_channel_to_position:
                     chip = chip_channel // 1000
@@ -515,4 +500,3 @@ class Geometry(H5FlowResource):
                     x += mod_centers[module_id-1][2]*10
                     y += mod_centers[module_id-1][1]*10
                     self._pixel_xy[(io_group, io_channel, chip, channel)] = x, y
-                    #self._pixel_xy[([io_group], [io_channel], [chip], [channel])] = np.array([x, y])
