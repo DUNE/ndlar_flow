@@ -115,6 +115,7 @@ class CalibHitBuilder(H5FlowStage):
         self.data_manager.create_dset(self.calib_hits_dset_name, dtype=self.calib_hits_dtype)
         self.data_manager.create_ref(source_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(self.calib_hits_dset_name, self.packets_dset_name)
+        self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
 
     def run(self, source_name, source_slice, cache):
         super(CalibHitBuilder, self).run(source_name, source_slice, cache)
@@ -189,9 +190,10 @@ class CalibHitBuilder(H5FlowStage):
             ped = np.array([self.pedestal[unique_id]['pedestal_mv']
                             for unique_id in hit_uniqueid_str])
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
-            calib_hits_arr['x'] = xy[:, 0]
-            calib_hits_arr['y'] = xy[:, 1]
-            calib_hits_arr['z'] = z
+            # NOTE: swapping x <--> z coordinates so the z is ~ in the beam direction
+            calib_hits_arr['x'] = z
+            calib_hits_arr['y'] = xy[:,1]
+            calib_hits_arr['z'] = xy[:,0]
             calib_hits_arr['ts_pps'] = raw_hits_arr['ts_pps']
             calib_hits_arr['t_drift'] = drift_t
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
@@ -207,7 +209,7 @@ class CalibHitBuilder(H5FlowStage):
         self.data_manager.write_ref(source_name, self.calib_hits_dset_name, ref)
 
         # event -> hit
-        #self.data_manager.write_ref(self.events_dset_name, self.calib_hits_dset_name, ref)
+        self.data_manager.write_ref(self.events_dset_name, self.calib_hits_dset_name, ref)
 
         # hit -> packet
         #ref = np.c_[calib_hits_arr['id'], index_arr]

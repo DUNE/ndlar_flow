@@ -150,16 +150,12 @@ class RawHitBuilder(H5FlowStage):
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
             print(min(tile_id), max(tile_id))
             z = resources['Geometry'].anode_z[(tile_id,)]
-            #vref = np.array(
-            #    [self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
-            #vcm = np.array([self.configuration[unique_id]['vcm_mv']
-            #                for unique_id in hit_uniqueid_str])
-            #ped = np.array([self.pedestal[unique_id]['pedestal_mv']
-            #                for unique_id in hit_uniqueid_str])
+
             raw_hits_arr['id'] = raw_hits_slice.start + np.arange(n, dtype=int)
-            raw_hits_arr['x_pix'] = xy[:, 0]
-            raw_hits_arr['y_pix'] = xy[:, 1]
-            raw_hits_arr['z_pix'] = z
+            # NOTE: swapping x <--> z coordinates so the z is ~ in the beam direction
+            raw_hits_arr['x_pix'] = z
+            raw_hits_arr['y_pix'] = xy[:,1]
+            raw_hits_arr['z_pix'] = xy[:,0]
             raw_hits_arr['ts_pps'] = ts_arr['ts']
             raw_hits_arr['ADC'] = packets_arr['dataword']
 
