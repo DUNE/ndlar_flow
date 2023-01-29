@@ -6,8 +6,8 @@ flow:
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
-  - !include h5flow_yamls/resources/LArData.yaml
+  - !include module3_yamls/resources/RunData.yaml
+  - !include module3_yamls/resources/LArData.yaml
 
 
 event_loop:
