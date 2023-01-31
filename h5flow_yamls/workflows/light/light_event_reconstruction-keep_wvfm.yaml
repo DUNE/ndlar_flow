@@ -1,0 +1,37 @@
+# Performs noise subtraction, deconvolution, and peak finding on raw light
+# waveforms
+
+flow:
+  source: 'light/events'
+  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_sum, hit_finder]
+
+
+resources:
+  - !include h5flow_yamls/resources/RunData.yaml
+  - !include h5flow_yamls/resources/Geometry.yaml
+  - !include h5flow_yamls/resources/LArData.yaml
+
+
+timestamp_corrector:
+  !include h5flow_yamls/reco/light/LightTimestampCorrector.yaml
+
+
+wvfm_filt:
+  !include h5flow_yamls/reco/light/WaveformNoiseFilter.yaml
+
+
+wvfm_deconv:
+  !include h5flow_yamls/reco/light/WaveformDeconvolution.yaml
+
+
+wvfm_align:
+  !include h5flow_yamls/reco/light/WaveformAlign.yaml
+
+
+wvfm_sum:
+  !include h5flow_yamls/reco/light/WaveformSum.yaml
+
+
+hit_finder:
+  !include h5flow_yamls/reco/light/WaveformHitFinder.yaml
+
