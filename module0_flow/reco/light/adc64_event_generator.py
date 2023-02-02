@@ -100,7 +100,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
 
         # set up parameters
         for key,val in self.defaults.items():
-            setattr(self, key, self.defaults.get(key,val))
+            setattr(self, key, params.get(key,val))
         self.n_samples = 0
 
         self.wvfm_dset_name = params['wvfm_dset_name']
