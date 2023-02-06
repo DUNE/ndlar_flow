@@ -145,39 +145,36 @@ class CalibHitBuilder(H5FlowStage):
         # convert to hits array
         calib_hits_arr = np.zeros((n,), dtype=self.calib_hits_dtype)
         if n:
-            #drift_t = raw_hits['ts_pps'] - t0_data['ts']
-            # TERRIBLE HACK -- ASK FOR PETER'S HELP TO FIX THIS.
-			# IM HAVING TROUBLE GETTING THE REF IN HERE PROPERLY
-            # SO FOR NOW I HARDCODE THE FOLLOWING (GOOD FOR 5 SPILL SIM
-            # CHALLENGE FILE):
-            # >>> f['/charge/events/ref/charge/raw_hits/ref_region'][0]
-            # (0, 2512)
-            # >>> f['/charge/events/ref/charge/raw_hits/ref_region'][1]
-            # (2512, 4255)
-            # >>> f['/charge/events/ref/charge/raw_hits/ref_region'][2]
-            # (4255, 6212)
-            # >>> f['/charge/events/ref/charge/raw_hits/ref_region'][3]
-            # (6212, 7174)
-            # >>> f['/charge/events/ref/charge/raw_hits/ref_region'][4]
-            # (7174, 9458)
-            hit_t0 = np.full(len(raw_hits_arr['ts_pps']),0)
-            hit_t0[0:2512] = np.full(2512,t0_data['ts'][0])
-            hit_t0[2512:4255] = np.full(1743,t0_data['ts'][1])
-            hit_t0[4255:6212] = np.full(1957,t0_data['ts'][2])
-            hit_t0[6212:7174] = np.full(962,t0_data['ts'][3])
-            hit_t0[7174:9458] = np.full(2284,t0_data['ts'][4])
 
-            print('raw_hits_arr.shape',raw_hits_arr['ts_pps'].shape)
+            # For now, use the event time as the t0 for each hit
+            # this should eventually be improved to match each hit
+            # to the correct light trigger and use that timing.
+            # Given optical pileup, we can have multiple triggers
+            # per event. There is probably a cleaner way to use h5flow
+            # associations, but for now this will do...
+            hit_t0 = np.full(len(raw_hits_arr['ts_pps']),0)
+
+            if not len(raw_hits) == len(t0_data['ts']):
+                print("event dividers for raw hits and t0 inconsistent")
+                exit
+            else:
+                first_index = 0
+                for t0_it, t0 in enumerate(t0_data['ts']):
+                    n_masked = np.ma.count_masked(raw_hits[t0_it]['id'],axis=0)
+                    n_not_masked = len(raw_hits[t0_it]['id']) - n_masked
+                    last_index = first_index + n_not_masked
+                    print(t0_it,n_not_masked,first_index,first_index+n_not_masked,t0)
+                    hit_t0[first_index:last_index] = np.full(n_not_masked,t0)
+                    first_index += n_not_masked
+
             drift_t = raw_hits_arr['ts_pps'] - hit_t0
 
             drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks)
-            #z = resources['Geometry'].anode_z[(tile_id,)]
             z = resources['Geometry'].get_z_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
 
             xy = resources['Geometry'].pixel_xy[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
-            print(min(tile_id), max(tile_id))
             hit_uniqueid = (((packets_arr['io_group'].astype(int)) * 100000
                              + packets_arr['io_channel'].astype(int)) * 1000
                             + packets_arr['chip_id'].astype(int)) * 64 \
