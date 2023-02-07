@@ -1,0 +1,16 @@
+# Converts larnd-sim light data to the low-level event built data for
+# light data (i.e. grouped raw waveforms)
+
+flow:
+  source: light_event_generator_mc
+  stages: [] # just generate events, no analysis stages
+  drop: []
+
+
+resources:
+  - !include yamls/module0_run2_flow/resources/RunData.yaml
+
+
+light_event_generator_mc:
+  !include yamls/module0_flow/reco/light/LightEventGeneratorMC.yaml
+

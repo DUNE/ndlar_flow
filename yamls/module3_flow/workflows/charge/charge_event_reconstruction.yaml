@@ -8,8 +8,8 @@ flow:
 
 
 resources:
-  - !include module3_yamls/resources/RunData.yaml
-  - !include module3_yamls/resources/Geometry.yaml
+  - !include yamls/module3_flow/resources/RunData.yaml
+  - !include yamls/module3_flow/resources/Geometry.yaml
 
 
 raw_events:
@@ -21,17 +21,17 @@ raw_events:
 
 
 timestamp_corrector:
-  !include module3_yamls/reco/charge/TimestampCorrector.yaml
+  !include yamls/module3_flow/reco/charge/TimestampCorrector.yaml
 
 
 ext_trig_finder:
-  !include module3_yamls/reco/charge/ExternalTriggerFinder.yaml
+  !include yamls/module3_flow/reco/charge/ExternalTriggerFinder.yaml
 
 
 hit_builder:
-  !include module3_yamls/reco/charge/HitBuilder.yaml
+  !include yamls/module3_flow/reco/charge/HitBuilder.yaml
 
 
 event_builder:
-  !include module3_yamls/reco/charge/EventBuilder.yaml
+  !include yamls/module3_flow/reco/charge/EventBuilder.yaml
 

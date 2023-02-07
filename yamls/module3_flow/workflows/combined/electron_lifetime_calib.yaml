@@ -3,9 +3,9 @@ flow:
   stages: [electron_lifetime_calib]
 
 resources:
-  - !include module3_yamls/resources/RunData.yaml
-  - !include module3_yamls/resources/Geometry.yaml
-  - !include module3_yamls/resources/LArData.yaml
+  - !include yamls/module3_flow/resources/RunData.yaml
+  - !include yamls/module3_flow/resources/Geometry.yaml
+  - !include yamls/module3_flow/resources/LArData.yaml
 
 events:
   classname: H5FlowDatasetLoopGenerator
