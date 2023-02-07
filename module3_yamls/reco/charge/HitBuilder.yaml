@@ -1,0 +1,19 @@
+classname: HitBuilder # reco/charge/hit_builder.py
+path: module0_flow.reco.charge.hit_builder
+requires:
+  - 'charge/packets'
+  - name: 'charge/packets_corr_ts'
+    path: ['charge/packets', 'charge/packets_corr_ts']
+params:
+  # inputs
+  packets_dset_name: 'charge/packets'
+  ts_dset_name: 'charge/packets_corr_ts'
+
+  # output
+  hits_dset_name: 'charge/hits'
+
+  # configuration parameters
+  network_agnostic: False
+  pedestal_file: '/global/cfs/projectdirs/dune/www/data/Module3/flow_data/pedestal-diagnostic-packet-2023_01_28_22_33_CETevd_ped.json'
+  configuration_file: '/global/cfs/projectdirs/dune/www/data/Module3/flow_data/evd_config_23-01-29_11-12-16.json'
+  # download link: https://portal.nersc.gov/project/dune/global/cfs/projectdirs/dune/www/data/Module3/flow_data

@@ -77,7 +77,7 @@ class RunData(H5FlowResource):
         super(RunData, self).init(source_name)
 
         self.source_name = source_name
-        if not self.data_manager.attr_exists(self.path, 'classname'):
+        if self.path not in self.data_manager['/'] or not self.data_manager.attr_exists(self.path, 'classname'):
             # run data does not exist, get it from input run list file
             self.data = dict()
 

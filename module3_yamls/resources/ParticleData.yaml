@@ -1,0 +1,8 @@
+classname: ParticleData
+path: module0_flow.resources.particle_data
+params:
+  path: 'particle_info'
+  muon_range_table_path: 'h5flow_data/PDG_muon_range_table_Ar.txt'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/PDG_muon_range_table_Ar.txt
+  proton_range_table_path: 'h5flow_data/NIST_proton_range_table_Ar.txt'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/NIST_proton_range_table_Ar.txt

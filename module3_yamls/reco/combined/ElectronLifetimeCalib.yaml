@@ -1,0 +1,12 @@
+classname: ElectronLifetimeCalib
+path: module0_flow.reco.combined.electron_lifetime
+requires:
+  - name: 'combined/hit_drift'
+    path: ['charge/hits', 'combined/hit_drift']
+  - 'charge/hits'
+params:
+  hits_dset_name: 'charge/hits'
+  charge_dset_name: 'charge/hits'
+  drift_dset_name: 'combined/hit_drift'
+  calib_dset_name: 'combined/q_calib_el'
+  mode: 'calibration'
