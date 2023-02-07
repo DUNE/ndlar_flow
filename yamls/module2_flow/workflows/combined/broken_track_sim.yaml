@@ -15,10 +15,10 @@ events:
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
-  - !include h5flow_yamls/resources/Geometry.yaml
-  - !include h5flow_yamls/resources/LArData.yaml
-  - !include h5flow_yamls/resources/DisabledChannels.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/DisabledChannels.yaml
 
 
 broken_track_sim:

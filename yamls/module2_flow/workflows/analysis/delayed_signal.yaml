@@ -10,8 +10,8 @@ flow:
 
 
 resources:
- - !include h5flow_yamls/resources/RunData.yaml
- - !include h5flow_yamls/resources/Geometry.yaml
+ - !include yamls/module2_flow/resources/RunData.yaml
+ - !include yamls/module2_flow/resources/Geometry.yaml
 
 
 events:

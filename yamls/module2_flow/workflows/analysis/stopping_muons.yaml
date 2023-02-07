@@ -6,11 +6,11 @@ flow:
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
-  - !include h5flow_yamls/resources/LArData.yaml
-  - !include h5flow_yamls/resources/Geometry.yaml
-  - !include h5flow_yamls/resources/ParticleData.yaml
-  - !include h5flow_yamls/resources/DisabledChannels.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/ParticleData.yaml
+  - !include yamls/module0_flow/resources/DisabledChannels.yaml
 
 
 events:
@@ -130,5 +130,5 @@ michel_id:
 
     generate_likelihood_pdf: False
     #generate_likelihood_pdf: True
-    likelihood_pdf_filename: h5flow_data/michel_pdf-0.1.0.npz
+    likelihood_pdf_filename: data/module0_flow/michel_pdf-0.1.0.npz
     # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/michel_pdf-0.1.0.npz

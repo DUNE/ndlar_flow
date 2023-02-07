@@ -54,7 +54,7 @@ class TimeDependentGain(H5FlowStage):
         ('q', 'f4')
     ])
 
-    default_gain_file = 'h5flow_data/module0_time_dependent_gain.npz'
+    default_gain_file = 'data/module0_flow/module0_time_dependent_gain.npz'
     default_hits_dset_name = 'charge/hits'
     default_calib_dset_name = 'combined/q_calib_tdg'
 

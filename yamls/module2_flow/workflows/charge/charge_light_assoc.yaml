@@ -7,8 +7,8 @@ flow:
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
 
 
 charge_light_associator:
-  !include h5flow_yamls/reco/charge/Charge2LightAssociation.yaml
+  !include yamls/module0_flow/reco/charge/Charge2LightAssociation.yaml

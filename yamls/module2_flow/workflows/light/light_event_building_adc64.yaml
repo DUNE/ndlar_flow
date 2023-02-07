@@ -5,5 +5,5 @@ flow:
   source: light_event_generator
 
 light_event_generator:
-  !include h5flow_yamls/reco/light/LightADC64EventGenerator.yaml
+  !include yamls/module0_flow/reco/light/LightADC64EventGenerator.yaml
   

@@ -132,5 +132,5 @@ michel_id:
 
     generate_likelihood_pdf: False
     #generate_likelihood_pdf: True
-    likelihood_pdf_filename: h5flow_data/michel_pdf-0.1.0.npz
+    likelihood_pdf_filename: data/module0_flow/michel_pdf-0.1.0.npz
     # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/michel_pdf-0.1.0.npz

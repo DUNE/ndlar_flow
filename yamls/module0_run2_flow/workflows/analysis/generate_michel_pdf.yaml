@@ -87,4 +87,4 @@ michel_id:
   params:
     # configuration parameters
     generate_likelihood_pdf: True
-    likelihood_pdf_filename: h5flow_data/michel_pdf-0.1.0.npz
+    likelihood_pdf_filename: data/module0_flow/michel_pdf-0.1.0.npz

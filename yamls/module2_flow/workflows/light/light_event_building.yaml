@@ -8,10 +8,10 @@ flow:
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
-  - !include h5flow_yamls/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
 
 
 light_event_generator:
-  !include h5flow_yamls/reco/light/LightEventGenerator.yaml
+  !include yamls/module0_flow/reco/light/LightEventGenerator.yaml
 

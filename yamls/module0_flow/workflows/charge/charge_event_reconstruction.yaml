@@ -33,7 +33,7 @@ hit_builder:
 
 
 time_dependent_gain:
-  !include h5flow_yamls/reco/charge/TimeDependentGain.yaml
+  !include yamls/module0_flow/reco/charge/TimeDependentGain.yaml
 
 
 event_builder:

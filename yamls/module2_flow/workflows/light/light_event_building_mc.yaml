@@ -8,9 +8,9 @@ flow:
 
 
 resources:
-  - !include h5flow_yamls/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
 
 
 light_event_generator_mc:
-  !include h5flow_yamls/reco/light/LightEventGeneratorMC.yaml
+  !include yamls/module0_flow/reco/light/LightEventGeneratorMC.yaml
 

@@ -20,7 +20,7 @@ params:
   merged_dset_name: 'combined/tracklets/merged'
 
   # configuration parameters
-  pdf_filename: 'h5flow_data/joint_pdf-3_0_0.npz'
+  pdf_filename: 'data/module0_flow/joint_pdf-3_0_0.npz'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/joint_pdf-3_0_0.npz
   pvalue_cut: 0.05
   max_neighbors: 5
