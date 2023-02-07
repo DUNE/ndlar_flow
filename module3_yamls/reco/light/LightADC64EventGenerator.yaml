@@ -1,0 +1,18 @@
+classname: LightADC64EventGenerator
+path: module0_flow.reco.light.adc64_event_generator
+dset_name: 'light/events'
+params:
+  # secondary output
+  wvfm_dset_name: 'light/wvfm'
+
+  # configuration parameters
+  n_adcs: 2
+  n_channels: 64
+  sn_table:
+   - 215553018 # ACL
+   - 215537201 # LCM
+  sync_channel: 32
+  sync_threshold: 10000
+  batch_size: 128
+  utime_ms_window: 1000
+  tai_ns_window: 1000

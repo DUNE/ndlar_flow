@@ -1,0 +1,40 @@
+# Pulls signal and noise from light waveforms (for deconvolution filter)
+
+flow:
+  source: event_loop
+  stages: [wvfm_extract_sig_noise]
+
+
+resources:
+  - !include h5flow_yamls/resources/RunData.yaml
+  - !include h5flow_yamls/resources/LArData.yaml
+
+
+event_loop:
+  classname: H5FlowDatasetLoopGenerator
+  dset_name: 'light/events'
+  params:
+    chunk_size: 128
+
+
+wvfm_extract_sig_noise:
+  classname: WaveformDeconvolution
+  requires:
+    - 'light/wvfm'
+  params:
+    # input
+    wvfm_dset_name: 'light/wvfm'
+
+    # configuration parameters
+    #noise_strategy: PPS # or slice
+    noise_strategy: slice
+    noise_slice: [0, 80] # first 80 samples
+    # noise_slice: [-256, null] # last 256 samples
+    # pps_threshold: 5000
+    signal_amplitude: [1000,5000]
+    gen_noise_spectrum: True
+    gen_signal_spectrum: True
+    gen_signal_impulse: True
+    impulse_alignment_oversampling: 10
+    do_filtering: False
+

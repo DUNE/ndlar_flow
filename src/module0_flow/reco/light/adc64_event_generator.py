@@ -12,8 +12,9 @@ import adc64format
 
 class LightADC64EventGenerator(H5FlowGenerator):
     '''
-        Light system event builder - converts multiple hdf5-formatted light files to an event-packed
-        h5flow-readable format. Identifies SYNC events to 
+        Light system event builder - converts multiple ADC64-formatted light files to an event-packed
+        h5flow-readable format. Uses the ``adc64format`` library to synchronize and align the
+        events in multiple files.
 
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, path to dataset to store raw waveforms
@@ -99,7 +100,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
 
         # set up parameters
         for key,val in self.defaults.items():
-            setattr(self, key, self.defaults.get(key,val))
+            setattr(self, key, params.get(key,val))
         self.n_samples = 0
 
         self.wvfm_dset_name = params['wvfm_dset_name']
@@ -142,6 +143,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
         self.input_file.streams[0].seek(0, 0)
         self.end_position = total_length_b // self.chunk_size if self.end_position is None else min(self.end_position, total_length_b // self.chunk_size)
         self.start_position = 0 if self.start_position is None else self.start_position
+        self.curr_position = self.start_position
 
         # skip to start position
         self.input_file.skip(max(0, self.start_position - 1))
@@ -230,6 +232,13 @@ class LightADC64EventGenerator(H5FlowGenerator):
             mask = np.any(event_arr['wvfm_valid'], axis=(-1,-2))
             event_arr = event_arr[mask]
             wvfm_arr = wvfm_arr[mask]
+            
+            # mask off any extraneous events
+            if self.curr_position + len(event_arr) > self.end_position:
+                mask = self.curr_position + np.arange(len(event_arr)) < self.end_position
+                event_arr = event_arr[mask]
+                wvfm_arr = wvfm_arr[mask]
+            self.curr_position += len(event_arr)
         else:
             event_arr = np.empty((0,), dtype=self.event_dtype)
             wvfm_arr = np.empty((0,), dtype=self.wvfm_dtype)

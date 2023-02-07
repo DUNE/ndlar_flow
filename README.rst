@@ -39,7 +39,8 @@ tips for installing at NERSC
 Because CORI uses a special build of MPICH MPI, you will need to follow the
 instructions at [https://docs.nersc.gov/development/languages/python/parallel-python/]
 to install a parallelized version of h5py *before* installing ``h5flow``. Note
-that this environment will then only be usable on the CORI compute nodes.
+that this environment will then only be usable on the CORI compute nodes, unless
+you have ``h5flow>=0.2.1`` which provides flags for running without MPI.
 
 If you'd like to set up a debugging environment that works on the CORI login
 nodes, install using the ``*-nompi`` environment files. This will not allow you
@@ -442,7 +443,7 @@ underlying ``h5py.File``::
 But when using multiple arguments, it will load references::
 
     # again lets get the first 1000 charge events
-    charge_events = dm['charge/events/data', sel]
+    charge_events = dm['charge/events', sel]
     # (event index,)
 
     # and now we use the fancy access method

@@ -1,0 +1,56 @@
+# Performs light gain calibration based on charge information
+
+flow:
+  source: events
+  stages: [light_gain_calib]
+  drop: []
+
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 32
+
+
+resources:
+  - !include h5flow_yamls/resources/RunData.yaml
+  - !include h5flow_yamls/resources/Geometry.yaml
+  - !include h5flow_yamls/resources/LArData.yaml
+
+
+light_gain_calib:
+  classname: LightCalibration # misc/light_calib.py
+  requires:
+    - 'light/events'
+    - 'charge/hits'
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
+    - name: 'light/deconv'
+      path: ['light/events', 'light/deconv']
+  params:
+    light_event_dset_name: 'light/events'
+    wvfm_dset_name: 'light/deconv'
+    hit_drift_dset_name: 'combined/hit_drift'
+    hits_dset_name: 'charge/hits'
+    larpix_gain: 221 # e/mV
+    fid_cut: 20.0 # mm
+    vis_energy_cut: 100 # keV
+    sample_window: [0,256]
+    gain_prefactor: # ArcLights: 1/6, LCMs: 1/2
+      0: { 2: 0.1667, 3: 0.1667, 4: 0.1667, 5: 0.1667, 6: 0.1667, 7: 0.1667,
+           9: 0.5, 10: 0.5, 11: 0.5, 12: 0.5, 13: 0.0, 14: 1.0, # ch 13 shows odd behavior
+          18: 0.1667, 19: 0.1667, 20: 0.1667, 21: 0.1667, 22: 0.1667, 23: 0.1667,
+          25: 0.5, 26: 0.5, 27: 0.5, 28: 0.5, 29: 0.5, 30: 0.5,
+          34: 0.0, 35: 0.0, 36: 0.0, 37: 0.0, 38: 0.0, 39: 0.0, # this arclight is disconnected
+          41: 0.5, 42: 0.5, 43: 0.5, 44: 0.5, 45: 0.5, 46: 0.5,
+          50: 0.1667, 51: 0.1667, 52: 0.1667, 53: 0.1667, 54: 0.1667, 55: 0.1667,
+          57: 0.5, 58: 0.5, 59: 0.5, 60: 0.5, 61: 0.5, 62: 0.5 }
+      1: { 2: 0.1667, 3: 0.1667, 4: 0.1667, 5: 0.1667, 6: 0.1667, 7: 0.1667,
+           9: 0.5, 10: 0.5, 11: 0.5, 12: 0.5, 13: 0.5, 14: 0.5,
+          18: 0.1667, 19: 0.1667, 20: 0.1667, 21: 0.1667, 22: 0.1667, 23: 0.1667,
+          25: 0.5, 26: 0.5, 27: 0.5, 28: 0.5, 29: 0.5, 30: 0.5,
+          34: 0.0, 35: 0.2, 36: 0.2, 37: 0.2, 38: 0.2, 39: 0.2, # ch 34 is disconnected
+          41: 0.5, 42: 0.5, 43: 0.5, 44: 0.5, 45: 0.5, 46: 0.5,
+          50: 0.1667, 51: 0.1667, 52: 0.1667, 53: 0.1667, 54: 0.1667, 55: 0.1667,
+          57: 0.5, 58: 0.5, 59: 0.5, 60: 0.5, 61: 0.5, 62: 0.5 }

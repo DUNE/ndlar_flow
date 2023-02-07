@@ -25,6 +25,7 @@ electron_lifetime_calib:
       path: ['combined/tracklets', 'charge/hits']
   params:
     hits_dset_name: 'track_hits'
+    charge_dset_name: 'track_hits'
     drift_dset_name: 'track_hit_drift'
     tracks_dset_name: 'combined/tracklets'
     mode: 'generate'

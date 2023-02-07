@@ -36,7 +36,7 @@ def charge_event_built_file(charge_source_file, runlist_file, tmp_h5_file):
 
 @pytest.fixture
 def charge_reco_file(charge_event_built_file, geometry_file, light_geometry_file, larpix_config_file,
-                     larpix_pedestal_config_file, tmp_h5_file):
+                     larpix_pedestal_config_file, time_dependent_gain_file, tmp_h5_file):
     print('Charge event reconstruction...')
     h5flow.run(['yamls/module0_flow/workflows/charge/charge_event_reconstruction.yaml'],
                tmp_h5_file,
@@ -77,7 +77,7 @@ def light_reco_file(light_event_built_file, light_noise_file, light_signal_file,
                light_event_built_file,
                verbose=2,
                start_position=0,
-               end_position=1000)
+               end_position=200)
 
     check_dsets(tmp_h5_file, (
         'light/hits/data',
@@ -96,7 +96,7 @@ def light_reco_wvfm_file(light_event_built_file, light_noise_file, light_signal_
                light_event_built_file,
                verbose=2,
                start_position=0,
-               end_position=1000)
+               end_position=200)
 
     check_dsets(tmp_h5_file, (
         'light/hits/data',

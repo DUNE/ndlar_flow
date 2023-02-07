@@ -62,7 +62,7 @@ class HitBuilder(H5FlowStage):
             geom        u1, unused
 
     '''
-    class_version = '1.1.0'
+    class_version = '1.2.0'
 
     #: ASIC ADC configuration lookup table
     configuration = defaultdict(lambda: dict(
@@ -98,6 +98,10 @@ class HitBuilder(H5FlowStage):
 
     def init(self, source_name):
         super(HitBuilder, self).init(source_name)
+
+        self.network_agnostic = resources['Geometry'].network_agnostic
+        self.n_io_channels_per_tile = resources['Geometry'].n_io_channels_per_tile
+        
         self.load_pedestals()
         self.load_configurations()
 
@@ -149,10 +153,9 @@ class HitBuilder(H5FlowStage):
             hits_arr['iochannel'] = packets_arr['io_channel']
             hits_arr['chipid'] = packets_arr['chip_id']
             hits_arr['channelid'] = packets_arr['channel_id']
-            hit_uniqueid = (((packets_arr['io_group'].astype(int)) * 256
-                             + packets_arr['io_channel'].astype(int)) * 256
-                            + packets_arr['chip_id'].astype(int)) * 64 \
-                + packets_arr['channel_id'].astype(int)
+            hit_uniqueid = self.unique_id(
+                packets_arr['io_group'].astype(int), packets_arr['io_channel'].astype(int),
+                packets_arr['chip_id'].astype(int), packets_arr['channel_id'].astype(int))
             hit_uniqueid_str = hit_uniqueid.astype(str)
             xy = resources['Geometry'].pixel_xy[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
@@ -183,14 +186,30 @@ class HitBuilder(H5FlowStage):
     def charge_from_dataword(dw, vref, vcm, ped):
         return dw / 256. * (vref - vcm) + vcm - ped
 
+    def unique_id(self, iogroup, iochannel, chipid, channelid):
+        id_ = ((iogroup * 256 + iochannel) * 256 + chipid) * 64 + channelid
+        if self.network_agnostic == True:
+            return self._remap_unique_id(id_)
+        return id_
+
+    def _remap_unique_id(self, unique_id):
+        ''' Remaps unique id for being agnostic to the network configuration io channel 1-4 -> 1, 5-8 -> 5, ... '''
+        io_channel =  (unique_id // (256 * 64)) % 256
+        io_channel_remap = ((io_channel - 1) // self.n_io_channels_per_tile) * self.n_io_channels_per_tile + 1
+        return ((unique_id // (256 * 64 * 256)) * 256 + io_channel_remap) * 256 * 64 + unique_id % (64 * 256)
+
     def load_pedestals(self):
         if self.pedestal_file != '' and not resources['RunData'].is_mc:
             with open(self.pedestal_file, 'r') as infile:
                 for key, value in json.load(infile).items():
+                    if self.network_agnostic == True:
+                        key = str(self._remap_unique_id(int(key)))
                     self.pedestal[key] = value
 
     def load_configurations(self):
         if self.configuration_file != '' and not resources['RunData'].is_mc:
             with open(self.configuration_file, 'r') as infile:
                 for key, value in json.load(infile).items():
+                    if self.network_agnostic == True:
+                        key = str(self._remap_unique_id(int(key)))                    
                     self.configuration[key] = value

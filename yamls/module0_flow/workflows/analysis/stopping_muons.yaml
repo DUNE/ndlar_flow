@@ -46,8 +46,11 @@ noise_overlay:
   path: module0_flow.analysis.mc_noise_model_overlay
   requires:
     - 'charge/hits'
+    - name: 'combined/q_calib_el'
+      path: ['charge/hits', 'combined/q_calib_el']
   params:
     hits_name: 'charge/hits'
+    charge_name: 'combined/q_calib_el'
     model_params:
       medm:
         type: 'scale_plus_binomial_noise'
@@ -81,6 +84,8 @@ stopping_muon_sel:
     - 'combined/tracklets/merged'
     - 'combined/t0'
     - 'charge/hits'
+    - name: 'combined/q_calib_el'
+      path: ['charge/hits', 'combined/q_calib_el']
     - name: 'combined/hit_drift'
       path: ['charge/hits', 'combined/hit_drift']
     - name: 'mc_truth/trajectories'
@@ -88,6 +93,7 @@ stopping_muon_sel:
   params:
     # inputs
     hits_dset_name: 'charge/hits'
+    charge_dset_name: 'combined/q_calib_el'
     hit_drift_dset_name: 'combined/hit_drift'    
     t0_dset_name: 'combined/t0'
     merged_dset_name: 'combined/tracklets/merged'
@@ -111,6 +117,8 @@ michel_id:
   path: module0_flow.analysis.michel_id  
   requires:
     - 'charge/hits'
+    - name: 'combined/q_calib_el'
+      path: ['charge/hits', 'combined/q_calib_el']
     - name: 'combined/hit_drift'
       path: ['charge/hits', 'combined/hit_drift']
     - name: 'analysis/stopping_muons/hit_profile'

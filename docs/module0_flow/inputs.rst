@@ -37,6 +37,9 @@ charge event reconstruction
  - ``pedestal_file``: a ``.json`` file describing the pedestal voltage on each pixel. This file is generated from a script within ``larpix-v2-testing-scripts``.
  - ``configuration_file``: a ``.json`` file describing the reference voltages on each pixel. This file is generated from a script within ``larpix-v2-testing-scripts``.
 
+``TimeDependentGain``
+ - ``gain_file``: a ``.npz`` file providing gain correction as a function of time. This file is generated manually, see the module documentation for specifics.
+
 light event building
 --------------------
 No additional input files except those required by resources are required to

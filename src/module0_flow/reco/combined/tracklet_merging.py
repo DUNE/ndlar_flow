@@ -41,7 +41,7 @@ class TrackletMerger(H5FlowStage):
          - ``pdf_bkg_name``: ``str``, name of array in .npz file containing the "background" histogram
          - ``pvalue_cut``: ``float``, p-value/inefficiency used as cut for likelihood ratio
          - ``max_neighbors``: ``int``, number of neighbor tracks to attempt merge procedure
-         - ``hits_dset_name``: ``str``, path to input charge hits dataset
+         - ``track_charge_dset_name``: ``str``, path to input charge dataset (1:1 with track hits, requires ``'q'`` field)
          - ``hit_drift_dset_name``: ``str``, path to charge hit drift data
          - ``hits_dset_name``: ``str``, path to input charge hits dataset
          - ``track_hits_dset_name``: ``str``, path to input track-referred charge hits dataset
@@ -70,6 +70,7 @@ class TrackletMerger(H5FlowStage):
                     merged_dset_name: 'combined/tracklets/merged'
                     hit_drift_dset_name: 'combined/hit_drift'
                     hits_dset_name: 'charge/hits'
+                    track_charge_dset_name: 'charge/hits'
                     tracks_dset_name: 'combined/tracklets'
                     pdf_filename: 'joint_pdf.npz'
                     pvalue_cut: 0.10
@@ -86,6 +87,7 @@ class TrackletMerger(H5FlowStage):
 
     default_hit_drift_dset_name = 'combined/track_hit_drift'
     default_hits_dset_name = 'charge/hits'
+    default_track_charge_dset_name = 'charge/hits'
     default_tracks_dset_name = 'combined/tracklets'
     default_track_hits_dset_name = 'combined/track_hits'
     default_merged_dset_name = 'combined/tracklets/merged'
@@ -106,6 +108,7 @@ class TrackletMerger(H5FlowStage):
 
         self.hit_drift_dset_name = params.get('hit_drift_dset_name', self.default_hit_drift_dset_name)
         self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
+        self.track_charge_dset_name = params.get('track_charge_dset_name', self.default_track_charge_dset_name)
         self.track_hits_dset_name = params.get('track_hits_dset_name', self.default_track_hits_dset_name)
         self.tracks_dset_name = params.get('tracks_dset_name', self.default_tracks_dset_name)
         self.merged_dset_name = params.get('merged_dset_name', self.default_merged_dset_name)
@@ -121,6 +124,7 @@ class TrackletMerger(H5FlowStage):
                                     classname=self.classname,
                                     class_version=self.class_version,
                                     hits_dset=self.hits_dset_name,
+                                    charge_dset=self.track_charge_dset_name,
                                     hit_drift_dset=self.hit_drift_dset_name,
                                     tracks_dset=self.tracks_dset_name,
                                     max_neighbors=self.max_neighbors,
@@ -147,6 +151,8 @@ class TrackletMerger(H5FlowStage):
 
         track_hit_drift = cache[self.hit_drift_dset_name]
         track_hits = cache[self.track_hits_dset_name]
+        track_hit_q = cache[self.track_charge_dset_name]
+        track_hit_q = track_hit_q.reshape(track_hits.shape)
         tracks = cache[self.tracks_dset_name]
         track_hit_drift = track_hit_drift.reshape(track_hits.shape)
 
@@ -213,6 +219,7 @@ class TrackletMerger(H5FlowStage):
             # (n_ev, n_grp, n_hit')
             track_grp_hits = np.zeros(track_grp_hits_shape, dtype=track_hits.dtype)
             track_grp_hit_drift = np.zeros(track_grp_hits_shape, dtype=track_hit_drift.dtype)
+            track_grp_hit_q = np.zeros(track_grp_hits_shape, dtype=track_hit_q.dtype)
             track_grp_id = np.zeros(track_grp_hits_shape, dtype=int)
             track_grp_hits_mask = np.ones(track_grp_hits_shape, dtype=bool)
             for grp_idx in range(track_grp_hits_shape[-2]):
@@ -221,22 +228,25 @@ class TrackletMerger(H5FlowStage):
                 hit_mask = ~track_hits[track_grp[:, grp_idx].filled(False)]['id'].mask
                 np.place(track_grp_hits[:, grp_idx], mask, track_hits[track_grp[:, grp_idx].filled(0)][hit_mask])
                 np.place(track_grp_hit_drift[:, grp_idx], mask, track_hit_drift[track_grp[:, grp_idx].filled(0)][hit_mask])
+                np.place(track_grp_hit_q[:, grp_idx], mask, track_hit_q[track_grp[:, grp_idx].filled(0)][hit_mask])
                 np.place(track_grp_id[:, grp_idx], mask, grp_idx)
                 np.place(track_grp_hits_mask[:, grp_idx], mask, False)
 
             track_grp_hits = ma.array(track_grp_hits, mask=track_grp_hits_mask, shrink=False)
+            track_grp_hit_q = ma.array(track_grp_hit_q, mask=track_grp_hits_mask, shrink=False)
             track_grp_hit_drift = ma.array(track_grp_hit_drift, mask=track_grp_hits_mask, shrink=False)
             track_grp_id = ma.array(track_grp_id, mask=track_grp_hits_mask, shrink=False)
 
             new_shape = track_grp.shape[0:1] + (-1,)
             track_grp_hits = track_grp_hits.reshape(new_shape)
             track_grp_hit_drift = track_grp_hit_drift.reshape(new_shape)
+            track_grp_hit_q = track_grp_hit_q.reshape(new_shape)            
             track_grp_id = track_grp_id.reshape(new_shape)
 
             # recalculate track parameters
             calc_shape = (track_grp_id.shape[0], -1)
             merged_tracks = TrackletReconstruction.calc_tracks(
-                track_grp_hits.reshape(calc_shape), track_grp_hit_drift['z'].reshape(calc_shape),
+                track_grp_hits.reshape(calc_shape), track_grp_hit_q['q'].reshape(calc_shape), track_grp_hit_drift['z'].reshape(calc_shape),
                 track_grp_id.reshape(calc_shape), self.trajectory_pts,
                 self.trajectory_dx)
         else:
@@ -245,6 +255,7 @@ class TrackletMerger(H5FlowStage):
             track_grp_id = ma.masked_all((0, 1), dtype=int)
             track_grp_hits = ma.masked_all((0, 1), dtype=track_hits.dtype)
             track_grp_hit_drift = ma.masked_all((0, 1), dtype=track_hit_drift.dtype)
+            track_grp_hit_q = ma.masked_all((0, 1), dtype=track_hit_q.dtype)            
 
         # save to merged track dataset
         n_tracks = np.count_nonzero(~merged_tracks['id'].mask)

@@ -77,7 +77,7 @@ class RunData(H5FlowResource):
         super(RunData, self).init(source_name)
 
         self.source_name = source_name
-        if not self.data_manager.attr_exists(self.path, 'classname'):
+        if self.path not in self.data_manager['/'] or not self.data_manager.attr_exists(self.path, 'classname'):
             # run data does not exist, get it from input run list file
             self.data = dict()
 
@@ -226,11 +226,6 @@ class RunData(H5FlowResource):
     def is_mc(self):
         ''' Simulation flag, ``True`` if file comes from simulation '''
         return self.data['is_mc']
-
-    @property
-    def cds_ticks(self):
-        ''' Charge readout system clock cycle (us) '''
-        return self.data['cds_ticks']
 
     @property
     def crs_ticks(self):

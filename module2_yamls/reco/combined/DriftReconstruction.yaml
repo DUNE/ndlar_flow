@@ -1,0 +1,12 @@
+classname: DriftReconstruction
+path: module0_flow.reco.combined.drift_reco
+requires:
+  - 'combined/t0'
+  - 'charge/hits'
+params:
+  # inputs
+  hits_dset_name: 'charge/hits'
+  t0_dset_name: 'combined/t0'
+
+  # output
+  drift_dset_name: 'combined/hit_drift'

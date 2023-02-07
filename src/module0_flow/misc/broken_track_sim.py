@@ -209,7 +209,7 @@ class BrokenTrackSim(H5FlowStage):
             trans_hits = d['trans_hits']
 
             track_ids = self.reco.find_tracks(trans_hits, hit_drift['z'])
-            new_tracks = self.reco.calc_tracks(trans_hits, hit_drift['z'], track_ids,
+            new_tracks = self.reco.calc_tracks(trans_hits, hits['q'], hit_drift['z'], track_ids,
                                                self.trajectory_pts,
                                                self.trajectory_dx)
 

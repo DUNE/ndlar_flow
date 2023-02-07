@@ -1,0 +1,9 @@
+classname: DisabledChannels # resources/disabled_channels.py
+path: module0_flow.resources.disabled_channels
+params:
+  path: 'disabled_channels'
+  disabled_channels_list: 'h5flow_data/module0-run1-selftrigger-disabled-list.json' # Mod0-Run1
+  #disabled_channels_list: 'h5flow_data/module0-run2-selftrigger-disabled-list.json' # Mod0-Run2  
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/badChannelLists/selftrigger_masked/module0-run1-selftrigger-disabled-list.json
+  missing_asic_list: 'h5flow_data/module0-network-absent-ASICs.json'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/badChannelLists/module0-network-absent-ASICs.json
