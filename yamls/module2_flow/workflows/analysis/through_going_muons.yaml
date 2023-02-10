@@ -1,0 +1,61 @@
+# Performs through-going muon selection
+
+flow:
+  source: events
+  stages: [through_going_muon_sel, delayed_analysis]
+
+
+resources:
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 32
+
+
+through_going_muon_sel:
+  classname: ThroughGoingMuonSelection # analysis/through_going_selection.py
+  path: module0_flow.analysis.through_going_selection
+  requires:
+    - 'combined/tracklets/merged'
+    - 'charge/ext_trigs'
+  params:
+    # inputs
+    ext_trigs_dset_name: 'charge/ext_trigs'
+    merged_dset_name: 'combined/tracklets/merged'
+
+    # configuration parameters
+    fid_cut: 20 # mm
+    cathode_fid_cut: 20 # mm
+
+delayed_analysis:
+  classname: DelayedSignal # analysis/delayed_signal.py
+  path: module0_flow.analysis.delayed_signal
+  requires:
+    - 'charge/hits'
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
+    - name: 'analysis/michel_id/hit_label'
+      path: ['charge/hits', 'analysis/michel_id/hit_michel_label']
+    - 'analysis/michel_id/michel_label'
+    - 'analysis/through_going_muons/event_sel_reco'
+    - name: 'light/swvfm'
+      path: ['light/events', 'light/swvfm']
+    - name: 'light/swvfm/alignment'
+      path: ['light/events', 'light/swvfm/alignment']
+
+  params:
+    stopping_sel_dset_name: 'analysis/through_going_muons/event_sel_reco'
+    fit_dset_name: 'analysis/through_going_muons/time_reco/fit'
+    prompt_dset_name: 'analysis/through_going_muons/time_reco/prompt'
+    delayed_dset_name: 'analysis/through_going_muons/time_reco/delayed'
+
+    noise_factor: 1
+      # For LED integral calibration, scale factor noise_factor = 1) [units: PE/tick]
+      - [0.1843, 0.6726, 0.6582, 0.4691, 0.1706, 0.6973, 0.6832, 0.6595, 1.0e+9, 0.5497, 0.5045, 0.6269, 0.2046, 0.7337, 0.5579, 0.5313, ]
+      - [0.1514, 0.5406, 0.5690, 0.3926, 0.2475, 0.5500, 0.5433, 0.5298, 0.0144, 0.5744, 0.5187, 0.5483, 0.1765, 0.5163, 0.5358, 0.5811, ]

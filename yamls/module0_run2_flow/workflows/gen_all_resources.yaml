@@ -1,0 +1,12 @@
+# Empty workflow that just creates resources in file
+
+flow:
+  source: charge/events
+  stages: []
+  drop: []
+
+resources:
+  - !include yamls/module0_run2_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
+  - !include yamls/module0_run2_flow/resources/DisabledChannels.yaml

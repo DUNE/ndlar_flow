@@ -1,0 +1,7 @@
+classname: LArData
+path: module0_flow.resources.lar_data
+params:
+  path: 'lar_info'
+  electron_lifetime_file: 'data/module0_flow/ElecLifetimeFit_Module0.npz'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/electronLifetime/ElecLifetimeFit_Module0.root
+  electron_lifetime: 2600 # us

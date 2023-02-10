@@ -27,7 +27,7 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
 
     cached_filepath = os.path.join(dest, file)
     src_filepath = os.path.join(src, file) if src is not None else None
-    dest_filepath = os.path.join('./h5flow_data/', file)
+    dest_filepath = os.path.join('./data/module0_flow/', file)
 
     # check if file exists in current cache
     if not os.path.exists(cached_filepath):
@@ -153,8 +153,8 @@ def triplet_response_data_256_file(pytestconfig, tmp_path_factory):
                                      ('https://portal.nersc.gov/project/dune/'
                                       'data/Module0/merged/reco_data/'
                                       'mod0_response.v0.data.256.npz')))
-    if not os.path.exists('h5flow_data/mod0_response.data.256.npz'):
-        os.rename(rv, 'h5flow_data/mod0_response.data.256.npz')    
+    if not os.path.exists('data/module0_flow/mod0_response.data.256.npz'):
+        os.rename(rv, 'data/module0_flow/mod0_response.data.256.npz')
     return rv
 
 @pytest.fixture
@@ -163,8 +163,8 @@ def triplet_response_sim_256_file(pytestconfig, tmp_path_factory):
                                      ('https://portal.nersc.gov/project/dune/'
                                       'data/Module0/merged/reco_data/'
                                       'mod0_response.v1.sim.256.npz')))
-    if not os.path.exists('h5flow_data/mod0_response.sim.256.npz'):
-        os.rename(rv, 'h5flow_data/mod0_response.sim.256.npz')
+    if not os.path.exists('data/module0_flow/mod0_response.sim.256.npz'):
+        os.rename(rv, 'data/module0_flow/mod0_response.sim.256.npz')
     return rv
 
 
@@ -174,9 +174,9 @@ def time_dependent_gain_file(pytestconfig, tmp_path_factory):
                                    ('https://portal.nersc.gov/project/dune/'
                                     'data/Module0/merged/reco_data/'
                                     'module0_time_dependent_gain_v0.npz')))
-    if not os.path.exists('h5flow_data/module0_time_dependent_gain.npz'):
-        os.rename(rv, 'h5flow_data/module0_time_dependent_gain.npz')
-    return 'h5flow_data/module0_time_dependent_gain.npz'
+    if not os.path.exists('data/module0_flow/module0_time_dependent_gain.npz'):
+        os.rename(rv, 'data/module0_flow/module0_time_dependent_gain.npz')
+    return 'data/module0_flow/module0_time_dependent_gain.npz'
 
 
 @pytest.fixture

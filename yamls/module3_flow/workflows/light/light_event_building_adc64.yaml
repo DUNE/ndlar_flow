@@ -1,0 +1,9 @@
+# Generates the low-level event built data for light data (i.e. grouped raw
+# waveforms)
+
+flow:
+  source: light_event_generator
+
+light_event_generator:
+  !include yamls/module3_flow/reco/light/LightADC64EventGenerator.yaml
+  
