@@ -1,9 +1,9 @@
-.. image:: https://readthedocs.org/projects/module0-flow/badge/?version=latest
-    :target: https://module0-flow.readthedocs.io/en/latest/?badge=latest
+.. image:: https://readthedocs.org/projects/ndlar-flow/badge/?version=latest
+    :target: https://ndlar-flow.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-.. image:: https://github.com/peter-madigan/module0_flow/actions/workflows/test.yml/badge.svg
-    :target: https://github.com/peter-madigan/module0_flow/actions/
+.. image:: https://github.com/peter-madigan/ndlar_flow/actions/workflows/test.yml/badge.svg
+    :target: https://github.com/peter-madigan/ndlar_flow/actions/
     :alt: Test Status
 
 environment
@@ -11,8 +11,8 @@ environment
 
 First, download this code::
 
-    git clone https://github.com/peter-madigan/module0_flow
-    cd module0_flow
+    git clone https://github.com/larpix/ndlar_flow
+    cd ndlar_flow
 
 To install proper dependencies, use the provided conda environment file ``env.yaml``::
 

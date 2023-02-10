@@ -18,7 +18,7 @@ autodoc_mock_imports = ['h5py', 'yaml', 'tqdm', 'ROOT', 'scipy', 'numpy', 'h5flo
 
 # -- Project information -----------------------------------------------------
 
-project = 'module0_flow'
+project = 'ndlar_flow'
 copyright = '2021, Peter Madigan'
 author = 'Peter Madigan'
 
