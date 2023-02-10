@@ -2,8 +2,8 @@
     :target: https://ndlar-flow.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-.. image:: https://github.com/peter-madigan/ndlar_flow/actions/workflows/test.yml/badge.svg
-    :target: https://github.com/peter-madigan/ndlar_flow/actions/
+.. image:: https://github.com/larpix/ndlar_flow/actions/workflows/test.yml/badge.svg
+    :target: https://github.com/larpix/ndlar_flow/actions/
     :alt: Test Status
 
 environment
