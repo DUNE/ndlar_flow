@@ -1,0 +1,17 @@
+classname: HitMerger # reco/charge/hit_merger.py
+path: module0_flow.reco.charge.hit_merger
+requires:
+  - 'charge/raw_hits'
+  - name: 'charge/raw_hits_idx'
+    path: ['charge/raw_hits']
+    index_only: True
+params:
+  # inputs
+  hits_name: 'charge/raw_hits'
+  hit_charge_name: 'charge/raw_hits'
+  hits_idx_name: 'charge/raw_hits_idx'
+
+  merged_name: 'charge/hits'
+  merge_cut: 30 # merge hits with delta t < merge_cut [CRS ticks]
+
+

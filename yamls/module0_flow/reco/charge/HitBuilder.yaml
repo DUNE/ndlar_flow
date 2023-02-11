@@ -10,7 +10,7 @@ params:
   ts_dset_name: 'charge/packets_corr_ts'
 
   # output
-  hits_dset_name: 'charge/hits'
+  hits_dset_name: 'charge/raw_hits'
 
   # configuration parameters
   pedestal_file: 'data/module0_flow/datalog_2021_04_02_19_00_46_CESTevd_ped.json'

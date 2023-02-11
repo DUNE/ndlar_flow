@@ -3,7 +3,7 @@
 
 flow:
   source: raw_events
-  stages: [timestamp_corrector, ext_trig_finder, hit_builder, time_dependent_gain, event_builder]
+  stages: [timestamp_corrector, ext_trig_finder, hit_builder, hit_merger, time_dependent_gain, event_builder]
   drop: []
 
 
@@ -17,7 +17,7 @@ raw_events:
   path: h5flow.modules
   dset_name: 'charge/raw_events'
   params:
-    chunk_size: 128
+    chunk_size: 16
 
 
 timestamp_corrector:
@@ -30,6 +30,10 @@ ext_trig_finder:
 
 hit_builder:
   !include yamls/module0_flow/reco/charge/HitBuilder.yaml
+
+
+hit_merger:
+  !include h5flow_yamls/reco/charge/HitMerger.yaml
 
 
 time_dependent_gain:
