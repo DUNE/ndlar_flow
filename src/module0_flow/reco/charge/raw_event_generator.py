@@ -4,6 +4,7 @@ from numpy.lib import recfunctions as rfn
 import h5py
 import logging
 from math import ceil
+import scipy.stats as stats
 from tqdm import tqdm
 
 from h5flow.core import H5FlowGenerator, resources
@@ -36,6 +37,9 @@ class RawEventGenerator(H5FlowGenerator):
          - ``nhit_cut`` : ``int``, optional, minimum number of packets in an event
          - ``sync_noise_cut_enabled`` : ``bool``, optional, remove hits occuring soon after a SYNC event
          - ``sync_noise_cut`` : ``int``, optional, if ``sync_noise_cut_enabled`` removes all events that have a timestamp less than this value
+         - ``timestamp_bit_error_fix_enabled`` : ``bool``, optional, allow fixing bit content from certain chips based on "nearby" data
+         - ``timestamp_bit_error_window`` : ``int``, optional, defines the "nearby" region in the file used to set the timestamp bits
+         - ``timestamp_bit_error_spec`` : multi-depth ``dict`` specifying the chips and bits to fix : ``<unique_bitmask>: <io group>: <io channel>: [<chip ids>]``
          - ``event_builder_class`` : ``str``, optional, event builder algorithm to use (see ``raw_event_builder.py``)
          - ``event_builder_config`` : ``dict``, optional, modify parameters of the event builder algorithm (see ``raw_event_builder.py``)
          - ``mc_events_dset_name`` : ``str``, optional, output dataset for mc events (if present)
@@ -77,6 +81,8 @@ class RawEventGenerator(H5FlowGenerator):
     default_nhit_cut = 100
     default_sync_noise_cut = [100000, 10000000]
     default_sync_noise_cut_enabled = True
+    default_timestamp_bit_error_fix_enabled = True
+    default_timestamp_bit_error_window = 256 # packets
     default_event_builder_class = 'SymmetricWindowRawEventBuilder'
     default_event_builder_config = dict()
     default_packets_dset_name = 'charge/packets'
@@ -102,6 +108,9 @@ class RawEventGenerator(H5FlowGenerator):
         self.nhit_cut = params.get('nhit_cut', self.default_nhit_cut)
         self.sync_noise_cut = params.get('sync_noise_cut', self.default_sync_noise_cut)
         self.sync_noise_cut_enabled = params.get('sync_noise_cut_enabled', self.default_sync_noise_cut_enabled)
+        self.timestamp_bit_error_window = params.get('timestamp_bit_error_window', self.default_timestamp_bit_error_window)
+        self.timestamp_bit_error_fix_enabled = params.get('timestamp_bit_error_fix_enabled', self.default_timestamp_bit_error_fix_enabled)
+        self.timestamp_bit_error_spec = params.get('timestamp_bit_error_spec', dict())
         self.event_builder_class = params.get('event_builder_class', self.default_event_builder_class)
         self.event_builder_config = params.get('event_builder_config', self.default_event_builder_config)
 
@@ -193,6 +202,15 @@ class RawEventGenerator(H5FlowGenerator):
                                     buffer_size=self.buffer_size,
                                     sync_noise_cut=self.sync_noise_cut,
                                     sync_noise_cut_enabled=self.sync_noise_cut_enabled,
+                                    timestamp_bit_error_fix_enabled=self.timestamp_bit_error_fix_enabled,
+                                    timestamp_bit_error_window=self.timestamp_bit_error_window,
+                                    timestamp_bit_error_spec=np.array([
+                                        (mask, iogroup, iochannel, chipid)
+                                        for mask,iogroup_spec in self.timestamp_bit_error_spec.items()
+                                        for iogroup,iochannel_spec in iogroup_spec.items()
+                                        for iochannel,chipids in iochannel_spec.items()
+                                        for chipid in chipids
+                                    ], dtype=np.dtype([('bitmask','u4'),('io_group','u1'),('io_channel','u1'),('chip_id','u1')])),
                                     event_builder_class=self.event_builder_class,
                                     event_builder_class_version=self.event_builder.version,
                                     start_position=self.start_position,
@@ -333,6 +351,13 @@ class RawEventGenerator(H5FlowGenerator):
         mask = mask | (block['packet_type'] == 7)  # external trigger packets
         mask = mask | (block['packet_type'] == 6)  # sync packets
 
+        logging.info(f'total packets: {len(block)}')
+        logging.info(f'valid entries: {mask.sum()}')
+        logging.info(f'bad parity: {block["valid_parity"].astype(bool).sum()}')
+        logging.info(f'messages: {(block["packet_type"] == 4).sum()}')
+        logging.info(f'triggers: {(block["packet_type"] == 7).sum()}')
+        logging.info(f'syncs: {(block["packet_type"] == 6).sum()}')        
+
         packet_buffer = np.copy(block[mask])
         self.pass_last_unix_ts(packet_buffer)
         packet_buffer = np.insert(packet_buffer, [0], self.last_unix_ts)
@@ -348,8 +373,51 @@ class RawEventGenerator(H5FlowGenerator):
         packet_buffer = packet_buffer[~ts_mask]
         if self.is_mc:
             mc_assn = mc_assn[~ts_mask[1:]]
-        packet_buffer['timestamp'] = packet_buffer['timestamp'].astype(int) % (2**31)  # ignore 32nd bit from pacman triggers
+        packet_buffer['timestamp'] = packet_buffer['timestamp'].astype(int) % 0x80000000 # ignore 32nd bit from pacman triggers, since larpix timestamp is only 31 bits
         self.last_unix_ts = unix_ts[-1] if len(unix_ts) else self.last_unix_ts
+        
+        if self.timestamp_bit_error_fix_enabled and len(packet_buffer) > 0 and not self.is_mc:
+            # apply a fix for known bit errors in timestamp
+            # find chip keys with known issues            
+            error_mask = np.zeros(packet_buffer.shape, dtype=bool)
+            error_bitmask = np.zeros_like(packet_buffer['timestamp'])
+            for bitmask in self.timestamp_bit_error_spec:
+                for io_group in self.timestamp_bit_error_spec[bitmask]:
+                    for io_channel in self.timestamp_bit_error_spec[bitmask][io_group]:
+                        for chip_id in self.timestamp_bit_error_spec[bitmask][io_group][io_channel]:
+                            chip_mask = ((packet_buffer['io_group'] == io_group)
+                                         & (packet_buffer['io_channel'] == io_channel)
+                                         & (packet_buffer['chip_id'] == chip_id))
+                            error_mask[chip_mask] = True
+                            error_bitmask[chip_mask] = bitmask
+
+            if np.any(error_mask):
+                # create a "local" view near these packets
+                local_buffer_ts_view = np.lib.stride_tricks.sliding_window_view(packet_buffer['timestamp'], self.timestamp_bit_error_window)
+                local_error_view = np.lib.stride_tricks.sliding_window_view(error_mask, self.timestamp_bit_error_window)
+                local_error_bitmask = error_bitmask[error_mask]
+                # since the sliding window doesn't extend past the end of the array, any elements at the end of the buffer need to be handled separately
+                error_mask0 = error_mask[:-self.timestamp_bit_error_window+1]
+                error_mask1 = error_mask[-self.timestamp_bit_error_window+1:]
+                # exclude known problematic chips from local view
+                local_buffer_ts_view0 = local_buffer_ts_view[error_mask0]
+                local_error_view0 = local_error_view[error_mask0]            
+                # for last elements, just use the same view repeated multiple times
+                local_buffer_ts_view1 = np.repeat(local_buffer_ts_view[-1:], np.sum(error_mask1), axis=0)
+                local_error_view1 = np.repeat(local_error_view[-1:], np.sum(error_mask1), axis=0)
+                # mask out entries we don't want to use to determine timestamp bits
+                local_buffer_ts_view = ma.array(
+                    np.concatenate([local_buffer_ts_view0, local_buffer_ts_view1], axis=0),
+                    mask=~np.concatenate([local_error_view0, local_error_view1], axis=0))
+
+                # use the most common value for the impacted bits
+                local_timestamp = stats.mstats.mode(np.bitwise_and(local_buffer_ts_view, local_error_bitmask[:,np.newaxis]), axis=-1)[0]
+                local_timestamp = local_timestamp.astype(packet_buffer.dtype['timestamp'])
+
+                # use local timestamp bits to fix bits in known problematic chips
+                np.place(packet_buffer['timestamp'], error_mask, np.bitwise_or(
+                    np.bitwise_and(packet_buffer['timestamp'][error_mask], np.invert(local_error_bitmask)),
+                    np.bitwise_and(local_timestamp, local_error_bitmask)))
 
         if self.sync_noise_cut_enabled and not self.is_mc:
             # remove all packets that occur before the cut
@@ -434,6 +502,8 @@ class RawEventGenerator(H5FlowGenerator):
             ref = np.c_[ev_idcs[~event_tracks.mask].ravel(), mc_evs.ravel()]
             ref = np.unique(ref, axis=0) if len(ref) else ref
             self.data_manager.write_ref(self.raw_event_dset_name, self.mc_events_dset_name, ref)
+
+        logging.info(f'new events: {nevents}')
 
         return raw_event_slice if nevents else H5FlowGenerator.EMPTY
 

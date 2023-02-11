@@ -3,7 +3,7 @@
 
 flow:
   source: raw_events
-  stages: [timestamp_corrector, ext_trig_finder, hit_builder, hit_merger, time_dependent_gain, event_builder]
+  stages: [chip_id_bit_flip_fix, timestamp_corrector, ext_trig_finder, hit_builder, hit_merger, time_dependent_gain, event_builder]
   drop: []
 
 
@@ -17,7 +17,11 @@ raw_events:
   path: h5flow.modules
   dset_name: 'charge/raw_events'
   params:
-    chunk_size: 16
+    chunk_size: 32
+
+
+chip_id_bit_flip_fix:
+  !include h5flow_yamls/reco/charge/BitFlipFix.yaml
 
 
 timestamp_corrector:
