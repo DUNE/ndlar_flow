@@ -2,7 +2,7 @@
 
 flow:
   source: events
-  stages: [truth_labels, noise_overlay, stopping_muon_sel, michel_id]
+  stages: [truth_labels, dropout, noise_overlay, stopping_muon_sel, michel_id, bkg_id]
 
 
 resources:
@@ -39,6 +39,26 @@ truth_labels:
 
     # output
     truth_labels_dset_name: 'analysis/muon_capture/truth_labels'
+
+
+dropout:
+  classname: Dropout
+  path: module0_flow.analysis.dropout
+  requires:
+    - 'charge/hits'
+    - name: 'combined/q_calib_el'
+      path: ['charge/hits', 'combined/q_calib_el']
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
+    - name: 'analysis/stopping_muons/hit_profile'
+      path: ['charge/hits', 'analysis/stopping_muons/hit_profile']
+  params:
+    mask:
+      - 'charge/hits'
+      - 'combined/q_calib_el'
+      - 'combined/hit_drift'
+      - 'analysis/stopping_muons/hit_profile'
+    p: 0.03
 
 
 noise_overlay:
@@ -124,6 +144,8 @@ michel_id:
     - name: 'analysis/stopping_muons/hit_profile'
       path: ['charge/hits', 'analysis/stopping_muons/hit_profile']
   params:
+    charge_dset_name: 'combined/q_calib_el'
+    
     # configuration parameters
     michel_e_cut: 4000 # keV
     michel_nhit_cut: 7
@@ -132,3 +154,22 @@ michel_id:
     #generate_likelihood_pdf: True
     likelihood_pdf_filename: data/module0_flow/michel_pdf-0.1.0.npz
     # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/michel_pdf-0.1.0.npz
+
+bkg_id:
+  classname: BackgroundID
+  path: module0_flow.analysis.background_id  
+  requires:
+    - 'charge/hits'
+    - name: 'combined/q_calib_el'
+      path: ['charge/hits', 'combined/q_calib_el']
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
+    - name: 'analysis/stopping_muons/hit_profile'
+      path: ['charge/hits', 'analysis/stopping_muons/hit_profile']
+  params:
+    charge_dset_name: 'combined/q_calib_el'
+    
+    generate_likelihood_pdf: False
+    #generate_likelihood_pdf: True
+    likelihood_pdf_filename: h5flow_data/bkg_pdf-0.0.0.npz
+    # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/bkg_pdf-0.0.0.npz

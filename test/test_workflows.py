@@ -225,6 +225,7 @@ def broken_track_sim_file(combined_file_no_light, geometry_file, light_geometry_
 @pytest.fixture
 def stopping_muon_analysis_file(combined_file, geometry_file, light_geometry_file,
                                 proton_range_table, muon_range_table, michel_pdf_file,
+                                background_pdf_file,
                                 electron_lifetime_file, tmp_h5_file):
     print('Stopping muon analysis...')
     h5flow.run(['yamls/module0_flow/workflows/analysis/stopping_muons.yaml'],
