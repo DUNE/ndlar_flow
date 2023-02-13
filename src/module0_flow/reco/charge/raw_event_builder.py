@@ -356,19 +356,21 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
                 self.event_buffer_mc_assn = np.empty((0,), dtype=mc_assn.dtype)
             self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
 
-        # break up by event
-        event_mask = (ts.reshape(1, -1) > event_start_timestamp.reshape(-1, 1)) \
-            & (ts.reshape(1, -1) < event_end_timestamp.reshape(-1, 1))
-        event_idx = np.argmax(event_mask, axis=0)
-        event_mask = np.any(event_mask, axis=0)
-        event_diff = np.diff(event_idx, axis=-1)
-        event_idcs = np.argwhere(event_diff | np.diff(event_mask, axis=-1)).ravel() + 1
+        # find starting event division for each packet
+        event_idx_start = np.searchsorted(event_start_timestamp, ts, side='right')-1
+        # find ending event division for each packet
+        event_idx_end = np.searchsorted(event_end_timestamp, ts, side='left')
+        # find packets within event boundaries
+        event_mask = (event_idx_start == event_idx_end)
+        # break packets at each event division
+        event_idcs = np.argwhere((event_idx_start[1:] != event_idx_start[:-1]) | (event_idx_end[1:] != event_idx_end[:-1])).ravel() + 1
+        # flag breaks that are events (and not gaps between events)
+        is_event = np.r_[False, event_mask[event_idcs]]
 
         events = np.split(packets, event_idcs)
         event_unix_ts = np.split(unix_ts, event_idcs)
         if mc_assn is not None:
             event_mc_assn = np.split(mc_assn, event_idcs)
-        is_event = np.r_[False, event_mask[event_idcs]]
 
         # only return packets from events
         return zip(*[v for i, v in enumerate(zip(events, event_unix_ts)) if is_event[i]]) if mc_assn is None \
