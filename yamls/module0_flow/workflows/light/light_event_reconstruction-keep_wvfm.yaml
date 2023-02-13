@@ -3,7 +3,7 @@
 
 flow:
   source: 'light/events'
-  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_sum, hit_finder]
+  stages: [timestamp_corrector, wvfm_filt, wvfm_align_filt, wvfm_deconv, wvfm_align, wvfm_sum]#, hit_finder]
 
 
 resources:
@@ -18,6 +18,17 @@ timestamp_corrector:
 
 wvfm_filt:
   !include yamls/module0_flow/reco/light/WaveformNoiseFilter.yaml
+
+
+wvfm_align_filt:
+  classname: WaveformAlign
+  path: module0_flow.reco.light.wvfm_align
+  requires:
+    - 'light/fwvfm'
+  params:
+    wvfm_dset_name: 'light/fwvfm'
+    busy_channel:
+        All: 0
 
 
 wvfm_deconv:
