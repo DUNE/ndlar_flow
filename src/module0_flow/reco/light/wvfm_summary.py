@@ -67,6 +67,7 @@ class WaveformSummary(H5FlowStage):
 
         # then set up new datasets
         self.data_manager.create_dset(self.wvfm_summ_dset_name, dtype=self.dtype)
+        self.data_manager.create_ref(source_name, self.wvfm_summ_dset_name)
 
     def run(self, source_name, source_slice, cache):
         super(WaveformSummary, self).run(source_name, source_slice, cache)
@@ -108,4 +109,10 @@ class WaveformSummary(H5FlowStage):
             summ_arr['ch'] = ch.flat[mask]
             summ_arr['sn'] = sn.flat[mask]
             summ_arr['adc'] = adc.flat[mask]
+
+            ref = np.c_[(valid * event_data['id'][:,np.newaxis,np.newaxis])[valid], summ_slice]
+        else:
+            ref = np.empty((0,2))
+            
         self.data_manager.write_data(self.wvfm_summ_dset_name, summ_slice, summ_arr)
+        self.data_manager.write_ref(source_name, self.wvfm_summ_dset_name, ref)
