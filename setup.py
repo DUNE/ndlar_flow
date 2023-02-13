@@ -21,6 +21,7 @@ setuptools.setup(name='module0_flow',
                      'scipy',
                      'scikit-image',
                      'scikit-learn',
-                     'h5flow>=0.2.0'
+                     'h5flow>=0.2.0',
+                     'pylandau',
                  ]
                  )
