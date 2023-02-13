@@ -353,7 +353,7 @@ class RawEventGenerator(H5FlowGenerator):
 
         logging.info(f'total packets: {len(block)}')
         logging.info(f'valid entries: {mask.sum()}')
-        logging.info(f'bad parity: {block["valid_parity"].astype(bool).sum()}')
+        logging.info(f'valid parity: {block["valid_parity"].astype(bool).sum()}')
         logging.info(f'messages: {(block["packet_type"] == 4).sum()}')
         logging.info(f'triggers: {(block["packet_type"] == 7).sum()}')
         logging.info(f'syncs: {(block["packet_type"] == 6).sum()}')        
