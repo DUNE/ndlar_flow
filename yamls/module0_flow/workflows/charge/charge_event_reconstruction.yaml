@@ -21,7 +21,7 @@ raw_events:
 
 
 chip_id_bit_flip_fix:
-  !include h5flow_yamls/reco/charge/BitFlipFix.yaml
+  !include yamls/module0_flow/reco/charge/BitFlipFix.yaml
 
 
 timestamp_corrector:
