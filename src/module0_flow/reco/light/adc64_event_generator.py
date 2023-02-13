@@ -84,7 +84,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
     def event_dtype(self): return np.dtype([
         ('id', 'u8'),  # unique identifier
         ('event', 'i4'),  # event number in data file
-        ('sn', 'i4', self.n_adcs),  # adc serial number
+        ('sn', 'i4', (self.n_adcs,)),  # adc serial number
         ('ch', 'u1', (self.n_adcs, self.n_channels)),  # channel number
         ('utime_ms', 'u8', (self.n_adcs, self.n_channels)),  # unix time [ms since epoch]
         ('tai_ns', 'u8', (self.n_adcs, self.n_channels)),  # time since PPS [ns]
