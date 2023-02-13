@@ -49,6 +49,7 @@ class StoppingMuonSelection(H5FlowStage):
         dqdx_peak_cut=5e3, # e/mm
         profile_search_dx=22, # mm
         remaining_e_cut=85e9, # keV
+        track_deflection_cut=0.75,
 
         curvature_rr_correction=22.6647 / 22,
         density_dx_correction_params=[0.78497819, -3.41826874, 198.93022888],
@@ -336,8 +337,15 @@ class StoppingMuonSelection(H5FlowStage):
         '''
         end_in_fid = resources['Geometry'].in_fid(
             end_xyz, cathode_fid=self.cathode_fid_cut * (include_cathode==True), field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
+        start_in_fid = resources['Geometry'].in_fid(
+            start_xyz, cathode_fid=self.cathode_fid_cut * (include_cathode==True), field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)        
         dy = end_xyz[:, 1] - start_xyz[:, 1]
-        return ((end_in_fid & (dy < 0)) | (~end_in_fid & (dy > 0)))
+        return (
+            ~(start_in_fid & end_in_fid) # events that are fully contained are not considered downward tracks
+            & ((start_in_fid & (dy > 0)) # if start point is in fid, downward if end y > start y
+               | (end_in_fid & (dy < 0)) # if end point is in fid, downward if end y < start y
+               | (~start_in_fid & ~end_in_fid) # if neither endpoint is in fid, assume downward
+               ))
 
     @staticmethod
     def density_dx_correction(rr, *params):
@@ -713,10 +721,23 @@ class StoppingMuonSelection(H5FlowStage):
                 if disabled_channels is not None:
                     proposed_step = traj[...,i-1,:] + curr_direction * dx
                     step_is_disabled = ~disabled_channels.is_active(proposed_step)
-                    local_mask = local_mask | (
-                        (dl < 2*dx) & (dt < 3*dx/4) & hit_mask[...,np.newaxis] & forward
-                        & step_is_disabled[...,np.newaxis,np.newaxis]
-                        & ~(local_mask).any(axis=-2, keepdims=True))
+                    disabled_steps = 0
+                    while np.any(step_is_disabled
+                                 & resources['Geometry'].in_fid(proposed_step.reshape(-1,3)).reshape(step_is_disabled.shape)):
+                        disabled_steps += 1
+                        local_mask = local_mask | (
+                            (dl < (1+disabled_steps) * dx) & (dt < (1+disabled_steps)*dx/2)
+                            & hit_mask[...,np.newaxis]
+                            & forward
+                            & step_is_disabled[...,np.newaxis,np.newaxis]
+                            & ~(local_mask).any(axis=-2, keepdims=True))
+
+                        proposed_step = proposed_step + curr_direction * dx
+                        step_is_disabled = ~disabled_channels.is_active(proposed_step)
+
+                        # handle rare case that current direction is 0.0, 0.0, 0.0
+                        if disabled_steps > 10e4:
+                            break
 
                 # then search in a sphere in ever expanding circles
                 search_factor = 1
@@ -725,7 +746,7 @@ class StoppingMuonSelection(H5FlowStage):
                         (r < search_factor * search_dx) & hit_mask[...,np.newaxis]
                         & ~(local_mask).any(axis=-2, keepdims=True)))
                     search_factor += 1
-                    if search_factor > 5:
+                    if search_factor > 10:
                         break
 
             # if no more hits found, continue
@@ -905,6 +926,8 @@ class StoppingMuonSelection(H5FlowStage):
 
             # define a stopping event as one with exclusively 1 track that enters from the outer boundary,
             # going downward, with little activity in the outer veto region and no through-going tracks
+
+            # choose seed points from trajectory end points, outside of the fid volume
             start_in_fid = resources['Geometry'].in_fid(
                 track_start, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut)
             seed_pt = np.where(np.expand_dims(start_in_fid, axis=-1),
@@ -914,7 +937,14 @@ class StoppingMuonSelection(H5FlowStage):
                                  & ~resources['Geometry'].in_fid(
                                      seed_pt.reshape(-1,3), cathode_fid=self.cathode_fid_cut, field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut))
             seed_near_cathode = seed_near_cathode.reshape(tracks.shape)
-            seed_track_mask = is_stopping & ~seed_near_cathode & is_downward
+            #seed_track_mask = is_stopping & ~seed_near_cathode & is_downward
+            # calculate the track unit direction at each trajectory step
+            track_dir = tracks['dx'] / np.linalg.norm(tracks['dx'], axis=-1, keepdims=True).clip(1e-300, None)
+            # calculate the cos of the dx between trajectory steps
+            track_deflection = np.sum(track_dir[...,1:,:] * track_dir[...,:-1,:], axis=-1)
+            # handle 0-length steps (assume parallel)
+            track_deflection[track_deflection == 0] = 1
+            seed_track_mask = is_downward & ~seed_near_cathode & (is_stopping | np.any(track_deflection < self.track_deflection_cut, axis=-1))
             max_seed_pts = int(max(np.sum(seed_track_mask.filled(0), axis=-1).max(), 1))
             seed_pt_idx = ma.argsort(ma.array(seed_track_mask, mask=~seed_track_mask | seed_track_mask.mask), axis=-1, fill_value=0)[..., ::-1, np.newaxis]
             seed_pt = np.take_along_axis(seed_pt, seed_pt_idx, axis=1)[...,:max_seed_pts,:]
@@ -1168,9 +1198,9 @@ class StoppingMuonSelection(H5FlowStage):
             if len(event_true_sel):
                 event_true_sel['sel'] = event_is_true_stopping
                 event_true_sel['stop'] = is_true_stopping
-                event_true_sel['muon_loglikelihood_mean'] = ma.sum(is_muon & is_true_stopping, axis=-1) >= 1
-                event_true_sel['proton_loglikelihood_mean'] = ma.sum(is_proton & is_true_stopping, axis=-1) >= 1
-                event_true_sel['mip_loglikelihood_mean'] = ma.sum(is_muon & ~is_true_stopping, axis=-1) >= 1
+                event_true_sel['muon_loglikelihood_mean'] = is_muon & is_true_stopping
+                event_true_sel['proton_loglikelihood_mean'] = is_proton & is_true_stopping
+                event_true_sel['mip_loglikelihood_mean'] = is_muon & ~is_true_stopping
                 event_true_sel['stop_pt'] = true_stop_pt.reshape(event_true_sel['stop_pt'].shape)
 
         # reserve data space

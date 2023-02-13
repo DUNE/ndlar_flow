@@ -10,6 +10,7 @@ from h5flow.core import H5FlowStage, resources
 from h5flow.data import dereference_chain
 
 from module0_flow.util.func import mode, condense_array
+import module0_flow.util.units as units
 
 
 class MuonCaptureTruthLabels(H5FlowStage):
@@ -126,12 +127,16 @@ class MuonCaptureTruthLabels(H5FlowStage):
             truth_label['stopping_track_id'] = traj_stop['trackID'] * (truth_label['stopping_event'])
 
             # now check for the presence of a Michel decay
+            stop_t = np.max(track_stop['t0_end'], axis=-1, keepdims=True)
             is_traj_michel = (
                 (np.abs(traj['pdgId']) == 11) & (traj['start_process'] != 2)
+                & (((traj['start_process'] == 6) & (traj['start_subprocess'] == 201)) # standard mu+ Michel decay
+                   | ((traj['start_process'] == 4) & (traj['start_subprocess'] == 151) # DIO mu- decay
+                      & ~((np.linalg.norm(traj['pxyz_start'], axis=-1) < 1016) # exclude prompt Auger electrons which do not have a separate Geant creation process id
+                          & ((traj['t_start'] * units.ms - stop_t * units.us) < 10 * units.ns))))
                 & (traj['eventID'] == np.expand_dims(traj_stop['eventID'],-1))
-                & (traj['parentID'] == np.expand_dims(traj_stop['trackID'],-1))
-                & ((np.linalg.norm(traj['pxyz_start'], axis=-1) < 1015) # FIXME: geant4 does not distinguish between Auger electrons and DIO electrons, use just the energy for now
-                   | (np.linalg.norm(traj['pxyz_start'], axis=-1) > 1016)))
+                & (traj['parentID'] == np.expand_dims(traj_stop['trackID'],-1)))
+
             michel = np.take_along_axis(
                 traj, ma.argmax(is_traj_michel, axis=-1)[...,np.newaxis], axis=-1).ravel()
             michel_track_idx = np.take_along_axis(
