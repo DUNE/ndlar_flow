@@ -70,7 +70,7 @@ noise_overlay:
       path: ['charge/hits', 'combined/q_calib_el']
   params:
     hits_name: 'charge/hits'
-    charge_name: 'combined/q_calib_el'
+    hit_charge_name: 'combined/q_calib_el'
     model_params:
       medm:
         type: 'scale_plus_binomial_noise'
@@ -79,8 +79,10 @@ noise_overlay:
         # <5% single channel dQ/dx shape residual for medium threshold runs btw 2-10ke/mm
         scale_factor: 1.007
         scale_width: 0.0667
-        binom_noise_scale: 9.946 # mV
-        binom_noise_width: 14.60 # mV
+        # binom_noise_scale: 9.946 # mV
+        # binom_noise_width: 14.60 # mV
+        binom_noise_scale: 11.2511 # mV, rescaled for simulated 222e/mV gain
+        binom_noise_width: 16.5158 # mV, rescaled for simulated 222e/mV gain
         binom_noise_prob: 0.2431
         binom_noise_asymm: 0.5425
 
@@ -91,8 +93,10 @@ noise_overlay:
         # <5% single channel dQ/dx shape residual for high threshold runs btw 2-10ke/mm
         scale_factor: 1.021
         scale_width: 0.04898
-        binom_noise_scale: 15.376 # mV
-        binom_noise_width: 17.676 # mV
+        # binom_noise_scale: 15.376 # mV
+        # binom_noise_width: 17.676 # mV
+        binom_noise_scale: 17.3936 # mV 
+        binom_noise_width: 19.9954 # mV
         binom_noise_prob: 0.2471
         binom_noise_asymm: 0.6020
 
@@ -124,13 +128,14 @@ stopping_muon_sel:
     cathode_fid_cut: 22 # mm
     profile_dx: 22 # mm
     larpix_gain:
-      mc: 250 # e/mV
+      mc: 222 # e/mV
       medm: 221 # e/mV
       high: 221 # e/mV
     curvature_rr_correction:
       mc: 1.0
       medm: 1.0
       high: 1.0
+
 
 michel_id:
   classname: MichelID
