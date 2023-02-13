@@ -126,10 +126,13 @@ class RawEventGenerator(H5FlowGenerator):
         self.event_builder = globals()[self.event_builder_class](**self.event_builder_config)
 
         # set up input file
-        if H5FLOW_MPI:
-            self.input_fh = h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm)
+        if self.input_filename == self.data_manager.filepath:
+            self.input_fh = self.data_manager
         else:
-            self.input_fh = h5py.File(self.input_filename, 'r')
+            if H5FLOW_MPI:
+                self.input_fh = h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm)
+            else:
+                self.input_fh = h5py.File(self.input_filename, 'r')
         self.packets = self.input_fh['packets']
 
         # set up loop variables
