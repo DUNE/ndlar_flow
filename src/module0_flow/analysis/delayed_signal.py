@@ -193,15 +193,17 @@ class DelayedSignal(H5FlowStage):
         # load from cache
         wvfm = cache[self.wvfm_dset_name]
         wvfm_align = cache[self.wvfm_align_dset_name]
-        if wvfm is not None and len(wvfm):
-            wvfm = wvfm.reshape((len(np.r_[source_slice]),-1))['samples']
+        if wvfm is not None and wvfm.size > 0:
+            wvfm = wvfm.reshape((len(np.r_[source_slice]), -1))['samples']
             wvfm_align = wvfm_align.reshape((len(np.r_[source_slice]),-1))
-        else:
+        elif wvfm is not None:
             wvfm = ma.array(np.empty((0,1,1,1,1), dtype=wvfm.dtype['samples']))
             wvfm_align = ma.array(np.empty((0,1), dtype=wvfm_align.dtype))
-        # remove samples near end of waveform
-        wvfm = wvfm[...,self.edge_effect_window:-self.edge_effect_window]
-        wvfm_ns = wvfm_align['ns'][...,np.newaxis,np.newaxis,np.newaxis] - (wvfm_align['sample_idx'][...,np.newaxis] - self.edge_effect_window - np.arange(wvfm.shape[-1])) * self.sample_rate
+
+        if wvfm is not None:
+            # remove samples near end of waveform
+            wvfm = wvfm[...,self.edge_effect_window:-self.edge_effect_window]
+            wvfm_ns = wvfm_align['ns'][...,np.newaxis,np.newaxis,np.newaxis] - (wvfm_align['sample_idx'][...,np.newaxis] - self.edge_effect_window - np.arange(wvfm.shape[-1])) * self.sample_rate
 
         # prep output arrays
         prompt_data = np.zeros(wvfm.shape[0], dtype=self.prompt_dtype)
@@ -209,7 +211,7 @@ class DelayedSignal(H5FlowStage):
         fit_data = np.zeros(wvfm.shape[0], dtype=self.fit_dtype)
 
         hits = cache[self.hits_dset_name]
-        if hits.shape[0]:
+        if hits is not None and hits.shape[0]:
             # calculate event acceptance
             hit_drift = cache[self.hit_drift_dset_name]
             michel_id = cache[self.michel_id_dset_name]
@@ -239,23 +241,33 @@ class DelayedSignal(H5FlowStage):
                     or ~event_sel[iev]['sel'].astype(bool)):
                     continue
 
+                # FIXME: skip events with poor timing signature (only necessary for Module0-Run2 long readout window data)
+                valid_mask = wvfm_align[iev]['ns'] != 0
+                if ((np.max(wvfm_align[iev]['ns'][valid_mask]) - np.min(wvfm_align[iev]['ns'][valid_mask]) > 600)
+                    and wvfm[iev].shape[-1] >= 1024 - 2 * self.edge_effect_window):
+                    continue
+
                 # align waveforms to overlapping region only
+                # get the sample index of each trigger rising edge
                 sample_idx = ma.array(wvfm_align[iev]['sample_idx'] - self.edge_effect_window,
                                       mask=wvfm_align[iev]['sample_idx']==0)
+                # get the earliest and latest trigger edge
                 last_trig_sample_idx = sample_idx.min(axis=(-1,-2,-3))
                 first_trig_sample_idx = sample_idx.max(axis=(-1,-2,-3))
 
+                # only include the region of samples from (trig_edge - last_trig_edge) -> (waveform_end - (first_trig_edge - trig_edge))
                 trig_end_clip = wvfm.shape[-1] - (first_trig_sample_idx[...,np.newaxis,np.newaxis]- sample_idx).astype(int)
                 trig_start_clip = (sample_idx - last_trig_sample_idx[...,np.newaxis,np.newaxis]).astype(int)
                 overlapping_samples = int(np.min(trig_end_clip - trig_start_clip))
 
+                # apply region selection on each waveform and create a new waveform, timestamp, and sample index for each
                 iclip = np.indices(wvfm[iev].shape[:-1] + (overlapping_samples,))[-1] + trig_start_clip[...,np.newaxis]
                 wvfm_clipped = np.take_along_axis(wvfm[iev], iclip, axis=-1)
                 wvfm_ns_clipped = np.take_along_axis(wvfm_ns[iev], iclip, axis=-1)
                 wvfm_clipped_align_sample = (first_trig_sample_idx - np.max(trig_start_clip)).astype(int)
 
                 # fit prompt component from pca
-                template_align_sample = (self.template_align/32).astype(int)
+                template_align_sample = (self.template_align/32).astype(int) # FIXME: (...)/32 here because of averaging bug in script that generated templates
                 first_trig_sample_idx = np.maximum(wvfm_clipped_align_sample, template_align_sample[np.newaxis])
                 last_trig_sample_idx = np.minimum(wvfm_clipped_align_sample, template_align_sample[np.newaxis])
                 template_end_clip = min(self.template.shape[-1], wvfm_clipped.shape[-1]) - (first_trig_sample_idx - template_align_sample[np.newaxis])
@@ -264,6 +276,7 @@ class DelayedSignal(H5FlowStage):
                 wvfm_start_clip = wvfm_clipped_align_sample - last_trig_sample_idx
                 overlapping_samples = int(np.min(template_end_clip - template_start_clip))
 
+                # sub-select overlapping portion following same approach as used to find overlapping regions of the waveforms
                 iclip_template = np.indices(
                     wvfm.shape[1:2]
                     + self.template.shape[1:-1]
@@ -319,6 +332,7 @@ class DelayedSignal(H5FlowStage):
                                 yinterp = np.interp(xdata[subset], wvfm_ns_clipped[itrig,itpc,idet,:], wvfm_clipped[itrig,itpc,idet,:], left=0, right=0)
                                 yinterp_prompt_sub = np.interp(xdata[subset], wvfm_ns_clipped[itrig,itpc,idet,:], wvfm_clipped[itrig,itpc,idet,:] - prompt_signal[itpc,idet,:] * prompt_trigger, left=0, right=0)
                                 noise = res_dev_clipped[0,itpc,idet] * prompt_trigger + res_dev_clipped[0,itpc,idet].mean() * ~prompt_trigger
+                                #noise = res_dev_clipped[0,itpc,idet].mean()
                                 
                                 ydata[subset] += yinterp
                                 ydata_prompt_sub[subset] += yinterp_prompt_sub
@@ -438,6 +452,7 @@ class DelayedSignal(H5FlowStage):
                     pnull = list(p)
                 pnull[2] = np.inf # push delayed time to infinity
                 mse0 = loss(p0, *fit_args) if fit_args[0].size else 0
+                mse = loss(p, *fit_args) if fit_args[0].size else 0
                     
                 if self.model_fit and not fit_result.success:
                     print('fit failed on ',np.r_[source_slice][iev],'because',fit_result.message)
@@ -450,12 +465,14 @@ class DelayedSignal(H5FlowStage):
                 fit_data[iev]['delayed_ns'] = p[2]
                 fit_data[iev]['pe_vis'] = pe_vis
                 #fit_data[iev]['cov'] = fit_result.jac.T @ fit_result.jac * fit_result.fun**2
-                fit_data[iev]['mse'] = fit_result.fun if self.model_fit else loss(p, *fit_args)
+                fit_data[iev]['mse'] = mse
                 fit_data[iev]['mse0'] = mse0
                 fit_data[iev]['ndf'] = wvfm_ns[iev,trig,tpc,det,:].size - len(p)
                 fit_data[iev]['fraction'] = p[3]
                 fit_data[iev]['tau_t'] = p[4]
 
+                if False and 980 < delayed_data[iev]['delay'] < 1140 and delayed_data[iev]['sum'] > 300:
+                    import pdb; pdb.set_trace()
 
                 ## FOR DEBUG ONLY!
                 # plots each analyzed event
