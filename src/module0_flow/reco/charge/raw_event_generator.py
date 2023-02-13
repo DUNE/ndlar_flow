@@ -90,6 +90,7 @@ class RawEventGenerator(H5FlowGenerator):
     default_mc_tracks_dset_name = 'mc_truth/tracks'
     default_mc_trajectories_dset_name = 'mc_truth/trajectories'
     default_mc_packet_fraction_dset_name = 'mc_truth/packet_fraction'
+    default_skip_mc_truth = False
 
     raw_event_dtype = np.dtype([
         ('id', 'u8'),
@@ -113,6 +114,7 @@ class RawEventGenerator(H5FlowGenerator):
         self.timestamp_bit_error_spec = params.get('timestamp_bit_error_spec', dict())
         self.event_builder_class = params.get('event_builder_class', self.default_event_builder_class)
         self.event_builder_config = params.get('event_builder_config', self.default_event_builder_config)
+        self.skip_mc_truth = params.get('skip_mc_truth', self.default_skip_mc_truth)
 
         # set up new dataset paths
         self.packets_dset_name = params.get('packets_dset_name', self.default_packets_dset_name)
@@ -262,55 +264,56 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.create_ref(self.mc_events_dset_name, self.mc_tracks_dset_name)
             self.data_manager.create_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name)
 
-            # create references between trajectories and tracks
-            traj_evid = self.mc_trajectories['eventID'][:]
-            tracks_evid = self.mc_tracks['eventID'][:]
-            evs, ev_traj_start, ev_track_start = np.intersect1d(
-                traj_evid, tracks_evid, return_indices=True)
-            evs, ev_traj_end, ev_track_end = np.intersect1d(
-                traj_evid[::-1], tracks_evid[::-1], return_indices=True)
-            ev_traj_end = len(self.mc_trajectories['eventID']) - ev_traj_end
-            ev_track_end = len(self.mc_tracks['eventID']) - ev_track_end
-            truth_slice = slice(
-                ceil(len(evs) / self.size) * self.rank,
-                ceil(len(evs) / self.size) * (self.rank + 1))
+            if self.skip_mc_truth == False:
+                # create references between trajectories and tracks
+                traj_evid = self.mc_trajectories['eventID'][:]
+                tracks_evid = self.mc_tracks['eventID'][:]
+                evs, ev_traj_start, ev_track_start = np.intersect1d(
+                    traj_evid, tracks_evid, return_indices=True)
+                evs, ev_traj_end, ev_track_end = np.intersect1d(
+                    traj_evid[::-1], tracks_evid[::-1], return_indices=True)
+                ev_traj_end = len(self.mc_trajectories['eventID']) - ev_traj_end
+                ev_track_end = len(self.mc_tracks['eventID']) - ev_track_end
+                truth_slice = slice(
+                    ceil(len(evs) / self.size) * self.rank,
+                    ceil(len(evs) / self.size) * (self.rank + 1))
+                
+                # create placeholder events data
+                mc_events_slice = self.data_manager.reserve_data(self.mc_events_dset_name, len(evs[truth_slice]))
+                mc_events_data = np.empty(len(evs[truth_slice]), dtype=self.mc_event_dtype)
+                mc_events_data['id'] = evs[truth_slice]
+                self.data_manager.write_data(
+                    self.mc_events_dset_name, mc_events_slice, mc_events_data)
 
-            # create placeholder events data
-            mc_events_slice = self.data_manager.reserve_data(self.mc_events_dset_name, len(evs[truth_slice]))
-            mc_events_data = np.empty(len(evs[truth_slice]), dtype=self.mc_event_dtype)
-            mc_events_data['id'] = evs[truth_slice]
-            self.data_manager.write_data(
-                self.mc_events_dset_name, mc_events_slice, mc_events_data)
-
-            traj_trackid = self.mc_trajectories['trackID'][:]
-            tracks_trackid = self.mc_tracks['trackID'][:]
-            iter_ = tqdm(range(truth_slice.start, truth_slice.stop), smoothing=1, desc='generating truth references') if self.rank == 0 else range(truth_slice.start, truth_slice.stop)
-            for i in iter_:
-                if i < len(evs):
-                    ev = evs[i]
-                    traj_start, traj_end = ev_traj_start[i], ev_traj_end[i]
-                    track_start, track_end = ev_track_start[i], ev_track_end[i]
-                    traj_trackid_block = np.expand_dims(traj_trackid[traj_start:traj_end], -1)
-                    track_trackid_block = np.expand_dims(tracks_trackid[track_start:track_end], 0)
-                    traj_evid_block = np.expand_dims(traj_evid[traj_start:traj_end], -1)
-                    track_evid_block = np.expand_dims(tracks_evid[track_start:track_end], 0)
-                    ref = np.argwhere((traj_trackid_block == track_trackid_block) &
-                                      (traj_evid_block == track_evid_block))
-                    ref[:, 0] += traj_start
-                    ref[:, 1] += track_start
-                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, ref)
-                    ref = np.argwhere(ev == traj_evid_block)
-                    ref[:, 0] += traj_start
-                    ref[:, 1] = i + mc_events_slice.start
-                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, ref)
-                    ref = np.argwhere(ev == track_evid_block)
-                    ref[:, 0] = i + mc_events_slice.start
-                    ref[:, 1] += track_start
-                    self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, ref)
-                else:
-                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
-                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, np.empty((0,2)))
-                    self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))                                        
+                traj_trackid = self.mc_trajectories['trackID'][:]
+                tracks_trackid = self.mc_tracks['trackID'][:]
+                iter_ = tqdm(range(truth_slice.start, truth_slice.stop), smoothing=1, desc='generating truth references') if self.rank == 0 else range(truth_slice.start, truth_slice.stop)
+                for i in iter_:
+                    if i < len(evs):
+                        ev = evs[i]
+                        traj_start, traj_end = ev_traj_start[i], ev_traj_end[i]
+                        track_start, track_end = ev_track_start[i], ev_track_end[i]
+                        traj_trackid_block = np.expand_dims(traj_trackid[traj_start:traj_end], -1)
+                        track_trackid_block = np.expand_dims(tracks_trackid[track_start:track_end], 0)
+                        traj_evid_block = np.expand_dims(traj_evid[traj_start:traj_end], -1)
+                        track_evid_block = np.expand_dims(tracks_evid[track_start:track_end], 0)
+                        ref = np.argwhere((traj_trackid_block == track_trackid_block) &
+                                          (traj_evid_block == track_evid_block))
+                        ref[:, 0] += traj_start
+                        ref[:, 1] += track_start
+                        self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, ref)
+                        ref = np.argwhere(ev == traj_evid_block)
+                        ref[:, 0] += traj_start
+                        ref[:, 1] = i + mc_events_slice.start
+                        self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, ref)
+                        ref = np.argwhere(ev == track_evid_block)
+                        ref[:, 0] = i + mc_events_slice.start
+                        ref[:, 1] += track_start
+                        self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, ref)
+                    else:
+                        self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
+                        self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, np.empty((0,2)))
+                        self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))                                        
 
         # if self.is_mc:
         #     # copy meta-data from input file
@@ -326,7 +329,6 @@ class RawEventGenerator(H5FlowGenerator):
 
     def finish(self):
         super(RawEventGenerator, self).finish()
-        self.input_fh.close()
 
     def next(self):
         '''
@@ -475,7 +477,7 @@ class RawEventGenerator(H5FlowGenerator):
         ref = np.c_[ev_idcs, packets_idcs]
         self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, ref)
 
-        if self.is_mc:
+        if self.is_mc and self.skip_mc_truth == False:
             # write mc data to file
             mc_assn = (np.concatenate(event_mc_assn, axis=0)
                        if len(event_mc_assn) else np.full((0,), -1, dtype=self.mc_assn.dtype))
