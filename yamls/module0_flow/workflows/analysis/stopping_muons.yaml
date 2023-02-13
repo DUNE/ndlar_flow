@@ -176,5 +176,5 @@ bkg_id:
     
     generate_likelihood_pdf: False
     #generate_likelihood_pdf: True
-    likelihood_pdf_filename: h5flow_data/bkg_pdf-0.0.0.npz
+    likelihood_pdf_filename: data/module0_flow/bkg_pdf-0.0.0.npz
     # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/bkg_pdf-0.0.0.npz
