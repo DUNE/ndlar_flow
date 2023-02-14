@@ -157,6 +157,7 @@ class LightIntensityMapGenerator(H5FlowStage):
         xyz = np.c_[x,y,z]
 
         # apply gain calibration
+        gain = (221 if not resources['RunData'].is_mc else 222)
         q = hit_charge['q'].compressed() * gain # mV -> e
         q = np.where(resources['Geometry'].in_fid(xyz) & (hit_drift['t_drift'].compressed() < 1900) & (hit_drift['t_drift'].compressed() > 0), q, 0)
 
