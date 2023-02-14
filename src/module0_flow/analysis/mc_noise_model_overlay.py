@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.ma as ma
 import logging
 
 from h5flow.core import H5FlowStage, resources
@@ -136,6 +137,8 @@ class MCNoiseModelOverlay(H5FlowStage):
         rv = np.empty_like(q)
         np.put(rv, order, smeared_q)
 
+        if hasattr(q, 'mask'):
+            rv = ma.array(rv, mask=q.mask)
         return rv
 
     def run(self, source_name, source_slice, cache):
@@ -152,7 +155,10 @@ class MCNoiseModelOverlay(H5FlowStage):
                       + hits['chipid'].astype(int)) * 100
                      + hits['channelid'].astype(int))
 
-        smeared_q = getattr(self, self.model_params['type'])(hit_q['q'].ravel(), unique_id.ravel(), **self.model_params)
+        if (~hits.mask['id']).sum() > 0:
+            smeared_q = getattr(self, self.model_params['type'])(hit_q['q'].ravel(), unique_id.ravel(), **self.model_params)
+        else:
+            smeared_q = hit_q['q'].ravel()
 
         if self.is_mc:
             hit_q['q'] = smeared_q.reshape(hit_q.shape)

@@ -80,7 +80,7 @@ def light_reco_file(light_event_built_file, light_noise_file, light_signal_file,
                end_position=200)
 
     check_dsets(tmp_h5_file, (
-        'light/hits/data',
+        #'light/hits/data', # 2/13 - removed from workflow
         'light/t_ns/data',
     ))
 
@@ -99,7 +99,7 @@ def light_reco_wvfm_file(light_event_built_file, light_noise_file, light_signal_
                end_position=200)
 
     check_dsets(tmp_h5_file, (
-        'light/hits/data',
+        # 'light/hits/data', # 2/13 - removed from workflow
         'light/t_ns/data',
         'light/fwvfm/data',
         'light/deconv/data',
@@ -225,6 +225,7 @@ def broken_track_sim_file(combined_file_no_light, geometry_file, light_geometry_
 @pytest.fixture
 def stopping_muon_analysis_file(combined_file, geometry_file, light_geometry_file,
                                 proton_range_table, muon_range_table, michel_pdf_file,
+                                background_pdf_file,
                                 electron_lifetime_file, tmp_h5_file):
     print('Stopping muon analysis...')
     h5flow.run(['yamls/module0_flow/workflows/analysis/stopping_muons.yaml'],

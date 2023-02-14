@@ -7,10 +7,12 @@ flow:
 
 resources:
   - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
 
 events:
   classname: H5FlowDatasetLoopGenerator
-  path: h5flow.modules
+  path: h5flow.modules.h5_flow_dataset_loop_generator
   dset_name: 'charge/events'
   params:
     chunk_size: 1
@@ -20,8 +22,18 @@ light_map:
   classname: LightIntensityMapGenerator # analysis/light_intensity_map.py
   path: module0_flow.analysis.light_intensity_map
   requires:
-    - name: 'light/swvfm'
-      path: ['light/events', 'light/swvfm']
+    - name: 'light/fwvfm'
+      path: ['light/events', 'light/fwvfm']
     - 'charge/hits'
+    - name: 'combined/q_calib_el'
+      path: ['charge/hits', 'combined/q_calib_el']
     - name: 'combined/hit_drift'
       path: ['charge/hits', 'combined/hit_drift']
+  params:
+    wvfm_dset_name: 'light/fwvfm'
+    charge_dset_name: 'combined/q_calib_el'
+    q_file: light_intensity_q.data.lut.v5.npz
+    s_file: light_intensity_s.data.lut.v5.npz
+    sum_files: True
+    charge_weighting: False
+    use_adc_channel_id: True

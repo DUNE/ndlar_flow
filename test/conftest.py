@@ -148,6 +148,13 @@ def michel_pdf_file(pytestconfig, tmp_path_factory):
                                       'michel_pdf-0.1.0.npz')))
 
 @pytest.fixture
+def background_pdf_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/merged/reco_data/'
+                                      'bkg_pdf-0.0.0.npz')))
+
+@pytest.fixture
 def triplet_response_data_256_file(pytestconfig, tmp_path_factory):
     rv = next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'

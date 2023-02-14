@@ -14,50 +14,57 @@ import tqdm
 import multiprocessing
 
 def match_files(filename, grp2_files, outpath, runlist, suffix, prefix, verbose):
-    reduced_filename = os.path.basename(filename.removesuffix(suffix[0])).removeprefix(prefix[0])
-    if runlist is None:
-        match = [reduced_filename in os.path.basename(other.removesuffix(suffix[1])).removeprefix(prefix[1])
-                 for other in grp2_files]
-        try:
-            i_match = match.index(True)
-        except ValueError:
+    try:
+        reduced_filename = os.path.basename(filename.removesuffix(suffix[0])).removeprefix(prefix[0])
+        if runlist is None:
+            match = [reduced_filename in os.path.basename(other.removesuffix(suffix[1])).removeprefix(prefix[1])
+                     for other in grp2_files]
+            try:
+                i_match = match.index(True)
+            except ValueError:
+                if verbose:
+                    print(f'Failed to match {reduced_filename}')
+                return False
+        else:
+            i_match = None
+            with open(runlist,'r') as f:
+                for line in f.readlines()[1:]:
+                    fields = line.split()
+                    if not len(fields):
+                        continue
+                    cfile = fields[1]
+                    lfile = fields[2]
+
+                    if cfile in reduced_filename:
+                        for i,light_filename in enumerate(grp2_files):
+                            if lfile in os.path.basename(light_filename.removesuffix(suffix[1])).removeprefix(prefix[0]) or cfile in os.path.basename(light_filename.removesuffix(suffix[1])).removeprefix(prefix[0]):
+                                i_match = i
+                                break
+                        break
+            if i_match is None:
+                if verbose:
+                    print(f'Failed to match {reduced_filename} in {os.path.basename(runlist)}')
+                return False
+
+        grp2_filename = grp2_files[i_match]
+        if verbose:
+            print(f'Merging {os.path.basename(filename)} and {os.path.basename(grp2_filename)}')
+        with h5py.File(os.path.join(outpath, os.path.basename(filename)), 'a') as fo:
+            if filename != fo.filename:
+                with h5py.File(filename, 'r') as fi:
+                    fi.visititems(lambda k,v: fi.copy(fi[k], fo, name=k) if not k in fo else None)
+
+            if grp2_filename != fo.filename:
+                with h5py.File(grp2_filename, 'r') as fi:
+                    fi.visititems(lambda k,v: fi.copy(fi[k], fo, name=k) if not k in fo else None)
+
             if verbose:
-                print(f'Failed to match {reduced_filename}')
-            return False
-    else:
-        i_match = None
-        with open(runlist,'r') as f:
-            for line in f.readlines()[1:]:
-                fields = line.split()
-                if not len(fields):
-                    continue
-                cfile = fields[1]
-                lfile = fields[2]
-
-                if cfile in reduced_filename:
-                    for i,light_filename in enumerate(grp2_files):
-                        if lfile in os.path.basename(light_filename.removesuffix(suffix[1])).removeprefix(prefix[0]) or cfile in os.path.basename(light_filename.removesuffix(suffix[1])).removeprefix(prefix[0]):
-                            i_match = i
-                            break
-                    break
-        if i_match is None:
-            if verbose:
-                print(f'Failed to match {reduced_filename} in {os.path.basename(runlist)}')
-            return False
-
-    grp2_filename = grp2_files[i_match]
-    if verbose:
-        print(f'Merging {os.path.basename(filename)} and {os.path.basename(grp2_filename)}')
-    with h5py.File(os.path.join(outpath, os.path.basename(filename)), 'a') as fo:
-        if filename != fo.filename:
-            with h5py.File(filename, 'r') as fi:
-                fi.visititems(lambda k,v: fi.copy(fi[k], fo, name=k) if isinstance(v, h5py.Group) and not k in fo else None)
-
-        if grp2_filename != fo.filename:
-            with h5py.File(grp2_filename, 'r') as fi:
-                fi.visititems(lambda k,v: fi.copy(fi[k], fo, name=k) if isinstance(v, h5py.Group) and not k in fo else None)
+                fo.visititems(lambda k,v: print(k,v))
             
-    return True
+        return True
+    except Exception as e:
+        print(e)
+        return False
     
 
 def main(outpath, grp1_input, grp2_input, processes, runlist, suffix, prefix, verbose, **kwargs):
