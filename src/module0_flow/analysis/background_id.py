@@ -223,6 +223,7 @@ class BackgroundID(H5FlowStage):
             bkg_label['bkg_q'] = np.sum(hit_q * (hit_score < self.score_cut) * ~muon_flag, axis=-1)            
             bkg_label['muon_dir'] = mu_dir
             bkg_label['stop_pt'] = mu_end
+        logging.info(f'total background hits (per event): {bkg_label["bkg_nhit"].tolist()}')
 
         hit_mask = ~hits['id'].mask
         hit_label = np.empty(hit_mask.sum(), dtype=self.hit_label_dtype)
@@ -230,6 +231,7 @@ class BackgroundID(H5FlowStage):
             hit_label['score'] = hit_score[hit_mask]
             hit_label['bkg_flag'] = ((hit_score < self.score_cut) & ~muon_flag)[hit_mask]
             hit_label['muon_flag'] = muon_flag[hit_mask]
+        logging.info(f'total background hits (per batch): {hit_label["bkg_flag"].sum()}')
 
         # write to file
         self.data_manager.reserve_data(self.bkg_label_dset_name, source_slice)

@@ -422,12 +422,13 @@ class ElectronLifetimeCalib(H5FlowStage):
             # even if hits are slightly late (i.e. in the case of multiple self-triggers on
             # a channel from a track crossing the cathode)
 
-            f = ma.masked_where(
-                drift['t_drift'].mask,
-                np.where(
-                    (drift['t_drift'] >= 0) & (drift['t_drift'] * tick_size * v_drift <= max_drift),
-                    np.exp((drift['t_drift'] * tick_size) / electron_lifetime[:,np.newaxis]),
-                    1)
+            with np.errstate(over='ignore'):
+                f = ma.masked_where(
+                    drift['t_drift'].mask,
+                    np.where(
+                        (drift['t_drift'] >= 0) & (drift['t_drift'] * tick_size * v_drift <= max_drift),
+                        np.exp((drift['t_drift'] * tick_size) / electron_lifetime[:,np.newaxis]),
+                        1)
                 )
             q = f * q
 
