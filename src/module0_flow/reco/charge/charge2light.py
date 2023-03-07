@@ -113,9 +113,9 @@ class Charge2LightAssociation(H5FlowStage):
 
         if self.rank == 0:
             self.total_matched_light = self.matched_light.clip(0,1).sum()
-            trigger_eff = self.total_matched_triggers/self.total_charge_triggers
-            event_eff = self.total_matched_events/self.total_charge_events
-            light_eff = self.total_matched_light/self.total_light_events
+            trigger_eff = self.total_matched_triggers/max(self.total_charge_triggers, 1)
+            event_eff = self.total_matched_events/max(self.total_charge_events, 1)
+            light_eff = self.total_matched_light/max(self.total_light_events, 1)
             print(f'Total charge trigger matching: {self.total_matched_triggers}/{self.total_charge_triggers} ({trigger_eff:0.04f})')
             print(f'Total charge event matching: {self.total_matched_events}/{self.total_charge_events} ({event_eff:0.04f})')
             print(f'Total light event matching: {self.total_matched_light}/{self.total_light_events} ({light_eff:0.04f})')
