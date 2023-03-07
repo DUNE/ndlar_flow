@@ -1046,8 +1046,8 @@ class StoppingMuonSelection(H5FlowStage):
                         #proton_r0[i] = rr_offset[ma.argmin(ma.array(proton_likelihood, mask=~mask), axis=0)] + proton_r0[i]
                         proton_offset.append(rr_offset[ma.argmin(ma.array(proton_likelihood[j], mask=~mask), axis=0)])
 
-                    muon_j_min = np.argmin([np.min(ll) if ll is not np.nan else 1e+303 for ll in muon_likelihood])
-                    proton_j_min = np.argmin([np.min(ll) if ll is not np.nan else 1e+303 for ll in proton_likelihood])
+                    muon_j_min = np.argmin([np.min(ll) if ll is not np.nan and np.any(~ll.mask) else 1e+303 for ll in muon_likelihood])
+                    proton_j_min = np.argmin([np.min(ll) if ll is not np.nan and np.any(~ll.mask) else 1e+303 for ll in proton_likelihood])
                     muon_score[i] = muon_likelihood[muon_j_min].filled(1e+303)
                     muon_r0[i] = muon_offset[muon_j_min]
                     proton_r0[i] = proton_offset[proton_j_min]
@@ -1172,6 +1172,8 @@ class StoppingMuonSelection(H5FlowStage):
             event_sel['veto_q'] = veto_q
             event_sel['max_dqdx'] = max_dqdx
 
+            logging.info(f'reconstructed {event_sel["stop"].astype(int).sum()} stopping events ({event_sel["sel"].astype(int).sum()} potential muons) of {len(event_sel)} total events')
+
         event_profile = np.zeros(len(tracks), dtype=self.event_profile_dtype)
         if len(event_profile):
             event_profile['seed_pt'] = start_pt.reshape(event_profile['seed_pt'].shape)
@@ -1203,6 +1205,10 @@ class StoppingMuonSelection(H5FlowStage):
                 event_true_sel['mip_loglikelihood_mean'] = is_muon & ~is_true_stopping
                 event_true_sel['stop_pt'] = true_stop_pt.reshape(event_true_sel['stop_pt'].shape)
 
+                logging.info(f'truth contained {event_true_sel["stop"].astype(int).sum()} true stopping events ({event_true_sel["sel"].astype(int).sum()} muons) of {len(event_true_sel)} total events')
+                logging.info(f'True stopping muons: {np.argwhere(event_true_sel["sel"]).ravel()}')
+                logging.info(f'Reco stopping muons: {np.argwhere(event_sel["sel"]).ravel()}')
+                
         # reserve data space
         event_sel_slice = self.data_manager.reserve_data(
             f'{self.path}/{self.event_sel_dset_name}', source_slice)

@@ -294,6 +294,7 @@ class MichelID(H5FlowStage):
             michel_label['muon_dir'] = mu_dir
             michel_label['stop_pt'] = mu_end
             michel_label['michel_end'] = michel_end
+        logging.info(f'total Michel hits (per {len(ev)} events): {michel_label["michel_nhit"].tolist()}')
 
         hit_mask = ~hits['id'].mask
         hit_label = np.empty(hit_mask.sum(), dtype=self.hit_label_dtype)
@@ -301,6 +302,7 @@ class MichelID(H5FlowStage):
             hit_label['score'] = hit_score[hit_mask]
             hit_label['michel_flag'] = ((hit_score > 0) & ~muon_flag)[hit_mask]
             hit_label['muon_flag'] = muon_flag[hit_mask]
+        logging.info(f'total Michel hits (per batch): {hit_label["michel_flag"].sum()}')
 
         # write to file
         self.data_manager.reserve_data(self.michel_label_dset_name, source_slice)

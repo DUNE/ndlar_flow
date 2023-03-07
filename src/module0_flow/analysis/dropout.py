@@ -46,6 +46,7 @@ class Dropout(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         super(Dropout, self).run(source_name, source_slice, cache)
         if not self.is_mc:
+            logging.info('skipping drop out on data file')
             return
 
         # fetch datasets from file
@@ -57,14 +58,17 @@ class Dropout(H5FlowStage):
         n_unmasked = dsets[0].size
         if hasattr(dsets[0], 'recordmask'):
             n_unmasked = (~(dsets[0].recordmask)).sum()
+        logging.info(f'using {n_unmasked} unmasked elements in {self.mask[0]} {dsets[0].shape} for dropout base mask')
 
         # generate random mask
-        rvs = stats.bernoulli.rvs(p=1-self.p, size=n_unmasked).astype(bool)
+        rvs = stats.bernoulli.rvs(p=self.p, size=n_unmasked).astype(bool)
+        logging.info(f'dropping {rvs.sum()} / {n_unmasked}')
 
         # create a new mask using random mask
         if hasattr(dsets[0], 'recordmask'):
             new_mask = dsets[0].recordmask.copy()
         else:
+            # default behavior is to use all elements
             new_mask = np.zeros(dsets[0].shape, dtype=bool)
         if n_unmasked > 0:
             np.place(new_mask, ~new_mask, rvs)
@@ -75,5 +79,4 @@ class Dropout(H5FlowStage):
             while len(new_mask_i.shape) < len(cache[name].shape):
                 new_mask_i = np.expand_dims(new_mask_i, axis=-1)
             new_mask_i = np.broadcast_to(new_mask_i, cache[name].shape)
-            logging.debug(f'dropped {(~(new_mask_i)).sum()} / {new_mask_i.shape} of {name}')
             cache[name] = ma.array(cache[name], mask=new_mask_i.copy())
