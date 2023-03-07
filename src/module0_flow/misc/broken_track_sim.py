@@ -79,7 +79,7 @@ class BrokenTrackSim(H5FlowStage):
         ``TrackletReconstruction.tracklet_dtype``.
 
     '''
-    class_version = '3.0.0'
+    class_version = '3.1.0'
 
     offset_dtype = np.dtype([
         ('id', 'u4'),
@@ -140,6 +140,7 @@ class BrokenTrackSim(H5FlowStage):
         super(BrokenTrackSim, self).init(source_name)
         self.trajectory_pts = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_pts']
         self.trajectory_dx = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_dx']
+        self.trajectory_residual_mode = self.data_manager.get_attrs(self.tracks_dset_name).get('trajectory_residual_mode',1)
         self.new_track_dtype = BrokenTrackSim.new_track_dtype(self.trajectory_pts)
 
         self.data_manager.create_dset(f'{self.path}/offset',
@@ -211,7 +212,8 @@ class BrokenTrackSim(H5FlowStage):
             track_ids = self.reco.find_tracks(trans_hits, hit_drift['z'])
             new_tracks = self.reco.calc_tracks(trans_hits, hits['q'], hit_drift['z'], track_ids,
                                                self.trajectory_pts,
-                                               self.trajectory_dx)
+                                               self.trajectory_dx,
+                                               self.trajectory_residual_mode)
 
             d = self.find_matching_tracks(new_tracks, rand_tracks, rand_x, rand_y,
                                           track_ids, hits_track_idx)
