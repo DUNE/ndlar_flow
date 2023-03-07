@@ -53,7 +53,7 @@ class TrackletReconstruction(H5FlowStage):
             dn                  i8(trajectory_pts-1,)       nhit along track displacement
 
     '''
-    class_version = '1.0.0'
+    class_version = '1.1.0'
 
     default_tracklet_dset_name = 'combined/tracklets'
     default_hits_dset_name = 'charge/hits'
@@ -128,7 +128,8 @@ class TrackletReconstruction(H5FlowStage):
                                     max_iterations=self.max_iterations,
                                     max_nhit=self.max_nhit,
                                     trajectory_pts=self.trajectory_pts,
-                                    trajectory_dx=self.trajectory_dx
+                                    trajectory_dx=self.trajectory_dx,
+                                    trajectory_residual_mode=self.trajectory_residual_mode
                                     )
 
         self.data_manager.create_dset(self.tracklet_dset_name, self.tracklet_dtype)

@@ -77,7 +77,7 @@ class TrackletMerger(H5FlowStage):
                     max_neighbors: 5
 
     '''
-    class_version = '3.0.0'
+    class_version = '3.1.0'
 
     default_pdf_filename = 'joint_pdf-2_0_1.npz'
     default_pdf_sig_name = 'rereco'
@@ -136,6 +136,7 @@ class TrackletMerger(H5FlowStage):
 
         self.trajectory_pts = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_pts']
         self.trajectory_dx = self.data_manager.get_attrs(self.tracks_dset_name)['trajectory_dx']
+        self.trajectory_residual_mode = self.data_manager.get_attrs(self.tracks_dset_name).get('trajectory_residual_mode', 1)
 
         self.merged_dtype = TrackletMerger.merged_dtype(self.trajectory_pts)
         self.data_manager.create_dset(self.merged_dset_name, self.merged_dtype)
@@ -248,7 +249,7 @@ class TrackletMerger(H5FlowStage):
             merged_tracks = TrackletReconstruction.calc_tracks(
                 track_grp_hits.reshape(calc_shape), track_grp_hit_q['q'].reshape(calc_shape), track_grp_hit_drift['z'].reshape(calc_shape),
                 track_grp_id.reshape(calc_shape), self.trajectory_pts,
-                self.trajectory_dx)
+                self.trajectory_dx, self.trajectory_residual_mode)
         else:
             merged_tracks = ma.masked_all((0, 1), dtype=self.merged_dtype)
             track_grp = ma.masked_all((0, 1, 1), dtype=bool)
