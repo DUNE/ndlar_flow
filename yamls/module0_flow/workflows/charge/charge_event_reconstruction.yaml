@@ -1,0 +1,49 @@
+# Generates the mid-level event built data for charge data (i.e. hits and
+# external triggers)
+
+flow:
+  source: raw_events
+  stages: [chip_id_bit_flip_fix, timestamp_corrector, ext_trig_finder, hit_builder, hit_merger, time_dependent_gain, event_builder]
+  drop: []
+
+
+resources:
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+
+
+raw_events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/raw_events'
+  params:
+    chunk_size: 32
+
+
+chip_id_bit_flip_fix:
+  !include yamls/module0_flow/reco/charge/BitFlipFix.yaml
+
+
+timestamp_corrector:
+  !include yamls/module0_flow/reco/charge/TimestampCorrector.yaml
+
+
+ext_trig_finder:
+  !include yamls/module0_flow/reco/charge/ExternalTriggerFinder.yaml
+
+
+hit_builder:
+  !include yamls/module0_flow/reco/charge/HitBuilder.yaml
+
+
+hit_merger:
+  !include yamls/module0_flow/reco/charge/HitMerger.yaml
+
+
+time_dependent_gain:
+  !include yamls/module0_flow/reco/charge/TimeDependentGain.yaml
+
+
+event_builder:
+  !include yamls/module0_flow/reco/charge/EventBuilder.yaml
+

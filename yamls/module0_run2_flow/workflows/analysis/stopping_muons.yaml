@@ -1,0 +1,136 @@
+# Performs stopping muon and michel event selections
+
+flow:
+  source: events
+  stages: [truth_labels, noise_overlay, stopping_muon_sel, michel_id]
+
+
+resources:
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/ParticleData.yaml
+  - !include yamls/module0_run2_flow/resources/DisabledChannels.yaml
+
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 32
+
+
+truth_labels:
+  classname: MuonCaptureTruthLabels
+  path: module0_flow.analysis.muon_capture_truth_labels
+  requires:
+    - name: 'mc_truth/trajectories'
+      path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories']
+    - name: 'mc_truth/tracks'
+      path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories', 'mc_truth/tracks']
+    - name: 'mc_truth/tracks_idx'
+      path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories', 'mc_truth/tracks']
+      index_only: True
+  params:
+    # inputs
+    truth_trajectories_dset_name: 'mc_truth/trajectories'
+    truth_tracks_dset_name: 'mc_truth/tracks'
+
+    # output
+    truth_labels_dset_name: 'analysis/muon_capture/truth_labels'
+
+
+noise_overlay:
+  classname: MCNoiseModelOverlay
+  path: module0_flow.analysis.mc_noise_model_overlay
+  requires:
+    - 'charge/hits'
+    - name: 'combined/q_calib_el'
+      path: ['charge/hits', 'combined/q_calib_el']
+  params:
+    hits_name: 'charge/hits'
+    charge_name: 'combined/q_calib_el'
+    model_params:
+      medm:
+        type: 'scale_plus_binomial_noise'
+      
+        # best fit to Module 0 medium threshold good runs on 4/10/2021
+        # <5% single channel dQ/dx shape residual for medium threshold runs btw 2-10ke/mm
+        scale_factor: 1.007
+        scale_width: 0.0667
+        binom_noise_scale: 9.946 # mV
+        binom_noise_width: 14.60 # mV
+        binom_noise_prob: 0.2431
+        binom_noise_asymm: 0.5425
+
+      high:
+        type: 'scale_plus_binomial_noise'
+      
+        # best fit to Module 0 high threshold good runs on 4/10/2021
+        # <5% single channel dQ/dx shape residual for high threshold runs btw 2-10ke/mm
+        scale_factor: 1.021
+        scale_width: 0.04898
+        binom_noise_scale: 15.376 # mV
+        binom_noise_width: 17.676 # mV
+        binom_noise_prob: 0.2471
+        binom_noise_asymm: 0.6020
+
+
+stopping_muon_sel:
+  classname: StoppingMuonSelection # analysis/stopping_muon_selection.py
+  path: module0_flow.analysis.stopping_muon_selection  
+  requires:
+    - 'combined/tracklets/merged'
+    - 'combined/t0'
+    - 'charge/hits'
+    - name: 'combined/q_calib_el'
+      path: ['charge/hits', 'combined/q_calib_el']
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
+    - name: 'mc_truth/trajectories'
+      path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories']
+  params:
+    # inputs
+    hits_dset_name: 'charge/hits'
+    charge_dset_name: 'combined/q_calib_el'
+    hit_drift_dset_name: 'combined/hit_drift'    
+    t0_dset_name: 'combined/t0'
+    merged_dset_name: 'combined/tracklets/merged'
+    truth_trajectories_dset_name: 'mc_truth/trajectories'
+
+    # configuration parameters
+    fid_cut: 22 # mm
+    cathode_fid_cut: 22 # mm
+    profile_dx: 22 # mm
+    larpix_gain:
+      mc: 250 # e/mV
+      medm: 221 # e/mV
+      high: 221 # e/mV
+    curvature_rr_correction:
+      mc: 1.0
+      medm: 1.0
+      high: 1.0
+
+michel_id:
+  classname: MichelID
+  path: module0_flow.analysis.michel_id  
+  requires:
+    - 'charge/hits'
+    - name: 'combined/q_calib_el'
+      path: ['charge/hits', 'combined/q_calib_el']
+    - name: 'combined/hit_drift'
+      path: ['charge/hits', 'combined/hit_drift']
+    - name: 'analysis/stopping_muons/hit_profile'
+      path: ['charge/hits', 'analysis/stopping_muons/hit_profile']
+  params:
+    charge_dset_name: 'combined/q_calib_el'
+
+    # configuration parameters
+    michel_e_cut: 4000 # keV
+    michel_nhit_cut: 7
+
+    generate_likelihood_pdf: False
+    #generate_likelihood_pdf: True
+    likelihood_pdf_filename: data/module0_flow/michel_pdf-0.1.0.npz
+    # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/michel_pdf-0.1.0.npz

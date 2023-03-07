@@ -13,8 +13,7 @@ setuptools.setup(name='module0_flow',
                  long_description_content_type='text/x-rst',
                  author='Peter Madigan',
                  author_email='pmadigan@berkeley.edu',
-                 # package_dir='module0_flow',
-                 packages=[p for p in setuptools.find_packages(where='.') if 'module0_flow' in p],
+                 package_dir={'': 'src'},
                  python_requires='>=3.7',
                  install_requires=[
                      'h5py>=2.10',
@@ -22,6 +21,7 @@ setuptools.setup(name='module0_flow',
                      'scipy',
                      'scikit-image',
                      'scikit-learn',
-                     'h5flow>=0.2.0'
+                     'h5flow>=0.2.0',
+                     'pylandau',
                  ]
                  )

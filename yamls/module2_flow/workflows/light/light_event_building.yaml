@@ -1,0 +1,17 @@
+# Generates the low-level event built data for light data (i.e. grouped raw
+# waveforms)
+
+flow:
+  source: light_event_generator
+  stages: [] # just generate events, no analysis stages
+  drop: []
+
+
+resources:
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
+
+
+light_event_generator:
+  !include yamls/module0_flow/reco/light/LightEventGenerator.yaml
+

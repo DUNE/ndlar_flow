@@ -12,13 +12,13 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../'))
+sys.path.insert(0, os.path.abspath('../src/'))
 
 autodoc_mock_imports = ['h5py', 'yaml', 'tqdm', 'ROOT', 'scipy', 'numpy', 'h5flow', 'mpi4py', 'sklearn', 'skimage']
 
 # -- Project information -----------------------------------------------------
 
-project = 'module0_flow'
+project = 'ndlar_flow'
 copyright = '2021, Peter Madigan'
 author = 'Peter Madigan'
 
@@ -44,7 +44,7 @@ templates_path = ['_templates']
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-autoapi_dirs = ['../h5flow_modules']
+autoapi_dirs = ['../src/module0_flow']
 autoapi_add_toctree_entry = False
 autoapi_generate_api_docs = False
 

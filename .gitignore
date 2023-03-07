@@ -12,3 +12,4 @@ build/
 *.root
 *.h5
 *.egg-info
+*.data

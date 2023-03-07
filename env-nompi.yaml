@@ -2,7 +2,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.9
+  - python=3.11
   - root
   - scipy
   - scikit-image
@@ -10,3 +10,5 @@ dependencies:
   - pip
   - pip:
     - h5flow>=0.1.0
+    - adc64format>=0.0.2
+    - pylandau

@@ -27,7 +27,7 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
 
     cached_filepath = os.path.join(dest, file)
     src_filepath = os.path.join(src, file) if src is not None else None
-    dest_filepath = os.path.join('./h5flow_data/', file)
+    dest_filepath = os.path.join('./data/module0_flow/', file)
 
     # check if file exists in current cache
     if not os.path.exists(cached_filepath):
@@ -57,8 +57,8 @@ def maybe_fetch_from_url(pytestconfig, tmp_path_factory, url):
 ])
 def charge_source_file(pytestconfig, tmp_path_factory, request):
     charge_source_file_url_lookup = {
-        'data': ('https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/'
-                 'dataRuns/packetData/datalog_2021_04_04_00_41_40_CEST.h5'),
+        'data': ('https://portal.nersc.gov/project/dune/data/Module0/test/'
+                 'charge/datalog_2021_04_04_00_41_40_CEST.trunc.h5'),
         'sim': ('https://portal.nersc.gov/project/dune/data/Module0/'
                 'simulation/stopping_muons/stopping_muons.test.h5')
     }
@@ -66,12 +66,15 @@ def charge_source_file(pytestconfig, tmp_path_factory, request):
                                      charge_source_file_url_lookup[request.param]))
 
 
-@ pytest.fixture
+@pytest.fixture
 def light_source_file(pytestconfig, tmp_path_factory):
-    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+    filename = next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0/LRS/Converted/'
-                                      'rwf_20210404_004206.data.root')))
+                                      'data/Module0/test/light/0a7a314c_20210404_004206.trunc.data')))
+    next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/test/light/0a7b54bd_20210404_004206.trunc.data')))
+    return filename
 
 
 @ pytest.fixture
@@ -106,11 +109,11 @@ def larpix_pedestal_config_file(pytestconfig, tmp_path_factory):
                                       'datalog_2021_04_02_19_00_46_CESTevd_ped.json')))
 
 
-@ pytest.fixture
+@pytest.fixture
 def runlist_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0/runlist.txt')))
+                                      'data/Module0/runlist-mod0-run1.txt')))
 
 
 @ pytest.fixture
@@ -144,8 +147,46 @@ def michel_pdf_file(pytestconfig, tmp_path_factory):
                                       'data/Module0/merged/reco_data/'
                                       'michel_pdf-0.1.0.npz')))
 
+@pytest.fixture
+def background_pdf_file(pytestconfig, tmp_path_factory):
+    return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/merged/reco_data/'
+                                      'bkg_pdf-0.0.0.npz')))
 
-@ pytest.fixture
+@pytest.fixture
+def triplet_response_data_256_file(pytestconfig, tmp_path_factory):
+    rv = next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/merged/reco_data/'
+                                      'mod0_response.v0.data.256.npz')))
+    if not os.path.exists('data/module0_flow/mod0_response.data.256.npz'):
+        os.rename(rv, 'data/module0_flow/mod0_response.data.256.npz')
+    return rv
+
+@pytest.fixture
+def triplet_response_sim_256_file(pytestconfig, tmp_path_factory):
+    rv = next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                     ('https://portal.nersc.gov/project/dune/'
+                                      'data/Module0/merged/reco_data/'
+                                      'mod0_response.v1.sim.256.npz')))
+    if not os.path.exists('data/module0_flow/mod0_response.sim.256.npz'):
+        os.rename(rv, 'data/module0_flow/mod0_response.sim.256.npz')
+    return rv
+
+
+@pytest.fixture
+def time_dependent_gain_file(pytestconfig, tmp_path_factory):
+    rv = next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
+                                   ('https://portal.nersc.gov/project/dune/'
+                                    'data/Module0/merged/reco_data/'
+                                    'module0_time_dependent_gain_v0.npz')))
+    if not os.path.exists('data/module0_flow/module0_time_dependent_gain.npz'):
+        os.rename(rv, 'data/module0_flow/module0_time_dependent_gain.npz')
+    return 'data/module0_flow/module0_time_dependent_gain.npz'
+
+
+@pytest.fixture
 def proton_range_table(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
@@ -153,7 +194,7 @@ def proton_range_table(pytestconfig, tmp_path_factory):
                                       'NIST_proton_range_table_Ar.txt')))
 
 
-@ pytest.fixture
+@pytest.fixture
 def electron_lifetime_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
@@ -161,7 +202,7 @@ def electron_lifetime_file(pytestconfig, tmp_path_factory):
                                       'ElecLifetimeFit_Module0.npz')))
 
 
-@ pytest.fixture
+@pytest.fixture
 def muon_range_table(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
@@ -177,19 +218,17 @@ def light_noise_file(pytestconfig, tmp_path_factory):
                                       'events_2021_04_10_04_21_27_CEST.fwvfm.noise_power.npz')))
 
 
-@ pytest.fixture
+@pytest.fixture
 def light_signal_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0/merged/prod2/'
-                                      'light_noise_filtered/'
+                                      'data/Module0/merged/reco_data/'
                                       'wvfm_deconv_signal_power.npz')))
 
 
-@ pytest.fixture
+@pytest.fixture
 def light_impulse_file(pytestconfig, tmp_path_factory):
     return next(maybe_fetch_from_url(pytestconfig, tmp_path_factory,
                                      ('https://portal.nersc.gov/project/dune/'
-                                      'data/Module0/merged/prod2/'
-                                      'light_noise_filtered/'
+                                      'data/Module0/merged/reco_data/'
                                       'wvfm_deconv_signal_impulse.fit.npz')))

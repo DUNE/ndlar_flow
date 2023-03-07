@@ -4,7 +4,7 @@ charge event building
 raw event generator
 -------------------
 
-.. autoapimodule:: h5flow_modules.reco.charge.raw_event_generator
+.. autoapimodule:: module0_flow.reco.charge.raw_event_generator
    :undoc-members:
    :members:
    :show-inheritance:
@@ -12,7 +12,7 @@ raw event generator
 raw event builder algorithms
 ----------------------------
 
-.. autoapimodule:: h5flow_modules.reco.charge.raw_event_builder
+.. autoapimodule:: module0_flow.reco.charge.raw_event_builder
    :undoc-members:
    :members:
    :show-inheritance:
@@ -23,7 +23,7 @@ charge hit reconstruction
 timestamp corrector
 -------------------
 
-.. autoapimodule:: h5flow_modules.reco.charge.timestamp_corrector
+.. autoapimodule:: module0_flow.reco.charge.timestamp_corrector
    :undoc-members:
    :members:
    :show-inheritance:
@@ -31,7 +31,7 @@ timestamp corrector
 hit builder
 -----------
 
-.. autoapimodule:: h5flow_modules.reco.charge.hit_builder
+.. autoapimodule:: module0_flow.reco.charge.hit_builder
    :undoc-members:
    :members:
    :show-inheritance:
@@ -39,7 +39,15 @@ hit builder
 external trigger finder
 -----------------------
 
-.. autoapimodule:: h5flow_modules.reco.charge.external_trigger_finder
+.. autoapimodule:: module0_flow.reco.charge.external_trigger_finder
+   :undoc-members:
+   :members:
+   :show-inheritance:
+
+time dependent gain calibration
+-------------------------------
+
+.. autoapimodule:: module0_flow.reco.charge.time_dependent_gain
    :undoc-members:
    :members:
    :show-inheritance:
@@ -47,7 +55,7 @@ external trigger finder
 event builder
 -------------
 
-.. autoapimodule:: h5flow_modules.reco.charge.event_builder
+.. autoapimodule:: module0_flow.reco.charge.event_builder
    :undoc-members:
    :members:
    :show-inheritance:

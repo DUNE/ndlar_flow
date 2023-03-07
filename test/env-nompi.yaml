@@ -2,8 +2,15 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.9
+  - python=3.11
+  - h5py
+  - pyyaml
+  - tqdm
+  - pytest
   - scipy
   - scikit-image
   - scikit-learn
   - pip
+  - pip:
+    - adc64format>=0.0.2
+    - pylandau

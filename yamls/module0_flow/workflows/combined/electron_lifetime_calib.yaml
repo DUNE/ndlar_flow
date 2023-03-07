@@ -1,0 +1,77 @@
+flow:
+  source: events
+  stages: [noise_overlay, electron_lifetime_calib]
+
+resources:
+  - !include h5flow_yamls/resources/RunData.yaml
+  - !include h5flow_yamls/resources/Geometry.yaml
+  - !include h5flow_yamls/resources/LArData.yaml
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 32
+
+noise_overlay:
+  classname: MCNoiseModelOverlay
+  path: module0_flow.analysis.mc_noise_model_overlay
+  requires:
+    - name: 'track_hits'
+      path: ['combined/tracklets/merged', 'charge/hits']    
+    - name: 'track_hit_q'
+      path: ['combined/tracklets/merged', 'charge/hits']
+  params:
+    hits_name: 'track_hits'
+    hit_charge_name: 'track_hit_q'
+    save_result: False
+    model_params:
+      medm:
+        type: 'scale_plus_binomial_noise'
+
+        # best fit to Module 0 medium threshold good runs on 4/10/2021
+        # <5% single channel dQ/dx shape residual for medium threshold runs btw 2-10ke/mm
+        scale_factor: 1.007
+        scale_width: 0.0667
+        binom_noise_scale: 11.2511 # mV, rescaled for simulated 222e/mV gain
+        binom_noise_width: 16.5158 # mV, rescaled for simulated 222e/mV gain
+        binom_noise_prob: 0.2431
+        binom_noise_asymm: 0.5425
+
+      high:
+        type: 'scale_plus_binomial_noise'
+
+        # best fit to Module 0 high threshold good runs on 4/10/2021
+        # <5% single channel dQ/dx shape residual for high threshold runs btw 2-10ke/mm
+        scale_factor: 1.021
+        scale_width: 0.04898
+        binom_noise_scale: 17.3936 # mV
+        binom_noise_width: 19.9954 # mV
+        binom_noise_prob: 0.2471
+        binom_noise_asymm: 0.6020
+
+electron_lifetime_calib:
+  classname: ElectronLifetimeCalib
+  path: module0_flow.reco.combined.electron_lifetime
+  requires:
+    - 'combined/tracklets/merged'
+    - name: 'track_hit_drift'
+      path: ['combined/tracklets/merged', 'charge/hits', 'combined/hit_drift']
+    - name: 'track_hits'
+      path: ['combined/tracklets/merged', 'charge/hits']
+    #- name: 'track_hit_q'
+    #  path: ['combined/tracklets/merged', 'charge/hits', 'combined/q_calib_el']
+    - name: 'track_hit_q'
+      path: ['combined/tracklets/merged', 'charge/hits']
+    - name: 'mc_truth/hits/tracks'
+      path: ['combined/tracklets/merged', 'charge/hits', 'charge/packets', 'mc_truth/tracks']
+  params:
+    hits_dset_name: 'track_hits'
+    charge_dset_name: 'track_hit_q'
+    drift_dset_name: 'track_hit_drift'
+    tracks_dset_name: 'combined/tracklets/merged'
+    true_segments_dset_name: 'mc_truth/hits/tracks'
+    mode: 'generate'
+    electron_lifetime_file: '/pscratch/sd/p/pmadigan/electron_lifetime/electron_lifetime.npz'
+    #electron_lifetime_file: '/global/cscratch1/sd/pmadigan/electron_lifetime/electron_lifetime.npz'

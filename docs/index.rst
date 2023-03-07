@@ -1,4 +1,4 @@
-Welcome to module0_flow's documentation!
+Welcome to the ndlar_flow documentation!
 ========================================
 
 .. toctree::
