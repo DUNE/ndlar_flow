@@ -24,9 +24,12 @@ WORKFLOW1='yamls/proto_nd_flow/workflows/charge/charge_event_building.yaml'
 WORKFLOW2='yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction.yaml'
 WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml'
 WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration.yaml'
+WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration.yaml'
 
 HERE=`pwd`
-cd ndlar_flow
+#cd ndlar_flow
+# assumes this is being run from ndlar_flow/scripts/proto_nd_flow:
+cd ../../
 
 # avoid being asked if we want to overwrite the file if it exists.
 # this is us answering "yes".
@@ -34,7 +37,7 @@ if [ -e $OUTPUT_FILE ]; then
     rm -i $OUTPUT_FILE
 fi
 
-$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 -i $INPUT_FILE -o $OUTPUT_FILE
+$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 -i $INPUT_FILE -o $OUTPUT_FILE
 
 echo "Done!"
 echo "Output can be found at $OUTPUT_FILE"
