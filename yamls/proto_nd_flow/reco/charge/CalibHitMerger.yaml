@@ -1,0 +1,22 @@
+classname: CalibHitMerger # reco/charge/calib_hit_merger.py
+path: proto_nd_flow.reco.charge.calib_hit_merger
+requires:
+  - 'charge/calib_prompt_hits'
+  - name: 'charge/calib_prompt_hits_idx'
+    path: ['charge/calib_prompt_hits']
+    index_only: True
+  - name: 'charge/packets'
+    path: ['charge/calib_prompt_hits','charge/packets']
+#  - name: 'charge/temp_hits'
+#    path: ['charge/calib_prompt_hits','charge/temp_hits']
+params:
+  # inputs
+  hits_name: 'charge/calib_prompt_hits'
+  packets_name: 'charge/packets'
+  hit_charge_name: 'charge/calib_prompt_hits'
+  hits_idx_name: 'charge/calib_prompt_hits'
+
+  merged_name: 'charge/calib_final_hits'
+  merge_cut: 50 # merge hits with delta t < merge_cut [CRS ticks]
+
+
