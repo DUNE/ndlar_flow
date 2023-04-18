@@ -15,8 +15,8 @@ class CalibHitMerger(H5FlowStage):
 
     Two algorithms for selecting pairs of hits to merge have been implemented:
 
-     - `'pairwise'`: On each iteration, sort all packets by unique channel and timestamp. Then, merge every pair of hits that fall within the merge cut. If an odd number of hits fall should be merged, the earliest hit of a group is excluded from the iteration.
-     - `'last-first'`: On each iteration, sort all packets by unique channel and timestamp. Then, merge the last pair of hits that fall within the merge cut within each contiguous chunk of neighboring hits.
+     - `'pairwise'`: On each iteration, sort all hits by unique y-z position and timestamp. Then, merge every pair of hits that fall within the merge cut. If an odd number of hits fall should be merged, the earliest hit of a group is excluded from the iteration.
+     - `'last-first'`: On each iteration, sort all hits by unique y-z and timestamp. Then, merge the last pair of hits that fall within the merge cut within each contiguous chunk of neighboring hits.
 
     Both algorithms should produce very similar results.
 
@@ -37,13 +37,11 @@ class CalibHitMerger(H5FlowStage):
           merged_name: 'charge/hits/merged'
           merged_q_name: 'charge/hits/merged_q' # optional, for when a separate hit charge dataset is used for 'q'
           merge_cut: 30 # merge hits with delta t < merge_cut [CRS ticks]
-          max_merge_steps: 5 # maximum number of iterations to use when merging
           merge_mode: 'last-first'
     '''
     class_version = '0.0.0'
     defaults = dict(
         hits_name = 'charge/calib_prompt_hits',
-        packets_name = 'charge/packets',
         hit_charge_name = 'charge/calib_prompt_hits',
         hits_idx_name = 'charge/calib_prompt_hits_idx',
         merged_name = 'charge/hits/calib_merged_hits',
@@ -71,18 +69,15 @@ class CalibHitMerger(H5FlowStage):
 
         self.data_manager.create_dset(self.merged_name, dtype=self.merged_dtype)
         self.data_manager.create_ref(self.hits_name, self.merged_name)
-        self.data_manager.create_ref(self.packets_name, self.merged_name)
         self.data_manager.create_ref(source_name, self.merged_name)
 
     @staticmethod
-    def merge_hits(hits, packets, weights, dt_cut, sum_fields=None, weighted_mean_fields=None, hit_q=None, max_steps=-1, mode='last-first'):
+    def merge_hits(hits, weights, dt_cut, sum_fields=None, weighted_mean_fields=None, hit_q=None, max_steps=-1, mode='last-first'):
         '''
         Combines hits along the second axis on unique channels with a delta t less than dt_cut. Continues
         until no hits (or merged hits) are within dt_cut of each other
 
         :param hits: original hits array, shape: (N,M)
-
-        :param packets: associated packets array, shape: (N,M)
 
         :param weights: values used for weighted mean, shape: (N,M)
 
@@ -105,7 +100,6 @@ class CalibHitMerger(H5FlowStage):
         mask = hits.mask['id'].copy()
         new_hits = hits.data.copy()
         weights = weights.data.copy()
-        packets = packets.data.copy()
         old_ids = hits.mask['id'].copy()[...,np.newaxis]
         old_id_mask = hits.mask['id'].copy()[...,np.newaxis]
         if hit_q is not None:
@@ -118,27 +112,23 @@ class CalibHitMerger(H5FlowStage):
                 logging.info(f'Hit merging algorithm reached max step limit {max_steps}')
 
             # sort array along last axis to find groups of hits on the same channel, use a stable sort with the aim of improving performance on later iterations
-            isort = np.argsort(ma.array(packets, mask=mask), axis=-1, order=['io_group','io_channel','chip_id','channel_id','timestamp'], kind='stable')
+            isort = np.argsort(ma.array(hits, mask=mask), axis=-1, order=['z','y','ts_pps','t_drift'], kind='stable')
             mask = np.take_along_axis(mask, isort, axis=-1)
             new_hits = np.take_along_axis(new_hits, isort, axis=-1)
-            packets = np.take_along_axis(packets, isort, axis=-1)
             weights = np.take_along_axis(weights, isort, axis=-1)
             old_ids = np.take_along_axis(old_ids, isort[...,np.newaxis], axis=-2)
             old_id_mask = np.take_along_axis(old_id_mask, isort[...,np.newaxis], axis=-2)
-            #print("packets.shape =",packets.shape)
-            #print("new_hits.shape =",new_hits.shape)
             N_new_hits = new_hits.shape[0]*new_hits.shape[1]-np.count_nonzero(mask)
             print('current number of merged hits =',N_new_hits)
+
             if hit_q is not None:
                 new_hit_q = np.take_along_axis(new_hit_q, isort, axis=-1)
             
             # identify neighboring hits on the same channel
             dt = np.abs(np.diff(new_hits['ts_pps'].astype(int), axis=-1))
             same_channel = (
-                (packets['io_group'][..., :-1] == packets['io_group'][..., 1:])
-                & (packets['io_channel'][..., :-1] == packets['io_channel'][..., 1:])
-                & (packets['chip_id'][..., :-1] == packets['chip_id'][..., 1:])
-                & (packets['channel_id'][..., :-1] == packets['channel_id'][..., 1:])
+                (new_hits['z'][..., :-1] == new_hits['z'][..., 1:])
+                & (new_hits['y'][..., :-1] == new_hits['y'][..., 1:])
             )
 
             # flag valid hits if they are on the same channel and are close in time
@@ -160,17 +150,10 @@ class CalibHitMerger(H5FlowStage):
                 # move 2nd hit into position of first hit, combining attributes along the way
                 hit0 = np.extract(to_merge, new_hits[...,:-1])
                 hit1 = np.extract(to_merge, new_hits[...,1:])
-                pack0 = np.extract(to_merge, packets[...,:-1])
-                pack1 = np.extract(to_merge, packets[...,1:])
                 if hit_q is not None:
                     hit_q0 = np.extract(to_merge, new_hit_q[...,:-1])
                     hit_q1 = np.extract(to_merge, new_hit_q[...,1:])
 
-                # these fields should be identical 
-                np.place(packets[...,:-1]['io_group'],to_merge,pack0['io_group'])
-                np.place(packets[...,:-1]['io_channel'],to_merge,pack0['io_channel'])
-                np.place(packets[...,:-1]['chip_id'],to_merge,pack0['chip_id'])
-                np.place(packets[...,:-1]['channel_id'],to_merge,pack0['channel_id'])
                 # these fields will be summed hit[i][field] -> hit[i+1][field] + hit[i][field]
                 for field in sum_fields:
                     if field in new_hits.dtype.names:
@@ -241,9 +224,8 @@ class CalibHitMerger(H5FlowStage):
         hits = cache[self.hits_name]
         hit_q = cache[self.hit_charge_name].reshape(hits.shape)
         hits_idx = cache[self.hits_idx_name].reshape(hits.shape)
-        packets = cache[self.packets_name].reshape(hits.shape)
 
-        merged, ref, merged_q = self.merge_hits(hits, packets, weights=hits['Q'], dt_cut=self.merge_cut, sum_fields=self.sum_fields, weighted_mean_fields=self.weighted_mean_fields,hit_q=hit_q if self.merged_q_name else None, max_steps=self.max_merge_steps, mode=self.merge_mode)
+        merged, ref, merged_q = self.merge_hits(hits, weights=hits['Q'], dt_cut=self.merge_cut, sum_fields=self.sum_fields, weighted_mean_fields=self.weighted_mean_fields,hit_q=hit_q if self.merged_q_name else None, max_steps=self.max_merge_steps, mode=self.merge_mode)
 
         merged_mask = merged.mask['id']
 

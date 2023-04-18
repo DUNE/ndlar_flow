@@ -5,18 +5,15 @@ requires:
   - name: 'charge/calib_prompt_hits_idx'
     path: ['charge/calib_prompt_hits']
     index_only: True
-  - name: 'charge/packets'
-    path: ['charge/calib_prompt_hits','charge/packets']
-#  - name: 'charge/temp_hits'
-#    path: ['charge/calib_prompt_hits','charge/temp_hits']
 params:
   # inputs
   hits_name: 'charge/calib_prompt_hits'
-  packets_name: 'charge/packets'
   hit_charge_name: 'charge/calib_prompt_hits'
   hits_idx_name: 'charge/calib_prompt_hits'
 
   merged_name: 'charge/calib_final_hits'
-  merge_cut: 50 # merge hits with delta t < merge_cut [CRS ticks]
+  merge_cut: 65 # merge hits with delta t < merge_cut [CRS ticks]
+  max_merge_steps: 50 # max number of iterations when merging
+                       # adjacent packets in time on the same channel
 
 
