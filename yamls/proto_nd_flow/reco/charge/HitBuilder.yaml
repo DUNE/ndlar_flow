@@ -10,7 +10,7 @@ params:
   ts_dset_name: 'charge/packets_corr_ts'
 
   # output
-  hits_dset_name: 'charge/hits'
+  hits_dset_name: 'charge/temp_hits'
 
   # configuration parameters
 

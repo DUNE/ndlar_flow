@@ -1,0 +1,19 @@
+classname: CalibHitMerger # reco/charge/calib_hit_merger.py
+path: proto_nd_flow.reco.charge.calib_hit_merger
+requires:
+  - 'charge/calib_prompt_hits'
+  - name: 'charge/calib_prompt_hits_idx'
+    path: ['charge/calib_prompt_hits']
+    index_only: True
+params:
+  # inputs
+  hits_name: 'charge/calib_prompt_hits'
+  hit_charge_name: 'charge/calib_prompt_hits'
+  hits_idx_name: 'charge/calib_prompt_hits'
+
+  merged_name: 'charge/calib_final_hits'
+  merge_cut: 65 # merge hits with delta t < merge_cut [CRS ticks]
+  max_merge_steps: 50 # max number of iterations when merging
+                       # adjacent packets in time on the same channel
+
+

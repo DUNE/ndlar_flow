@@ -1,0 +1,17 @@
+classname: HitMerger # reco/charge/hit_merger.py
+path: proto_nd_flow.reco.charge.hit_merger
+requires:
+  - 'charge/temp_hits'
+  - name: 'charge/temp_hits_idx'
+    path: ['charge/temp_hits']
+    index_only: True
+params:
+  # inputs
+  hits_name: 'charge/temp_hits'
+  hit_charge_name: 'charge/temp_hits'
+  hits_idx_name: 'charge/temp_hits'
+
+  merged_name: 'charge/calib_final_hits'
+  merge_cut: 30 # merge hits with delta t < merge_cut [CRS ticks]
+
+
