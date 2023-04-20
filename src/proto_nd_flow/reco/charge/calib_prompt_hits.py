@@ -122,6 +122,8 @@ class CalibHitBuilder(H5FlowStage):
         events_data = cache[self.events_dset_name]
         packets_data = cache[self.packets_dset_name]
         packets_index = cache[self.packets_index_name]
+        print(self.packets_index_name)
+        print(type(packets_index))
         t0_data = cache[self.t0_dset_name]
         raw_hits = cache[self.raw_hits_dset_name]
 
@@ -134,7 +136,7 @@ class CalibHitBuilder(H5FlowStage):
             mask = (packets_data['packet_type'] == 0) & mask
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
-            #index_arr = packets_index.data[mask]
+            index_arr = packets_index.data[mask]
         else:
             n = 0
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
@@ -209,8 +211,8 @@ class CalibHitBuilder(H5FlowStage):
         self.data_manager.write_ref(self.events_dset_name, self.calib_hits_dset_name, ref)
 
         # hit -> packet
-        #ref = np.c_[calib_hits_arr['id'], index_arr]
-        #self.data_manager.write_ref(self.calib_hits_dset_name, self.packets_dset_name, ref)
+        ref = np.c_[calib_hits_arr['id'], index_arr]
+        self.data_manager.write_ref(self.calib_hits_dset_name, self.packets_dset_name, ref)
 
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped):
