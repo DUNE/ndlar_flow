@@ -140,13 +140,13 @@ class RawEventGenerator(H5FlowGenerator):
         for field in ('x_start', 'y_start', 'z_start', 'x', 'y', 'z', 'x_end',
                       'y_end', 'z_end'):
             if 'x' in field or 'z' in field:
-                tracks_copy[field] = tracks[field] * units.cm
+                tracks_copy[field] = tracks[field] #* units.cm
             elif 'y' in field:
-                tracks_copy[field] = (tracks[field] + 21.8236) * units.cm
+                tracks_copy[field] = (tracks[field] + 21.8236) #* units.cm
         for field in ('tran_diff', 'dx', 'long_diff'):
-            tracks_copy[field] = tracks[field] * units.cm
-        tracks_copy['dE'] = tracks['dE'] * units.MeV
-        tracks_copy['dEdx'] = tracks['dEdx'] * (units.MeV / units.cm)
+            tracks_copy[field] = tracks[field] #* units.cm
+        tracks_copy['dE'] = tracks['dE'] #* units.MeV
+        tracks_copy['dEdx'] = tracks['dEdx'] #* (units.MeV / units.cm)
         for field in ('t', 't_start', 't_end'):
             tracks_copy[field] = tracks[field] * units.us
         return tracks_copy
@@ -154,13 +154,13 @@ class RawEventGenerator(H5FlowGenerator):
     def _convert_mc_truth_trajectories(self, traj):
         traj_copy = traj.copy()
         for field in ('xyz_start', 'xyz_end'):
-            traj_copy[field][:, 0] = traj[field][:, 2] * units.cm
-            traj_copy[field][:, 1] = traj[field][:, 1] * units.cm + 21.8236
-            traj_copy[field][:, 2] = traj[field][:, 0] * units.cm
+            traj_copy[field][:, 0] = traj[field][:, 2] #* units.cm
+            traj_copy[field][:, 1] = traj[field][:, 1] + 21.8236 #* units.cm + 218.236
+            traj_copy[field][:, 2] = traj[field][:, 0] #* units.cm
         for field in ('pxyz_start', 'pxyz_end'):
-            traj_copy[field][:, 0] = traj[field][:, 2] * units.keV
-            traj_copy[field][:, 1] = traj[field][:, 1] * units.keV
-            traj_copy[field][:, 2] = traj[field][:, 0] * units.keV
+            traj_copy[field][:, 0] = traj[field][:, 2] #* units.MeV
+            traj_copy[field][:, 1] = traj[field][:, 1] #* units.MeV
+            traj_copy[field][:, 2] = traj[field][:, 0] #* units.MeV
         for field in ('t_start', 't_end'):
             traj_copy[field] = traj[field] * units.ns
         return traj_copy
@@ -168,9 +168,9 @@ class RawEventGenerator(H5FlowGenerator):
     def _convert_mc_truth_interactions(self, inter):
         inter_copy = inter.copy()
         for field in ('vertex',):
-            inter_copy[field][:, 0] = inter[field][:, 2] * units.cm
-            inter_copy[field][:, 1] = inter[field][:, 1] * units.cm
-            inter_copy[field][:, 2] = inter[field][:, 0] * units.cm
+            inter_copy[field][:, 0] = inter[field][:, 2] #* units.cm
+            inter_copy[field][:, 1] = inter[field][:, 1] + 21.8236 #* units.cm + 218.236
+            inter_copy[field][:, 2] = inter[field][:, 0] #* units.cm
         return inter_copy
 
     def init(self):
@@ -189,7 +189,6 @@ class RawEventGenerator(H5FlowGenerator):
             self.mc_tracks = self.input_fh['tracks']
             self.mc_trajectories = self.input_fh['trajectories']
             self.mc_events = self.input_fh['genie_hdr']
-            # self.mc_tracks_dtype = self.mc_tracks.dtype
 
         # initialize data objects
         self.data_manager.create_dset(self.raw_event_dset_name, dtype=self.raw_event_dtype)
@@ -229,11 +228,9 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.reserve_data(self.mc_events_dset_name, inter_sl)
             # self.data_manager.write_data(self.mc_events_dset_name, inter_sl, self.mc_events[inter_sl])
             self.data_manager.write_data(self.mc_events_dset_name, inter_sl, self._convert_mc_truth_interactions(self.mc_events[inter_sl]))
-            # print("num ev {}".format(ninter))
 
             self.data_manager.create_dset(self.mc_tracks_dset_name, dtype=self.mc_tracks.dtype)
             ntracks = len(self.mc_tracks)
-            # print("num tracks {}".format(ntracks))
 
             # track_sl = slice(
                 # min(ntracks, ceil(ntracks / self.size) * self.rank),
@@ -248,7 +245,6 @@ class RawEventGenerator(H5FlowGenerator):
 
             self.data_manager.create_dset(self.mc_trajectories_dset_name, dtype=self.mc_trajectories.dtype)
             ntraj = len(self.mc_trajectories)
-            # print("num traj {}".format(ntraj))
             # traj_sl = slice(
                 # min(ntracks, ceil(ntraj / self.size * self.rank)),
                 # min(ntraj, ceil(ntraj / self.size * (self.rank + 1))))
