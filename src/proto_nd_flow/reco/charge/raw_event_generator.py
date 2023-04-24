@@ -242,14 +242,14 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.create_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name)
 
             # create references between trajectories and tracks
-            traj_evid = self.mc_trajectories['eventID'][:]
-            tracks_evid = self.mc_tracks['eventID'][:]
+            traj_evid = self.mc_trajectories['vertexID'][:]
+            tracks_evid = self.mc_tracks['vertexID'][:]
             evs, ev_traj_start, ev_track_start = np.intersect1d(
                 traj_evid, tracks_evid, return_indices=True)
             evs, ev_traj_end, ev_track_end = np.intersect1d(
                 traj_evid[::-1], tracks_evid[::-1], return_indices=True)
-            ev_traj_end = len(self.mc_trajectories['eventID']) - ev_traj_end
-            ev_track_end = len(self.mc_tracks['eventID']) - ev_track_end
+            ev_traj_end = len(self.mc_trajectories['vertexID']) - ev_traj_end
+            ev_track_end = len(self.mc_tracks['vertexID']) - ev_track_end
             truth_slice = slice(
                 ceil(len(evs) / self.size) * self.rank,
                 ceil(len(evs) / self.size) * (self.rank + 1))
