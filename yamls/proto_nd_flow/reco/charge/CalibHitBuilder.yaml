@@ -6,7 +6,7 @@ requires:
   - 'charge/packets'
   - 'combined/t0'
   - name: 'charge/packets_index'
-    path: ['charge/raw_hits','charge/packets','combined/t0','charge/packet_index']
+    path: ['charge/raw_hits','charge/packets','combined/t0','charge/packets_index']
 params:
   # inputs
   events_dset_name: 'charge/events'
