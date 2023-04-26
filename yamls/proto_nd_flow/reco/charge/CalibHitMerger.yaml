@@ -1,12 +1,14 @@
 classname: CalibHitMerger # reco/charge/calib_hit_merger.py
 path: proto_nd_flow.reco.charge.calib_hit_merger
 requires:
+  - 'charge/events'
   - 'charge/calib_prompt_hits'
   - name: 'charge/calib_prompt_hits_idx'
     path: ['charge/calib_prompt_hits']
     index_only: True
 params:
   # inputs
+  events_dset_name: 'charge/events'
   hits_name: 'charge/calib_prompt_hits'
   hit_charge_name: 'charge/calib_prompt_hits'
   hits_idx_name: 'charge/calib_prompt_hits'

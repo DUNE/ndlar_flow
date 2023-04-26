@@ -18,6 +18,7 @@ class CalibHitBuilder(H5FlowStage):
 
         Parameters:
          - ``hits_dset_name`` : ``str``, required, output dataset path
+         - ``events_dset_name`` : ``str``, required, input dataset path for high-level events
          - ``packets_dset_name`` : ``str``, required, input dataset path for packets
          - ``packets_index_name`` : ``str``, required, input dataset path for packet index (defaults to ``{packets_dset_name}_index'``)
          - ``ts_dset_name`` : ``str``, required, input dataset path for clock-corrected packet timestamps
@@ -42,6 +43,7 @@ class CalibHitBuilder(H5FlowStage):
                       index_only: True
                 params:
                     hits_dset_name: 'charge/raw_hits'
+                    events_dset_name: 'charge/events'
                     packets_dset_name: 'charge/packets'
                     packets_index_name: 'charge/packets_index'
                     t0_dset_name: 'combined/t0'

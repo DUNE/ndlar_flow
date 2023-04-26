@@ -31,6 +31,7 @@ class CalibHitMerger(H5FlowStage):
             path: ['charge/hits']
             index_only: True
         params:
+          events_dset_name: 'charge/events'
           hits_name: 'charge/hits'
           hit_charge_name: 'charge/hits' # dataset to grab 'q' from
           hits_idx_name: 'charge/hits_idx'
@@ -41,6 +42,7 @@ class CalibHitMerger(H5FlowStage):
     '''
     class_version = '0.0.0'
     defaults = dict(
+        events_dset_name = 'charge/events',
         hits_name = 'charge/calib_prompt_hits',
         hit_charge_name = 'charge/calib_prompt_hits',
         hits_idx_name = 'charge/calib_prompt_hits_idx',
@@ -70,6 +72,7 @@ class CalibHitMerger(H5FlowStage):
         self.data_manager.create_dset(self.merged_name, dtype=self.merged_dtype)
         self.data_manager.create_ref(self.hits_name, self.merged_name)
         self.data_manager.create_ref(source_name, self.merged_name)
+        self.data_manager.create_ref(self.events_dset_name, self.merged_name)
 
     @staticmethod
     def merge_hits(hits, weights, dt_cut, sum_fields=None, weighted_mean_fields=None, hit_q=None, max_steps=-1, mode='last-first'):
@@ -250,3 +253,4 @@ class CalibHitMerger(H5FlowStage):
         self.data_manager.write_ref(self.hits_name, self.merged_name, ref)
         ev_ref = np.c_[(np.indices(merged_mask.shape)[0] + source_slice.start)[~merged_mask], merge_idx]
         self.data_manager.write_ref(source_name, self.merged_name, ev_ref)
+        self.data_manager.write_ref(self.events_dset_name, self.merged_name, ev_ref)
