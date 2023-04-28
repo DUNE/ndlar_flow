@@ -115,7 +115,7 @@ class CalibHitMerger(H5FlowStage):
                 logging.info(f'Hit merging algorithm reached max step limit {max_steps}')
 
             # sort array along last axis to find groups of hits on the same channel, use a stable sort with the aim of improving performance on later iterations
-            isort = np.argsort(ma.array(hits, mask=mask), axis=-1, order=['z','y','ts_pps','t_drift'], kind='stable')
+            isort = np.argsort(ma.array(new_hits, mask=mask), axis=-1, order=['z','y','ts_pps','t_drift'], kind='stable')
             mask = np.take_along_axis(mask, isort, axis=-1)
             new_hits = np.take_along_axis(new_hits, isort, axis=-1)
             weights = np.take_along_axis(weights, isort, axis=-1)
