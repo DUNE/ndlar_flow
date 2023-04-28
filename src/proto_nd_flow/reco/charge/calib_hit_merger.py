@@ -213,24 +213,11 @@ class CalibHitMerger(H5FlowStage):
 
         new_hit_idx = np.broadcast_to(np.cumsum(~mask.ravel(), axis=0).reshape(mask.shape + (1,)), old_ids.shape)-1
 
-        print('---------------------------------')
-        #print('old_id_mask.shape =',old_id_mask.shape)
-        #print('old_id_mask =',old_id_mask)
-        #print('old_ids.shape =',old_ids.shape)
-        #print('old_ids =',old_ids[:100])
-        #print('extracted prompt ref.shape =',np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids).shape)
-        #print('extracted prompt ref =',np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids)[:100])
-        print('unique extracted prompt ref =',np.unique(np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids)))
-        print('---------------------------------')
-
-
-
         return (
             ma.array(new_hits, mask=mask),
             np.c_[np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids), np.extract(~(old_id_mask | mask[...,np.newaxis]), new_hit_idx)],
             ma.array(new_hit_q, mask=mask) if hit_q is not None else None
             )
-    
 
     def run(self, source_name, source_slice, cache):
         super(CalibHitMerger, self).run(source_name, source_slice, cache)
