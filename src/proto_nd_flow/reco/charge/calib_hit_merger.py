@@ -103,7 +103,7 @@ class CalibHitMerger(H5FlowStage):
         mask = hits.mask['id'].copy()
         new_hits = hits.data.copy()
         weights = weights.data.copy()
-        old_ids = hits.mask['id'].copy()[...,np.newaxis]
+        old_ids = hits.data['id'].copy()[...,np.newaxis]
         old_id_mask = hits.mask['id'].copy()[...,np.newaxis]
         if hit_q is not None:
             new_hit_q = hit_q.copy()
@@ -115,7 +115,7 @@ class CalibHitMerger(H5FlowStage):
                 logging.info(f'Hit merging algorithm reached max step limit {max_steps}')
 
             # sort array along last axis to find groups of hits on the same channel, use a stable sort with the aim of improving performance on later iterations
-            isort = np.argsort(ma.array(hits, mask=mask), axis=-1, order=['z','y','ts_pps','t_drift'], kind='stable')
+            isort = np.argsort(ma.array(new_hits, mask=mask), axis=-1, order=['z','y','ts_pps','t_drift'], kind='stable')
             mask = np.take_along_axis(mask, isort, axis=-1)
             new_hits = np.take_along_axis(new_hits, isort, axis=-1)
             weights = np.take_along_axis(weights, isort, axis=-1)
@@ -218,7 +218,6 @@ class CalibHitMerger(H5FlowStage):
             np.c_[np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids), np.extract(~(old_id_mask | mask[...,np.newaxis]), new_hit_idx)],
             ma.array(new_hit_q, mask=mask) if hit_q is not None else None
             )
-    
 
     def run(self, source_name, source_slice, cache):
         super(CalibHitMerger, self).run(source_name, source_slice, cache)
