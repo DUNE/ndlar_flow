@@ -103,7 +103,7 @@ class CalibHitMerger(H5FlowStage):
         mask = hits.mask['id'].copy()
         new_hits = hits.data.copy()
         weights = weights.data.copy()
-        old_ids = hits.mask['id'].copy()[...,np.newaxis]
+        old_ids = hits.data['id'].copy()[...,np.newaxis]
         old_id_mask = hits.mask['id'].copy()[...,np.newaxis]
         if hit_q is not None:
             new_hit_q = hit_q.copy()
@@ -212,6 +212,18 @@ class CalibHitMerger(H5FlowStage):
                 break
 
         new_hit_idx = np.broadcast_to(np.cumsum(~mask.ravel(), axis=0).reshape(mask.shape + (1,)), old_ids.shape)-1
+
+        print('---------------------------------')
+        #print('old_id_mask.shape =',old_id_mask.shape)
+        #print('old_id_mask =',old_id_mask)
+        #print('old_ids.shape =',old_ids.shape)
+        #print('old_ids =',old_ids[:100])
+        #print('extracted prompt ref.shape =',np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids).shape)
+        #print('extracted prompt ref =',np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids)[:100])
+        print('unique extracted prompt ref =',np.unique(np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids)))
+        print('---------------------------------')
+
+
 
         return (
             ma.array(new_hits, mask=mask),
