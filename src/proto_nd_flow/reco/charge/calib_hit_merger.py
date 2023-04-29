@@ -247,7 +247,12 @@ class CalibHitMerger(H5FlowStage):
                 np.place(merged_q['id'], ~merged_mask, merge_idx)
             self.data_manager.write_data(self.merged_q_name, merge_idx, merged_q[~merged_mask])
             self.data_manager.write_ref(self.merged_name, self.merged_q_name, np.c_[merge_idx, merge_idx])
-        
+
+        # HACK: Remove duplicate refs. Would be nice to actually understand and
+        # fix the origin of these duplicates.
+        ref = np.unique(ref, axis=0)
+        ref.sort(axis=0)        # might as well
+
         # finally, write the event -> hit references
         self.data_manager.write_ref(self.hits_name, self.merged_name, ref)
         ev_ref = np.c_[(np.indices(merged_mask.shape)[0] + source_slice.start)[~merged_mask], merge_idx]
