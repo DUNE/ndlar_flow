@@ -134,45 +134,6 @@ class RawEventGenerator(H5FlowGenerator):
     def __len__(self):
         return len(self.slices)
 
-    def _convert_mc_truth_tracks(self, tracks):
-        ''' Apply geometry transformation from edep-sim coordinates to larnd-sim / module0_flow coordinates '''
-        tracks_copy = tracks.copy()
-        for field in ('x_start', 'y_start', 'z_start', 'x', 'y', 'z', 'x_end',
-                      'y_end', 'z_end'):
-            if 'x' in field or 'z' in field:
-                tracks_copy[field] = tracks[field] #* units.cm
-            elif 'y' in field:
-                tracks_copy[field] = (tracks[field] + 21.8236) #* units.cm
-        for field in ('tran_diff', 'dx', 'long_diff'):
-            tracks_copy[field] = tracks[field] #* units.cm
-        tracks_copy['dE'] = tracks['dE'] #* units.MeV
-        tracks_copy['dEdx'] = tracks['dEdx'] #* (units.MeV / units.cm)
-        for field in ('t', 't_start', 't_end'):
-            tracks_copy[field] = tracks[field] * units.us
-        return tracks_copy
-
-    def _convert_mc_truth_trajectories(self, traj):
-        traj_copy = traj.copy()
-        for field in ('xyz_start', 'xyz_end'):
-            traj_copy[field][:, 0] = traj[field][:, 2] #* units.cm
-            traj_copy[field][:, 1] = traj[field][:, 1] + 21.8236 #* units.cm + 218.236
-            traj_copy[field][:, 2] = traj[field][:, 0] #* units.cm
-        for field in ('pxyz_start', 'pxyz_end'):
-            traj_copy[field][:, 0] = traj[field][:, 2] #* units.MeV
-            traj_copy[field][:, 1] = traj[field][:, 1] #* units.MeV
-            traj_copy[field][:, 2] = traj[field][:, 0] #* units.MeV
-        for field in ('t_start', 't_end'):
-            traj_copy[field] = traj[field] * units.ns
-        return traj_copy
-
-    def _convert_mc_truth_interactions(self, inter):
-        inter_copy = inter.copy()
-        for field in ('vertex',):
-            inter_copy[field][:, 0] = inter[field][:, 2] #* units.cm
-            inter_copy[field][:, 1] = inter[field][:, 1] + 21.8236 #* units.cm + 218.236
-            inter_copy[field][:, 2] = inter[field][:, 0] #* units.cm
-        return inter_copy
-
     def init(self):
         super(RawEventGenerator, self).init()
 
@@ -226,7 +187,8 @@ class RawEventGenerator(H5FlowGenerator):
                 ceil(ninter / self.size * self.rank),
                 ceil(ninter / self.size * (self.rank + 1)))
             self.data_manager.reserve_data(self.mc_events_dset_name, inter_sl)
-            self.data_manager.write_data(self.mc_events_dset_name, inter_sl, self._convert_mc_truth_interactions(self.mc_events[inter_sl]))
+            self.data_manager.write_data(self.mc_events_dset_name, inter_sl,
+                                         self.mc_events[inter_sl])
 
             self.data_manager.create_dset(self.mc_tracks_dset_name, dtype=self.mc_tracks.dtype)
             ntracks = len(self.mc_tracks)
@@ -239,7 +201,7 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.reserve_data(self.mc_tracks_dset_name, track_sl)
             self.data_manager.write_data(
                 self.mc_tracks_dset_name, track_sl,
-                self._convert_mc_truth_tracks(self.mc_tracks[track_sl]))
+                self.mc_tracks[track_sl])
 
             self.data_manager.create_dset(self.mc_trajectories_dset_name, dtype=self.mc_trajectories.dtype)
             ntraj = len(self.mc_trajectories)
@@ -252,7 +214,7 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.reserve_data(self.mc_trajectories_dset_name, traj_sl)
             self.data_manager.write_data(
                 self.mc_trajectories_dset_name, traj_sl,
-                self._convert_mc_truth_trajectories(self.mc_trajectories[traj_sl]))
+                self.mc_trajectories[traj_sl])
 
             # set up references
             self.data_manager.create_ref(self.raw_event_dset_name, self.mc_events_dset_name)
