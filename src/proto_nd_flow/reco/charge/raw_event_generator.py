@@ -238,6 +238,7 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.create_ref(self.mc_events_dset_name, self.mc_trajectories_dset_name)
             self.data_manager.create_ref(self.mc_events_dset_name, self.mc_tracks_dset_name)
             self.data_manager.create_ref(self.mc_events_dset_name, self.mc_stack_dset_name)
+            self.data_manager.create_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name)
             self.data_manager.create_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name)
 
             # create references between trajectories and tracks
@@ -256,6 +257,7 @@ class RawEventGenerator(H5FlowGenerator):
                 ceil(len(evs) / self.size * self.rank),
                 ceil(len(evs) / self.size * (self.rank + 1)))
 
+            stack_trackid = self.mc_stack['trackID'][:]
             traj_trackid = self.mc_trajectories['trackID'][:]
             tracks_trackid = self.mc_tracks['trackID'][:]
             iter_ = tqdm(range(truth_slice.start, truth_slice.stop), smoothing=1, desc='generating truth references') if self.rank == 0 else range(truth_slice.start, truth_slice.stop)
@@ -277,30 +279,41 @@ class RawEventGenerator(H5FlowGenerator):
                     self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, ref)
 
                     # Create refs for interactions --> traj
-                    intr_evid_block = np.expand_dims(intr_evid[:], 0)
+                    intr_evid_block = np.expand_dims(intr_evid[:], 0) # Might need to modify for MPI running
                     ref = np.argwhere((ev == intr_evid_block) & (ev == traj_evid_block))
                     ref[:, 0] += traj_start
                     ref[:, 1] += 0 #i + inter_sl.start # Might need to modify for MPI running
                     self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, ref)
 
                     # Create refs for interactions --> tracks
-                    intr_evid_block = np.expand_dims(intr_evid[:], -1)
+                    intr_evid_block = np.expand_dims(intr_evid[:], -1) # Might need to modify for MPI running
                     ref = np.argwhere((ev == track_evid_block) & (ev == intr_evid_block))
                     ref[:, 0] += 0 #i + inter_sl.start # Might need to modify for MPI running
                     ref[:, 1] += track_start
                     self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, ref)
 
                     # Create refs for interactions --> generator particle stack
-                    stack_evid_block = np.expand_dims(stack_evid[:], 0)
+                    stack_evid_block = np.expand_dims(stack_evid[:], 0) # Might need to modify for MPI running
                     ref = np.argwhere((ev == intr_evid_block) & (ev == stack_evid_block))
                     # ref[:, 0] += 0 # Placeholders for now.
                     # ref[:, 1] += 0 # This extra offset might be needed for future MPI running
                     self.data_manager.write_ref(self.mc_events_dset_name, self.mc_stack_dset_name, ref)
+
+                    # Create refs for generator particle stack --> traj
+                    stack_trackid_block = np.expand_dims(stack_trackid[:], -1) # Might need to modify for MPI running
+                    traj_trackid_block = np.transpose(traj_trackid_block)
+                    stack_evid_block = np.transpose(stack_evid_block) # Might need to modify for MPI running
+                    traj_evid_block = np.transpose(traj_evid_block)
+                    ref = np.argwhere((stack_trackid_block == traj_trackid_block) & (stack_evid_block == traj_evid_block))
+                    ref[:, 0] += 0 # Might need to modify for MPI running
+                    ref[:, 1] += traj_start
+                    self.data_manager.write_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name, ref)
                 else:
                     self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
                     self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, np.empty((0,2)))
                     self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
                     self.data_manager.write_ref(self.mc_events_dset_name, self.mc_stack_dset_name, np.empty((0,2)))
+                    self.data_manager.write_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name, np.empty((0,2)))
 
         # if self.is_mc:
         #     # copy meta-data from input file
