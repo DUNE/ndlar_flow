@@ -251,7 +251,8 @@ class CalibHitMerger(H5FlowStage):
         # HACK: Remove duplicate refs. Would be nice to actually understand and
         # fix the origin of these duplicates.
         ref = np.unique(ref, axis=0)
-        ref.sort(axis=0)        # might as well
+        # sort based on the ID of the prompt hit, to make analysis more convenient
+        ref = ref[np.argsort(ref[:, 0])]
 
         # finally, write the event -> hit references
         self.data_manager.write_ref(self.hits_name, self.merged_name, ref)
