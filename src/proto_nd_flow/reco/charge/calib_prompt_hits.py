@@ -198,7 +198,7 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['ts_pps'] = raw_hits_arr['ts_pps']
             calib_hits_arr['t_drift'] = drift_t
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
-            calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-6 # hardcoding W_ion and not accounting for finite electron lifetime
+            calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 # hardcoding W_ion and not accounting for finite electron lifetime
 
         # write
         self.data_manager.write_data(self.calib_hits_dset_name, calib_hits_slice, calib_hits_arr)
