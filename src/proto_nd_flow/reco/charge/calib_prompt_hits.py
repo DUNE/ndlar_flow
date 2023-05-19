@@ -52,9 +52,9 @@ class CalibHitBuilder(H5FlowStage):
 
         ``calib_prompt_hits`` datatype::
 
-            x              f8, pixel x location [mm]
-            y              f8, pixel y location [mm]
-            z              f8, pixel z location [mm]
+            x              f8, pixel x location [cm]
+            y              f8, pixel y location [cm]
+            z              f8, pixel z location [cm]
             t_drift        u8, drift time [ticks???]
             ts_pps         f8, PPS packet timestamp [ns]
             Q              f8, hit charge [ke-]
@@ -192,9 +192,10 @@ class CalibHitBuilder(H5FlowStage):
                             for unique_id in hit_uniqueid_str])
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             # NOTE: swapping x <--> z coordinates so the z is ~ in the beam direction
-            calib_hits_arr['x'] = z
-            calib_hits_arr['y'] = xy[:,1]
-            calib_hits_arr['z'] = xy[:,0]
+            #       dividing positions by 10 to convert from mm to cm
+            calib_hits_arr['x'] = z/10.
+            calib_hits_arr['y'] = xy[:,1]/10.
+            calib_hits_arr['z'] = xy[:,0]/10.
             calib_hits_arr['ts_pps'] = raw_hits_arr['ts_pps']
             calib_hits_arr['t_drift'] = drift_t
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
