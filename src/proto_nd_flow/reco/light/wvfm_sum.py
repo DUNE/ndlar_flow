@@ -6,14 +6,11 @@ from h5flow.core import H5FlowStage, resources
 
 class WaveformSum(H5FlowStage):
     '''
-        Sums the signal across light detector SiPM channels, while applying
-        a gain correction to each SiPM.
+        Sums the signal across light detector SiPM channels.
 
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, input dataset path
          - ``swvfm_dset_name`` : ``str``, required, output dataset path
-         - ``gain``: ``dict`` of ``dict`` of ``<adc #>: <channel #>: <gain correction>`` where each gain correction converts the ADC value to visible energy
-         - ``gain_mc``: same as ``gain``, but only applied if datafile is simulation
 
         ``wvfm_dset_name`` is required in the data cache.
 
@@ -29,8 +26,6 @@ class WaveformSum(H5FlowStage):
                 params:
                     wvfm_dset_name: 'light/deconv'
                     swvfm_dset_name: 'light/swvfm'
-                    gain:
-                        default: 1.0
 
 
         Uses the same dtype as the input waveform dataset(s) except with
@@ -54,39 +49,16 @@ class WaveformSum(H5FlowStage):
         self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
         self.swvfm_dset_name = params.get('swvfm_dset_name')
         self.align_dset_name = f'{self.swvfm_dset_name}/alignment'
-        self.gain = params.get('gain',{'default': 1.0})
-        self.gain_mc = params.get('gain_mc',{'default': 1.0})
-
-
-    def _load_gain_data(self, gain_data):
-        self.gain = defaultdict(lambda : defaultdict((lambda : gain_data.get('default',1.0))))
-        for adc in gain_data:
-            if adc == 'default':
-                continue
-            for chan in gain_data[adc]:
-                self.gain[adc][chan] = gain_data[adc][chan]
 
                 
     def init(self, source_name):
         super(WaveformSum, self).init(source_name)
 
-        # use appropriate gain data
-        if resources['RunData'].is_mc:
-            self._load_gain_data(self.gain_mc)
-        else:
-            self._load_gain_data(self.gain)
-
-        # save all config info
-        gain = np.array([(int(adc), int(chan), self.gain[adc][chan])
-                for adc in self.gain for chan in self.gain[adc]],
-                dtype=np.dtype([('adc','i4'), ('chan','i4'), ('gain','f8')]))
         self.data_manager.set_attrs(self.swvfm_dset_name,
                                     classname=self.classname,
                                     class_version=self.class_version,
                                     source_dset=source_name,
-                                    wvfm_dset=self.wvfm_dset_name,
-                                    gain=gain
-                                    )
+                                    wvfm_dset=self.wvfm_dset_name)
 
         # then set up new datasets
         tpc_ids, det_ids = resources['Geometry'].det_bounds.keys()
@@ -121,7 +93,7 @@ class WaveformSum(H5FlowStage):
                     continue
                 mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
                 if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
-                    align_data['sample_idx'][mask,tpc_id,det_id] = wvfm_align_data['sample_idx'][mask,adc]
+                    align_data['sample_idx'][mask,tpc_id,det_id] = wvfm_align_data['sample_idx'][mask,adc,chan]
                     align_data['ns'][mask] = wvfm_align_data['ns'][mask]
 
         for adc in range(wvfm_data['samples'].shape[1]):
@@ -133,8 +105,7 @@ class WaveformSum(H5FlowStage):
                 # WARNING: does not handle case where different channels on same detector are not aligned (not relevant for Module 0 data)
                 mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
                 swvfm_data['samples'][mask,tpc_id,det_id,:] += (
-                    wvfm_data['samples'][mask,adc,chan].filled(0)
-                    * self.gain[adc][chan])
+                    wvfm_data['samples'][mask,adc,chan].filled(0))
 
         # reserve new data
         swvfm_slice = self.data_manager.reserve_data(self.swvfm_dset_name, source_slice)
