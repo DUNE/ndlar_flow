@@ -1,0 +1,32 @@
+classname: WaveformDeconvolution 
+path: proto_nd_flow.reco.light.wvfm_deconv
+requires:
+  - 'light/fwvfm'
+params:
+  # input
+  wvfm_dset_name: 'light/fwvfm'
+
+  # output
+  deconv_dset_name: 'light/deconv'
+
+  # configuration parameters
+  do_filtering: False
+  noise_strategy: slice
+  noise_slice: [0, 75]
+  gen_noise_spectrum: True
+  gen_signal_spectrum: True
+  gen_signal_impulse: True
+  impulse_alignment_oversampling: 10
+  filter_type: Wiener
+  gaus_filter_width: 1
+  filter_channels: [ 4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
+    20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+    36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 52, 53,
+    54, 55, 56, 57, 58, 59, 60, 61, 62, 63 ]
+  signal_amplitude: [300, 1000000]
+  noise_spectrum_filename: 'data/proto_nd_flow/noise_power.npz'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/events_2021_04_10_04_21_27_CEST.fwvfm.noise_power.npz
+  signal_spectrum_filename: 'data/proto_nd_flow/wvfm_deconv_signal_power.npz'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/wvfm_deconv_signal_power.npz
+  signal_impulse_filename: 'data/proto_nd_flow/wvfm_deconv_signal_impulse.fit.npz'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/merged/reco_data/wvfm_deconv_signal_impulse.fit.npz
