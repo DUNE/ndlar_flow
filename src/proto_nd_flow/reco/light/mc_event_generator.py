@@ -96,7 +96,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         self.adc_sn = np.array(params['adc_sn'])
         self.channel_map = np.array(params['channel_map'])
-        self.busy_channel = np.array(params.get('busy_channel',[0]*self.n_adcs))
+        # self.busy_channel = np.array(params.get('busy_channel',[0]*self.n_adcs))
         self.disabled_channels = np.array(params.get('disabled_channels',[]))
         self.event_dset_name = self.dset_name
         self.n_samples = 0
@@ -174,7 +174,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
                                     busy_delay=self.busy_delay,
                                     adc_sn=self.adc_sn,
                                     channel_map=self.channel_map,
-                                    busy_channel=self.busy_channel,
+                                    #busy_channel=self.busy_channel,
                                     disabled_channels=self.disabled_channels,
                                     wvfm_dset_name=self.wvfm_dset_name,
                                     start_position=self.start_position,
@@ -219,7 +219,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
         remapped_wvfms = remapped_wvfms * (self.channel_map != -1)[np.newaxis,:,:,np.newaxis]
 
         # mock busy signal
-        remapped_wvfms[:, np.r_[range(self.n_adcs)], self.busy_channel, self.busy_delay:] = self.busy_ampl
+        # remapped_wvfms[:, np.r_[range(self.n_adcs)], self.busy_channel, self.busy_delay:] = self.busy_ampl
 
         # zero out disabled channels
         remapped_wvfms[:, self.disabled_channels[...,0], self.disabled_channels[...,1]] = 0.
