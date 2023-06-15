@@ -3,7 +3,7 @@
 
 flow:
   source: 'light/events'
-  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_sum] #wvfm_align, sipm_hit_finder, wvfm_sum, hit_finder]
+  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align] #, wvfm_calib, wvfm_sum, sipm_hit_finder] #, sum_hit_finder] #, wvfm_sum, hit_finder]
 
   # remove waveforms from output file
   drop: ['light/wvfm'] #, 'light/fwvfm', 'light/deconv']
@@ -27,16 +27,22 @@ wvfm_deconv:
   !include yamls/proto_nd_flow/reco/light/WaveformDeconvolution.yaml
 
 
-#wvfm_align:
-#  !include yamls/proto_nd_flow/reco/light/WaveformAlign.yaml
+wvfm_align:
+  !include yamls/proto_nd_flow/reco/light/WaveformAlign.yaml
 
+wvfm_calib:
+  !include yamls/proto_nd_flow/reco/light/WaveformCalib.yaml
 
 wvfm_sum:
   !include yamls/proto_nd_flow/reco/light/WaveformSum.yaml
   
   
-#sipm_hit_finder:
-#  !include yamls/proto_nd_flow/reco/light/SiPMHitFinder.yaml
+sipm_hit_finder:
+  !include yamls/proto_nd_flow/reco/light/SiPMHitFinder.yaml
+
+
+sum_hit_finder:
+  !include yamls/proto_nd_flow/reco/light/SumHitFinder.yaml
 
 
 #hit_finder:
