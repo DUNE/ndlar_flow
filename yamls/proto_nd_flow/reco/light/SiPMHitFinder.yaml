@@ -1,0 +1,19 @@
+classname: WaveformHitFinder # light/hit_finder.py
+path: proto_nd_flow.reco.light.hit_finder
+requires:
+  - 'light/deconv'
+  - 'light/deconv/alignment'
+  - 'light/t_ns'
+params:
+  # inputs
+  wvfm_dset_name: 'light/deconv'
+  t_ns_dset_name: 'light/t_ns'
+
+  # output
+  hits_dset_name: 'light/sipm_hits' # new dataset to produce
+
+  # configuration parameters
+  near_samples: 4
+
+  #threshold: !include yamls/proto_nd_flow/reco/light/sipm_threshold.yaml
+  threshold: 250
