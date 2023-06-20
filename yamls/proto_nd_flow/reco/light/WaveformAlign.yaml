@@ -1,0 +1,7 @@
+classname: WaveformAlign
+path: proto_nd_flow.reco.light.wvfm_align
+requires:
+    - 'light/deconv'
+params:
+    wvfm_dset_name: 'light/deconv'
+    sim_latency: 100
