@@ -31,6 +31,7 @@ class CalibHitMerger(H5FlowStage):
             path: ['charge/hits']
             index_only: True
         params:
+          events_dset_name: 'charge/events'
           hits_name: 'charge/hits'
           hit_charge_name: 'charge/hits' # dataset to grab 'q' from
           hits_idx_name: 'charge/hits_idx'
@@ -41,6 +42,7 @@ class CalibHitMerger(H5FlowStage):
     '''
     class_version = '0.0.0'
     defaults = dict(
+        events_dset_name = 'charge/events',
         hits_name = 'charge/calib_prompt_hits',
         hit_charge_name = 'charge/calib_prompt_hits',
         hits_idx_name = 'charge/calib_prompt_hits_idx',
@@ -70,6 +72,7 @@ class CalibHitMerger(H5FlowStage):
         self.data_manager.create_dset(self.merged_name, dtype=self.merged_dtype)
         self.data_manager.create_ref(self.hits_name, self.merged_name)
         self.data_manager.create_ref(source_name, self.merged_name)
+        self.data_manager.create_ref(self.events_dset_name, self.merged_name)
 
     @staticmethod
     def merge_hits(hits, weights, dt_cut, sum_fields=None, weighted_mean_fields=None, hit_q=None, max_steps=-1, mode='last-first'):
@@ -100,7 +103,7 @@ class CalibHitMerger(H5FlowStage):
         mask = hits.mask['id'].copy()
         new_hits = hits.data.copy()
         weights = weights.data.copy()
-        old_ids = hits.mask['id'].copy()[...,np.newaxis]
+        old_ids = hits.data['id'].copy()[...,np.newaxis]
         old_id_mask = hits.mask['id'].copy()[...,np.newaxis]
         if hit_q is not None:
             new_hit_q = hit_q.copy()
@@ -112,7 +115,7 @@ class CalibHitMerger(H5FlowStage):
                 logging.info(f'Hit merging algorithm reached max step limit {max_steps}')
 
             # sort array along last axis to find groups of hits on the same channel, use a stable sort with the aim of improving performance on later iterations
-            isort = np.argsort(ma.array(hits, mask=mask), axis=-1, order=['z','y','ts_pps','t_drift'], kind='stable')
+            isort = np.argsort(ma.array(new_hits, mask=mask), axis=-1, order=['z','y','ts_pps','t_drift'], kind='stable')
             mask = np.take_along_axis(mask, isort, axis=-1)
             new_hits = np.take_along_axis(new_hits, isort, axis=-1)
             weights = np.take_along_axis(weights, isort, axis=-1)
@@ -215,7 +218,6 @@ class CalibHitMerger(H5FlowStage):
             np.c_[np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids), np.extract(~(old_id_mask | mask[...,np.newaxis]), new_hit_idx)],
             ma.array(new_hit_q, mask=mask) if hit_q is not None else None
             )
-    
 
     def run(self, source_name, source_slice, cache):
         super(CalibHitMerger, self).run(source_name, source_slice, cache)
@@ -245,8 +247,15 @@ class CalibHitMerger(H5FlowStage):
                 np.place(merged_q['id'], ~merged_mask, merge_idx)
             self.data_manager.write_data(self.merged_q_name, merge_idx, merged_q[~merged_mask])
             self.data_manager.write_ref(self.merged_name, self.merged_q_name, np.c_[merge_idx, merge_idx])
-        
+
+        # HACK: Remove duplicate refs. Would be nice to actually understand and
+        # fix the origin of these duplicates.
+        ref = np.unique(ref, axis=0)
+        # sort based on the ID of the prompt hit, to make analysis more convenient
+        ref = ref[np.argsort(ref[:, 0])]
+
         # finally, write the event -> hit references
         self.data_manager.write_ref(self.hits_name, self.merged_name, ref)
         ev_ref = np.c_[(np.indices(merged_mask.shape)[0] + source_slice.start)[~merged_mask], merge_idx]
         self.data_manager.write_ref(source_name, self.merged_name, ev_ref)
+        self.data_manager.write_ref(self.events_dset_name, self.merged_name, ev_ref)

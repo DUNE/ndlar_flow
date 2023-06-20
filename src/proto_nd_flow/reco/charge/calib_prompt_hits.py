@@ -18,6 +18,7 @@ class CalibHitBuilder(H5FlowStage):
 
         Parameters:
          - ``hits_dset_name`` : ``str``, required, output dataset path
+         - ``events_dset_name`` : ``str``, required, input dataset path for high-level events
          - ``packets_dset_name`` : ``str``, required, input dataset path for packets
          - ``packets_index_name`` : ``str``, required, input dataset path for packet index (defaults to ``{packets_dset_name}_index'``)
          - ``ts_dset_name`` : ``str``, required, input dataset path for clock-corrected packet timestamps
@@ -42,6 +43,7 @@ class CalibHitBuilder(H5FlowStage):
                       index_only: True
                 params:
                     hits_dset_name: 'charge/raw_hits'
+                    events_dset_name: 'charge/events'
                     packets_dset_name: 'charge/packets'
                     packets_index_name: 'charge/packets_index'
                     t0_dset_name: 'combined/t0'
@@ -50,9 +52,9 @@ class CalibHitBuilder(H5FlowStage):
 
         ``calib_prompt_hits`` datatype::
 
-            x              f8, pixel x location [mm]
-            y              f8, pixel y location [mm]
-            z              f8, pixel z location [mm]
+            x              f8, pixel x location [cm]
+            y              f8, pixel y location [cm]
+            z              f8, pixel z location [cm]
             t_drift        u8, drift time [ticks???]
             ts_pps         f8, PPS packet timestamp [ns]
             Q              f8, hit charge [ke-]
@@ -122,6 +124,8 @@ class CalibHitBuilder(H5FlowStage):
         events_data = cache[self.events_dset_name]
         packets_data = cache[self.packets_dset_name]
         packets_index = cache[self.packets_index_name]
+        print(self.packets_index_name)
+        print(type(packets_index))
         t0_data = cache[self.t0_dset_name]
         raw_hits = cache[self.raw_hits_dset_name]
 
@@ -134,7 +138,7 @@ class CalibHitBuilder(H5FlowStage):
             mask = (packets_data['packet_type'] == 0) & mask
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
-            #index_arr = packets_index.data[mask]
+            index_arr = packets_index.data[mask]
         else:
             n = 0
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
@@ -188,13 +192,14 @@ class CalibHitBuilder(H5FlowStage):
                             for unique_id in hit_uniqueid_str])
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             # NOTE: swapping x <--> z coordinates so the z is ~ in the beam direction
-            calib_hits_arr['x'] = z
-            calib_hits_arr['y'] = xy[:,1]
-            calib_hits_arr['z'] = xy[:,0]
+            #       dividing positions by 10 to convert from mm to cm
+            calib_hits_arr['x'] = z/10.
+            calib_hits_arr['y'] = xy[:,1]/10.
+            calib_hits_arr['z'] = xy[:,0]/10.
             calib_hits_arr['ts_pps'] = raw_hits_arr['ts_pps']
             calib_hits_arr['t_drift'] = drift_t
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
-            calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-6 # hardcoding W_ion and not accounting for finite electron lifetime
+            calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 # hardcoding W_ion and not accounting for finite electron lifetime
 
         # write
         self.data_manager.write_data(self.calib_hits_dset_name, calib_hits_slice, calib_hits_arr)
@@ -209,8 +214,8 @@ class CalibHitBuilder(H5FlowStage):
         self.data_manager.write_ref(self.events_dset_name, self.calib_hits_dset_name, ref)
 
         # hit -> packet
-        #ref = np.c_[calib_hits_arr['id'], index_arr]
-        #self.data_manager.write_ref(self.calib_hits_dset_name, self.packets_dset_name, ref)
+        ref = np.c_[calib_hits_arr['id'], index_arr]
+        self.data_manager.write_ref(self.calib_hits_dset_name, self.packets_dset_name, ref)
 
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped):

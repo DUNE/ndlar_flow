@@ -3,7 +3,7 @@
 
 flow:
   source: raw_events
-  stages: [timestamp_corrector, ext_trig_finder, temp_hit_builder, raw_hit_builder, event_builder]
+  stages: [timestamp_corrector, ext_trig_finder, raw_hit_builder, event_builder]
   drop: []
 
 
@@ -26,10 +26,6 @@ timestamp_corrector:
 
 ext_trig_finder:
   !include yamls/proto_nd_flow/reco/charge/ExternalTriggerFinder.yaml
-
-
-temp_hit_builder:
-  !include yamls/proto_nd_flow/reco/charge/HitBuilder.yaml
 
 
 raw_hit_builder:
