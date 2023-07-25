@@ -8,7 +8,7 @@ HERE=`pwd`
 cd ${DATA_DIR}
 
 # tile layout describing a *single* module (fix me)
-curl -O https://portal.nersc.gov/project/dune/data/2x2/simulation/kwood_dev/proto_nd_flow_inputs/multi_tile_layout-2.3.16.yaml 
+curl -O https://portal.nersc.gov/project/dune/data/2x2/simulation/kwood_dev/proto_nd_flow_inputs/multi_tile_layout-2.4.16.yaml 
 
 # 2x2 detector description
 curl -O https://portal.nersc.gov/project/dune/data/2x2/simulation/kwood_dev/proto_nd_flow_inputs/2x2.yaml

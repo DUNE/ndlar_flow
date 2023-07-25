@@ -6,6 +6,7 @@ params:
   packets_dset_name: 'charge/packets'
 
   # configuration parameters
+  mc_tracks_dset_name: 'mc_truth/segments'
   buffer_size: 384000
   nhit_cut: 100
   sync_noise_cut: [1000000, 11000000] # 1e6 cut based on Brooke's study
