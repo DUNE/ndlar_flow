@@ -321,7 +321,8 @@ class CalibHitMerger(H5FlowStage):
         ref = ref[np.argsort(ref[:, 0])]
 
         # finally, write the references
-        self.data_manager.write_ref(self.hits_name, self.merged_name, np.c_[merge_idx, merge_idx])
-        self.data_manager.write_ref(self.merged_name,self.mc_hit_frac_dset_name,ref)
+        self.data_manager.write_ref(self.hits_name, self.merged_name, ref)
+        self.data_manager.write_ref(self.merged_name,self.mc_hit_frac_dset_name,np.c_[merge_idx,merge_idx])
         ev_ref = np.c_[(np.indices(merged_mask.shape)[0] + source_slice.start)[~merged_mask], merge_idx]
         self.data_manager.write_ref(source_name, self.merged_name, ev_ref)
+        self.data_manager.write_ref(self.events_dset_name, self.merged_name, ev_ref)
