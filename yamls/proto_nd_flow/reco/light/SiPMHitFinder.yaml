@@ -6,7 +6,7 @@ requires:
   - 'light/t_ns'
 params:
   # inputs
-  wvfm_dset_name: 'light/deconv'
+  wvfm_dset_name: 'light/cwvfm'
   t_ns_dset_name: 'light/t_ns'
 
   # output
