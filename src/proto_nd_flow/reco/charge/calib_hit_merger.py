@@ -210,7 +210,7 @@ class CalibHitMerger(H5FlowStage):
                 # combine weights for next iteration
                 np.place(weights[...,:-1], to_merge, weights[...,:-1] + weights[...,1:])
                 for hit_it, hit_cont in np.ndenumerate(weights[...,:-1]):
-                    if to_merge[hit_it] | mask[hit_it]:
+                    if (not to_merge[hit_it]) | mask[hit_it]:
                         #print('skipping')
                         continue
                     if hit_contributions[hit_it][1].shape[0] < 100: print('a shape :',hit_contributions[hit_it][1].shape)
