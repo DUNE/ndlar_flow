@@ -19,17 +19,7 @@ raw_events:
   path: h5flow.modules
   dset_name: 'charge/raw_events'
   params:
-    chunk_size: 128
-
-#calib_prompt_hits:
-#  classname: H5FlowDatasetLoopGenerator
-#  path: h5flow.modules
-#  dset_name: 'charge/calib_prompt_hits'
-#  params:
-#    chunk_size: 128
-
-#temp_hit_builder:
-#  !include yamls/proto_nd_flow/reco/charge/HitBuilder.yaml
+    chunk_size: 32
 
 calib_hit_merger:
   !include yamls/proto_nd_flow/reco/charge/CalibHitMerger.yaml
