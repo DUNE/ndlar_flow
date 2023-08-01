@@ -44,6 +44,7 @@ class CalibHitMerger(H5FlowStage):
         hit_charge_name = 'charge/calib_prompt_hits',
         merged_name = 'charge/hits/calib_merged_hits',
         max_merge_steps = 5,
+        max_contrib_segments = 200,
         merge_mode = 'last-first',
         merge_cut = 50, # CRS ticks
         mc_hit_frac_dset_name = 'mc_truth/calib_final_hit_backtrack'
@@ -51,11 +52,6 @@ class CalibHitMerger(H5FlowStage):
     valid_merge_modes = ['last-first', 'pairwise']
 
     merged_dtype = CalibHitBuilder.calib_hits_dtype
-
-    hit_frac_dtype = np.dtype([
-        ('fraction', '(100,)f8'),
-        ('segment_id', '(100,)u8')
-    ])
 
     sum_fields = ['Q','E']
     weighted_mean_fields = ['t_drift', 'ts_pps','x']
@@ -70,6 +66,11 @@ class CalibHitMerger(H5FlowStage):
     def init(self, source_name):
         super(CalibHitMerger, self).init(source_name)
 
+        self.hit_frac_dtype = np.dtype([
+            ('fraction', f'({self.max_contrib_segments},)f8'),
+            ('segment_id', f'({self.max_contrib_segments},)u8')
+        ])
+
         self.data_manager.create_dset(self.merged_name, dtype=self.merged_dtype)
         self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype)
         self.data_manager.create_ref(self.hits_name, self.merged_name)
@@ -77,8 +78,8 @@ class CalibHitMerger(H5FlowStage):
         self.data_manager.create_ref(self.merged_name,self.mc_hit_frac_dset_name)
         self.data_manager.create_ref(self.events_dset_name, self.merged_name)
 
-    @staticmethod
-    def merge_hits(hits, weights, seg_fracs, dt_cut, sum_fields=None, weighted_mean_fields=None, max_steps=-1, mode='last-first'):
+    #@staticmethod
+    def merge_hits(self,hits, weights, seg_fracs, dt_cut, sum_fields=None, weighted_mean_fields=None, max_steps=-1, mode='last-first'):
         '''
         Combines hits along the second axis on unique channels with a delta t less than dt_cut. Continues
         until no hits (or merged hits) are within dt_cut of each other
@@ -112,14 +113,7 @@ class CalibHitMerger(H5FlowStage):
         old_ids = hits.data['id'].copy()[...,np.newaxis]
         old_id_mask = hits.mask['id'].copy()[...,np.newaxis]
 
-
-        hit_frac_dtype = np.dtype([
-            ('fraction', '(100,)f8'),
-            ('segment_id', '(100,)u8')
-        ])
-
-
-        hit_contributions = np.full(shape=weights.shape+(3,100),fill_value=0.)
+        hit_contributions = np.full(shape=weights.shape+(3,self.max_contrib_segments),fill_value=0.)
         #print('weights shape',weights.shape) 
         #print('hit_contr shape',hit_contributions.shape) 
         for it, q in np.ndenumerate(weights):
@@ -213,11 +207,9 @@ class CalibHitMerger(H5FlowStage):
                     if (not to_merge[hit_it]) | mask[hit_it]:
                         #print('skipping')
                         continue
-                    if hit_contributions[hit_it][1].shape[0] < 100: print('a shape :',hit_contributions[hit_it][1].shape)
+                    #if hit_contributions[hit_it][1].shape[0] < self.max_contrib_segments: print('a shape :',hit_contributions[hit_it][1].shape)
                     e = np.argwhere(hit_contributions[...,:-1][hit_it][1]==0)[0][0]
                     f = np.argwhere(hit_contributions[...,:][hit_it[0],hit_it[1]+1][1]==0)[0][0]
-                    #print(e,f)
-                    #print('--------------------')
                     # merge the hit contributions:
                     for comb_it in range(f):
                         hit_contributions[...,:-1][hit_it][1][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][1][comb_it]
@@ -254,8 +246,8 @@ class CalibHitMerger(H5FlowStage):
                 break
 
         # calculate segment contributions for each merged hit
-        tmp_bt = np.full(shape=new_hits.shape+(2,100),fill_value=0.)
-        back_track = np.full(shape=new_hits.shape,fill_value=0.,dtype=hit_frac_dtype)
+        tmp_bt = np.full(shape=new_hits.shape+(2,self.max_contrib_segments),fill_value=0.)
+        back_track = np.full(shape=new_hits.shape,fill_value=0.,dtype=self.hit_frac_dtype)
         # loop over hits
         for hit_it, hit in np.ndenumerate(new_hits):
             if mask[hit_it]: continue
@@ -277,8 +269,8 @@ class CalibHitMerger(H5FlowStage):
             isort = np.flip(np.argsort(np.abs(bt_unique_frac), axis=-1, kind='stable'))
             bt_unique_segs = np.take_along_axis(bt_unique_segs, isort, axis=-1)
             bt_unique_frac = np.take_along_axis(bt_unique_frac, isort, axis=-1)
-            back_track[hit_it]['fraction'] = [0.]*100
-            back_track[hit_it]['segment_id'] = [0]*100
+            back_track[hit_it]['fraction'] = [0.]*self.max_contrib_segments
+            back_track[hit_it]['segment_id'] = [0]*self.max_contrib_segments
             back_track[hit_it]['fraction'][:bt_unique_frac.shape[0]] = bt_unique_frac
             back_track[hit_it]['segment_id'][:bt_unique_segs.shape[0]] = bt_unique_segs
 
