@@ -2,7 +2,7 @@ classname: LArData
 path: module0_flow.resources.lar_data
 params:
   path: 'lar_info'
-  electron_lifetime_file: 'data/module0_flow/ElecLifetimeFit_Module1.root' #used to be a .npz
+  electron_lifetime_file: 'data/module0_flow/ElecLifetimeFit_Module0.npz' #used to be a .npz
   # download link: https://portal.nersc.gov/project/dune/data/Module0/electronLifetime/ElecLifetimeFit_Module0.root
   electron_lifetime: 2600 # us
   mode: 1 # choices of vdrift models: 1. LArSoft 2.BNL mobility measurement
