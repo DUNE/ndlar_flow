@@ -5,4 +5,4 @@ requires:
 params:
   hits_dset_name: 'charge/hits'
   calib_dset_name: 'charge/q_calib_tdg'
-  gain_file: 'data/module0_flow/module0_time_dependent_gain.npz'
+  gain_file: 'data/module0_flow/module0_time_dependent_gain_v0.npz'
