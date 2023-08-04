@@ -10,13 +10,7 @@ params:
   deconv_dset_name: 'light/deconv'
 
   # configuration parameters
-  do_filtering: False
-  noise_strategy: slice
-  noise_slice: [0, 75]
-  gen_noise_spectrum: True
-  gen_signal_spectrum: True
-  gen_signal_impulse: True
-  impulse_alignment_oversampling: 10
+  do_filtering: True
   filter_type: Wiener
   gaus_filter_width: 1
   filter_channels: [ 4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
