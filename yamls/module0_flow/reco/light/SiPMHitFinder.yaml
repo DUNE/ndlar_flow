@@ -16,4 +16,4 @@ params:
 
   threshold: !include yamls/module0_flow/reco/light/sipm_threshold.yaml
 
-  mask: [0, 1, 8, 15, 16, 17, 24, 31, 32, 33, 40, 47, 48, 49, 56, 63]
+  #mask: [0, 1, 8, 15, 16, 17, 24, 31, 32, 33, 40, 47, 48, 49, 56, 63]
