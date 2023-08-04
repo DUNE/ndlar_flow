@@ -60,12 +60,12 @@ workflow4_C='yamls/module0_flow/workflows/combined/combined_reconstruction.yaml'
 cd ndlar_flow
 pip install adc64format
 
-#h5flow --nompi -c $workflow1_L $workflow2_L \
-#    -i $inFile_L -o $outFile_L
+h5flow --nompi -c $workflow1_L \
+    -i $inFile_L -o $outFile_L
 
-h5flow --nompi -c $workflow1_L $workflow3_L \
-    -i $inFile_L -o $outFile
+h5flow --nompi -c $workflow3_L \
+    -i $outFile_L -o $outFile
 
 #h5flow --nompi -c $workflow1_C $workflow2_C $workflow3_C $workflow4_C \
-#h5flow --nompi -c $workflow1_C \
+#h5flow --nompi -c $workflow1_C $workflow2_C \
 #    -i $inFile_C -o $outFile_C	
