@@ -35,14 +35,14 @@ wvfm_deconv:
   !include yamls/module0_flow/reco/light/WaveformDeconvolution.yaml
 
 
-wvfm_align:
-  !include yamls/module0_flow/reco/light/WaveformAlign.yaml
+#wvfm_align:
+#  !include yamls/module0_flow/reco/light/WaveformAlign.yaml
 
 
-wvfm_sum:
-  !include yamls/module0_flow/reco/light/WaveformSum.yaml
+#wvfm_sum:
+#  !include yamls/module0_flow/reco/light/WaveformSum.yaml
 
 
-hit_finder:
-  !include yamls/module0_flow/reco/light/WaveformHitFinder.yaml
+#hit_finder:
+#  !include yamls/module0_flow/reco/light/WaveformHitFinder.yaml
 
