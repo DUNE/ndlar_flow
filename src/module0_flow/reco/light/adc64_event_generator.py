@@ -76,7 +76,8 @@ class LightADC64EventGenerator(H5FlowGenerator):
         sync_channel = 32,
         sync_threshold = 5000,
         sync_buffer = 200,        
-        clock_timestamp_factor = 0.625,
+#Karolina:        clock_timestamp_factor = 0.625,
+        clock_timestamp_factor = 1,
         utime_ms_window = 1000,
         tai_ns_window = 1000,
         )
@@ -84,8 +85,11 @@ class LightADC64EventGenerator(H5FlowGenerator):
     def event_dtype(self): return np.dtype([
         ('id', 'u8'),  # unique identifier
         ('event', 'i4'),  # event number in data file
+#Karolina:       ('sn', 'i4', (self.n_adcs,)),  # adc serial number
+#        ('ch', 'u1', (self.n_adcs, self.n_channels)),  # channel number
+        #('sn', 'i4', self.n_adcs),  # adc serial number
         ('sn', 'i4', (self.n_adcs,)),  # adc serial number
-        ('ch', 'u1', (self.n_adcs, self.n_channels)),  # channel number
+ 		        ('ch', 'u1', (self.n_adcs, self.n_channels)),  # channel number
         ('utime_ms', 'u8', (self.n_adcs, self.n_channels)),  # unix time [ms since epoch]
         ('tai_ns', 'u8', (self.n_adcs, self.n_channels)),  # time since PPS [ns]
         ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels))  # boolean, 1 if channel present in event
