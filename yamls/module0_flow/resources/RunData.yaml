@@ -2,7 +2,8 @@ classname: RunData
 path: module0_flow.resources.run_data
 params:
   path: 'run_info'
-  runlist_file: 'data/module0_flow/runlist-mod0-run1.txt'
+  runlist_file: 'data/module0_flow/runlist.txt' 
+  # changed for Module 1
   #runlist_file: 'data/module0_flow/runlist-mod0-run2.txt'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/runlist.txt
   # download link: https://portal.nersc.gov/project/dune/data/Module0-Run2/runlist.txt  

@@ -47,13 +47,10 @@ class Geometry(H5FlowResource):
 
             resources:
                 - classname: Geometry
-                  params:
-                    path: 'geometry_info'
-                    crs_geometry_file: 'data/module0_flow/multi_tile_layout-2.2.16.yaml'
-                    lrs_geometry_file: 'data/module0_flow/light_module_desc-0.0.0.yaml'
+
 
     '''
-    class_version = '0.2.0'
+    class_version = '0.0.0' # changed for compatibility
 
     default_path = 'geometry_info'
     default_network_agnostic = False
@@ -99,9 +96,9 @@ class Geometry(H5FlowResource):
             write_lut(self.data_manager, self.path, self.anode_z, 'anode_z')
             write_lut(self.data_manager, self.path, self.drift_dir, 'drift_dir')
 
-            write_lut(self.data_manager, self.path, self.tpc_id, 'tpc_id')
-            write_lut(self.data_manager, self.path, self.det_id, 'det_id')
-            write_lut(self.data_manager, self.path, self.det_bounds, 'det_bounds')
+            #write_lut(self.data_manager, self.path, self.tpc_id, 'tpc_id')
+            #write_lut(self.data_manager, self.path, self.det_id, 'det_id')
+            #write_lut(self.data_manager, self.path, self.det_bounds, 'det_bounds')
         else:
             assert_compat_version(self.class_version, self.data['class_version'])
 
@@ -112,14 +109,14 @@ class Geometry(H5FlowResource):
             self._anode_z = read_lut(self.data_manager, self.path, 'anode_z')
             self._drift_dir = read_lut(self.data_manager, self.path, 'drift_dir')
 
-            self._tpc_id = read_lut(self.data_manager, self.path, 'tpc_id')
-            self._det_id = read_lut(self.data_manager, self.path, 'det_id')
-            self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
+            #self._tpc_id = read_lut(self.data_manager, self.path, 'tpc_id')
+            #self._det_id = read_lut(self.data_manager, self.path, 'det_id')
+            #self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
 
         lut_size = (self.pixel_xy.nbytes + self.tile_id.nbytes
-                    + self.anode_z.nbytes + self.drift_dir.nbytes
-                    + self.tpc_id.nbytes + self.det_id.nbytes
-                    + self.det_bounds.nbytes)
+                    + self.anode_z.nbytes + self.drift_dir.nbytes)
+                    #+ self.tpc_id.nbytes + self.det_id.nbytes
+                    #+ self.det_bounds.nbytes)
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
 
@@ -258,149 +255,149 @@ class Geometry(H5FlowResource):
         return pixel_pos[0] * tile_orientation[2], pixel_pos[1] * tile_orientation[1]
 
 
-    @property
-    def tpc_id(self):
-        '''
-            Lookup table for TPC id, usage::
+   # @property
+   # def tpc_id(self):
+   #     '''
+   #         Lookup table for TPC id, usage::
+#
+   #             resource['Geometry'].tpc_id[(adc_index, channel_index)]
+#
+   #     '''
+   #     return self._tpc_id
 
-                resource['Geometry'].tpc_id[(adc_index, channel_index)]
-
-        '''
-        return self._tpc_id
-
-
-    @property
-    def det_id(self):
-        '''
-            Lookup table for detector id within a TPC, usage::
-
-                resource['Geometry'].det_id[(adc_index, channel_index)]
-
-        '''
-        return self._det_id
-
-
-    @property
-    def det_bounds(self):
-        '''
-            Lookup table for detector min and max xyz coordinate, usage::
-
-                resource['Geometry'].det_bounds[(tpc_id, det_id)]
-
-        '''
-        return self._det_bounds
-
-
-    @staticmethod
-    def _rect_solid_angle_sign(coord, rect_min, rect_max):
-        overlapping = (coord >= rect_min) & (coord <= rect_max)
-        inverted = np.abs(rect_min - coord) < np.abs(rect_max - coord)
-
-        sign_min = overlapping + ~overlapping * (1 - 2*inverted)
-        sign_max = overlapping + ~overlapping * (2*inverted - 1)
-
-        return sign_min, sign_max
-
-
-    def solid_angle(self, xyz, tpc_id, det_id):
-        '''
-        Calculate the solid angle of a rectangular detector ``det_id`` in TPC
-        ``tpc_id`` as seen from the point ``xyz``, under the assumption
-        that the detector is oriented along the drift direction
-
-        Note: this method does not consider cathode / field cage visibilty.
-
-        :param xyz: array shape: ``(N,3)``
-
-        :param tpc_id: array shape: ``(M,)``
-
-        :param det_id: array shape: ``(M,)``
-
-        :returns: array shape: ``(N, M)``
-
-        '''
-        x,y,z = xyz[...,0:1,np.newaxis], xyz[...,1:2,np.newaxis], xyz[...,2:3,np.newaxis]
-        det_bounds = self.det_bounds[(tpc_id, det_id)]
-        det_bounds = det_bounds.reshape((1,)+det_bounds.shape)
-        det_min = det_bounds[...,0,:]
-        det_max = det_bounds[...,1,:]
-
-        det_x = (det_min[...,0] + det_max[...,0])/2
-        det_y_sign_min, det_y_sign_max = self._rect_solid_angle_sign(
-            y, det_min[...,1], det_max[...,1])
-        det_z_sign_min, det_z_sign_max = self._rect_solid_angle_sign(
-            z, det_min[...,2], det_max[...,2])
-
-        omega = np.zeros(det_y_sign_min.shape, dtype=float)
-        for det_y,det_y_sign in ((det_max[...,1], det_y_sign_max), (det_min[...,1], det_y_sign_min)):
-            for det_z,det_z_sign in ((det_max[...,2], det_z_sign_max), (det_min[...,2], det_z_sign_min)):
-                d = np.sqrt((x-det_x)**2 + (y-det_y)**2 + (z-det_z)**2)
-                omega += det_y_sign * det_z_sign * np.arctan2(np.abs(det_y-y) * np.abs(det_z-z), np.abs(det_x-x)* d)
-
-        return omega
-
-
+#
+#    @property
+#    def det_id(self):
+#        '''
+#            Lookup table for detector id within a TPC, usage::
+#
+#                resource['Geometry'].det_id[(adc_index, channel_index)]
+#
+#        '''
+#        return self._det_id
+#
+#
+#    @property
+#    def det_bounds(self):
+#        '''
+#            Lookup table for detector min and max xyz coordinate, usage::
+#
+#                resource['Geometry'].det_bounds[(tpc_id, det_id)]
+#
+#        '''
+#        return self._det_bounds
+#
+#
+#    @staticmethod
+#    def _rect_solid_angle_sign(coord, rect_min, rect_max):
+#        overlapping = (coord >= rect_min) & (coord <= rect_max)
+#        inverted = np.abs(rect_min - coord) < np.abs(rect_max - coord)
+#
+#        sign_min = overlapping + ~overlapping * (1 - 2*inverted)
+#        sign_max = overlapping + ~overlapping * (2*inverted - 1)
+#
+#        return sign_min, sign_max
+#
+#
+#    def solid_angle(self, xyz, tpc_id, det_id):
+#        '''
+#        Calculate the solid angle of a rectangular detector ``det_id`` in TPC
+#        ``tpc_id`` as seen from the point ``xyz``, under the assumption
+#        that the detector is oriented along the drift direction
+#
+#        Note: this method does not consider cathode / field cage visibilty.
+#
+#        :param xyz: array shape: ``(N,3)``
+#
+#        :param tpc_id: array shape: ``(M,)``
+#
+#        :param det_id: array shape: ``(M,)``
+#
+#        :returns: array shape: ``(N, M)``
+#
+#        '''
+#        x,y,z = xyz[...,0:1,np.newaxis], xyz[...,1:2,np.newaxis], xyz[...,2:3,np.newaxis]
+#        det_bounds = self.det_bounds[(tpc_id, det_id)]
+#        det_bounds = det_bounds.reshape((1,)+det_bounds.shape)
+#        det_min = det_bounds[...,0,:]
+#        det_max = det_bounds[...,1,:]
+#
+#        det_x = (det_min[...,0] + det_max[...,0])/2
+#        det_y_sign_min, det_y_sign_max = self._rect_solid_angle_sign(
+#            y, det_min[...,1], det_max[...,1])
+#        det_z_sign_min, det_z_sign_max = self._rect_solid_angle_sign(
+#            z, det_min[...,2], det_max[...,2])
+#
+#        omega = np.zeros(det_y_sign_min.shape, dtype=float)
+#        for det_y,det_y_sign in ((det_max[...,1], det_y_sign_max), (det_min[...,1], det_y_sign_min)):
+#            for det_z,det_z_sign in ((det_max[...,2], det_z_sign_max), (det_min[...,2], det_z_sign_min)):
+#                d = np.sqrt((x-det_x)**2 + (y-det_y)**2 + (z-det_z)**2)
+#                omega += det_y_sign * det_z_sign * np.arctan2(np.abs(det_y-y) * np.abs(det_z-z), np.abs(det_x-x)* d)
+#
+#        return omega
+#
+#
     def load_geometry(self):
         self._load_charge_geometry()
-        self._load_light_geometry()
+        #self._load_light_geometry()
 
 
-    def _load_light_geometry(self):
-        if self.rank == 0:
-            logging.warning(f'Loading geometry from {self.lrs_geometry_file}...')
-
-        with open(self.lrs_geometry_file) as gf:
-            geometry = yaml.load(gf, Loader=yaml.FullLoader)
-
-        # enforce that light geometry formatting is as expected
-        assert_compat_version(geometry['format_version'], '0.0.0')
-
-        tpc_ids = np.array([v for v in geometry['tpc_center'].keys()])
-        det_ids = np.array([v for v in geometry['det_center'].keys()])
-        max_chan = max([len(chan) for tpc in geometry['det_chan'].values() for chan in tpc.values()])
-
-        shape = tpc_ids.shape + det_ids.shape
-        det_adc = np.full(shape, -1, dtype=int)
-        det_chan = np.full(shape + (max_chan,), -1, dtype=int)
-        det_chan_mask = np.zeros(shape + (max_chan,), dtype=bool)
-        det_bounds = np.zeros(shape + (2,3), dtype=float)
-        for i, tpc in enumerate(tpc_ids):
-            for j, det in enumerate(det_ids):
-                det_adc[i,j] = geometry['det_adc'][tpc][det]
-                det_chan[i,j,:len(geometry['det_chan'][tpc][det])] = geometry['det_chan'][tpc][det]
-
-                tpc_center = np.array(geometry['tpc_center'][tpc])
-                det_geom = geometry['geom'][geometry['det_geom'][det]]
-                det_center = np.array(geometry['det_center'][det])
-                det_bounds[i,j,0] = tpc_center + det_center + np.array(det_geom['min'])
-                det_bounds[i,j,1] = tpc_center + det_center + np.array(det_geom['max'])
-
-        det_chan_mask = det_chan != -1
-
-        det_adc, det_chan, tpc_ids, det_ids = np.broadcast_arrays(
-            det_adc[...,np.newaxis], det_chan,
-            tpc_ids[...,np.newaxis,np.newaxis], det_ids[...,np.newaxis])
-
-        adc_chan_min_max = [(min(det_adc[det_chan_mask]), max(det_adc[det_chan_mask])),
-                            (min(det_chan[det_chan_mask]), max(det_chan[det_chan_mask]))]
-        self._tpc_id = LUT('i4', *adc_chan_min_max)
-        self._tpc_id.default = -1
-
-        self._det_id = LUT('i4', *adc_chan_min_max)
-        self._det_id.default = -1
-
-        det_min_max = [(min(tpc_ids[det_chan_mask]), max(tpc_ids[det_chan_mask])),
-                       (min(det_ids[det_chan_mask]), max(det_ids[det_chan_mask]))]
-        self._det_bounds = LUT('f4', *det_min_max, shape=(2,3))
-        self._det_bounds.default = 0.
-
-        self._tpc_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = tpc_ids[det_chan_mask]
-        self._det_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = det_ids[det_chan_mask]
-
-        tpc_ids, det_ids, det_chan_mask = tpc_ids[...,0], det_ids[...,0], det_chan_mask[...,0]
-        self._det_bounds[(tpc_ids[det_chan_mask], det_ids[det_chan_mask])] = det_bounds[det_chan_mask]
-
-
+    #def _load_light_geometry(self):
+    #    if self.rank == 0:
+    #        logging.warning(f'Loading geometry from {self.lrs_geometry_file}...')
+#
+    #    with open(self.lrs_geometry_file) as gf:
+    #        geometry = yaml.load(gf, Loader=yaml.FullLoader)
+#
+    #    # enforce that light geometry formatting is as expected
+    #    assert_compat_version(geometry['format_version'], '0.0.0')
+#
+    #    tpc_ids = np.array([v for v in geometry['tpc_center'].keys()])
+    #    det_ids = np.array([v for v in geometry['det_center'].keys()])
+    #    max_chan = max([len(chan) for tpc in geometry['det_chan'].values() for chan in tpc.values()])
+#
+    #    shape = tpc_ids.shape + det_ids.shape
+    #    det_adc = np.full(shape, -1, dtype=int)
+    #    det_chan = np.full(shape + (max_chan,), -1, dtype=int)
+    #    det_chan_mask = np.zeros(shape + (max_chan,), dtype=bool)
+    #    det_bounds = np.zeros(shape + (2,3), dtype=float)
+    #    for i, tpc in enumerate(tpc_ids):
+    #        for j, det in enumerate(det_ids):
+    #            det_adc[i,j] = geometry['det_adc'][tpc][det]
+    #            det_chan[i,j,:len(geometry['det_chan'][tpc][det])] = geometry['det_chan'][tpc][det]
+#
+    #            tpc_center = np.array(geometry['tpc_center'][tpc])
+    #            det_geom = geometry['geom'][geometry['det_geom'][det]]
+    #            det_center = np.array(geometry['det_center'][det])
+    #            det_bounds[i,j,0] = tpc_center + det_center + np.array(det_geom['min'])
+    #            det_bounds[i,j,1] = tpc_center + det_center + np.array(det_geom['max'])
+#
+    #    det_chan_mask = det_chan != -1
+#
+    #    det_adc, det_chan, tpc_ids, det_ids = np.broadcast_arrays(
+    #        det_adc[...,np.newaxis], det_chan,
+    #        tpc_ids[...,np.newaxis,np.newaxis], det_ids[...,np.newaxis])
+#
+    #    adc_chan_min_max = [(min(det_adc[det_chan_mask]), max(det_adc[det_chan_mask])),
+    #                        (min(det_chan[det_chan_mask]), max(det_chan[det_chan_mask]))]
+    #    self._tpc_id = LUT('i4', *adc_chan_min_max)
+    #    self._tpc_id.default = -1
+#
+    #    self._det_id = LUT('i4', *adc_chan_min_max)
+    #    self._det_id.default = -1
+#
+    #    det_min_max = [(min(tpc_ids[det_chan_mask]), max(tpc_ids[det_chan_mask])),
+    #                   (min(det_ids[det_chan_mask]), max(det_ids[det_chan_mask]))]
+    #    self._det_bounds = LUT('f4', *det_min_max, shape=(2,3))
+    #    self._det_bounds.default = 0.
+#
+    #    self._tpc_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = tpc_ids[det_chan_mask]
+    #    self._det_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = det_ids[det_chan_mask]
+#
+    #    tpc_ids, det_ids, det_chan_mask = tpc_ids[...,0], det_ids[...,0], det_chan_mask[...,0]
+    #    self._det_bounds[(tpc_ids[det_chan_mask], det_ids[det_chan_mask])] = det_bounds[det_chan_mask]
+#
+#
     def _load_charge_geometry(self):
         if self.rank == 0:
             logging.warning(f'Loading geometry from {self.crs_geometry_file}...')
