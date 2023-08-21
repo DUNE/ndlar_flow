@@ -184,8 +184,8 @@ class Charge2LightAssociation(H5FlowStage):
                 # no overlap, short circuit
                 idcs = np.empty((0, 2), dtype=int)
  '''                       
-            #Karolina: 
-            # check match on external triggers
+        #Karolina: 
+        # check match on external triggers
         if nevents:
             ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
             if np.any(ext_trigs_mask):
