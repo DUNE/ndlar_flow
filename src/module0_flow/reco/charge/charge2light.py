@@ -189,8 +189,8 @@ class Charge2LightAssociation(H5FlowStage):
                 ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
                 ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1, 1), ext_trigs_data.shape)[ext_trigs_mask]
                 ext_trigs_ts = ext_trigs_all['ts']
-            '''
-            else:
+                '''
+                else:
                 # find relevant region of light array
                 i_min = np.argmax((self.light_unix_ts >= unix_ts_start - self.unix_ts_window))
                 i_max = len(self.light_unix_ts) - 1 - np.argmax((self.light_unix_ts <= unix_ts_end + self.unix_ts_window)[::-1])
@@ -201,8 +201,8 @@ class Charge2LightAssociation(H5FlowStage):
                 charge_ts = ext_trigs_all['ts']
 
                 assoc_mat = \
-                    (np.abs(self.light_unix_ts[sl].reshape(1, -1) - charge_unix_ts.reshape(-1, 1)) <= self.unix_ts_window) \
-                    & (np.abs(self.light_ts[sl].reshape(1, -1) - charge_ts.reshape(-1, 1)) <= self.ts_window)
+                (np.abs(self.light_unix_ts[sl].reshape(1, -1) - charge_unix_ts.reshape(-1, 1)) <= self.unix_ts_window) \
+                & (np.abs(self.light_ts[sl].reshape(1, -1) - charge_ts.reshape(-1, 1)) <= self.ts_window)
                 idcs = np.argwhere(assoc_mat)
                 '''
                 #Karolina:
@@ -221,16 +221,16 @@ class Charge2LightAssociation(H5FlowStage):
                     ev_id_bcast = np.broadcast_to(ev_id[:,np.newaxis], ext_trigs_mask.shape)
                     ev_ref = np.unique(np.append(ev_ref, np.c_[ev_id_bcast[ext_trigs_mask][idcs[:, 0]], idcs[:, 1]], axis=0), axis=0)
                     
-                 '''
-                ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1, 1)
-                ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
+                    '''
+                    ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1, 1)
+                    ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
 
-                if len(idcs):
+                    if len(idcs):
                     ev_ref = np.unique(np.c_[ev_id[ext_trigs_mask][idcs[:, 0]], idcs[:, 1]], axis=0)
-                else:
+                    else:
                     ev_ref = np.empty((0, 2), dtype=int)
-                '''
-                #Karolina
+                    '''
+                    #Karolina
                 logging.info(f'found charge/light match on {len(ext_trig_ref)}/{ext_trigs_mask.sum()} triggers')
                 logging.info(f'found charge/light match on {len(ev_ref)}/{len(event_data)} events')
                 self.total_charge_triggers += ext_trigs_mask.sum()
