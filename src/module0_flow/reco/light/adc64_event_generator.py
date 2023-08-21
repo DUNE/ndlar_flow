@@ -225,7 +225,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
                         event_arr[ievent]['sn'][iadc] = device['serial']
                         event_arr[ievent]['ch'][iadc, channels] = channels
                         event_arr[ievent]['utime_ms'][iadc, channels] = header['unix']
-                        event_arr[ievent]['tai_ns'][iadc, channels] = time['tai_s']#*1e9 + time['tai_ns']
+                        event_arr[ievent]['tai_ns'][iadc, channels] = time['tai_s']*1e9 + time['tai_ns']
                         event_arr[ievent]['wvfm_valid'][iadc, channels] = True
                         wvfm_arr[ievent]['samples'][iadc, channels] = data['voltage']
 
