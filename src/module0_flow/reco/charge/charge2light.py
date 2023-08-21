@@ -186,13 +186,13 @@ class Charge2LightAssociation(H5FlowStage):
  '''                       
             #Karolina: 
             # check match on external triggers
-            if nevents:
-                ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
-                if np.any(ext_trigs_mask):
-                    ext_trigs_all = ext_trigs_data.data[ext_trigs_mask]
-                    ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
-                    ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1, 1), ext_trigs_data.shape)[ext_trigs_mask]
-                    ext_trigs_ts = ext_trigs_all['ts']
+        if nevents:
+            ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
+            if np.any(ext_trigs_mask):
+                ext_trigs_all = ext_trigs_data.data[ext_trigs_mask]
+                ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
+                ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1, 1), ext_trigs_data.shape)[ext_trigs_mask]
+                ext_trigs_ts = ext_trigs_all['ts']
             #
 '''
             else:
