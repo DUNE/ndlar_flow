@@ -67,7 +67,6 @@ class Charge2LightAssociation(H5FlowStage):
         self.total_matched_events = 0
         self.matched_light = np.zeros((0,), dtype=bool)
         self.total_matched_light = 0
-        #
 
     def init(self, source_name):
         super(Charge2LightAssociation, self).init(source_name)
@@ -97,7 +96,6 @@ class Charge2LightAssociation(H5FlowStage):
         #Karolina:
         if not resources['RunData'].is_mc:
              self.light_ts = self.light_ts % int(1e9)
-        #
         self.light_ts = self.light_ts * (units.ns / resources['RunData'].crs_ticks)  # convert ns -> larpix clock ticks
 
         self.light_unix_ts_start = self.light_unix_ts.min()
@@ -152,7 +150,6 @@ class Charge2LightAssociation(H5FlowStage):
             idcs = np.empty((0,2), dtype=int)
 
         return idcs   
-        #
 
     def run(self, source_name, source_slice, cache):
         super(Charge2LightAssociation, self).run(source_name, source_slice, cache)
@@ -168,8 +165,7 @@ class Charge2LightAssociation(H5FlowStage):
         ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int)
         ext_trig_ref = np.empty((0, 2), dtype=int)
         ev_ref = np.empty((0, 2), dtype=int)
-        #
-'''
+        '''
         lengths = np.count_nonzero(ext_trigs_mask, axis=-1)
         ext_trigs_all = ext_trigs_data.data[ext_trigs_mask]
         ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
@@ -183,7 +179,7 @@ class Charge2LightAssociation(H5FlowStage):
                     self.light_unix_ts_end <= unix_ts_start - self.unix_ts_window:
                 # no overlap, short circuit
                 idcs = np.empty((0, 2), dtype=int)
- '''                       
+        '''                       
         #Karolina: 
         # check match on external triggers
         if nevents:
@@ -193,8 +189,7 @@ class Charge2LightAssociation(H5FlowStage):
                 ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
                 ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1, 1), ext_trigs_data.shape)[ext_trigs_mask]
                 ext_trigs_ts = ext_trigs_all['ts']
-            #
-'''
+            '''
             else:
                 # find relevant region of light array
                 i_min = np.argmax((self.light_unix_ts >= unix_ts_start - self.unix_ts_window))
@@ -209,41 +204,40 @@ class Charge2LightAssociation(H5FlowStage):
                     (np.abs(self.light_unix_ts[sl].reshape(1, -1) - charge_unix_ts.reshape(-1, 1)) <= self.unix_ts_window) \
                     & (np.abs(self.light_ts[sl].reshape(1, -1) - charge_ts.reshape(-1, 1)) <= self.ts_window)
                 idcs = np.argwhere(assoc_mat)
-'''
+                '''
                 #Karolina:
                 idcs = self.match_on_timestamp(ext_trigs_unix_ts, ext_trigs_ts)
-                #
 
                 if len(idcs):
-'''
+                    '''
                     idcs[:, 1] = self.light_event_id[sl][idcs[:, 1]]  # idcs now contains ext trigger index <-> global light event id
-        else:
-            idcs = np.empty((0, 2), dtype=int)
+                    else:
+                    idcs = np.empty((0, 2), dtype=int)
 
-        ext_trig_ref = np.c_[ext_trigs_idcs[idcs[:, 0]], idcs[:, 1]]
-'''
-        #Karolina
+                    ext_trig_ref = np.c_[ext_trigs_idcs[idcs[:, 0]], idcs[:, 1]]
+                    '''
+                    #Karolina
                     ext_trig_ref = np.append(ext_trig_ref, np.c_[ext_trigs_idcs[idcs[:, 0]], idcs[:, 1]], axis=0)
                     ev_id_bcast = np.broadcast_to(ev_id[:,np.newaxis], ext_trigs_mask.shape)
                     ev_ref = np.unique(np.append(ev_ref, np.c_[ev_id_bcast[ext_trigs_mask][idcs[:, 0]], idcs[:, 1]], axis=0), axis=0)
-        #
-'''
-        ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1, 1)
-        ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
+                    
+                 '''
+                ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1, 1)
+                ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
 
-        if len(idcs):
-            ev_ref = np.unique(np.c_[ev_id[ext_trigs_mask][idcs[:, 0]], idcs[:, 1]], axis=0)
-        else:
-            ev_ref = np.empty((0, 2), dtype=int)
-'''
-        #Karolina
+                if len(idcs):
+                    ev_ref = np.unique(np.c_[ev_id[ext_trigs_mask][idcs[:, 0]], idcs[:, 1]], axis=0)
+                else:
+                    ev_ref = np.empty((0, 2), dtype=int)
+                '''
+                #Karolina
                 logging.info(f'found charge/light match on {len(ext_trig_ref)}/{ext_trigs_mask.sum()} triggers')
                 logging.info(f'found charge/light match on {len(ev_ref)}/{len(event_data)} events')
                 self.total_charge_triggers += ext_trigs_mask.sum()
                 self.total_matched_triggers += len(np.unique(ext_trig_ref[:,0]))
                 self.total_matched_events += len(np.unique(ev_ref[:,0]))
                 self.matched_light[np.unique(ext_trig_ref[:,1])] = True
-        #
+            
         # write references
         # ext trig -> light event
         self.data_manager.write_ref(self.ext_trigs_dset_name, self.light_event_dset_name, ext_trig_ref)
