@@ -11,5 +11,6 @@ params:
   ext_trigs_dset_name: 'charge/ext_trigs'
 
   # configuration parameters
+  # +/- number of seconds 
   unix_ts_window: 1
-  ts_window: 10
+  ts_window: 100
