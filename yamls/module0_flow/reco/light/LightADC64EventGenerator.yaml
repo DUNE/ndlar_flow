@@ -14,7 +14,7 @@ params:
    - 215553019 # Mod1 ACL
    - 215563696 # Mod1 LCM
   sync_channel: 999999
-  sync_threshold: 10000
+  sync_threshold: 99999
   batch_size: 128
   utime_ms_window: 1000
   tai_ns_window: 1000
