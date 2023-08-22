@@ -17,4 +17,4 @@ params:
   sync_threshold: 3000
   batch_size: 128
   utime_ms_window: 1000
-  tai_ns_window: 16000
+  tai_ns_window: 1000
