@@ -1,0 +1,19 @@
+# Copied from /yaml/proto_nd_flow/resources/RunData.yaml
+
+classname: RunData
+path: proto_nd_flow.resources.run_data
+params:
+  path: 'run_info'
+  runlist_file: 'data/proto_nd_flow/runlist-2x2-mcexample.txt'
+  #runlist_file: 'data/module0_flow/runlist-mod0-run2.txt'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/runlist.txt
+  # download link: https://portal.nersc.gov/project/dune/data/Module0-Run2/runlist.txt  
+  defaults:
+    charge_filename: '-'
+    light_filename: '-'
+    e_field: 0.05 # kV/mm
+    light_samples: 256
+    charge_thresholds: 'medm'
+    is_mc: True
+    crs_ticks: 0.1 # us
+    lrs_ticks: 0.016 # us
