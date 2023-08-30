@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from h5flow.core import H5FlowStage, resources
 
-from proto_nd_flow.reco.charge.calib_prompt_hits import CalibHitBuilder
+from proto_nd_flow.reco.charge.calib_final_hits import CalibHitBuilder
 
 
 class Dummy(H5FlowStage):
@@ -15,21 +15,11 @@ class Dummy(H5FlowStage):
     class_version = '0.0.0'
     defaults = dict(
         events_dset_name = 'charge/events',
-        hits_name = 'charge/calib_prompt_hits',
-        hit_charge_name = 'charge/calib_prompt_hits',
-        merged_name = 'charge/hits/calib_merged_hits',
-        max_merge_steps = 5,
-        max_contrib_segments = 200,
-        merge_mode = 'last-first',
-        merge_cut = 50, # CRS ticks
-        mc_hit_frac_dset_name = 'mc_truth/calib_final_hit_backtrack'
+        hits_name = 'charge/calib_final_hits',
+        hit_charge_name = 'charge/calib_final_hits',
+        hits_hough_name = 'charge/calib_hough_hits'
         )
-    valid_merge_modes = ['last-first', 'pairwise']
-
-    merged_dtype = CalibHitBuilder.calib_hits_dtype
-
-    sum_fields = ['Q','E']
-    weighted_mean_fields = ['t_drift', 'ts_pps','x']
+    hough_dtype = CalibHitBuilder.calib_hits_dtype
 
     def __init__(self, **params):
         print('running dummy.py!!!!!')
@@ -48,3 +38,7 @@ class Dummy(H5FlowStage):
             ('segment_id', f'({self.max_contrib_segments},)u8')
         ])
 
+        self.data_manager.create_dset(self.hits_hough_name, dtype=self.hough_dtype)
+        self.data_manager.create_ref(self.hits_name, self.hits_hough_name)
+        self.data_manager.create_ref(source_name, self.hits_hough_name)
+        self.data_manager.create_ref(self.events_dset_name, self.hits_hough_name)
