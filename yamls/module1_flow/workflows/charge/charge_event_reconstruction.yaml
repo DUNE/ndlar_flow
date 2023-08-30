@@ -1,7 +1,7 @@
 # Generates the mid-level event built data for charge data (i.e. hits and
 # external triggers)
 
-# Copied from yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction.yaml
+# Copied and modified from yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction.yaml
 
 flow:
   source: raw_events
@@ -10,8 +10,8 @@ flow:
 
 
 resources:
-  - !include yamls/proto_nd_flow/resources/RunData.yaml
-  - !include yamls/proto_nd_flow/resources/Geometry.yaml
+  - !include yamls/module1_flow/resources/RunData.yaml
+  - !include yamls/module1_flow/resources/Geometry.yaml
 
 
 raw_events:

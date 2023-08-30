@@ -1,7 +1,7 @@
 # Generates the low-level event built data for charge data (i.e. grouped
 # packets)
 
-# Copied from ndlar_flow/yamls/proto_nd_flow/workflows/charge/charge_event_building.yaml
+# Copied and modified from ndlar_flow/yamls/proto_nd_flow/workflows/charge/charge_event_building.yaml
 
 flow:
   source: raw_event_generator
@@ -10,7 +10,7 @@ flow:
 
 
 resources:
-  - !include yamls/proto_nd_flow/resources/RunData.yaml
+  - !include yamls/module1_flow/resources/RunData.yaml
 
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files
