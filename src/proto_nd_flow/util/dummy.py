@@ -112,7 +112,54 @@ class Dummy(H5FlowStage):
         weights = weights.data.copy()
         old_ids = hits.data['id'].copy()[...,np.newaxis]
         old_id_mask = hits.mask['id'].copy()[...,np.newaxis]
+        
+        new_hit_idx = np.broadcast_to(np.cumsum(~mask.ravel(), axis=0).reshape(mask.shape + (1,)), old_ids.shape)-1
+        back_track = np.full(shape=new_hits.shape,fill_value=0.,dtype=self.hit_frac_dtype)
+       
+        return (
+            ma.array(new_hits, mask=mask),
+            np.c_[np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids), np.extract(~(old_id_mask | mask[...,np.newaxis]), new_hit_idx)],
+            ma.array(back_track, mask=mask)
+            )
 
+    def run(self, source_name, source_slice, cache):
+        super(Dummy, self).run(source_name, source_slice, cache)
+
+        event_id = np.r_[source_slice]
+        packet_frac_bt = cache['packet_frac_backtrack']
+        packet_seg_bt = cache['packet_seg_backtrack']
+        hits = cache[self.hits_name]
+
+        merged, ref, back_track = self.merge_hits(hits, weights=hits['Q'], seg_fracs=[packet_seg_bt,packet_frac_bt],dt_cut=self.merge_cut, sum_fields=self.sum_fields, weighted_mean_fields=self.weighted_mean_fields, max_steps=self.max_merge_steps, mode=self.merge_mode)
+
+        merged_mask = merged.mask['id']
+
+        # first write the new merged hits to the file
+        new_nhit = int((~merged_mask).sum())
+        merge_slice = self.data_manager.reserve_data(self.merged_name, new_nhit)
+        merge_idx = np.r_[merge_slice].astype(merged.dtype['id'])
+        if new_nhit > 0:
+            ref[:,1] += merge_idx[0] # offset references based on reserved region in output file
+            np.place(merged['id'], ~merged_mask, merge_idx)
+
+        self.data_manager.write_data(self.merged_name, merge_idx, merged[~merged_mask])
+        merge_bt_slice = self.data_manager.reserve_data(self.mc_hit_frac_dset_name, new_nhit)
+        self.data_manager.write_data(self.mc_hit_frac_dset_name, merge_idx, back_track[~merged_mask])
+
+        # HACK: Remove duplicate refs. Would be nice to actually understand and
+        # fix the origin of these duplicates.
+        ref = np.unique(ref, axis=0)
+        # sort based on the ID of the prompt hit, to make analysis more convenient
+        ref = ref[np.argsort(ref[:, 0])]
+
+        # finally, write the references
+        self.data_manager.write_ref(self.hits_name, self.merged_name, ref)
+        self.data_manager.write_ref(self.merged_name,self.mc_hit_frac_dset_name,np.c_[merge_idx,merge_idx])
+        ev_ref = np.c_[(np.indices(merged_mask.shape)[0] + source_slice.start)[~merged_mask], merge_idx]
+        self.data_manager.write_ref(source_name, self.merged_name, ev_ref)
+        self.data_manager.write_ref(self.events_dset_name, self.merged_name, ev_ref)
+
+'''
         hit_contributions = np.full(shape=weights.shape+(3,self.max_contrib_segments),fill_value=0.)
         #print('weights shape',weights.shape) 
         #print('hit_contr shape',hit_contributions.shape) 
@@ -247,8 +294,7 @@ class Dummy(H5FlowStage):
 
         # calculate segment contributions for each merged hit
         tmp_bt = np.full(shape=new_hits.shape+(2,self.max_contrib_segments),fill_value=0.)
-        back_track = np.full(shape=new_hits.shape,fill_value=0.,dtype=self.hit_frac_dtype)
-        # loop over hits
+       # loop over hits
         for hit_it, hit in np.ndenumerate(new_hits):
             if mask[hit_it]: continue
             hit_contr = hit_contributions[hit_it]
@@ -274,47 +320,5 @@ class Dummy(H5FlowStage):
             back_track[hit_it]['fraction'][:bt_unique_frac.shape[0]] = bt_unique_frac
             back_track[hit_it]['segment_id'][:bt_unique_segs.shape[0]] = bt_unique_segs
 
-        new_hit_idx = np.broadcast_to(np.cumsum(~mask.ravel(), axis=0).reshape(mask.shape + (1,)), old_ids.shape)-1
+       '''
 
-        return (
-            ma.array(new_hits, mask=mask),
-            np.c_[np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids), np.extract(~(old_id_mask | mask[...,np.newaxis]), new_hit_idx)],
-            ma.array(back_track, mask=mask)
-            )
-
-    def run(self, source_name, source_slice, cache):
-        super(Dummy, self).run(source_name, source_slice, cache)
-
-        event_id = np.r_[source_slice]
-        packet_frac_bt = cache['packet_frac_backtrack']
-        packet_seg_bt = cache['packet_seg_backtrack']
-        hits = cache[self.hits_name]
-
-        merged, ref, back_track = self.merge_hits(hits, weights=hits['Q'], seg_fracs=[packet_seg_bt,packet_frac_bt],dt_cut=self.merge_cut, sum_fields=self.sum_fields, weighted_mean_fields=self.weighted_mean_fields, max_steps=self.max_merge_steps, mode=self.merge_mode)
-
-        merged_mask = merged.mask['id']
-
-        # first write the new merged hits to the file
-        new_nhit = int((~merged_mask).sum())
-        merge_slice = self.data_manager.reserve_data(self.merged_name, new_nhit)
-        merge_idx = np.r_[merge_slice].astype(merged.dtype['id'])
-        if new_nhit > 0:
-            ref[:,1] += merge_idx[0] # offset references based on reserved region in output file
-            np.place(merged['id'], ~merged_mask, merge_idx)
-
-        self.data_manager.write_data(self.merged_name, merge_idx, merged[~merged_mask])
-        merge_bt_slice = self.data_manager.reserve_data(self.mc_hit_frac_dset_name, new_nhit)
-        self.data_manager.write_data(self.mc_hit_frac_dset_name, merge_idx, back_track[~merged_mask])
-
-        # HACK: Remove duplicate refs. Would be nice to actually understand and
-        # fix the origin of these duplicates.
-        ref = np.unique(ref, axis=0)
-        # sort based on the ID of the prompt hit, to make analysis more convenient
-        ref = ref[np.argsort(ref[:, 0])]
-
-        # finally, write the references
-        self.data_manager.write_ref(self.hits_name, self.merged_name, ref)
-        self.data_manager.write_ref(self.merged_name,self.mc_hit_frac_dset_name,np.c_[merge_idx,merge_idx])
-        ev_ref = np.c_[(np.indices(merged_mask.shape)[0] + source_slice.start)[~merged_mask], merge_idx]
-        self.data_manager.write_ref(source_name, self.merged_name, ev_ref)
-        self.data_manager.write_ref(self.events_dset_name, self.merged_name, ev_ref)
