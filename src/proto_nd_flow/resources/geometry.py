@@ -426,7 +426,7 @@ class Geometry(H5FlowResource):
 
         tiles = np.arange(1,len(geometry_yaml['tile_chip_to_io'])*len(det_geometry_yaml['module_to_io_groups'])+1)
         io_groups = [
-            geometry_yaml['tile_chip_to_io'][tile][chip] // 1000 * (mod-1)*2
+            geometry_yaml['tile_chip_to_io'][tile][chip] // 1000 + (mod-1)*2
             for tile in geometry_yaml['tile_chip_to_io']
             for chip in geometry_yaml['tile_chip_to_io'][tile]
             for mod in det_geometry_yaml['module_to_io_groups']
