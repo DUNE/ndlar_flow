@@ -10,33 +10,12 @@ from proto_nd_flow.reco.charge.calib_prompt_hits import CalibHitBuilder
 
 class Dummy(H5FlowStage):
     '''
-    Merges the specified cached hits based on their unique channel id and timestamp:
-     - q -> sum(q)
-     - ts -> sum(ts * q) / sum(q)
-
-    Two algorithms for selecting pairs of hits to merge have been implemented:
-
-     - `'pairwise'`: On each iteration, sort all hits by unique y-z position and timestamp. Then, merge every pair of hits that fall within the merge cut. If an odd number of hits fall should be merged, the earliest hit of a group is excluded from the iteration.
-     - `'last-first'`: On each iteration, sort all hits by unique y-z and timestamp. Then, merge the last pair of hits that fall within the merge cut within each contiguous chunk of neighboring hits.
-
-    Both algorithms should produce very similar results.
-
-    Example config::
-
-      hit_merging:
-        classname: CalibHitMerger
-        path: module0_flow.reco.charge.hit_merger
-        requires:
-          - 'charge/hits'
-        params:
-          events_dset_name: 'charge/events'
-          hits_name: 'charge/hits'
-          hit_charge_name: 'charge/hits' # dataset to grab 'q' from
-          merged_name: 'charge/hits/merged'
-          mc_hit_frac_dset_name: ``str``, optional, output dataset path for hit charge fraction truth (if present)
-          merge_cut: 30 # merge hits with delta t < merge_cut [CRS ticks]
-          merge_mode: 'last-first'
-    '''
+    This module was adapted from CalibHitMerger
+    The goal is to take the charge/calib_prompt_hits and perform a Hough transform
+    This could also be performed on calib_merged_hits that are in the "final" stage
+    The outputs are saved as a set of hits along the line that are a subset of the inital input hits
+    ksutton 8/30/23
+      '''
     class_version = '0.0.0'
     defaults = dict(
         events_dset_name = 'charge/events',
@@ -81,28 +60,8 @@ class Dummy(H5FlowStage):
     #@staticmethod
     def merge_hits(self,hits, weights, seg_fracs, dt_cut, sum_fields=None, weighted_mean_fields=None, max_steps=-1, mode='last-first'):
         '''
-        Combines hits along the second axis on unique channels with a delta t less than dt_cut. Continues
-        until no hits (or merged hits) are within dt_cut of each other
-
-        :param hits: original hits array, shape: (N,M)
-
-        :param weights: values used for weighted mean, shape: (N,M)
-
-        :param fracs: fractional contributions of true segments per packet
-
-        :param dt_cut: delta t cut to merge hits (float) [CRS ticks]
-
-        :sum_fields: list of fields in ``hits`` and that should be *summed* when combined, must not be in ``weighted_mean_fields``
-
-        :weighted_mean_fields: list of fields in ``hits`` and that should be averaged using the weights when combined, must not be in ``sum_fields``
-
-        :param max_steps: optional, maximum number of merges to apply to pairs of neighboring hits (<0 == no limit, 0 == skip merging, >0 == limit steps)
-
-        :param mode: optional, merging strategy, either `'last-first'` (on each iteration merges the last hit pair) or `'pairwise'` (on each iteration merges each unique hit pair)
-
-        :returns: new hit array, shape: (N,m), new hit charge array, shape: (N,m), and an index array with shape (L,2), [:,0] being the index into the original hit array and [:,1] being the flattened index into the compressed new array
-
-        '''
+        currently does nothing, need to add in Hough transform here
+'''
 
         new_seg_bt = np.array(seg_fracs[0])
         new_frac_bt = np.array(seg_fracs[1])
@@ -125,16 +84,18 @@ class Dummy(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         super(Dummy, self).run(source_name, source_slice, cache)
 
+        #get the event id, backtracking, and hits from the input file
         event_id = np.r_[source_slice]
         packet_frac_bt = cache['packet_frac_backtrack']
         packet_seg_bt = cache['packet_seg_backtrack']
         hits = cache[self.hits_name]
 
+        #get the new hits, references, and backtracking for the 
         merged, ref, back_track = self.merge_hits(hits, weights=hits['Q'], seg_fracs=[packet_seg_bt,packet_frac_bt],dt_cut=self.merge_cut, sum_fields=self.sum_fields, weighted_mean_fields=self.weighted_mean_fields, max_steps=self.max_merge_steps, mode=self.merge_mode)
 
-        merged_mask = merged.mask['id']
+        merged_mask = merged.mask['id'] #not sure what this does yet
 
-        # first write the new merged hits to the file
+        # first write the new hits to the file 
         new_nhit = int((~merged_mask).sum())
         merge_slice = self.data_manager.reserve_data(self.merged_name, new_nhit)
         merge_idx = np.r_[merge_slice].astype(merged.dtype['id'])
