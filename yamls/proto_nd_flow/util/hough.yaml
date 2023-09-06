@@ -1,5 +1,5 @@
-classname: Dummy # reco/charge/calib_hit_merger.py
-path: proto_nd_flow.util.dummy
+classname: hough # reco/charge/calib_hit_merger.py
+path: proto_nd_flow.util.hough
 requires:
   - 'charge/events'
   - 'charge/calib_prompt_hits'

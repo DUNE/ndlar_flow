@@ -8,7 +8,7 @@ from h5flow.core import H5FlowStage, resources
 from proto_nd_flow.reco.charge.calib_prompt_hits import CalibHitBuilder
 
 
-class Dummy(H5FlowStage):
+class hough(H5FlowStage):
     '''
     This module was adapted from CalibHitMerger
     The goal is to take the charge/calib_prompt_hits and perform a Hough transform
@@ -36,14 +36,14 @@ class Dummy(H5FlowStage):
     weighted_mean_fields = ['t_drift', 'ts_pps','x']
 
     def __init__(self, **params):
-        super(Dummy, self).__init__(**params)
+        super(hough, self).__init__(**params)
         for key in self.defaults:
             setattr(self, key, params.get(key, self.defaults[key]))
         self.merge_mode = self.merge_mode.lower()
         assert self.merge_mode in self.valid_merge_modes, f'invalid merge mode: {self.merge_mode}'
 
     def init(self, source_name):
-        super(Dummy, self).init(source_name)
+        super(hough, self).init(source_name)
 
         self.hit_frac_dtype = np.dtype([
             ('fraction', f'({self.max_contrib_segments},)f8'),
@@ -82,7 +82,7 @@ class Dummy(H5FlowStage):
             )
 
     def run(self, source_name, source_slice, cache):
-        super(Dummy, self).run(source_name, source_slice, cache)
+        super(hough, self).run(source_name, source_slice, cache)
 
         #get the event id, backtracking, and hits from the input file
         event_id = np.r_[source_slice]
