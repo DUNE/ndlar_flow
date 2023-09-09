@@ -12,4 +12,4 @@ params:
 
   # configuration parameters
   unix_ts_window: 1
-  ts_window: 10
+  ts_window: 16
