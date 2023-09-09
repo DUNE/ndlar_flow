@@ -13,3 +13,4 @@ build/
 *.h5
 *.egg-info
 *.data
+.ipynb_checkpoints
