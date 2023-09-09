@@ -16,3 +16,4 @@ params:
   batch_size: 128
   utime_ms_window: 1000
   tai_ns_window: 1000
+  clock_timestamp_factor: 1
