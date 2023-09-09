@@ -1,0 +1,38 @@
+# Performs combined reconstruction, generating t0s, tracklets, ...
+
+flow:
+  source: events
+  stages: [t0_reco, drift_reco, electron_lifetime_corr, tracklet_reco, tracklet_merge]
+  drop: []
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 32
+
+resources:
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
+  - !include yamls/module0_flow/resources/DisabledChannels.yaml
+
+t0_reco:
+  !include yamls/module0_flow/reco/combined/T0Reconstruction.yaml
+
+
+drift_reco:
+  !include yamls/module0_flow/reco/combined/DriftReconstruction.yaml
+
+
+electron_lifetime_corr:
+  !include yamls/module0_flow/reco/combined/ElectronLifetimeCalib.yaml
+
+
+tracklet_reco:
+  !include yamls/module0_flow/reco/combined/TrackletReconstruction.yaml
+
+
+tracklet_merge:
+  !include yamls/module0_flow/reco/combined/TrackletMerger.yaml

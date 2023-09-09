@@ -1,0 +1,8 @@
+classname: WaveformAlign
+path: module0_flow.reco.light.wvfm_align
+requires:
+    - 'light/deconv'
+params:
+    wvfm_dset_name: 'light/deconv'
+    busy_channel:
+        All: 0

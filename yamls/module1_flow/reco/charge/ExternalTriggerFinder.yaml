@@ -1,0 +1,17 @@
+classname: ExternalTriggerFinder
+path: module0_flow.reco.charge.external_trigger_finder
+requires:
+  - 'charge/packets'
+  - name: 'charge/packets_corr_ts'
+    path: ['charge/packets', 'charge/packets_corr_ts']
+params:
+  # inputs
+  packets_dset_name: 'charge/packets'
+  ts_dset_name: 'charge/packets_corr_ts'
+
+  # output
+  ext_trigs_dset_name: 'charge/ext_trigs'
+
+  # configuration parameters
+  pacman_trigger_enabled: True
+  pacman_trigger_word_filter: 2

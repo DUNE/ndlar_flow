@@ -1,0 +1,17 @@
+classname: HitBuilder # reco/charge/hit_builder.py
+path: module0_flow.reco.charge.hit_builder
+requires:
+  - 'charge/packets'
+  - name: 'charge/packets_corr_ts'
+    path: ['charge/packets', 'charge/packets_corr_ts']
+params:
+  # inputs
+  packets_dset_name: 'charge/packets'
+  ts_dset_name: 'charge/packets_corr_ts'
+
+  # output
+  hits_dset_name: 'charge/hits'
+
+  # configuration parameters
+  pedestal_file: 'data/module0_flow/packet_2022_02_08_01_40_31_CETevd_ped.json'
+  configuration_file: 'data/module0_flow/config_22-02-08_13-37-39.json'
