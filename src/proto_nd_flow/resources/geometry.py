@@ -450,7 +450,7 @@ class Geometry(H5FlowResource):
  
         pixel_xy_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
         self._pixel_xy = LUT('f4', *pixel_xy_min_max, shape=(2,))
-        self._pixel_xy.default = 0.
+        self._pixel_xy.default = np.nan
     
         tile_min_max = [(min(v), len(det_geometry_yaml['module_to_io_groups'])*max(v)) for v in (io_groups, io_channels)]
         self._tile_id = LUT('i4', *tile_min_max)
