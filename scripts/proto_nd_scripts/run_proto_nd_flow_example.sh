@@ -20,11 +20,12 @@ H5FLOW_CMD='h5flow'
 #H5FLOW_CMD='srun -n32 h5flow'
 
 # run all stages
-WORKFLOW1='yamls/proto_nd_flow/workflows/charge/charge_event_building.yaml'
-WORKFLOW2='yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction.yaml'
-WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml'
-WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration.yaml'
-WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration.yaml'
+#WORKFLOW1='yamls/proto_nd_flow/workflows/charge/charge_event_building.yaml'
+#WORKFLOW2='yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction.yaml'
+#WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml'
+#WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration.yaml'
+#WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration.yaml'
+WORKFLOW6= '/global/homes/d/demaross/ndlar_flow/src/selection/RockMuon_selection.yaml'
 
 HERE=`pwd`
 #cd ndlar_flow
@@ -37,7 +38,8 @@ if [ -e $OUTPUT_FILE ]; then
     rm -i $OUTPUT_FILE
 fi
 
-$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 -i $INPUT_FILE -o $OUTPUT_FILE
+#$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 -i $INPUT_FILE -o $OUTPUT_FILE
+$H5FLOW_CMD -c $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
 
 echo "Done!"
 echo "Output can be found at $OUTPUT_FILE"
