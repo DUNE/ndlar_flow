@@ -14,5 +14,5 @@ resources:
 
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files
-  !include yamls/proto_nd_flow/reco/charge/RawEventGenerator.yaml
+  !include yamls/module1_flow/reco/charge/RawEventGenerator.yaml
 
