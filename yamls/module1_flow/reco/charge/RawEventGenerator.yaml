@@ -1,4 +1,4 @@
-# Copied from yamls/proto_nd_flow/reco/charge/RawEventGenerator.yaml 
+# Copied and modified from yamls/proto_nd_flow/reco/charge/RawEventGenerator.yaml 
 
 classname: RawEventGenerator
 path: proto_nd_flow.reco.charge.raw_event_generator
@@ -8,9 +8,8 @@ params:
   packets_dset_name: 'charge/packets'
 
   # configuration parameters
-  mc_tracks_dset_name: 'mc_truth/segments'
   buffer_size: 384000
-  nhit_cut: 100
+  nhit_cut: 5
   sync_noise_cut: [1000000, 11000000] # 1e6 cut based on Brooke's study
   sync_noise_cut_enabled: True
   event_builder_class: 'SymmetricWindowRawEventBuilder'
