@@ -23,17 +23,17 @@ raw_events:
 
 
 timestamp_corrector:
-  !include yamls/proto_nd_flow/reco/charge/TimestampCorrector.yaml
+  !include yamls/module1_flow/reco/charge/TimestampCorrector.yaml
 
 
 ext_trig_finder:
-  !include yamls/proto_nd_flow/reco/charge/ExternalTriggerFinder.yaml
+  !include yamls/module1_flow/reco/charge/ExternalTriggerFinder.yaml
 
 
 raw_hit_builder:
-  !include yamls/proto_nd_flow/reco/charge/RawHitBuilder.yaml
+  !include yamls/module1_flow/reco/charge/RawHitBuilder.yaml
 
 
 event_builder:
-  !include yamls/proto_nd_flow/reco/charge/EventBuilder.yaml
+  !include yamls/module1_flow/reco/charge/EventBuilder.yaml
 
