@@ -1,4 +1,4 @@
-#Copied from yamls/proto_nd_flow/workflows/charge/final_calibration.yaml
+#Copied and modified from yamls/proto_nd_flow/workflows/charge/final_calibration.yaml
 
 classname: CalibHitMerger # reco/charge/calib_hit_merger.py
 path: proto_nd_flow.reco.charge.calib_hit_merger
@@ -15,7 +15,6 @@ params:
   # inputs
   events_dset_name: 'charge/events'
   hits_name: 'charge/calib_prompt_hits'
-  mc_hit_frac_dset_name: 'mc_truth/calib_final_hit_backtrack'
   merged_name: 'charge/calib_final_hits'
   max_contrib_segments: 200
   merge_cut: 65 # merge hits with delta t < merge_cut [CRS ticks]
