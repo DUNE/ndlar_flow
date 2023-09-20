@@ -1,5 +1,5 @@
 classname: TrackletMerger
-path: module0_flow.reco.combined.tracklet_merging
+path: proto_nd_flow.util.tracklet_merging
 requires:
  - 'combined/tracklets'
  - name: 'combined/track_hits'
