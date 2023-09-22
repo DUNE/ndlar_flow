@@ -4,7 +4,7 @@
 
 ### Overview 
 
-There are currently two Python-based event displays available for visualizing single module data and simulation files run through flow. The event displays are version-specific, with one intended for use on files run through `module0_flow` and one for use on files run through `proto_nd_flow`. The source code for each event display is available in the corresponding subdirectory, e.g. `event_display/proto_nd_flow`. The event displays are set up to run inside Jupyter notebooks, and examples of such usage are also given in the corresponding subdirectories. The examples involve using files stored on NERSC, so if the notebooks are run outside of NERSC, you will need to download both the flow file you would like to visualize and a module geometry file.
+There are currently two Python-based event displays available for visualizing single module data and simulation files run through flow. The event displays are version-specific, with one intended for use on files run through `module0_flow` and one for use on files run through `proto_nd_flow`. The source code for each event display is available in the corresponding subdirectory, e.g. `event_display/proto_nd_flow`, and is adapted from [this older event display script](https://github.com/larpix/larpix-v2-testing-scripts/blob/master/event-display/module0_evd.py). The event displays here are set up to run inside Jupyter notebooks, and examples of such usage are also given in the corresponding subdirectories. The examples involve using files stored on NERSC, so if the notebooks are run outside of NERSC, you will need to download both the flow file you would like to visualize and a module geometry file.
 
 ### File Locations
 
