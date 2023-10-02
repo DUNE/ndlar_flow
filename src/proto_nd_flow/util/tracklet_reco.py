@@ -17,8 +17,10 @@ class TrackletReconstruction(H5FlowStage):
         Parameters:
          - ``tracklet_dset_name``: ``str``, path to output dataset
          - ``hits_dset_name``: ``str``, path to input charge hits dataset
-         - ``charge_dset_name``: ``str``, path to input charge dataset (1:1 with hits dataset, requires ``"q"`` field)
+         - ``charge_dset_name``: ``str``, path to input charge dataset (1:1 with hits dataset, requires ``"Q"`` field)
+            ** NOTE: change in charge field name from module0_flow datasets ("q") to proto_nd_flow calib datasets ("Q")
          - ``hit_drift_dset_name``: ``str``, path to charge hits drift data
+            ** NOTE: same as hits datasets when using proto_nd_flow calib datasets
          - ``dbscan_eps``: ``float``, dbscan epsilon parameter
          - ``dbscan_min_samples``: ``int``, dbscan min neighbor points to consider as "core" point
          - ``ransac_min_samples``: ``int``, min points to run ransac algorithm
@@ -56,9 +58,9 @@ class TrackletReconstruction(H5FlowStage):
     class_version = '1.1.0'
 
     default_tracklet_dset_name = 'combined/tracklets'
-    default_hits_dset_name = 'charge/hits'
-    default_charge_dset_name = 'charge/hits'
-    default_hit_drift_dset_name = 'combined/hit_drift'
+    default_hits_dset_name = 'charge/calib_final_hits'
+    default_charge_dset_name = 'charge/calib_final_hits'
+    default_hit_drift_dset_name = 'combined/calib_final_hits'
 
     default_dbscan_eps = 25
     default_dbscan_min_samples = 5
@@ -141,10 +143,12 @@ class TrackletReconstruction(H5FlowStage):
 
         events = cache[source_name]                         # shape: (N,)
         hits = cache[self.hits_dset_name]                   # shape: (N,M)
-        q = cache[self.charge_dset_name]['q']
+        q = cache[self.charge_dset_name]['Q']
         q = q.reshape(hits.shape)
         hit_drift = cache[self.hit_drift_dset_name]         # shape: (N,M,1)
         hit_drift = hit_drift.reshape(hits.shape)
+
+
         if self.max_nhit is not None:
             hits = ma.array(hits, mask=(events['nhit'][..., np.newaxis] > self.max_nhit) | hits['id'].mask,
                             shrink=False)
@@ -175,8 +179,8 @@ class TrackletReconstruction(H5FlowStage):
     @staticmethod
     def hit_xyz(hits, hit_z):
         xyz = np.concatenate((
-            np.expand_dims(hits['px'], axis=-1),
-            np.expand_dims(hits['py'], axis=-1),
+            np.expand_dims(hits['x'], axis=-1),
+            np.expand_dims(hits['y'], axis=-1),
             np.expand_dims(hit_z, axis=-1),
         ), axis=-1)
         return xyz
@@ -297,8 +301,8 @@ class TrackletReconstruction(H5FlowStage):
                 tracks[i, j]['yp'] = xyp[1]
                 tracks[i, j]['nhit'] = np.count_nonzero(mask)
                 tracks[i, j]['q'] = np.sum(hit_q[i][mask])
-                tracks[i, j]['ts_start'] = np.min(hits[i][mask]['ts'])
-                tracks[i, j]['ts_end'] = np.max(hits[i][mask]['ts'])
+                tracks[i, j]['ts_start'] = np.min(hits[i][mask]['ts_pps'])
+                tracks[i, j]['ts_end'] = np.max(hits[i][mask]['ts_pps'])
                 tracks[i, j]['residual'] = residual
                 tracks[i, j]['length'] = np.linalg.norm(r_max - r_min)
                 tracks[i, j]['start'] = r_min

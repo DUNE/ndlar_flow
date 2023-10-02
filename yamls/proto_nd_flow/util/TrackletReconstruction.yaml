@@ -1,16 +1,12 @@
 classname: TrackletReconstruction
 path: proto_nd_flow.util.tracklet_reco
 requires:
-  - 'charge/hits'
-  - name: 'combined/hit_drift'
-    path: ['charge/hits', 'combined/hit_drift']
-  - name: 'combined/q_calib_el'
-    path: ['charge/hits', 'combined/q_calib_el']    
+  - 'charge/calib_final_hits'
 params:
   # inputs
-  hits_dset_name: 'charge/hits'
-  charge_dset_name: 'combined/q_calib_el'
-  hit_drift_dset_name: 'combined/hit_drift'
+  hits_dset_name: 'charge/calib_final_hits'
+  charge_dset_name: 'charge/calib_final_hits'
+  hit_drift_dset_name: 'charge/calib_final_hits'
 
   # output
   tracklet_dset_name: 'combined/tracklets'
