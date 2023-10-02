@@ -25,7 +25,7 @@ H5FLOW_CMD='h5flow'
 #WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml'
 #WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration.yaml'
 #WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration.yaml'
-WORKFLOW6= '/global/homes/d/demaross/ndlar_flow/src/selection/RockMuon_selection.yaml'
+WORKFLOW6='yamls/proto_nd_flow/workflows/rock_muon_selection.yaml'
 
 HERE=`pwd`
 #cd ndlar_flow

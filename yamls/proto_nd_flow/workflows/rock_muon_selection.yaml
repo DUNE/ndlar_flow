@@ -1,0 +1,15 @@
+
+flow:
+  source: events
+  stages: [RockMuon_selection]
+  drop: []
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 1
+
+RockMuon_selection:
+  !include yamls/proto_nd_flow/selections/RockMuonSelection.yaml

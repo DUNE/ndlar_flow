@@ -1,0 +1,40 @@
+
+classname: RockMuonSelection #path
+
+path: selection.RockMuon_selection
+requires:
+  - 'charge/events'
+
+  - name: 'charge/calib_prompt_hits'
+    path: ["charge/events", "charge/calib_prompt_hits"]
+        
+  - name: 'mc_truth/segments'
+    path: ["charge/raw_events","charge/calib_prompt_hits", "charge/packets" ,"mc_truth/segments"]
+        
+  - name: 'mc_truth/trajectories'
+    path: ["charge/raw_events","charge/calib_prompt_hits","charge/packets","mc_truth/segments", "mc_truth/trajectories"]
+    
+params:
+    #Inputs
+    events_dset_name: 'charge/events'
+    PromptHits_dset_name: 'charge/calib_prompt_hits'
+    Segs_PromptHits_dset_name: 'mc_truth/segments'
+    Traj_PromptHits_dset_name: 'mc_truth/trajectories'
+        
+    #Outputs
+    rock_muon_hits_dset_name: 'rock_muon_hits'
+        
+    #configuration parameters
+    x_boundaries: [-63.931, -3.069, 3.069, 63.931] #cm
+    y_boundaries: [-268-42-19.8543, -268-42+103.8543] #cm
+    z_boundaries: [1300-64.3163,  1300-2.6837, 1300+2.6837, 1300+64.3163] #cm
+
+    length_cut: 55 #cm
+    MEVR: 0.974 #Minimum explained variance ratio
+    
+    track_counts: -1    
+        
+        
+        
+        
+    
