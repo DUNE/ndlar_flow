@@ -38,8 +38,8 @@ class TrackletReconstruction(H5FlowStage):
             id          u4,     unique identifier
             theta       f8,     track inclination w.r.t anode
             phi         f8,     track orientation w.r.t anode
-            xp          f8,     intersection of track with ``x=0,y=0`` plane [mm]
-            yp          f8,     intersection of track with ``x=0,y=0`` plane [mm]
+            yp          f8,     intersection of track with ``y=0,z=0`` plane [mm]
+            zp          f8,     intersection of track with ``y=0,z=0`` plane [mm]
             nhit        i8,     number of hits in track
             q           f8,     charge sum [mV]
             ts_start    f8,     PPS timestamp of track start [crs ticks]
@@ -78,7 +78,7 @@ class TrackletReconstruction(H5FlowStage):
         return np.dtype([
             ('id', 'u4'),
             ('theta', 'f8'), ('phi', 'f8'),
-            ('xp', 'f8'), ('yp', 'f8'),
+            ('yp', 'f8'), ('zp', 'f8'),
             ('nhit', 'i8'), ('q', 'f8'),
             ('ts_start', 'f8'), ('ts_end', 'f8'),
             ('residual', 'f8', (3,)), ('length', 'f8'),
@@ -155,8 +155,8 @@ class TrackletReconstruction(H5FlowStage):
             hit_drift = ma.array(hit_drift, mask=(events['nhit'][..., np.newaxis] > self.max_nhit) | hits['id'].mask,
                                  shrink=False)
 
-        track_ids = self.find_tracks(hits, hit_drift['z'])
-        tracks = self.calc_tracks(hits, q, hit_drift['z'], track_ids, self.trajectory_pts,
+        track_ids = self.find_tracks(hits)
+        tracks = self.calc_tracks(hits, q, track_ids, self.trajectory_pts,
                                   self.trajectory_dx, self.trajectory_residual_mode)
         n_tracks = np.count_nonzero(~tracks['id'].mask)
         tracks_mask = ~tracks['id'].mask
@@ -177,25 +177,25 @@ class TrackletReconstruction(H5FlowStage):
         self.data_manager.write_ref(source_name, self.tracklet_dset_name, ref)
 
     @staticmethod
-    def hit_xyz(hits, hit_z):
+    def hit_xyz(hits):
         xyz = np.concatenate((
             np.expand_dims(hits['x'], axis=-1),
             np.expand_dims(hits['y'], axis=-1),
-            np.expand_dims(hit_z, axis=-1),
+            np.expand_dims(hits['z'], axis=-1),
         ), axis=-1)
         return xyz
 
-    def find_tracks(self, hits, hit_z):
+    def find_tracks(self, hits):
         '''
             Extract tracks from a given hits array
 
             :param hits: masked array ``shape: (N, n)``
 
-            :param hit_z: masked array ``shape: (N, n)``
+            [[former input]] :param hit_drift_coord: masked array ``shape: (N, n)``
 
             :returns: mask array ``shape: (N, n)`` of track ids for each hit, a value of -1 means no track is associated with the hit
         '''
-        xyz = self.hit_xyz(hits, hit_z)
+        xyz = self.hit_xyz(hits)
 
         iter_mask = np.ones(hits.shape, dtype=bool)
         iter_mask = iter_mask & (~hits['id'].mask)
@@ -243,7 +243,7 @@ class TrackletReconstruction(H5FlowStage):
         return ma.array(track_id, mask=hits['id'].mask, shrink=False)
 
     @classmethod
-    def calc_tracks(cls, hits, hit_q, hit_z, track_ids, trajectory_pts, trajectory_dx, trajectory_residual_mode):
+    def calc_tracks(cls, hits, hit_q, track_ids, trajectory_pts, trajectory_dx, trajectory_residual_mode):
         '''
             Calculate track parameters from hits
 
@@ -251,7 +251,7 @@ class TrackletReconstruction(H5FlowStage):
 
             :param hit_q: masked array, ``shape: (N,M)``
 
-            :param hit_z: masked array, ``shape: (N,M)``
+            [[former input]] :param hit_drift_coord: masked array, ``shape: (N,M)``
 
             :param track_ids: masked array, ``shape: (N,M)``
 
@@ -261,7 +261,7 @@ class TrackletReconstruction(H5FlowStage):
 
             :returns: masked array, ``shape: (N,m)``
         '''
-        xyz = cls.hit_xyz(hits, hit_z)
+        xyz = cls.hit_xyz(hits)
 
         n_tracks = np.clip(track_ids.max() + 1, 1, np.inf).astype(int) if np.count_nonzero(~track_ids.mask) \
             else 1
@@ -279,7 +279,7 @@ class TrackletReconstruction(H5FlowStage):
                 r_min, r_max = cls.projected_limits(
                     centroid, axis, xyz[i][mask])
                 residual = cls.track_residual(centroid, axis, xyz[i][mask])
-                xyp = cls.xyp(axis, centroid)
+                yzp = cls.yzp(axis, centroid)
 
                 # run trajectory approximation algo
                 traj = cls.trajectory_approx(centroid, axis, xyz[i][mask], trajectory_residual_mode,
@@ -297,8 +297,8 @@ class TrackletReconstruction(H5FlowStage):
 
                 tracks[i, j]['theta'] = cls.theta(axis)
                 tracks[i, j]['phi'] = cls.phi(axis)
-                tracks[i, j]['xp'] = xyp[0]
-                tracks[i, j]['yp'] = xyp[1]
+                tracks[i, j]['yp'] = yzp[0]
+                tracks[i, j]['zp'] = yzp[1]
                 tracks[i, j]['nhit'] = np.count_nonzero(mask)
                 tracks[i, j]['q'] = np.sum(hit_q[i][mask])
                 tracks[i, j]['ts_start'] = np.min(hits[i][mask]['ts_pps'])
@@ -490,29 +490,29 @@ class TrackletReconstruction(H5FlowStage):
         '''
             :param axis: array, ``shape: (3,)``
 
-            :returns: angle of axis w.r.t z-axis
+            :returns: angle of axis w.r.t x-axis
         '''
-        return np.arctan2(np.linalg.norm(axis[:2]), axis[-1])
+        return np.arctan2(np.linalg.norm(axis[1:]), axis[0])
 
     @staticmethod
     def phi(axis):
         '''
             :param axis: array, ``shape: (3,)``
 
-            :returns: orientation of axis about z-axis
+            :returns: orientation of axis about x-axis
         '''
-        return np.arctan2(axis[1], axis[0])
+        return np.arctan2(axis[1], axis[2])
 
     @staticmethod
-    def xyp(axis, centroid):
+    def yzp(axis, centroid):
         '''
             :param axis: array, ``shape: (3,)``
 
             :param centroid: array, ``shape: (3,)``
 
-            :returns: x,y coordinate where line intersects ``x=0,y=0`` plane
+            :returns: y,z coordinate where line intersects ``y=0,z=0`` plane
         '''
-        if axis[-1] == 0:
-            return centroid[:2]
-        s = -centroid[-1] / axis[-1]
-        return (centroid + axis * s)[:2]
+        if axis[0] == 0:
+            return centroid[1:]
+        s = -centroid[0] / axis[0]
+        return (centroid + axis * s)[1:]
