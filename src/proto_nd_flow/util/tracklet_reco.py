@@ -197,8 +197,13 @@ class TrackletReconstruction(H5FlowStage):
         '''
         xyz = self.hit_xyz(hits)
 
+        # Adding masks where hit coordinate is recorded as nan to enable dbscan 
+        hits['x'].mask = hits['x'].mask | ma.masked_invalid(hits['x']).mask
+        hits['y'].mask = hits['y'].mask | ma.masked_invalid(hits['y']).mask
+        hits['z'].mask = hits['z'].mask | ma.masked_invalid(hits['z']).mask
+
         iter_mask = np.ones(hits.shape, dtype=bool)
-        iter_mask = iter_mask & (~hits['id'].mask)
+        iter_mask = iter_mask & (~hits['id'].mask) & (~hits['x'].mask) & (~hits['y'].mask) & (~hits['z'].mask)
         track_id = np.full(hits.shape, -1, dtype='i8')
         for i in range(hits.shape[0]):
 
@@ -326,6 +331,10 @@ class TrackletReconstruction(H5FlowStage):
 
             :returns: ``shape: (N,)`` array of grouped track ids
         '''
+
+        #print("XYZ:", xyz)
+        #print("Mask:", mask)
+        #print("XYZ Mask:", xyz[mask])
         clustering = self.dbscan.fit(xyz[mask])
         track_ids = np.full(len(mask), -1)
         track_ids[mask] = clustering.labels_
