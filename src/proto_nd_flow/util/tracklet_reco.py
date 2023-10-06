@@ -21,10 +21,10 @@ class TrackletReconstruction(H5FlowStage):
             ** NOTE: change in charge field name from module0_flow datasets ("q") to proto_nd_flow calib datasets ("Q")
          - ``hit_drift_dset_name``: ``str``, path to charge hits drift data
             ** NOTE: same as hits datasets when using proto_nd_flow calib datasets
-         - ``dbscan_eps``: ``float``, dbscan epsilon parameter
+         - ``dbscan_eps``: ``float``, dbscan epsilon parameter [cm]
          - ``dbscan_min_samples``: ``int``, dbscan min neighbor points to consider as "core" point
          - ``ransac_min_samples``: ``int``, min points to run ransac algorithm
-         - ``ransac_residual_threshold``: ``float``, max distance from trial axis
+         - ``ransac_residual_threshold``: ``float``, max distance from trial axis [cm]
          - ``ransac_max_trials``: ``int``, number of ransac trials per cluster
          - ``max_iterations``: ``int``, max number of fitting iterations before giving up
          - ``max_nhit``: ``int``, skip track fitting on events with greater number of hits, ``None`` to apply no cut
@@ -38,20 +38,20 @@ class TrackletReconstruction(H5FlowStage):
             id          u4,     unique identifier
             theta       f8,     track inclination w.r.t anode
             phi         f8,     track orientation w.r.t anode
-            yp          f8,     intersection of track with ``y=0,z=0`` plane [mm]
-            zp          f8,     intersection of track with ``y=0,z=0`` plane [mm]
+            yp          f8,     intersection of track with ``y=0,z=0`` plane [cm]
+            zp          f8,     intersection of track with ``y=0,z=0`` plane [cm]
             nhit        i8,     number of hits in track
-            q           f8,     charge sum [mV]
+            q           f8,     charge sum [ke-]
             ts_start    f8,     PPS timestamp of track start [crs ticks]
             ts_end      f8,     PPS timestamp of track end [crs ticks]
-            residual    f8(3,)  average track fit error in (x,y,z) [mm]
-            length      f8      track length [mm]
-            start       f8(3,)  track start point (x,y,z) [mm]
-            end         f8(3,)  track end point (x,y,z) [mm]
-            trajectory          f8(trajectory_pts, 3,)      track approximation points (x,y,z) [mm]
-            trajectory_residual f8(trajectory_pts-1,)       track approximation average error [mm]
-            dx                  f8(trajectory_pts-1, 3)     track approximation displacement (dx,dy,dz) [mm]
-            dq                  f8(trajectory_pts-1,)       charge along track displacement [mV]
+            residual    f8(3,)  average track fit error in (x,y,z) [cm]
+            length      f8      track length [cm]
+            start       f8(3,)  track start point (x,y,z) [cm]
+            end         f8(3,)  track end point (x,y,z) [cm]
+            trajectory          f8(trajectory_pts, 3,)      track approximation points (x,y,z) [cm]
+            trajectory_residual f8(trajectory_pts-1,)       track approximation average error [cm]
+            dx                  f8(trajectory_pts-1, 3)     track approximation displacement (dx,dy,dz) [cm]
+            dq                  f8(trajectory_pts-1,)       charge along track displacement [ke-]
             dn                  i8(trajectory_pts-1,)       nhit along track displacement
 
     '''
@@ -62,10 +62,10 @@ class TrackletReconstruction(H5FlowStage):
     default_charge_dset_name = 'charge/calib_final_hits'
     default_hit_drift_dset_name = 'combined/calib_final_hits'
 
-    default_dbscan_eps = 25
+    default_dbscan_eps = 2.5
     default_dbscan_min_samples = 5
     default_ransac_min_samples = 2
-    default_ransac_residual_threshold = 8
+    default_ransac_residual_threshold = 0.8
     default_ransac_max_trials = 100
     default_max_iterations = 100
     default_trajectory_pts = 5
