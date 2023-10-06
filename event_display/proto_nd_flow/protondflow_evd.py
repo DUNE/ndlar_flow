@@ -26,7 +26,8 @@ class ProtoNDFlowEventDisplay:
                                    options are 'raw_hits', 'calib_prompt_hits', and 'calib_final_hits'
             - tracklets     (bool): bool denoting whether or not file contains 'combined/tracklets' dataset;
                                    default is False. Right now, tracklets plotting is only set up to plot
-                                   with 'calib_final_hits' dataset
+                                   with hits dataset from which tracklets were made (either 'calib_prompt_hits'
+                                   OR 'calib_final_hits')
         
         In order to run the display, set up a Jupyter Notebook, import everything in this file,
         and execute the run() method, e.g.:
@@ -480,7 +481,7 @@ class ProtoNDFlowEventDisplay:
 
         ev_id = event['id']
         
-        if self.tracklets and self.hits_dset == 'calib_final_hits':
+        if self.tracklets and (self.hits_dset == 'calib_final_hits' or self.hits_dset == 'calib_prompt_hits'):
             track_ref = self.tracks_ref[self.tracks_region[ev_id,'start']:self.tracks_region[ev_id,'stop']]
             track_ref = np.sort(track_ref[track_ref[:,0] == ev_id, 1])
             tracks = self.tracks[track_ref]
