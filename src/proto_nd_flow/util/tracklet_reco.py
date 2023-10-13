@@ -64,7 +64,7 @@ class TrackletReconstruction(H5FlowStage):
     default_hit_drift_dset_name = 'combined/calib_final_hits'
 
     #default_dbscan_eps = 2.5
-    default_hdbscan_min_samples = 5
+    default_hdbscan_min_samples = 2
     default_hdbscan_min_cluster_size = 5
     default_ransac_min_samples = 2
     default_ransac_residual_threshold = 0.8
@@ -215,10 +215,17 @@ class TrackletReconstruction(H5FlowStage):
             current_track_id = -1
 
             for _ in range(self.max_iterations):
+                
+                if sum(iter_mask[i]) < self._hdbscan_min_samples:
+                    continue
                 # hdbscan to find clusters
+
+                #print("Running first HDBSCAN...")
                 track_ids = self._do_hdbscan(xyz[i], iter_mask[i])
 
-                for id_ in np.unique(track_ids):
+                #print("First HDBSCAN successful.")
+
+                '''for id_ in np.unique(track_ids):
                     if id_ == -1:
                         continue
                     mask = track_ids == id_
@@ -229,20 +236,23 @@ class TrackletReconstruction(H5FlowStage):
                     inliers = self._do_ransac(xyz[i], mask)
                     mask[mask] = inliers
 
-                    if np.sum(mask) < 1:
+                    if np.sum(mask) < self._hdbscan_min_samples:
                         continue
 
+                    #print("Running second HDBSCAN...")
                     # and a final hdbscan for re-clustering
                     final_track_ids = self._do_hdbscan(xyz[i], mask)
 
-                    for id_ in np.unique(final_track_ids):
-                        if id_ == -1:
-                            continue
-                        mask = final_track_ids == id_
+                    #print("Second HDBSCAN successful.")'''
 
-                        current_track_id += 1
-                        track_id[i, mask] = current_track_id
-                        iter_mask[i, mask] = False
+                final_track_ids = track_ids
+                for id_ in np.unique(final_track_ids):
+                    if id_ == -1:
+                        continue
+                    mask = final_track_ids == id_
+                    current_track_id += 1
+                    track_id[i, mask] = current_track_id
+                    iter_mask[i, mask] = False
 
                 if np.all(track_ids == -1) or not np.any(iter_mask[i]):
                     break
@@ -336,7 +346,7 @@ class TrackletReconstruction(H5FlowStage):
 
         #print("XYZ:", xyz)
         #print("Mask:", mask)
-        #print("XYZ Mask:", xyz[mask])
+        #print("XYZ Mask Shape:", xyz[mask].shape)
         clustering = self.hdbscan.fit(xyz[mask])
         track_ids = np.full(len(mask), -1)
         track_ids[mask] = clustering.labels_

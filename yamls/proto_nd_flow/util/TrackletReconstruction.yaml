@@ -15,9 +15,9 @@ params:
   # configuration parameters
   #dbscan_eps: 2.5
   hdbscan_min_cluster_size: 5
-  hdbscan_min_samples: 5
-  ransac_min_samples: 2
-  ransac_residual_threshold: 0.8
-  ransac_max_trials: 10
+  hdbscan_min_samples: 2
+  ransac_min_samples: 3
+  ransac_residual_threshold: 1.222
+  ransac_max_trials: 30
   trajectory_pts: 16
   trajectory_residual_mode: 1 # 1: shortest distance to the segment ends  # 2: shortest distance to the tractory
