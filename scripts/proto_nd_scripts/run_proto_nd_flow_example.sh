@@ -34,7 +34,7 @@ cd ../../
 # avoid being asked if we want to overwrite the file if it exists.
 # this is us answering "yes".
 if [ -e $OUTPUT_FILE ]; then
-    rm -i $OUTPUT_FILE
+    rm $OUTPUT_FILE
 fi
 
 $H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 -i $INPUT_FILE -o $OUTPUT_FILE
