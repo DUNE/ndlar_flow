@@ -11,7 +11,7 @@ from h5flow.core import H5FlowStage, resources
 class TrackletReconstruction(H5FlowStage):
     '''
         Reconstructs "tracklets" or short, collinear track segments from hit
-        data using DBSCAN and RANSAC. The track direction is estimated using
+        data using HDBSCAN and RANSAC. The track direction is estimated using
         a PCA fit.
 
         Parameters:
@@ -21,8 +21,9 @@ class TrackletReconstruction(H5FlowStage):
             ** NOTE: change in charge field name from module0_flow datasets ("q") to proto_nd_flow calib datasets ("Q")
          - ``hit_drift_dset_name``: ``str``, path to charge hits drift data
             ** NOTE: same as hits datasets when using proto_nd_flow calib datasets
-         - ``dbscan_eps``: ``float``, dbscan epsilon parameter [cm]
-         - ``dbscan_min_samples``: ``int``, dbscan min neighbor points to consider as "core" point
+         - DEPRECATED ``dbscan_eps``: ``float``, dbscan epsilon parameter [cm]
+         - ``hdbscan_min_samples``: ``int``, hdbscan min neighbor points to consider as "core" point
+         - ``hdbscan_min_cluster_size``: ``int``, hdbscan min number of points to form a cluster
          - ``ransac_min_samples``: ``int``, min points to run ransac algorithm
          - ``ransac_residual_threshold``: ``float``, max distance from trial axis [cm]
          - ``ransac_max_trials``: ``int``, number of ransac trials per cluster
@@ -62,8 +63,9 @@ class TrackletReconstruction(H5FlowStage):
     default_charge_dset_name = 'charge/calib_final_hits'
     default_hit_drift_dset_name = 'combined/calib_final_hits'
 
-    default_dbscan_eps = 2.5
-    default_dbscan_min_samples = 5
+    #default_dbscan_eps = 2.5
+    default_hdbscan_min_samples = 5
+    default_hdbscan_min_cluster_size = 5
     default_ransac_min_samples = 2
     default_ransac_residual_threshold = 0.8
     default_ransac_max_trials = 100
@@ -98,8 +100,8 @@ class TrackletReconstruction(H5FlowStage):
         self.charge_dset_name = params.get('charge_dset_name', self.default_charge_dset_name)
         self.hit_drift_dset_name = params.get('hit_drift_dset_name', self.default_hit_drift_dset_name)
 
-        self._dbscan_eps = params.get('dbscan_eps', self.default_dbscan_eps)
-        self._dbscan_min_samples = params.get('dbscan_min_samples', self.default_dbscan_min_samples)
+        self._hdbscan_min_cluster_size = params.get('hdbscan_min_cluster_size', self.default_hdbscan_min_cluster_size)
+        self._hdbscan_min_samples = params.get('hdbscan_min_samples', self.default_hdbscan_min_samples)
         self._ransac_min_samples = params.get('ransac_min_samples', self.default_ransac_min_samples)
         self._ransac_residual_threshold = params.get('ransac_residual_threshold', self.default_ransac_residual_threshold)
         self._ransac_max_trials = params.get('ransac_max_trials', self.default_ransac_max_trials)
@@ -111,7 +113,7 @@ class TrackletReconstruction(H5FlowStage):
         self.trajectory_dx = params.get('trajectory_dx', self.default_trajectory_dx)
         self.tracklet_dtype = self.tracklet_dtype(self.trajectory_pts)
 
-        self.dbscan = cluster.DBSCAN(eps=self._dbscan_eps, min_samples=self._dbscan_min_samples)
+        self.hdbscan = cluster.HDBSCAN(min_cluster_size=self._hdbscan_min_cluster_size, min_samples=self._hdbscan_min_samples, allow_single_cluster=True)
 
     def init(self, source_name):
         super(TrackletReconstruction, self).init(source_name)
@@ -122,8 +124,8 @@ class TrackletReconstruction(H5FlowStage):
                                     hits_dset=self.hits_dset_name,
                                     charge_dset=self.charge_dset_name,
                                     hit_drift_dset=self.hit_drift_dset_name,
-                                    dbscan_eps=self._dbscan_eps,
-                                    dbscan_min_samples=self._dbscan_min_samples,
+                                    hdbscan_min_cluster_size=self._hdbscan_min_cluster_size,
+                                    hdbscan_min_samples=self._hdbscan_min_samples,
                                     ransac_min_samples=self._ransac_min_samples,
                                     ransac_residual_threshold=self._ransac_residual_threshold,
                                     ransac_max_trials=self._ransac_max_trials,
@@ -197,7 +199,7 @@ class TrackletReconstruction(H5FlowStage):
         '''
         xyz = self.hit_xyz(hits)
 
-        # Adding masks where hit coordinate is recorded as nan to enable dbscan 
+        # Adding masks where hit coordinate is recorded as nan to enable hdbscan 
         hits['x'].mask = hits['x'].mask | ma.masked_invalid(hits['x']).mask
         hits['y'].mask = hits['y'].mask | ma.masked_invalid(hits['y']).mask
         hits['z'].mask = hits['z'].mask | ma.masked_invalid(hits['z']).mask
@@ -213,8 +215,8 @@ class TrackletReconstruction(H5FlowStage):
             current_track_id = -1
 
             for _ in range(self.max_iterations):
-                # dbscan to find clusters
-                track_ids = self._do_dbscan(xyz[i], iter_mask[i])
+                # hdbscan to find clusters
+                track_ids = self._do_hdbscan(xyz[i], iter_mask[i])
 
                 for id_ in np.unique(track_ids):
                     if id_ == -1:
@@ -230,8 +232,8 @@ class TrackletReconstruction(H5FlowStage):
                     if np.sum(mask) < 1:
                         continue
 
-                    # and a final dbscan for re-clustering
-                    final_track_ids = self._do_dbscan(xyz[i], mask)
+                    # and a final hdbscan for re-clustering
+                    final_track_ids = self._do_hdbscan(xyz[i], mask)
 
                     for id_ in np.unique(final_track_ids):
                         if id_ == -1:
@@ -323,7 +325,7 @@ class TrackletReconstruction(H5FlowStage):
 
         return ma.array(tracks, mask=tracks_mask, shrink=False)
 
-    def _do_dbscan(self, xyz, mask):
+    def _do_hdbscan(self, xyz, mask):
         '''
             :param xyz: ``shape: (N,3)`` array of precomputed 3D distances
 
@@ -335,7 +337,7 @@ class TrackletReconstruction(H5FlowStage):
         #print("XYZ:", xyz)
         #print("Mask:", mask)
         #print("XYZ Mask:", xyz[mask])
-        clustering = self.dbscan.fit(xyz[mask])
+        clustering = self.hdbscan.fit(xyz[mask])
         track_ids = np.full(len(mask), -1)
         track_ids[mask] = clustering.labels_
         return track_ids

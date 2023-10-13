@@ -13,8 +13,9 @@ params:
   tracklet_dset_name: 'combined/tracklets'
 
   # configuration parameters
-  dbscan_eps: 2.5
-  dbscan_min_samples: 5
+  #dbscan_eps: 2.5
+  hdbscan_min_cluster_size: 5
+  hdbscan_min_samples: 5
   ransac_min_samples: 2
   ransac_residual_threshold: 0.8
   ransac_max_trials: 10
