@@ -14,9 +14,10 @@ params:
 
   # configuration parameters
   #dbscan_eps: 2.5
-  hdbscan_min_cluster_size: 5
-  hdbscan_min_samples: 2
-  ransac_min_samples: 3
+  max_iterations: 10 
+  hdbscan_min_cluster_size: 10
+  hdbscan_min_samples: 5
+  ransac_min_samples: 2
   ransac_residual_threshold: 1.222
   ransac_max_trials: 30
   trajectory_pts: 16

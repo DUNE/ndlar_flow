@@ -225,7 +225,7 @@ class TrackletReconstruction(H5FlowStage):
 
                 #print("First HDBSCAN successful.")
 
-                '''for id_ in np.unique(track_ids):
+                for id_ in np.unique(track_ids):
                     if id_ == -1:
                         continue
                     mask = track_ids == id_
@@ -245,16 +245,15 @@ class TrackletReconstruction(H5FlowStage):
 
                     #print("Second HDBSCAN successful.")'''
 
-                final_track_ids = track_ids
-                for id_ in np.unique(final_track_ids):
-                    if id_ == -1:
-                        continue
-                    mask = final_track_ids == id_
-                    current_track_id += 1
-                    track_id[i, mask] = current_track_id
-                    iter_mask[i, mask] = False
+                    for id_ in np.unique(final_track_ids):
+                        if id_ < 0:
+                            continue
+                        mask = final_track_ids == id_
+                        current_track_id += 1
+                        track_id[i, mask] = current_track_id
+                        iter_mask[i, mask] = False
 
-                if np.all(track_ids == -1) or not np.any(iter_mask[i]):
+                if np.all(track_ids < 0) or not np.any(iter_mask[i]):
                     break
 
         return ma.array(track_id, mask=hits['id'].mask, shrink=False)
