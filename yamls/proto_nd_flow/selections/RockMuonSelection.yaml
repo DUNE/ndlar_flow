@@ -1,7 +1,7 @@
 
 classname: RockMuonSelection #path
 
-path: selection.RockMuon_selection
+path: proto_nd_flow.selection.RockMuon_selection
 requires:
   - 'charge/events'
 
@@ -23,7 +23,8 @@ params:
         
     #Outputs
     rock_muon_hits_dset_name: 'rock_muon_hits'
-        
+    rock_muon_segments_dset_name: 'rock_muon_segments'
+
     #configuration parameters
     x_boundaries: [-63.931, -3.069, 3.069, 63.931] #cm
     y_boundaries: [-268-42-19.8543, -268-42+103.8543] #cm
@@ -33,7 +34,7 @@ params:
     MEVR: 0.974 #Minimum explained variance ratio
     
     track_counts: -1    
-        
+    segment_counts: -1    
         
         
         
