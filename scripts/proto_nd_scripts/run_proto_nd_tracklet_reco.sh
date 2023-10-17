@@ -10,7 +10,7 @@ OUTPUT_DIR=`pwd` # !!change!!
 OUTPUT_NAME=(${INPUT_FILE//"/"/ })
 OUTPUT_NAME=${OUTPUT_NAME[-1]}
 OUTPUT_FILE="${OUTPUT_DIR}/${OUTPUT_NAME}"
-OUTPUT_FILE=${OUTPUT_FILE//.h5/.proto_nd_flow.TRACKLETS_HDBSCAN_RANSAC.h5}
+OUTPUT_FILE=${OUTPUT_FILE//.h5/.proto_nd_flow.TRACKLETS_HDBSCAN_1_20_20_2488.h5}
 echo ${OUTPUT_FILE}
 
 # for running on a login node

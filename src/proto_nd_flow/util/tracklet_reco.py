@@ -24,6 +24,7 @@ class TrackletReconstruction(H5FlowStage):
          - DEPRECATED ``dbscan_eps``: ``float``, dbscan epsilon parameter [cm]
          - ``hdbscan_min_samples``: ``int``, hdbscan min neighbor points to consider as "core" point
          - ``hdbscan_min_cluster_size``: ``int``, hdbscan min number of points to form a cluster
+         - ``hdbscan_cluster_sel_eps``: ``int``, hdbscan threshold value [cm] clusters below this size may be merged using DBSCAN* algorithm
          - ``ransac_min_samples``: ``int``, min points to run ransac algorithm
          - ``ransac_residual_threshold``: ``float``, max distance from trial axis [cm]
          - ``ransac_max_trials``: ``int``, number of ransac trials per cluster
@@ -66,6 +67,7 @@ class TrackletReconstruction(H5FlowStage):
     #default_dbscan_eps = 2.5
     default_hdbscan_min_samples = 2
     default_hdbscan_min_cluster_size = 5
+    default_hdbscan_cluster_sel_eps = 5
     default_ransac_min_samples = 2
     default_ransac_residual_threshold = 0.8
     default_ransac_max_trials = 100
@@ -102,6 +104,7 @@ class TrackletReconstruction(H5FlowStage):
 
         self._hdbscan_min_cluster_size = params.get('hdbscan_min_cluster_size', self.default_hdbscan_min_cluster_size)
         self._hdbscan_min_samples = params.get('hdbscan_min_samples', self.default_hdbscan_min_samples)
+        self._hdbscan_cluster_sel_eps = params.get('hdbscan_cluster_sel_eps', self.default_hdbscan_cluster_sel_eps)
         self._ransac_min_samples = params.get('ransac_min_samples', self.default_ransac_min_samples)
         self._ransac_residual_threshold = params.get('ransac_residual_threshold', self.default_ransac_residual_threshold)
         self._ransac_max_trials = params.get('ransac_max_trials', self.default_ransac_max_trials)
@@ -113,7 +116,10 @@ class TrackletReconstruction(H5FlowStage):
         self.trajectory_dx = params.get('trajectory_dx', self.default_trajectory_dx)
         self.tracklet_dtype = self.tracklet_dtype(self.trajectory_pts)
 
-        self.hdbscan = cluster.HDBSCAN(min_cluster_size=self._hdbscan_min_cluster_size, min_samples=self._hdbscan_min_samples, allow_single_cluster=True)
+        self.hdbscan = cluster.HDBSCAN(min_cluster_size=self._hdbscan_min_cluster_size, \
+                                       min_samples=self._hdbscan_min_samples, \
+                                       cluster_selection_epsilon = self._hdbscan_cluster_sel_eps, \
+                                       allow_single_cluster=True)
 
     def init(self, source_name):
         super(TrackletReconstruction, self).init(source_name)
@@ -221,39 +227,40 @@ class TrackletReconstruction(H5FlowStage):
                 # hdbscan to find clusters
 
                 #print("Running first HDBSCAN...")
-                track_ids = self._do_hdbscan(xyz[i], iter_mask[i])
+                #track_ids = self._do_hdbscan(xyz[i], iter_mask[i])
+#
+                ##print("First HDBSCAN successful.")
+#
+                #for id_ in np.unique(track_ids):
+                #    if id_ == -1:
+                #        continue
+                #    mask = track_ids == id_
+                #    if np.sum(mask) <= self._ransac_min_samples:
+                #        continue
+#
+                #    # ransac for collinear hits
+                #    inliers = self._do_ransac(xyz[i], mask)
+                #    #mask[mask] = inliers
+                #    iter_mask[i, mask] = inliers
+#
+                #if np.sum(iter_mask[i]) < self._hdbscan_min_samples:
+                #    continue
 
-                #print("First HDBSCAN successful.")
+                #print("Running second HDBSCAN...")
+                # and a final hdbscan for re-clustering
+                final_track_ids = self._do_hdbscan(xyz[i], iter_mask[i])
 
-                for id_ in np.unique(track_ids):
-                    if id_ == -1:
+                #print("Second HDBSCAN successful.")'''
+
+                for id_ in np.unique(final_track_ids):
+                    if id_ < 0:
                         continue
-                    mask = track_ids == id_
-                    if np.sum(mask) <= self._ransac_min_samples:
-                        continue
+                    mask = final_track_ids == id_
+                    current_track_id += 1
+                    track_id[i, mask] = current_track_id
+                    iter_mask[i, mask] = False
 
-                    # ransac for collinear hits
-                    inliers = self._do_ransac(xyz[i], mask)
-                    mask[mask] = inliers
-
-                    if np.sum(mask) < self._hdbscan_min_samples:
-                        continue
-
-                    #print("Running second HDBSCAN...")
-                    # and a final hdbscan for re-clustering
-                    final_track_ids = self._do_hdbscan(xyz[i], mask)
-
-                    #print("Second HDBSCAN successful.")'''
-
-                    for id_ in np.unique(final_track_ids):
-                        if id_ < 0:
-                            continue
-                        mask = final_track_ids == id_
-                        current_track_id += 1
-                        track_id[i, mask] = current_track_id
-                        iter_mask[i, mask] = False
-
-                if np.all(track_ids < 0) or not np.any(iter_mask[i]):
+                if np.all(final_track_ids < 0) or not np.any(iter_mask[i]):
                     break
 
         return ma.array(track_id, mask=hits['id'].mask, shrink=False)
