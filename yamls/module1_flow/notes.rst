@@ -59,7 +59,7 @@ Charge
 
 * ``yamls/module1_flow/reco/charge/EventBuilder.yaml``
 
-   Copied from ``yamls/proto_nd_flow/reco/charge/EventBuilder.yaml``. No changes.
+  Copied from ``yamls/proto_nd_flow/reco/charge/EventBuilder.yaml``. No changes.
 
 
 3. ``yamls/module1_flow/workflows/combined/combined_reconstruction.yaml``
@@ -68,7 +68,7 @@ Charge
 
 * ``yamls/module1_flow/reco/combined/T0Reconstruction.yaml``
 
-   Copied from ``yamls/proto_nd_flow/reco/combined/T0Reconstruction.yaml``. No changes made.
+  Copied from ``yamls/proto_nd_flow/reco/combined/T0Reconstruction.yaml``. No changes made.
 
 4. ``yamls/module1_flow/workflows/charge/prompt_calibration.yaml``
 
@@ -76,9 +76,9 @@ Charge
 
 * ``yamls/module1_flow/reco/charge/CalibHitBuilder.yaml``
 
-   Copied and modified from ``yamls/proto_nd_flow/reco/charge/CalibHitBuilder.yaml``.
+  Copied and modified from ``yamls/proto_nd_flow/reco/charge/CalibHitBuilder.yaml``.
 
-   Added option for ``pedestal_file`` and ``configuration_file``, using inputs found in previoulsy flowed file metadata.
+  Added option for ``pedestal_file`` and ``configuration_file``, using inputs found in previoulsy flowed file metadata.
 
 5. ``yamls/module1_flow/workflows/charge/final_calibration.yaml``
 
@@ -86,6 +86,53 @@ Charge
 
 * ``yamls/module1_flow/reco/charge/CalibHitMerger.yaml``
 
-   Copied and modified from ``yamls/proto_nd_flow/workflows/charge/final_calibration.yaml``.
+  Copied and modified from ``yamls/proto_nd_flow/workflows/charge/final_calibration.yaml``.
 
-   Removed ``mc_hit_frac_dset_name``.
+  Removed ``mc_hit_frac_dset_name``.
+
+Light
+-----
+1. ``yamls/module1_flow/workflows/light/light_event_building_adc64.yaml``
+
+   Copied and modified from ``yamls/module3_flow/workflows/light/light_event_building_adc64.yaml``. The equivalent file did not exist in ``proto_nd_flow``. Only difference is that the ``.yaml`` files now point to a ``module1_flow`` specific file.
+
+* ``yamls/module1_flow/reco/light/LightADC64EventGenerator.yaml``
+
+  Copied and modified from ``yamls/module3_flow/reco/light/LightADC64EventGenerator.yaml``. Set the ``sn_table`` arguments, I need to remember from where.
+
+2. ``yamls/module1_flow/workflows/light/light_event_reconstruction.yaml``
+
+   Copied and modified from ``yamls/proto_nd_flow/workflows/light/light_event_reconstruction.yaml``. Only difference is that the ``.yaml`` files now point to a ``module1_flow`` specific file.
+
+* ``yamls/module1_flow/reco/light/LightTimestampCorrector.yaml``
+
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/LightTimestampCorrector.yaml``. Changed ``slope`` to only have two TPC values.
+
+* ``yamls/proto_nd_flow/reco/light/WaveformNoiseFilter.yaml``
+
+  Right now just using ``proto_nd_flow`` file. Does it need to be updated?
+
+* ``yamls/module1_flow/reco/light/WaveformDeconvolution.yaml``
+
+  Copied and modified from ``yamls/proton_nd_flow/reco/light/WaveformDeconvolution.yaml``. ``noise_spectrum_filename``, ``signal_spectrum_filename``, ``signal_impulse_filename`` were set to ``module0`` files.
+
+
+* ``yamls/proto_nd_flow/reco/light/WaveformAlign.yaml``
+
+  Right now just using ``proto_nd_flow`` file. Does it need to be updated?
+
+* ``yamls/proto_nd_flow/reco/light/WaveformCalib.yaml``
+
+  Right now just using ``proto_nd_flow`` file. Does it need to be updated? Looks to be assuming 8 TPCs? Need to check
+
+* ``yamls/proto_nd_flow/reco/light/WaveformSum.yaml``
+
+  Right now just using ``proto_nd_flow`` file. Does it need to be updated?
+
+* ``yamls/proto_nd_flow/reco/light/SiPMHitFinder.yaml``
+
+  Right now just using ``proto_nd_flow`` file. Does it need to be updated?
+
+* ``yamls/proto_nd_flow/reco/light/SumHitFinder.yaml``
+
+  Right now just using ``proto_nd_flow`` file. Does it need to be updated? Looks to be assuming 8 TPCs? Need to check
