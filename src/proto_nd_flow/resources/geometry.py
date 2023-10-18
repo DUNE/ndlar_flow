@@ -122,7 +122,7 @@ class Geometry(H5FlowResource):
         lut_size = (self.pixel_xy.nbytes + self.tile_id.nbytes
                     + self.anode_z.nbytes + self.drift_dir.nbytes
                     + self.tpc_id.nbytes + self.det_id.nbytes
-                    + self.det_bounds.nbytes) * 4
+                    + self.det_bounds.nbytes)
 
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
