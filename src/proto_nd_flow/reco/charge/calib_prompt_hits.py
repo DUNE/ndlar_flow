@@ -91,16 +91,23 @@ class CalibHitBuilder(H5FlowStage):
         self.events_dset_name = params.get('events_dset_name')
         self.raw_hits_dset_name = params.get('raw_hits_dset_name')
         self.calib_hits_dset_name = params.get('calib_hits_dset_name')
+        self.mc_hit_frac_dset_name = params.get('mc_hit_frac_dset_name')
         self.packets_dset_name = params.get('packets_dset_name')
         self.packets_index_name = params.get('packets_index_name', self.packets_dset_name + '_index')
         self.t0_dset_name = params.get('t0_dset_name')
         self.pedestal_file = params.get('pedestal_file', '')
         self.configuration_file = params.get('configuration_file', '')
+        self.max_contrib_segments = params.get('max_contrib_segments','')
 
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
         self.load_pedestals()
         self.load_configurations()
+
+        self.hit_frac_dtype = np.dtype([
+            ('fraction', f'({self.max_contrib_segments},)f8'),
+            ('segment_id', f'({self.max_contrib_segments},)u8')
+        ])
 
         # save all config info
         self.data_manager.set_attrs(self.calib_hits_dset_name,
@@ -115,17 +122,19 @@ class CalibHitBuilder(H5FlowStage):
 
         # then set up new datasets
         self.data_manager.create_dset(self.calib_hits_dset_name, dtype=self.calib_hits_dtype)
+        self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype)
         self.data_manager.create_ref(source_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(self.calib_hits_dset_name, self.packets_dset_name)
         self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
+        self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name)
 
     def run(self, source_name, source_slice, cache):
         super(CalibHitBuilder, self).run(source_name, source_slice, cache)
         events_data = cache[self.events_dset_name]
         packets_data = cache[self.packets_dset_name]
         packets_index = cache[self.packets_index_name]
-        print(self.packets_index_name)
-        print(type(packets_index))
+        packet_frac_bt = cache['packet_frac_backtrack']
+        packet_seg_bt = cache['packet_seg_backtrack']
         t0_data = cache[self.t0_dset_name]
         raw_hits = cache[self.raw_hits_dset_name]
 
@@ -138,13 +147,19 @@ class CalibHitBuilder(H5FlowStage):
             mask = (packets_data['packet_type'] == 0) & mask
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
+            packet_frac_bt_arr = packet_frac_bt.data[mask]
+            packet_seg_bt_arr = packet_seg_bt.data[mask]
             index_arr = packets_index.data[mask]
         else:
             n = 0
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
 
+        has_mc_truth = packet_seg_bt is not None
+
         # reserve new data
         calib_hits_slice = self.data_manager.reserve_data(self.calib_hits_dset_name, n)
+        if has_mc_truth:
+            hit_bt_slice = self.data_manager.reserve_data(self.mc_hit_frac_dset_name,n)
 
         # convert to hits array
         calib_hits_arr = np.zeros((n,), dtype=self.calib_hits_dtype)
@@ -201,6 +216,18 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
             calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 # hardcoding W_ion and not accounting for finite electron lifetime
 
+            # create truth-level backtracking dataset
+            if has_mc_truth:
+                back_track = np.full(shape=packets_arr.shape,fill_value=0.,dtype=self.hit_frac_dtype)
+                for hit_it, pack in np.ndenumerate(packets_arr):
+                    back_track[hit_it]['fraction'] = packet_frac_bt_arr[hit_it] 
+                    back_track[hit_it]['segment_id'] = packet_seg_bt_arr[hit_it]['segment_id']
+
+        # if back tracking information was available, write the merged back tracking
+        # dataset to file 
+        if has_mc_truth:
+            self.data_manager.write_data(self.mc_hit_frac_dset_name, hit_bt_slice, back_track)
+
         # write
         self.data_manager.write_data(self.calib_hits_dset_name, calib_hits_slice, calib_hits_arr)
 
@@ -216,6 +243,11 @@ class CalibHitBuilder(H5FlowStage):
         # hit -> packet
         ref = np.c_[calib_hits_arr['id'], index_arr]
         self.data_manager.write_ref(self.calib_hits_dset_name, self.packets_dset_name, ref)
+
+        # hit -> backtracking
+        if has_mc_truth:
+            self.data_manager.write_ref(self.calib_hits_dset_name,self.mc_hit_frac_dset_name,np.c_[calib_hits_arr['id'],calib_hits_arr['id']])
+
 
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped):
