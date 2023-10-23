@@ -1,0 +1,19 @@
+classname: HitBuilder # reco/charge/hit_builder.py
+path: module0_flow.reco.charge.hit_builder
+requires:
+  - 'charge/packets'
+  - name: 'charge/packets_corr_ts'
+    path: ['charge/packets', 'charge/packets_corr_ts']
+params:
+  # inputs
+  packets_dset_name: 'charge/packets'
+  ts_dset_name: 'charge/packets_corr_ts'
+
+  # output
+  hits_dset_name: 'charge/hits'
+
+  # configuration parameters
+  pedestal_file: '/global/cfs/cdirs/dune/www/data/Module1/TPC12/dataRuns/Pedestal/packet_2022_02_08_01_40_31_CETevd_ped.json'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/datalog_2021_04_02_19_00_46_CESTevd_ped.json
+  configuration_file: '/global/cfs/cdirs/dune/www/data/Module1/TPC12/config_22-02-08_13-37-39.json'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/evd_config_21-03-31_12-36-13.json

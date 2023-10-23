@@ -6,14 +6,12 @@ params:
   wvfm_dset_name: 'light/wvfm'
 
   # configuration parameters
-  n_adcs: 2
+  n_adcs: 1
   n_channels: 64
   sn_table:
-    - 215564618
-    #- 215553018 # ACL
-    #- 215537201 # LCM
+   - 215564653
   sync_channel: 32
-  sync_threshold: 10000
+  sync_threshold: 9999999
   batch_size: 128
   utime_ms_window: 1000
   tai_ns_window: 1000

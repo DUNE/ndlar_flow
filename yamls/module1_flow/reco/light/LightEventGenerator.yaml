@@ -1,5 +1,5 @@
-classname: LightADC64EventGenerator
-path: module0_flow.reco.light.adc64_event_generator
+classname: LightEventGenerator # light/raw_event_generator.py
+path: module0_flow.reco.light.raw_event_generator
 dset_name: 'light/events'
 params:
   # secondary output
@@ -8,10 +8,6 @@ params:
   # configuration parameters
   n_adcs: 2
   n_channels: 64
-  sn_table:
-    - 215564653
-  sync_channel: 32
-  sync_threshold: 99999
-  batch_size: 128
+  chunk_size: 128
   utime_ms_window: 1000
   tai_ns_window: 1000
