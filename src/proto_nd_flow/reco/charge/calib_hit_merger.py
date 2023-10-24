@@ -119,7 +119,7 @@ class CalibHitMerger(H5FlowStage):
             # [there is probably a more pythonic way of doing this...]
             for it, q in np.ndenumerate(weights):
                 if len(new_frac_bt[it]) > 1:
-                    print('!!!!!!!!!!!!!!!!!')
+                    #print('!!!!!!!!!!!!!!!!!')
                     break
                 counter=0
                 for entry_it, entry in enumerate(new_frac_bt[it][0]):
@@ -145,7 +145,7 @@ class CalibHitMerger(H5FlowStage):
             old_ids = np.take_along_axis(old_ids, isort[...,np.newaxis], axis=-2)
             old_id_mask = np.take_along_axis(old_id_mask, isort[...,np.newaxis], axis=-2)
             N_new_hits = new_hits.shape[0]*new_hits.shape[1]-np.count_nonzero(mask)
-            print('current number of merged hits =',N_new_hits)
+            #print('current number of merged hits =',N_new_hits)
             
             # identify neighboring hits on the same channel
             dt = np.abs(np.diff(new_hits['ts_pps'].astype(int), axis=-1))
@@ -166,7 +166,7 @@ class CalibHitMerger(H5FlowStage):
             else:
                 raise RuntimeError(f'invalid merge mode: {mode}')
 
-            print("merging:",np.count_nonzero(to_merge))
+            #print("merging:",np.count_nonzero(to_merge))
 
             # exits loop if no remaining hits to combine
             if np.any(to_merge):
