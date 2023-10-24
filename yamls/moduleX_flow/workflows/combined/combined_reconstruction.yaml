@@ -16,11 +16,11 @@ events:
     chunk_size: 32
 
 resources:
-  - !include yamls/module1_flow/resources/RunData.yaml
-  - !include yamls/module1_flow/resources/Geometry.yaml
-  - !include yamls/module1_flow/resources/LArData.yaml
+  - !include yamls/moduleX_flow/resources/RunData.yaml
+  - !include yamls/moduleX_flow/resources/Geometry.yaml
+  - !include yamls/moduleX_flow/resources/LArData.yaml
 #  - !include yamls/proto_nd_flow/resources/DisabledChannels.yaml
 
 t0_reco:
-  !include yamls/module1_flow/reco/combined/T0Reconstruction.yaml
+  !include yamls/moduleX_flow/reco/combined/T0Reconstruction.yaml
 

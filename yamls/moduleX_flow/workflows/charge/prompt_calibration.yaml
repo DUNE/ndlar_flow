@@ -10,9 +10,9 @@ flow:
 
 
 resources:
-  - !include yamls/module1_flow/resources/RunData.yaml
-  - !include yamls/module1_flow/resources/LArData.yaml
-  - !include yamls/module1_flow/resources/Geometry.yaml
+  - !include yamls/moduleX_flow/resources/RunData.yaml
+  - !include yamls/moduleX_flow/resources/LArData.yaml
+  - !include yamls/moduleX_flow/resources/Geometry.yaml
 
 
 raw_events:
@@ -23,5 +23,5 @@ raw_events:
     chunk_size: 128
 
 calib_hit_builder:
-  !include yamls/module1_flow/reco/charge/CalibHitBuilder.yaml
+  !include yamls/moduleX_flow/reco/charge/CalibHitBuilder.yaml
 

@@ -12,9 +12,9 @@ flow:
 
 
 resources:
-  - !include yamls/module1_flow/resources/RunData.yaml
-  - !include yamls/module1_flow/resources/LArData.yaml
-  - !include yamls/module1_flow/resources/Geometry.yaml
+  - !include yamls/moduleX_flow/resources/RunData.yaml
+  - !include yamls/moduleX_flow/resources/LArData.yaml
+  - !include yamls/moduleX_flow/resources/Geometry.yaml
 
 raw_events:
   classname: H5FlowDatasetLoopGenerator
@@ -24,5 +24,5 @@ raw_events:
     chunk_size: 32
 
 calib_hit_merger:
-  !include yamls/module1_flow/reco/charge/CalibHitMerger.yaml
+  !include yamls/moduleX_flow/reco/charge/CalibHitMerger.yaml
 

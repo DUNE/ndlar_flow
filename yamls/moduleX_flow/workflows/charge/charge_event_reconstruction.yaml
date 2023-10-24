@@ -5,8 +5,8 @@
 
 flow:
   source: raw_events
-  stages: [ext_trig_finder, raw_hit_builder, event_builder]
-    #stages: [timestamp_corrector, ext_trig_finder, raw_hit_builder, event_builder]
+    #stages: [ext_trig_finder, raw_hit_builder, event_builder]
+  stages: [timestamp_corrector, ext_trig_finder, raw_hit_builder, event_builder]
   drop: []
 
 
@@ -23,8 +23,8 @@ raw_events:
     chunk_size: 128
 
 
-      #timestamp_corrector:
-      #  !include yamls/moduleX_flow/reco/charge/TimestampCorrector.yaml
+timestamp_corrector:
+  !include yamls/moduleX_flow/reco/charge/TimestampCorrector.yaml
 
 
 ext_trig_finder:
