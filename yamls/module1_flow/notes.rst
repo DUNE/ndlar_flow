@@ -108,31 +108,30 @@ Light
 
   Copied and modified from ``yamls/proto_nd_flow/reco/light/LightTimestampCorrector.yaml``. Changed ``slope`` to only have two TPC values. I noticed that all other modules have slopes (0: -1.18e-7, 1: 1.18e-7), while I kept them set to 0. Not sure what module1 wants. 
 
-* ``yamls/proto_nd_flow/reco/light/WaveformNoiseFilter.yaml``
+* ``yamls/module1_flow/reco/light/WaveformNoiseFilter.yaml``
 
-  Right now just using ``proto_nd_flow`` file. Does it need to be updated?
+  Copied from ``yamls/proto_nd_flow/reco/light/WaveformNoiseFilter.yaml``. Option ``filter_channels`` differs from others modules.
 
 * ``yamls/module1_flow/reco/light/WaveformDeconvolution.yaml``
 
-  Copied and modified from ``yamls/proton_nd_flow/reco/light/WaveformDeconvolution.yaml``. ``noise_spectrum_filename``, ``signal_spectrum_filename``, ``signal_impulse_filename`` were set to ``module0`` files.
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/WaveformDeconvolution.yaml``. ``noise_spectrum_filename``, ``signal_spectrum_filename``, ``signal_impulse_filename`` were set to ``module0`` files. Option ``filter_channels`` differs from other modules.
 
+* ``yamls/module1_flow/reco/light/WaveformAlign.yaml``
 
-* ``yamls/proto_nd_flow/reco/light/WaveformAlign.yaml``
+  Copied from ``yamls/proto_nd_flow/reco/light/WaveformAlign.yaml``. Is ``sim_latency`` a simulation that should be removed? Other modules have ``busy_channel: All: 0`` parameter. 
 
-  Right now just using ``proto_nd_flow`` file. Does it need to be updated?
+* ``yamls/module1_flow/reco/light/WaveformCalib.yaml``
 
-* ``yamls/proto_nd_flow/reco/light/WaveformCalib.yaml``
+  Copied from ``yamls/proto_nd_flow/reco/light/WaveformCalib.yaml``. Looks like it needs to be updated. Does it assume 8 TPCs? Does everything ``gain_mc`` need to be removed? And does ``gain`` need to be updated. File doesn't exist for other modules.
 
-  Right now just using ``proto_nd_flow`` file. Does it need to be updated? Looks to be assuming 8 TPCs? Need to check
+* ``yamls/module1_flow/reco/light/WaveformSum.yaml``
 
-* ``yamls/proto_nd_flow/reco/light/WaveformSum.yaml``
+  Copied from ``yamls/proto_nd_flow/reco/light/WaveformSum.yaml``. Other modules have ``gain`` and ``gain_mc`` parameters. 
 
-  Right now just using ``proto_nd_flow`` file. Does it need to be updated?
+* ``yamls/module1_flow/reco/light/SiPMHitFinder.yaml``
 
-* ``yamls/proto_nd_flow/reco/light/SiPMHitFinder.yaml``
+  Copied from ``yamls/proto_nd_flow/reco/light/SiPMHitFinder.yaml``. ``near_sample`` parameter is different. Here, ``threshold`` is a single constant, while other modules point to a ``siplm_threshold.yaml`` file. 
 
-  Right now just using ``proto_nd_flow`` file. Does it need to be updated?
+* ``yamls/module1_flow/reco/light/SumHitFinder.yaml``
 
-* ``yamls/proto_nd_flow/reco/light/SumHitFinder.yaml``
-
-  Right now just using ``proto_nd_flow`` file. Does it need to be updated? Looks to be assuming 8 TPCs? Need to check
+  Copied from ``yamls/proto_nd_flow/reco/light/SumHitFinder.yaml``. Does not exist for other modules. Is ``threshold`` assuming 8 TPCSs? 
