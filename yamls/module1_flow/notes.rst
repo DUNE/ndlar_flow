@@ -106,7 +106,7 @@ Light
 
 * ``yamls/module1_flow/reco/light/LightTimestampCorrector.yaml``
 
-  Copied and modified from ``yamls/proto_nd_flow/reco/light/LightTimestampCorrector.yaml``. Changed ``slope`` to only have two TPC values.
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/LightTimestampCorrector.yaml``. Changed ``slope`` to only have two TPC values. I noticed that all other modules have slopes (0: -1.18e-7, 1: 1.18e-7), while I kept them set to 0. Not sure what module1 wants. 
 
 * ``yamls/proto_nd_flow/reco/light/WaveformNoiseFilter.yaml``
 
