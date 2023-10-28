@@ -49,13 +49,13 @@ Charge
 
 * ``yamls/module1_flow/reco/charge/ExternalTriggerFinder.yaml``
 
-  Copied from ``yamls/proto_nd_flow/reco/charge/ExternalTriggerFinder.yaml``. No changes made.
+  Copied from ``yamls/proto_nd_flow/reco/charge/ExternalTriggerFinder.yaml``. No changes made .
 
 * ``yamls/module1_flow/reco/charge/RawHitBuilder.yaml``
 
   Copied and modified from ``yamls/proto_nd_flow/reco/charge/RawHitBuilder.yaml``
 
-  Included ``configuration_file`` and ``pedestal_file``, and set them to what I found in previously flowed file's metadata.
+  Included ``configuration_file`` and ``pedestal_file``, and set them to what I found in previously flowed file's metadata. I think this was renamed from ``yamls/module0_flow/reco/charge/HitBuilder.yaml`` in the ``module0_flow``. In modules 2 and 3, the option ``network_agnostic: True`` is set. 
 
 * ``yamls/module1_flow/reco/charge/EventBuilder.yaml``
 
@@ -64,29 +64,29 @@ Charge
 
 3. ``yamls/module1_flow/workflows/combined/combined_reconstruction.yaml``
 
-   Copied and modified from ``yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml``. Only difference is that the ``.yaml`` files point to ``module1_flow`` specific files. ``proto_nd_flow`` only had a ``t0_reco`` step, whlie ``module0_flow`` has ``drift_reco``, ``electron_lifetime_corr``, ``tracklet_reco``, ``tracklet_merge``.
+   Copied and modified from ``yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml``. Only difference is that the ``.yaml`` files point to ``module1_flow`` specific files. ``proto_nd_flow`` only had a ``t0_reco`` step, while module[0,2,3]  have ``drift_reco``, ``electron_lifetime_corr``, ``tracklet_reco``, and module[0,2] have ``tracklet_merge``.
 
 * ``yamls/module1_flow/reco/combined/T0Reconstruction.yaml``
 
-  Copied from ``yamls/proto_nd_flow/reco/combined/T0Reconstruction.yaml``. No changes made.
+  Copied from ``yamls/proto_nd_flow/reco/combined/T0Reconstruction.yaml``. No changes made. Has an extra parameter compared to modules [0,2,3] called ``raw_hits_dset_name: 'charge/raw_hits'``.
 
 4. ``yamls/module1_flow/workflows/charge/prompt_calibration.yaml``
 
-   Copied and modified from yamls/proto_nd_flow/workflows/charge/prompt_calibration.yaml. Only difference is that the ``.yaml`` files point to ``module1_flow`` specific files.
+   Copied and modified from yamls/proto_nd_flow/workflows/charge/prompt_calibration.yaml. Only difference is that the ``.yaml`` files point to ``module1_flow`` specific files. I don't see a corresponding file for modules[0,2,3].
 
 * ``yamls/module1_flow/reco/charge/CalibHitBuilder.yaml``
 
   Copied and modified from ``yamls/proto_nd_flow/reco/charge/CalibHitBuilder.yaml``.
 
-  Added option for ``pedestal_file`` and ``configuration_file``, using inputs found in previoulsy flowed file metadata.
+  Added option for ``pedestal_file`` and ``configuration_file``, using inputs found in previoulsy flowed file metadata. I don't see this file for modules[0,2,3]
 
 5. ``yamls/module1_flow/workflows/charge/final_calibration.yaml``
 
-   Copied and modified from ``yamls/proto_nd_flow/workflows/charge/final_calibration.yaml``. Only difference is that ``.yaml`` files now point to ``module1_flow`` specific files.
+   Copied and modified from ``yamls/proto_nd_flow/workflows/charge/final_calibration.yaml``. Only difference is that ``.yaml`` files now point to ``module1_flow`` specific files. Don't see corresponding file for modules[0,2,3].
 
 * ``yamls/module1_flow/reco/charge/CalibHitMerger.yaml``
 
-  Copied and modified from ``yamls/proto_nd_flow/workflows/charge/final_calibration.yaml``.
+  Copied and modified from ``yamls/proto_nd_flow/reco/charge/CalibHitMerger.yaml``. Maybe corresponds to ``yamls/module0_flow/reco/charge/HitMerger.yaml`` in ``module0``? Doesn't exist for modules[2,3]
 
   Removed ``mc_hit_frac_dset_name``.
 
@@ -102,7 +102,7 @@ Light
 
 2. ``yamls/module1_flow/workflows/light/light_event_reconstruction.yaml``
 
-   Copied and modified from ``yamls/proto_nd_flow/workflows/light/light_event_reconstruction.yaml``. Only difference is that the ``.yaml`` files now point to a ``module1_flow`` specific file.
+   Copied and modified from ``yamls/proto_nd_flow/workflows/light/light_event_reconstruction.yaml``. Only difference is that the ``.yaml`` files now point to a ``module1_flow`` specific file. Compared to module 0 workflow, there are three extra steps: ``wvfm_calib``, ``sipm_hit_finder``, ``sum_hit_finder``.
 
 * ``yamls/module1_flow/reco/light/LightTimestampCorrector.yaml``
 
