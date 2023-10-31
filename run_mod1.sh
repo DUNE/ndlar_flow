@@ -10,12 +10,12 @@ light_data='/global/cfs/cdirs/dune/www/data/Module1/LRS/SingleModule_Jan22/0cd94
 
 output_dir='/global/cfs/cdirs/dune/users/kwresilo/data/module1/' 
 run='20220208_124818'
-outfile='_matched.h5'
+outfile='_matched_charge_ts_corrected.h5'
 
 #echo "RUNNING CHARGE RECO"
 #run charge building and reco
-#h5flow --nompi -c $workflow1 $workflow2\
-#    -i ${charge_data} -o ${output_dir}${run}${outfile}
+h5flow --nompi -c $workflow1 $workflow2\
+    -i ${charge_data} -o ${output_dir}${run}${outfile}
 
 echo "RUNNING LIGHT RECO"
 #run light reco

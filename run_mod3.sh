@@ -10,7 +10,7 @@ light_data='/global/cfs/cdirs/dune/www/data/Module3/run3/LRS/cosmic/0cd9414a_202
 
 output_dir='/global/cfs/cdirs/dune/users/kwresilo/data/module3/' 
 run='20230316_025421'
-outfile='_matched.h5'
+outfile='_matched_ts_corrected.h5'
 
 echo "RUNNING CHARGE RECO"
 #run charge building and reco
