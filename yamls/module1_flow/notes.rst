@@ -10,7 +10,7 @@ Resources
 
 * ``yamls/module1_flow/resources/Geometry.yaml``
 
-  Copied and modified from ``yamls/proto_nd_flow/resources/Geometry.yaml`` I set ``det_geometry_file`` to ``data/module1_flow/module0.yaml``. I don't know if that's alright, and I don't think module0 accepted that option. ``crs_geometry_file`` is set to what I found in previously flowed file's metadata. I kept ``lrs_geometry_file`` the same as in proto_nd_flow, but I don't know if that works. Also, some module workflows had ``network_agnostic`` True and others False. 
+  Copied and modified from ``yamls/proto_nd_flow/resources/Geometry.yaml`` I set ``det_geometry_file`` to ``data/module1_flow/module0.yaml``. I don't know if that's alright, and I don't think module0 accepted that option. ``crs_geometry_file`` is set to what I found in previously flowed file's metadata. I kept ``lrs_geometry_file`` the same as in proto_nd_flow, but I don't know if that works. Also, some module workflows had ``network_agnostic`` True and others False; not sure which is correct. 
 
 * ``yamls/module1_flow/resources/LArData.yaml``
 
@@ -55,7 +55,7 @@ Charge
 
   Copied and modified from ``yamls/proto_nd_flow/reco/charge/RawHitBuilder.yaml``
 
-  Included ``configuration_file`` and ``pedestal_file``, and set them to what I found in previously flowed file's metadata. I think this was renamed from ``yamls/module0_flow/reco/charge/HitBuilder.yaml`` in the ``module0_flow``. In module workflows 2 and 3, the option ``network_agnostic: True`` is set. 
+  Included ``configuration_file`` and ``pedestal_file``, and set them to what I found in previously flowed file's metadata. I think this was renamed from ``yamls/module0_flow/reco/charge/HitBuilder.yaml`` in the ``module0_flow``. In module workflows 2 and 3, the option ``network_agnostic: True`` is set. Not sure if we want this here too. 
 
 * ``yamls/module1_flow/reco/charge/EventBuilder.yaml``
 
@@ -118,7 +118,7 @@ Light
 
 * ``yamls/module1_flow/reco/light/WaveformAlign.yaml``
 
-  Copied from ``yamls/proto_nd_flow/reco/light/WaveformAlign.yaml``. Is ``sim_latency`` a simulation that should be removed? Other module workflows have ``busy_channel: All: 0`` parameter. 
+  Copied from ``yamls/proto_nd_flow/reco/light/WaveformAlign.yaml``. Is ``sim_latency`` a simulation parameter that should be removed? Other module workflows have ``busy_channel: All: 0`` parameter. 
 
 * ``yamls/module1_flow/reco/light/WaveformCalib.yaml``
 
