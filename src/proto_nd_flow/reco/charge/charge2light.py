@@ -150,31 +150,6 @@ class Charge2LightAssociation(H5FlowStage):
 
         return idcs
             
-
-    def match_on_timestamp(self, charge_unix_ts, charge_pps_ts):
-        unix_ts_start = charge_unix_ts.min()
-        unix_ts_end = charge_unix_ts.max()
-
-        if self.light_unix_ts_start >= unix_ts_end + self.unix_ts_window or \
-           self.light_unix_ts_end <= unix_ts_start - self.unix_ts_window:
-            # no overlap, short circuit
-            return np.empty((0, 2), dtype=int)
-
-        # subselect only portion of light events that overlaps with unix timestamps
-        i_min = np.argmax((self.light_unix_ts >= unix_ts_start - self.unix_ts_window))
-        i_max = len(self.light_unix_ts) - 1 - np.argmax((self.light_unix_ts <= unix_ts_end + self.unix_ts_window)[::-1])
-        sl = slice(i_min, i_max)
-
-        assoc_mat = (np.abs(self.light_unix_ts[sl].reshape(1, -1) - charge_unix_ts.reshape(-1, 1)) <= self.unix_ts_window) \
-                     & (np.abs(self.light_ts[sl].reshape(1, -1) - charge_pps_ts.reshape(-1, 1)) <= self.ts_window)
-        idcs = np.argwhere(assoc_mat)
-        if len(idcs):
-            idcs[:, 1] = self.light_event_id[sl][idcs[:, 1]]  # idcs now contains ext trigger index <-> global light event id
-        else:
-            idcs = np.empty((0,2), dtype=int)
-
-        return idcs        
-
     def run(self, source_name, source_slice, cache):
         super(Charge2LightAssociation, self).run(source_name, source_slice, cache)
 
