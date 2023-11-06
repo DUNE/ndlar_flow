@@ -1,13 +1,13 @@
 classname: TrackletReconstruction
 path: proto_nd_flow.util.tracklet_reco
 requires:
-  #- 'charge/calib_final_hits'
-  - 'charge/calib_prompt_hits'
+  - 'charge/calib_final_hits'
+  #- 'charge/calib_prompt_hits'
 params:
   # inputs
-  hits_dset_name: 'charge/calib_prompt_hits' #'charge/calib_final_hits'
-  charge_dset_name: 'charge/calib_prompt_hits' #'charge/calib_final_hits'
-  hit_drift_dset_name: 'charge/calib_prompt_hits' #'charge/calib_final_hits'
+  hits_dset_name: 'charge/calib_final_hits' #'charge/calib_prompt_hits'
+  charge_dset_name: 'charge/calib_final_hits' #'charge/calib_prompt_hits'
+  hit_drift_dset_name: 'charge/calib_final_hits' #'charge/calib_prompt_hits'
 
   # output
   tracklet_dset_name: 'combined/tracklets'
@@ -15,9 +15,9 @@ params:
   # configuration parameters
   #dbscan_eps: 2.5
   max_iterations: 1 
-  hdbscan_min_cluster_size: 20
-  hdbscan_min_samples: 20 
-  hdbscan_cluster_sel_eps: 2.488
+  hdbscan_min_cluster_size: 15
+  hdbscan_min_samples: 9 
+  hdbscan_cluster_sel_eps: 3.421
   ransac_min_samples: 2
   ransac_residual_threshold: 2.444
   ransac_max_trials: 5
