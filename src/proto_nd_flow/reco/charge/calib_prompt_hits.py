@@ -189,9 +189,9 @@ class CalibHitBuilder(H5FlowStage):
             drift_t = raw_hits_arr['ts_pps'] - hit_t0
 
             drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks)
-            z = resources['Geometry'].get_z_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
+            x = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
 
-            xy = resources['Geometry'].pixel_xy[packets_arr['io_group'],
+            zy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
             hit_uniqueid = (((packets_arr['io_group'].astype(int)) * 100000
@@ -206,11 +206,10 @@ class CalibHitBuilder(H5FlowStage):
             ped = np.array([self.pedestal[unique_id]['pedestal_mv']
                             for unique_id in hit_uniqueid_str])
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
-            # NOTE: swapping x <--> z coordinates so the z is ~ in the beam direction
-            #       dividing positions by 10 to convert from mm to cm
-            calib_hits_arr['x'] = z/10.
-            calib_hits_arr['y'] = xy[:,1]/10.
-            calib_hits_arr['z'] = xy[:,0]/10.
+            # NOTE: dividing positions by 10 to convert from mm to cm
+            calib_hits_arr['x'] = x/10.
+            calib_hits_arr['y'] = zy[:,1]/10.
+            calib_hits_arr['z'] = zy[:,0]/10.
             calib_hits_arr['ts_pps'] = raw_hits_arr['ts_pps']
             calib_hits_arr['t_drift'] = drift_t
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)

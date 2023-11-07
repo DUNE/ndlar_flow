@@ -145,11 +145,11 @@ class RawHitBuilder(H5FlowStage):
         # convert to hits array
         raw_hits_arr = np.zeros((n,), dtype=self.hits_dtype)
         if n:
-            xy = resources['Geometry'].pixel_xy[packets_arr['io_group'],
+            xy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
             print(min(tile_id), max(tile_id))
-            z = resources['Geometry'].anode_z[(tile_id,)]
+            z = resources['Geometry'].anode_drift_coordinate[(tile_id,)]
 
             raw_hits_arr['id'] = raw_hits_slice.start + np.arange(n, dtype=int)
             # NOTE: swapping x <--> z coordinates so the z is ~ in the beam direction

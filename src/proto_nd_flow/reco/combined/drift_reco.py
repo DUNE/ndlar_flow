@@ -71,7 +71,7 @@ class DriftReconstruction(H5FlowStage):
 
         drift_t = hits['ts'] - t0['ts']
         drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks)
-        z = resources['Geometry'].get_z_coordinate(hits['iogroup'], hits['iochannel'], drift_d)
+        z = resources['Geometry'].get_drift_coordinate(hits['iogroup'], hits['iochannel'], drift_d)
 
         drift_array = np.empty(hits['id'].compressed().shape, dtype=self.drift_dtype)
         drift_array['z'] = z.compressed()

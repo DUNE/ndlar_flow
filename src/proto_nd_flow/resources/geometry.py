@@ -21,13 +21,13 @@ class Geometry(H5FlowResource):
 
         Provides (for charge geometry):
          - ``pixel_pitch``: pixel pitch in mm
-         - ``pixel_xy``: lookup table for pixel (x,y) coordinates
+         - ``pixel_coordinates_2D``: lookup table for pixel (x,y) coordinates
          - ``tile_id``: lookup table for io channel tile ids
-         - ``anode_z``: lookup table for tile z coordinate
+         - ``anode_drift_coordinate``: lookup table for tile z coordinate
          - ``drift_dir``: lookup table for tile drift direction (±z)
          - ``regions``: drift regions minimum and maximum corners of TPC drift regions
          - ``in_fid()``: helper function for defining fiducial volumes
-         - ``get_z_coordinate()``: helper function for converting drift time to z coordinate
+         - ``get_drift_coordinate()``: helper function for converting drift time to z coordinate
 
         Provides (for light geometry):
          - ``tpc_id``: lookup table for TPC number for light detectors
@@ -88,9 +88,9 @@ class Geometry(H5FlowResource):
                                         pixel_pitch=self.pixel_pitch,
                                         crs_geometry_file=self.crs_geometry_file
                                         )
-            write_lut(self.data_manager, self.path, self.pixel_xy, 'pixel_xy')
+            write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
             write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
-            write_lut(self.data_manager, self.path, self.anode_z, 'anode_z')
+            write_lut(self.data_manager, self.path, self.anode_drift_coordinate, 'anode_drift_coordinate')
             write_lut(self.data_manager, self.path, self.drift_dir, 'drift_dir')
 
             write_lut(self.data_manager, self.path, self.tpc_id, 'tpc_id')
@@ -101,17 +101,17 @@ class Geometry(H5FlowResource):
 
             # load geometry from file
             self._pixel_pitch = self.data['pixel_pitch']
-            self._pixel_xy = read_lut(self.data_manager, self.path, 'pixel_xy')
+            self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
-            self._anode_z = read_lut(self.data_manager, self.path, 'anode_z')
+            self._anode_drift_coordinate = read_lut(self.data_manager, self.path, 'anode_drift_coordinate')
             self._drift_dir = read_lut(self.data_manager, self.path, 'drift_dir')
 
             self._tpc_id = read_lut(self.data_manager, self.path, 'tpc_id')
             self._det_id = read_lut(self.data_manager, self.path, 'det_id')
             self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
 
-        lut_size = (self.pixel_xy.nbytes + self.tile_id.nbytes
-                    + self.anode_z.nbytes + self.drift_dir.nbytes
+        lut_size = (self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
+                    + self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
                     + self.tpc_id.nbytes + self.det_id.nbytes
                     + self.det_bounds.nbytes) * 4
 
@@ -122,14 +122,14 @@ class Geometry(H5FlowResource):
     def _create_regions(self):
         self._regions = []
 
-        io_group, io_channel, chip_id, channel_id = self.pixel_xy.keys()
-        xy = self.pixel_xy[(io_group, io_channel, chip_id, channel_id)]
+        io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
+        xy = self.pixel_coordinates_2D[(io_group, io_channel, chip_id, channel_id)]
         tile_id = self.tile_id[(io_group, io_channel)]
-        anode_z = self.anode_z[(tile_id,)]
+        anode_drift_coordinate = self.anode_drift_coordinate[(tile_id,)]
         drift_dir = self.drift_dir[(tile_id,)]
 
-        anode_zs, inv = np.unique(anode_z, return_inverse=True)
-        for i, z in enumerate(anode_zs):
+        anode_drift_coordinates, inv = np.unique(anode_drift_coordinate, return_inverse=True)
+        for i, z in enumerate(anode_drift_coordinates):
             mask = (inv == i)
 
             min_x, max_x = xy[mask, 0].min(), xy[mask, 0].max()
@@ -147,14 +147,14 @@ class Geometry(H5FlowResource):
 
 
     @property
-    def pixel_xy(self):
+    def pixel_coordinates_2D(self):
         '''
-            Lookup table for pixel xy coordinate, usage::
+            Lookup table for pixel coordinates (2D), usage::
 
-                resource['Geometry'].pixel_xy[(io_group,io_channel,chip_id,channel_id)]
+                resource['Geometry'].pixel_coordinates_2D[(io_group,io_channel,chip_id,channel_id)]
 
         '''
-        return self._pixel_xy
+        return self._pixel_coordinates_2D
 
 
     @property
@@ -169,14 +169,14 @@ class Geometry(H5FlowResource):
 
 
     @property
-    def anode_z(self):
+    def anode_drift_coordinate(self):
         '''
-            Lookup table for anode z coordinate, usage::
+            Lookup table for anode drift coordinate, usage::
 
-                resource['Geometry'].anode_z[(tile_id,)]
+                resource['Geometry'].anode_drift_coordinate[(tile_id,)]
 
         '''
-        return self._anode_z
+        return self._anode_drift_coordinate
 
 
     @property
@@ -226,10 +226,10 @@ class Geometry(H5FlowResource):
         return in_any_fid
 
 
-    def get_z_coordinate(self, io_group, io_channel, drift):
+    def get_drift_coordinate(self, io_group, io_channel, drift):
         '''
             Convert a drift distance on a set of ``(io group, io channel)`` to
-            a z-coordinate.
+            the drift coordinate.
 
             :param io_group: io group to calculate z coordinate, ``shape: (N,)``
 
@@ -237,14 +237,14 @@ class Geometry(H5FlowResource):
 
             :param drift: drift distance [mm], ``shape: (N,)``
 
-            :returns: z coordinate [mm], ``shape: (N,)``
+            :returns: drift coordinate [mm], ``shape: (N,)``
 
         '''
         tile_id = self.tile_id[(io_group, io_channel)]
-        z_anode = self.anode_z[(np.array(tile_id),)]
+        anode_drift_coord = self.anode_drift_coordinate[(np.array(tile_id),)]
         drift_direction = self.drift_dir[(np.array(tile_id),)]
 
-        return z_anode.reshape(drift.shape) + \
+        return anode_drift_coord.reshape(drift.shape) + \
             drift_direction.reshape(drift.shape) * drift
 
     @staticmethod
@@ -448,21 +448,21 @@ class Geometry(H5FlowResource):
             for mod in det_geometry_yaml['module_to_io_groups']
         ]
  
-        pixel_xy_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
-        self._pixel_xy = LUT('f4', *pixel_xy_min_max, shape=(2,))
-        self._pixel_xy.default = 0.
+        pixel_coordinates_2D_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
+        self._pixel_coordinates_2D = LUT('f4', *pixel_coordinates_2D_min_max, shape=(2,))
+        self._pixel_coordinates_2D.default = 0.
     
         tile_min_max = [(min(v), len(det_geometry_yaml['module_to_io_groups'])*max(v)) for v in (io_groups, io_channels)]
         self._tile_id = LUT('i4', *tile_min_max)
         self._tile_id.default = -1
     
         anode_min_max = [(min(tiles), len(det_geometry_yaml['module_to_io_groups'])*max(tiles))]
-        self._anode_z = LUT('f4', *anode_min_max)
-        self._anode_z.default = 0.
+        self._anode_drift_coordinate = LUT('f4', *anode_min_max)
+        self._anode_drift_coordinate.default = 0.
         self._drift_dir = LUT('i1', *anode_min_max)
         self._drift_dir.default = 0.
 
-        self._anode_z[(tiles,)] = [tile_positions[(tile-1)%16+1][0]+10.*mod_centers[((tile-1)//16)%4][0] for tile in tiles]
+        self._anode_drift_coordinate[(tiles,)] = [tile_positions[(tile-1)%16+1][0]+10.*mod_centers[((tile-1)//16)%4][0] for tile in tiles]
 
         self._drift_dir[(tiles,)] = [tile_orientations[(tile-1)%16+1][0] for tile in tiles]
         for module_id in det_geometry_yaml['module_to_io_groups']:
@@ -499,4 +499,4 @@ class Geometry(H5FlowResource):
                     y += tile_positions[tile][1]
                     x += mod_centers[module_id-1][2]*10
                     y += mod_centers[module_id-1][1]*10
-                    self._pixel_xy[(io_group, io_channel, chip, channel)] = x, y
+                    self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = x, y
