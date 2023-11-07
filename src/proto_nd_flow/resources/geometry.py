@@ -417,9 +417,9 @@ class Geometry(H5FlowResource):
         mod_centers = det_geometry_yaml['tpc_offsets']
         tile_chip_to_io = geometry_yaml['tile_chip_to_io']
 
-        xs = np.array(list(chip_channel_to_position.values()))[:, 0] * self.pixel_pitch
+        zs = np.array(list(chip_channel_to_position.values()))[:, 0] * self.pixel_pitch
         ys = np.array(list(chip_channel_to_position.values()))[:, 1] * self.pixel_pitch
-        x_size = max(xs) - min(xs) + self.pixel_pitch
+        z_size = max(zs) - min(zs) + self.pixel_pitch
         y_size = max(ys) - min(ys) + self.pixel_pitch
 
         tile_geometry = {}
@@ -488,15 +488,15 @@ class Geometry(H5FlowResource):
                     io_group = io_group_io_channel // 1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
 
-                    x = chip_channel_to_position[chip_channel][0] * \
-                        self.pixel_pitch - x_size / 2 + self.pixel_pitch / 2
+                    z = chip_channel_to_position[chip_channel][0] * \
+                        self.pixel_pitch - z_size / 2 + self.pixel_pitch / 2
                     y = chip_channel_to_position[chip_channel][1] * \
                         self.pixel_pitch - y_size / 2 + self.pixel_pitch / 2
 
-                    x, y = self._rotate_pixel((x, y), tile_orientation)
+                    z, y = self._rotate_pixel((z, y), tile_orientation)
 
-                    x += tile_positions[tile][2]
+                    z += tile_positions[tile][2]
                     y += tile_positions[tile][1]
-                    x += mod_centers[module_id-1][2]*10
+                    z += mod_centers[module_id-1][2]*10
                     y += mod_centers[module_id-1][1]*10
-                    self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = x, y
+                    self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = z, y
