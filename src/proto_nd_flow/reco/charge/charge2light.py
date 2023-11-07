@@ -5,7 +5,7 @@ import logging
 
 from h5flow.core import H5FlowStage, resources
 from h5flow import H5FLOW_MPI
-import module0_flow.util.units as units
+import proto_nd_flow.util.units as units
 
 
 class Charge2LightAssociation(H5FlowStage):
@@ -87,16 +87,18 @@ class Charge2LightAssociation(H5FlowStage):
         self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['id'][:]
         self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
         self.light_unix_ts = self.data_manager.get_dset(self.light_event_dset_name)['utime_ms'][:]
+        self.light_unix_ts = self.light_unix_ts.mean(axis=-1)
         # reshape unix ts array to use with mask
-        self.light_unix_ts = self.light_unix_ts[:, :, np.newaxis]
-        self.light_unix_ts = np.where(self.light_event_mask, self.light_unix_ts, 0)
-        self.light_unix_ts = ma.array(self.light_unix_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
+        # self.light_unix_ts = self.light_unix_ts[:, :, np.newaxis]
+        # self.light_unix_ts = np.where(self.light_event_mask, self.light_unix_ts, 0)
+        # self.light_unix_ts = ma.array(self.light_unix_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
         self.light_unix_ts = self.light_unix_ts * (units.ms / units.s)  # convert ms -> s
         self.light_ts = self.data_manager.get_dset(self.light_event_dset_name)['tai_ns'][:]
+        self.light_ts = self.light_ts.mean(axis=-1)
         # reshape tai_ns array as above
-        self.light_ts = self.light_ts[:, :, np.newaxis]
-        self.light_ts =  np.where(self.light_event_mask, self.light_ts, 0)
-        self.light_ts = ma.array(self.light_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
+        # self.light_ts = self.light_ts[:, :, np.newaxis]
+        # self.light_ts =  np.where(self.light_event_mask, self.light_ts, 0)
+        # self.light_ts = ma.array(self.light_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
         if not resources['RunData'].is_mc:
             self.light_ts = self.light_ts % int(1e9)
         self.light_ts = self.light_ts * (units.ns / resources['RunData'].crs_ticks)  # convert ns -> larpix clock ticks
@@ -123,8 +125,7 @@ class Charge2LightAssociation(H5FlowStage):
             light_eff = self.total_matched_light/max(self.total_light_events, 1)
             print(f'Total charge trigger matching: {self.total_matched_triggers}/{self.total_charge_triggers} ({trigger_eff:0.04f})')
             print(f'Total charge event matching: {self.total_matched_events}/{self.total_charge_events} ({event_eff:0.04f})')
-            print(f'Total light event matching: {self.total_matched_light}/{self.total_light_events} ({light_eff:0.04f})')
-   
+            print(f'Total light event matching: {self.total_matched_light}/{self.total_light_events} ({light_eff:0.04f})') 
 
     def match_on_timestamp(self, charge_unix_ts, charge_pps_ts):
         unix_ts_start = charge_unix_ts.min()
@@ -143,6 +144,7 @@ class Charge2LightAssociation(H5FlowStage):
         assoc_mat = (np.abs(self.light_unix_ts[sl].reshape(1, -1) - charge_unix_ts.reshape(-1, 1)) <= self.unix_ts_window) \
                      & (np.abs(self.light_ts[sl].reshape(1, -1) - charge_pps_ts.reshape(-1, 1)) <= self.ts_window)
         idcs = np.argwhere(assoc_mat)
+        #idcs = 1000
         if len(idcs):
             idcs[:, 1] = self.light_event_id[sl][idcs[:, 1]]  # idcs now contains ext trigger index <-> global light event id
         else:
@@ -159,7 +161,7 @@ class Charge2LightAssociation(H5FlowStage):
         ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
 
         nevents = len(event_data)
-
+        print('nevents')
         ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int)
         ext_trig_ref = np.empty((0, 2), dtype=int)
         ev_ref = np.empty((0, 2), dtype=int)        
@@ -172,7 +174,6 @@ class Charge2LightAssociation(H5FlowStage):
                 ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
                 ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1, 1), ext_trigs_data.shape)[ext_trigs_mask]
                 ext_trigs_ts = ext_trigs_all['ts']
-
                 idcs = self.match_on_timestamp(ext_trigs_unix_ts, ext_trigs_ts)
 
                 if len(idcs):
