@@ -123,18 +123,18 @@ class Geometry(H5FlowResource):
         self._regions = []
 
         io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
-        xy = self.pixel_coordinates_2D[(io_group, io_channel, chip_id, channel_id)]
+        zy = self.pixel_coordinates_2D[(io_group, io_channel, chip_id, channel_id)]
         tile_id = self.tile_id[(io_group, io_channel)]
         anode_drift_coordinate = self.anode_drift_coordinate[(tile_id,)]
         drift_dir = self.drift_dir[(tile_id,)]
 
         anode_drift_coordinates, inv = np.unique(anode_drift_coordinate, return_inverse=True)
-        for i, z in enumerate(anode_drift_coordinates):
+        for i, x in enumerate(anode_drift_coordinates):
             mask = (inv == i)
 
-            min_x, max_x = xy[mask, 0].min(), xy[mask, 0].max()
-            min_y, max_y = xy[mask, 1].min(), xy[mask, 1].max()
-            min_z, max_z = (z * (drift_dir[mask][0] > 0), z * (drift_dir[mask][0] < 0))
+            min_x, max_x = (x * (drift_dir[mask][0] > 0), x * (drift_dir[mask][0] < 0))
+            min_y, max_y = zy[mask, 1].min(), zy[mask, 1].max()
+            min_z, max_z = zy[mask, 0].min(), zy[mask, 0].max()
 
             self._regions.append(np.array([[min_x, min_y, min_z],
                                            [max_x, max_y, max_z]]))
@@ -215,9 +215,9 @@ class Geometry(H5FlowResource):
             :returns: boolean array, ``shape: (N,)``, True indicates point is within fiducial volume
 
         '''
-        fid_cathode = np.array([field_cage_fid, field_cage_fid, cathode_fid])
-        fid_anode = np.array([field_cage_fid, field_cage_fid, anode_fid])
-        fid = [(fid_cathode, fid_anode) if np.around(boundary[0,2]) == 0 else (fid_anode, fid_cathode) for boundary in self.regions]
+        fid_cathode = np.array([cathode_fid, field_cage_fid, field_cage_fid])
+        fid_anode = np.array([anode_fid, field_cage_fid, field_cage_fid])
+        fid = [(fid_cathode, fid_anode) if np.around(boundary[0,0]) == 0 else (fid_anode, fid_cathode) for boundary in self.regions]
         coord_in_fid = ma.concatenate([np.expand_dims((xyz < np.expand_dims(boundary[1] - fid[i][1], 0))
                                                       & (xyz > np.expand_dims(boundary[0] + fid[i][0], 0)), axis=-1)
                                        for i,boundary in enumerate(self.regions)], axis=-1)
