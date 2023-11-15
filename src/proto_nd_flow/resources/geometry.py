@@ -21,13 +21,13 @@ class Geometry(H5FlowResource):
 
         Provides (for charge geometry):
          - ``pixel_pitch``: pixel pitch in mm
-         - ``pixel_coordinates_2D``: lookup table for pixel (x,y) coordinates
+         - ``pixel_coordinates_2D``: lookup table for pixel coordinates in pixel plane (2D)
          - ``tile_id``: lookup table for io channel tile ids
-         - ``anode_drift_coordinate``: lookup table for tile z coordinate
-         - ``drift_dir``: lookup table for tile drift direction (±z)
+         - ``anode_drift_coordinate``: lookup table for tile drift coordinate (x as of Spring 2023)
+         - ``drift_dir``: lookup table for tile drift direction (±x as of Spring 2023)
          - ``regions``: drift regions minimum and maximum corners of TPC drift regions
          - ``in_fid()``: helper function for defining fiducial volumes
-         - ``get_drift_coordinate()``: helper function for converting drift time to z coordinate
+         - ``get_drift_coordinate()``: helper function for converting drift time to drift coordinate (x as of Spring 2023)
 
         Provides (for light geometry):
          - ``tpc_id``: lookup table for TPC number for light detectors
