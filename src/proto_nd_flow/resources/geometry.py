@@ -8,6 +8,7 @@ from h5flow.core import resources
 
 from proto_nd_flow.util.lut import LUT, write_lut, read_lut
 from proto_nd_flow.util.compat import assert_compat_version
+import proto_nd_flow.util.units as units
 
 
 class Geometry(H5FlowResource):
@@ -24,10 +25,14 @@ class Geometry(H5FlowResource):
          - ``pixel_coordinates_2D``: lookup table for pixel coordinates in pixel plane (2D)
          - ``tile_id``: lookup table for io channel tile ids
          - ``anode_drift_coordinate``: lookup table for tile drift coordinate (x as of Spring 2023)
-         - ``drift_dir``: lookup table for tile drift direction (±x as of Spring 2023)
-         - ``regions``: drift regions minimum and maximum corners of TPC drift regions
+         - ``drift_dir``: lookup table for tile drift direction (±x direction as of Spring 2023;
+                          hard to use bc cathode is not at x=0 in 2x2)
+         - ``drift_regions``: drift regions minimum and maximum corners of TPC drift regions
+                              cathode drift coordinate is treated as minimum x coordinate and anode
+                              drift coordinate is treated as maximum x coordinate
          - ``in_fid()``: helper function for defining fiducial volumes
-         - ``get_drift_coordinate()``: helper function for converting drift time to drift coordinate (x as of Spring 2023)
+         - ``get_drift_coordinate()``: helper function for converting drift time to drift coordinate 
+                                       (x as of Spring 2023)
 
         Provides (for light geometry):
          - ``tpc_id``: lookup table for TPC number for light detectors
@@ -67,7 +72,7 @@ class Geometry(H5FlowResource):
         self.det_geometry_file = params.get('det_geometry_file', self.default_crs_geometry_file)
         self.crs_geometry_file = params.get('crs_geometry_file', self.default_crs_geometry_file)
         self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
-        self._regions = None  # active TPC regions
+        self._drift_regions = None  # active TPC drift regions
 
 
     def init(self, source_name):
@@ -86,6 +91,7 @@ class Geometry(H5FlowResource):
                                         classname=self.classname,
                                         class_version=self.class_version,
                                         pixel_pitch=self.pixel_pitch,
+                                        drift_regions=self.drift_regions,
                                         crs_geometry_file=self.crs_geometry_file
                                         )
             write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
@@ -101,6 +107,7 @@ class Geometry(H5FlowResource):
 
             # load geometry from file
             self._pixel_pitch = self.data['pixel_pitch']
+            self._drift_regions = self.data['drift_regions']
             self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
             self._anode_drift_coordinate = read_lut(self.data_manager, self.path, 'anode_drift_coordinate')
@@ -117,28 +124,6 @@ class Geometry(H5FlowResource):
 
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
-
-
-    def _create_regions(self):
-        self._regions = []
-
-        io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
-        zy = self.pixel_coordinates_2D[(io_group, io_channel, chip_id, channel_id)]
-        tile_id = self.tile_id[(io_group, io_channel)]
-        anode_drift_coordinate = self.anode_drift_coordinate[(tile_id,)]
-        drift_dir = self.drift_dir[(tile_id,)]
-
-        anode_drift_coordinates, inv = np.unique(anode_drift_coordinate, return_inverse=True)
-        for i, x in enumerate(anode_drift_coordinates):
-            mask = (inv == i)
-
-            min_x, max_x = (x * (drift_dir[mask][0] > 0), x * (drift_dir[mask][0] < 0))
-            min_y, max_y = zy[mask, 1].min(), zy[mask, 1].max()
-            min_z, max_z = zy[mask, 0].min(), zy[mask, 0].max()
-
-            self._regions.append(np.array([[min_x, min_y, min_z],
-                                           [max_x, max_y, max_z]]))
-
 
     @property
     def pixel_pitch(self):
@@ -191,15 +176,13 @@ class Geometry(H5FlowResource):
 
 
     @property
-    def regions(self):
+    def drift_regions(self):
         '''
             List of active volume extent for each TPC, each shape: ``(2,3)``
             representing the minimum xyz coordinate and the maximum xyz
             coordinate
         '''
-        if self._regions is None:
-            self._create_regions()
-        return self._regions
+        return self._drift_regions
 
 
     def in_fid(self, xyz, cathode_fid=0.0, field_cage_fid=0.0, anode_fid=0.0):
@@ -217,10 +200,10 @@ class Geometry(H5FlowResource):
         '''
         fid_cathode = np.array([cathode_fid, field_cage_fid, field_cage_fid])
         fid_anode = np.array([anode_fid, field_cage_fid, field_cage_fid])
-        fid = [(fid_cathode, fid_anode) if np.around(boundary[0,0]) == 0 else (fid_anode, fid_cathode) for boundary in self.regions]
+        fid = [(fid_cathode, fid_anode) if np.around(boundary[0,0]) == 0 else (fid_anode, fid_cathode) for boundary in self.drift_regions]
         coord_in_fid = ma.concatenate([np.expand_dims((xyz < np.expand_dims(boundary[1] - fid[i][1], 0))
                                                       & (xyz > np.expand_dims(boundary[0] + fid[i][0], 0)), axis=-1)
-                                       for i,boundary in enumerate(self.regions)], axis=-1)
+                                       for i,boundary in enumerate(self.drift_regions)], axis=-1)
         in_fid = ma.all(coord_in_fid, axis=1)
         in_any_fid = ma.any(in_fid, axis=-1)
         return in_any_fid
@@ -497,6 +480,37 @@ class Geometry(H5FlowResource):
 
                     z += tile_positions[tile][2]
                     y += tile_positions[tile][1]
-                    z += mod_centers[module_id-1][2]*10
-                    y += mod_centers[module_id-1][1]*10
+                    z += mod_centers[module_id-1][2]*units.cm # det geo yaml is in cm; here we convert to mm 
+                    y += mod_centers[module_id-1][1]*units.cm # det geo yaml is in cm; here we convert to mm
                     self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = z, y
+
+        self._drift_regions = []
+
+        io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
+        cathode_drift_coordinates = np.unique(np.array(mod_centers)[:,0])*units.cm # det geo yaml is in cm; here we convert to mm
+        unique_io_group, inv = np.unique(io_group, return_inverse=True)
+        
+        # Loop through io_groups
+        for i, group in enumerate(unique_io_group):
+            mask = (inv == i)
+
+            # Get zy coordinates for io_group
+            zy = self.pixel_coordinates_2D[(io_group[mask], io_channel[mask], chip_id[mask], channel_id[mask])]
+            
+            # Get x coordinates for anode and cathode corresponding to io_group
+            tile_id = self.tile_id[(io_group[mask], io_channel[mask])]
+            anode_drift_coordinate = np.unique(self.anode_drift_coordinate[(tile_id,)])[0]
+            cathode_drift_coordinate = cathode_drift_coordinates[0]
+            if abs(anode_drift_coordinate - cathode_drift_coordinates[1]) \
+                < abs(anode_drift_coordinate - cathode_drift_coordinate):
+                cathode_drift_coordinate = cathode_drift_coordinates[1]
+
+            # Assign min and max y,z coordinates for drift region
+            min_y, max_y = zy[:,1].min(), zy[:,1].max()
+            min_z, max_z = zy[:,0].min(), zy[:,0].max()
+
+            # Append drift region to _drift_regions list
+            self._drift_regions.append(np.array([[cathode_drift_coordinate, min_y, min_z],
+                                                 [anode_drift_coordinate, max_y, max_z]]))
+            
+        print("Drift Regions:", self._drift_regions)
