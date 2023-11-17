@@ -198,14 +198,52 @@ class Geometry(H5FlowResource):
             :returns: boolean array, ``shape: (N,)``, True indicates point is within fiducial volume
 
         '''
-        fid_cathode = np.array([cathode_fid, field_cage_fid, field_cage_fid])
-        fid_anode = np.array([anode_fid, field_cage_fid, field_cage_fid])
-        fid = [(fid_cathode, fid_anode) if np.around(boundary[0,0]) == 0 else (fid_anode, fid_cathode) for boundary in self.drift_regions]
-        coord_in_fid = ma.concatenate([np.expand_dims((xyz < np.expand_dims(boundary[1] - fid[i][1], 0))
-                                                      & (xyz > np.expand_dims(boundary[0] + fid[i][0], 0)), axis=-1)
-                                       for i,boundary in enumerate(self.drift_regions)], axis=-1)
-        in_fid = ma.all(coord_in_fid, axis=1)
-        in_any_fid = ma.any(in_fid, axis=-1)
+        # Define xyz coordinates of fiducial boundaries separately for each limiting boundary
+        fid_cathode = np.array([cathode_fid, 0., 0.])
+        fid_anode = np.array([anode_fid, 0., 0.])
+        fid_field_cage = np.array([0., field_cage_fid, field_cage_fid])
+
+        drift_regions_fid = self.drift_regions
+        num_tpcs = len(drift_regions_fid)
+        drift_dir = np.ones(num_tpcs, dtype=int)
+        coord_in_fid = np.zeros(num_tpcs, dtype=bool)
+
+        # Loop through drift regions
+        # Notes: Cases are separated by drift direction because drift region boundaries are 
+        #       defined using the convention [[cathode_x, min_y, min_z], [anode_x, max_y, max_z]]
+        #       Positive drift direction: anode_x > cathode_x
+        #       Negative drift direction: anode_x < cathode_x
+        for i in range(num_tpcs):
+
+            # Redefine drift regions to account for fiducial boundaries
+            if drift_regions_fid[i][0][0] < drift_regions_fid[i][1][0]:
+
+                drift_regions_fid[i][0] = drift_regions_fid[i][0] + fid_cathode + fid_field_cage
+                drift_regions_fid[i][1] = drift_regions_fid[i][1] - fid_anode - fid_field_cage
+            
+            elif drift_regions_fid[i][0][0] > drift_regions_fid[i][1][0]:
+
+                drift_dir[i] = -1
+                drift_regions_fid[i][0] = drift_regions_fid[i][0] - fid_cathode + fid_field_cage
+                drift_regions_fid[i][1] = drift_regions_fid[i][1] + fid_anode - fid_field_cage
+
+            else:
+                raise ValueError('Drift distance is 0.')
+
+            # Check if xyz point is in each fiducial drift region
+            if drift_dir[i] == 1:
+                coord_in_fid[i] = ma.all([np.expand_dims((xyz > np.expand_dims(drift_regions_fid[i][0], 0))
+                                                       & (xyz < np.expand_dims(drift_regions_fid[i][1], 0)), axis=-1)], axis=1)
+            elif drift_dir[i] == -1:
+                coord_in_fid[i] = ma.all([np.expand_dims((xyz[0] < np.expand_dims(drift_regions_fid[i][0][0], 0))
+                                                       & (xyz[0] > np.expand_dims(drift_regions_fid[i][1][0], 0))
+                                                       & (xyz[1:] > np.expand_dims(drift_regions_fid[i][0][1:], 0))
+                                                       & (xyz[1:] < np.expand_dims(drift_regions_fid[i][1][1:], 0)), axis=-1)], axis=1)
+
+            else: 
+                raise ValueError('Drift direction is invalid.')
+        
+        in_any_fid = ma.any(coord_in_fid, axis=-1)
         return in_any_fid
 
 
@@ -497,6 +535,10 @@ class Geometry(H5FlowResource):
             # Get zy coordinates for io_group
             zy = self.pixel_coordinates_2D[(io_group[mask], io_channel[mask], chip_id[mask], channel_id[mask])]
             
+            # Assign min and max y,z coordinates for drift region
+            min_y, max_y = zy[:,1].min(), zy[:,1].max()
+            min_z, max_z = zy[:,0].min(), zy[:,0].max()
+
             # Get x coordinates for anode and cathode corresponding to io_group
             tile_id = self.tile_id[(io_group[mask], io_channel[mask])]
             anode_drift_coordinate = np.unique(self.anode_drift_coordinate[(tile_id,)])[0]
@@ -504,10 +546,6 @@ class Geometry(H5FlowResource):
             if abs(anode_drift_coordinate - cathode_drift_coordinates[1]) \
                 < abs(anode_drift_coordinate - cathode_drift_coordinate):
                 cathode_drift_coordinate = cathode_drift_coordinates[1]
-
-            # Assign min and max y,z coordinates for drift region
-            min_y, max_y = zy[:,1].min(), zy[:,1].max()
-            min_z, max_z = zy[:,0].min(), zy[:,0].max()
 
             # Append drift region to _drift_regions list
             self._drift_regions.append(np.array([[cathode_drift_coordinate, min_y, min_z],
