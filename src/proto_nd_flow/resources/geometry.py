@@ -232,13 +232,15 @@ class Geometry(H5FlowResource):
 
             # Check if xyz point is in each fiducial drift region
             if drift_dir[i] == 1:
-                coord_in_fid[i] = ma.all([np.expand_dims((xyz > np.expand_dims(drift_regions_fid[i][0], 0))
-                                                       & (xyz < np.expand_dims(drift_regions_fid[i][1], 0)), axis=-1)], axis=1)
+                coord_in_fid[i] = ma.all(ma.concatenate(\
+                    [np.expand_dims((xyz > np.expand_dims(drift_regions_fid[i][0], 0))
+                                  & (xyz < np.expand_dims(drift_regions_fid[i][1], 0)), axis=-1)]), axis=1)
             elif drift_dir[i] == -1:
-                coord_in_fid[i] = ma.all([np.expand_dims((xyz[0] < np.expand_dims(drift_regions_fid[i][0][0], 0))
-                                                       & (xyz[0] > np.expand_dims(drift_regions_fid[i][1][0], 0))
-                                                       & (xyz[1:] > np.expand_dims(drift_regions_fid[i][0][1:], 0))
-                                                       & (xyz[1:] < np.expand_dims(drift_regions_fid[i][1][1:], 0)), axis=-1)], axis=1)
+                coord_in_fid[i] = ma.all(ma.concatenate(\
+                    [np.expand_dims((xyz[0] < np.expand_dims(drift_regions_fid[i][0][0], 0))
+                                  & (xyz[0] > np.expand_dims(drift_regions_fid[i][1][0], 0))
+                                  & (xyz[1:] > np.expand_dims(drift_regions_fid[i][0][1:], 0))
+                                  & (xyz[1:] < np.expand_dims(drift_regions_fid[i][1][1:], 0)), axis=-1)]), axis=1)
 
             else: 
                 raise ValueError('Drift direction is invalid.')
