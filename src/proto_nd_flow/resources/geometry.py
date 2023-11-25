@@ -25,8 +25,7 @@ class Geometry(H5FlowResource):
          - ``pixel_coordinates_2D``: lookup table for pixel coordinates in pixel plane (2D)
          - ``tile_id``: lookup table for io channel tile ids
          - ``anode_drift_coordinate``: lookup table for tile drift coordinate (x as of Spring 2023)
-         - ``drift_dir``: lookup table for tile drift direction (±x direction as of Spring 2023;
-                          hard to use bc cathode is not at x=0 in 2x2)
+         - ``drift_dir``: lookup table for tile drift direction (either ±x direction as of Spring 2023)
          - ``drift_regions``: drift regions minimum and maximum corners of TPC drift regions
                               cathode drift coordinate is treated as minimum x coordinate and anode
                               drift coordinate is treated as maximum x coordinate
@@ -205,7 +204,7 @@ class Geometry(H5FlowResource):
 
         drift_regions_fid = self.drift_regions
         num_tpcs = len(drift_regions_fid)
-        drift_dir = np.ones(num_tpcs, dtype=int)
+        drift_direction = np.ones(num_tpcs, dtype=int) # Start with default positive drift direction
         coord_in_fid = np.zeros(num_tpcs, dtype=bool)
 
         # Loop through drift regions
@@ -223,7 +222,7 @@ class Geometry(H5FlowResource):
             
             elif drift_regions_fid[i][0][0] > drift_regions_fid[i][1][0]:
 
-                drift_dir[i] = -1
+                drift_direction[i] = -1 # Record negative drift direction
                 drift_regions_fid[i][0] = drift_regions_fid[i][0] - fid_cathode + fid_field_cage
                 drift_regions_fid[i][1] = drift_regions_fid[i][1] + fid_anode - fid_field_cage
 
@@ -231,11 +230,11 @@ class Geometry(H5FlowResource):
                 raise ValueError('Drift distance is 0.')
 
             # Check if xyz point is in each fiducial drift region
-            if drift_dir[i] == 1:
+            if drift_direction[i] == 1:
                 coord_in_fid[i] = ma.all(ma.concatenate(\
                     [np.expand_dims((xyz > np.expand_dims(drift_regions_fid[i][0], 0))
                                   & (xyz < np.expand_dims(drift_regions_fid[i][1], 0)), axis=-1)]), axis=1)
-            elif drift_dir[i] == -1:
+            elif drift_direction[i] == -1:
                 coord_in_fid[i] = ma.all(ma.concatenate(\
                     [np.expand_dims((xyz[0] < np.expand_dims(drift_regions_fid[i][0][0], 0))
                                   & (xyz[0] > np.expand_dims(drift_regions_fid[i][1][0], 0))
@@ -485,7 +484,8 @@ class Geometry(H5FlowResource):
         self._drift_dir = LUT('i1', *anode_min_max)
         self._drift_dir.default = 0.
 
-        self._anode_drift_coordinate[(tiles,)] = [tile_positions[(tile-1)%16+1][0]+10.*mod_centers[((tile-1)//16)%4][0] for tile in tiles]
+        # Warning: number of tiles (16) and number of modules (4) are hard-coded here
+        self._anode_drift_coordinate[(tiles,)] = [tile_positions[(tile-1)%16+1][0]+units.cm*mod_centers[((tile-1)//16)%4][0] for tile in tiles] # det geo yaml is in cm; here we convert to mm
 
         self._drift_dir[(tiles,)] = [tile_orientations[(tile-1)%16+1][0] for tile in tiles]
         for module_id in det_geometry_yaml['module_to_io_groups']:
@@ -553,4 +553,4 @@ class Geometry(H5FlowResource):
             self._drift_regions.append(np.array([[cathode_drift_coordinate, min_y, min_z],
                                                  [anode_drift_coordinate, max_y, max_z]]))
             
-        print("Drift Regions:", self._drift_regions)
+        #print("Drift Regions:", self._drift_regions)
