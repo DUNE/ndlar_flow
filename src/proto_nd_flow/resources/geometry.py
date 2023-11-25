@@ -13,7 +13,9 @@ import proto_nd_flow.util.units as units
 
 class Geometry(H5FlowResource):
     '''
-        Provides helper functions for looking up geometric properties
+        Provides helper functions for looking up geometric properties. 
+        **!! Unlike previous versions of this module, all output attributes and datasets
+        are saved in units of cm !!**
 
         Parameters:
          - ``path``: ``str``, path to stored geometry data within file
@@ -21,14 +23,15 @@ class Geometry(H5FlowResource):
          - ``lrs_geometry_file``: ``str``, path to yaml file describing light readout system
 
         Provides (for charge geometry):
-         - ``pixel_pitch``: pixel pitch in mm
-         - ``pixel_coordinates_2D``: lookup table for pixel coordinates in pixel plane (2D)
-         - ``tile_id``: lookup table for io channel tile ids
-         - ``anode_drift_coordinate``: lookup table for tile drift coordinate (x as of Spring 2023)
+         - ``pixel_pitch``            [attr]: distance between pixel centers 
+         - ``cathode_thickness``      [attr]: thickness of cathode [cm]
+         - ``lar_detector_bounds``    [attr]: min and max xyz coordinates for full LAr detector [cm]
+         - ``module_RO_bounds``       [attr]: min and max xyz coordinates for each pixel LArTPC module [cm]
+         - ``max_drift_distance``     [attr]: max drift distance in each LArTPC (2 TPCs per module) [cm]   
+         - ``pixel_coordinates_2D``   [dset]: lookup table for pixel coordinates in 2D pixel plane
+         - ``tile_id``                [dset]: lookup table for io channel tile ids 
+         - ``anode_drift_coordinate`` [dset]: lookup table for tile drift coordinate (x as of Spring 2023)
          - ``drift_dir``: lookup table for tile drift direction (either ±x direction as of Spring 2023)
-         - ``drift_regions``: drift regions minimum and maximum corners of TPC drift regions
-                              cathode drift coordinate is treated as minimum x coordinate and anode
-                              drift coordinate is treated as maximum x coordinate
          - ``in_fid()``: helper function for defining fiducial volumes
          - ``get_drift_coordinate()``: helper function for converting drift time to drift coordinate 
                                        (x as of Spring 2023)
@@ -71,7 +74,10 @@ class Geometry(H5FlowResource):
         self.det_geometry_file = params.get('det_geometry_file', self.default_crs_geometry_file)
         self.crs_geometry_file = params.get('crs_geometry_file', self.default_crs_geometry_file)
         self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
-        self._drift_regions = None  # active TPC drift regions
+        self._cathode_thickness = 0.0 # thickness of cathode [cm]
+        self._lar_detector_bounds = None # min and max xyz coordinates for full LAr detector
+        self._module_RO_bounds = None # min and max xyz coordinates for each pixel LArTPC module
+        self._max_drift_distance = None # max drift distance in each LArTPC (2 TPCs per module)
 
 
     def init(self, source_name):
@@ -90,7 +96,10 @@ class Geometry(H5FlowResource):
                                         classname=self.classname,
                                         class_version=self.class_version,
                                         pixel_pitch=self.pixel_pitch,
-                                        drift_regions=self.drift_regions,
+                                        cathode_thickness=self.cathode_thickness,
+                                        lar_detector_bounds=self.lar_detector_bounds,
+                                        module_RO_bounds=self.module_RO_bounds,
+                                        max_drift_distance=self.max_drift_distance,
                                         crs_geometry_file=self.crs_geometry_file
                                         )
             write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
@@ -106,7 +115,10 @@ class Geometry(H5FlowResource):
 
             # load geometry from file
             self._pixel_pitch = self.data['pixel_pitch']
-            self._drift_regions = self.data['drift_regions']
+            self._cathode_thickness = self.data['cathode_thickness']
+            self._lar_detector_bounds = self.data['lar_detector_bounds']
+            self._module_RO_bounds = self.data['module_RO_bounds']
+            self._max_drift_distance = self.data['max_drift_distance']
             self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
             self._anode_drift_coordinate = read_lut(self.data_manager, self.path, 'anode_drift_coordinate')
@@ -126,9 +138,45 @@ class Geometry(H5FlowResource):
 
     @property
     def pixel_pitch(self):
-        ''' Pixel pitch in mm '''
+        ''' Distance between pixel centers [cm] '''
         return self._pixel_pitch
+    
 
+    @property
+    def cathode_thickness(self):
+        ''' Thickness of cathode [cm] '''
+        return self._cathode_thickness
+    
+
+    @property
+    def lar_detector_bounds(self):
+        '''
+            Array of shape ``(2,3)`` representing the minimum xyz coordinate 
+            and the maximum xyz coordinate for the full LAr detector being studied
+            (e.g. single module, 2x2, ND-LAr, etc.) [cm]
+        '''
+        return self._lar_detector_bounds
+    
+
+    @property
+    def module_RO_bounds(self):
+        '''
+            List of active volume extent for each module, each shape: ``(2,3)`` 
+            representing the minimum xyz coordinate and the maximum xyz coordinate  
+            for each module in the LAr detector [cm]
+        '''
+        return self._module_RO_bounds
+
+
+    @property
+    def max_drift_distance(self):
+        '''
+            Maximum possible drift distance for ionization electrons in each TPC (2 TPCs
+            per module). Assuming a zero-thickness cathode, this is the distance between 
+            the cathode and one of the two anodes in a module [cm]
+        '''
+        return self._max_drift_distance
+    
 
     @property
     def pixel_coordinates_2D(self):
@@ -172,16 +220,6 @@ class Geometry(H5FlowResource):
 
         '''
         return self._drift_dir
-
-
-    @property
-    def drift_regions(self):
-        '''
-            List of active volume extent for each TPC, each shape: ``(2,3)``
-            representing the minimum xyz coordinate and the maximum xyz
-            coordinate
-        '''
-        return self._drift_regions
 
 
     def in_fid(self, xyz, cathode_fid=0.0, field_cage_fid=0.0, anode_fid=0.0):
@@ -431,13 +469,13 @@ class Geometry(H5FlowResource):
             raise RuntimeError('Only multi-tile geometry configurations are accepted')
 
         self._pixel_pitch = geometry_yaml['pixel_pitch']
+        self._max_drift_distance = det_geometry_yaml['drift_length']
         chip_channel_to_position = geometry_yaml['chip_channel_to_position']
         tile_orientations = geometry_yaml['tile_orientations']
         tile_positions = geometry_yaml['tile_positions']
-        tpc_centers = geometry_yaml['tpc_centers']
-        tile_indeces = geometry_yaml['tile_indeces']
         mod_centers = det_geometry_yaml['tpc_offsets']
         tile_chip_to_io = geometry_yaml['tile_chip_to_io']
+        module_to_io_groups = det_geometry_yaml['module_to_io_groups']
 
         zs = np.array(list(chip_channel_to_position.values()))[:, 0] * self.pixel_pitch
         ys = np.array(list(chip_channel_to_position.values()))[:, 1] * self.pixel_pitch
@@ -451,34 +489,34 @@ class Geometry(H5FlowResource):
             geometry_yaml['tile_chip_to_io'][tile][chip] // 1000 * (mod-1)*2
             for tile in geometry_yaml['tile_chip_to_io']
             for chip in geometry_yaml['tile_chip_to_io'][tile]
-            for mod in det_geometry_yaml['module_to_io_groups']
+            for mod in module_to_io_groups
         ]
         io_channels = [
             geometry_yaml['tile_chip_to_io'][tile][chip] % 1000
             for tile in geometry_yaml['tile_chip_to_io']
             for chip in geometry_yaml['tile_chip_to_io'][tile]
-            for mod in det_geometry_yaml['module_to_io_groups']
+            for mod in module_to_io_groups
         ]
         chip_ids = [
             chip_channel // 1000
             for chip_channel in geometry_yaml['chip_channel_to_position']
-            for mod in det_geometry_yaml['module_to_io_groups']
+            for mod in module_to_io_groups
         ]
         channel_ids = [
             chip_channel % 1000
             for chip_channel in geometry_yaml['chip_channel_to_position']
-            for mod in det_geometry_yaml['module_to_io_groups']
+            for mod in module_to_io_groups
         ]
  
         pixel_coordinates_2D_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
         self._pixel_coordinates_2D = LUT('f4', *pixel_coordinates_2D_min_max, shape=(2,))
         self._pixel_coordinates_2D.default = 0.
     
-        tile_min_max = [(min(v), len(det_geometry_yaml['module_to_io_groups'])*max(v)) for v in (io_groups, io_channels)]
+        tile_min_max = [(min(v), len(module_to_io_groups)*max(v)) for v in (io_groups, io_channels)]
         self._tile_id = LUT('i4', *tile_min_max)
         self._tile_id.default = -1
     
-        anode_min_max = [(min(tiles), len(det_geometry_yaml['module_to_io_groups'])*max(tiles))]
+        anode_min_max = [(min(tiles), len(module_to_io_groups)*max(tiles))]
         self._anode_drift_coordinate = LUT('f4', *anode_min_max)
         self._anode_drift_coordinate.default = 0.
         self._drift_dir = LUT('i1', *anode_min_max)
@@ -488,7 +526,10 @@ class Geometry(H5FlowResource):
         self._anode_drift_coordinate[(tiles,)] = [tile_positions[(tile-1)%16+1][0]+units.cm*mod_centers[((tile-1)//16)%4][0] for tile in tiles] # det geo yaml is in cm; here we convert to mm
 
         self._drift_dir[(tiles,)] = [tile_orientations[(tile-1)%16+1][0] for tile in tiles]
-        for module_id in det_geometry_yaml['module_to_io_groups']:
+        self._module_RO_bounds = []
+
+        # Loop through modules
+        for module_id in module_to_io_groups:
             for tile in tile_chip_to_io:
                 tile_orientation = tile_orientations[tile]
                 tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
@@ -524,33 +565,61 @@ class Geometry(H5FlowResource):
                     y += mod_centers[module_id-1][1]*units.cm # det geo yaml is in cm; here we convert to mm
                     self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = z, y
 
-        self._drift_regions = []
+            io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
+            min_x, max_x = -999999999, 999999999
+            min_y, max_y = -999999999, 999999999
+            min_z, max_z = -999999999, 999999999
+            
+            # Loop through io_groups
+            for iog in module_to_io_groups[module_id]:
+                
+                mask = (io_group == iog)
 
-        io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
-        cathode_drift_coordinates = np.unique(np.array(mod_centers)[:,0])*units.cm # det geo yaml is in cm; here we convert to mm
-        unique_io_group, inv = np.unique(io_group, return_inverse=True)
+                # Get zy coordinates for io_group
+                zy = self.pixel_coordinates_2D[(io_group[mask], io_channel[mask], chip_id[mask], channel_id[mask])]
+            
+                if (abs(min_y) == 999999999) and (abs(max_y) == 999999999) \
+                    and (abs(min_z) == 999999999) and (abs(max_z) == 999999999):
+
+                    # Assign min and max y,z coordinates for initial io_group
+                    min_y, max_y = zy[:,1].min(), zy[:,1].max()
+                    min_z, max_z = zy[:,0].min(), zy[:,0].max()
+
+                else:
+                    # Update min and max y,z coordinates based on subsequent io_group
+                    min_y, max_y = min(min_y, zy[:,1].min()), max(max_y, zy[:,1].max())
+                    min_z, max_z = min(min_z, zy[:,0].min()), max(max_z, zy[:,0].max())
+
+                # Get x coordinates for anode corresponding to io_group
+                tile_id = self.tile_id[(io_group[mask], io_channel[mask])]
+                anode_drift_coordinate = np.unique(self.anode_drift_coordinate[(tile_id,)])[0]
+
+                if (abs(min_x) == 999999999) and (abs(max_x) == 999999999):
+
+                    min_x, max_x = anode_drift_coordinate, anode_drift_coordinate
+
+                else: 
+                    min_x, max_x = min(min_x, anode_drift_coordinate), max(max_x, anode_drift_coordinate)
+
+
+            # Append module boundaries to module readout bounds list
+            self._module_RO_bounds.append(np.array([[min_x, min_y, min_z],
+                                                    [max_x, max_y, max_z]]))
+            
+        self._module_RO_bounds = np.array(self._module_RO_bounds)
+        self._lar_detector_bounds = np.array([np.amin(self._module_RO_bounds[:,:,0], axis=0),
+                                              np.amax(self._module_RO_bounds[:,:,1], axis=0)])
         
-        # Loop through io_groups
-        for i, group in enumerate(unique_io_group):
-            mask = (inv == i)
+        cathode_x_coords = np.unique(np.array(mod_centers)[:,0])
+        anode_to_cathode = np.min(np.array([abs(self._lar_detector_bounds[0][0] - cathode_x)
+                                            for cathode_x in cathode_x_coords]))
+        if self._max_drift_distance < anode_to_cathode:
+            # Difference b/w max drift dist and anode-cathode dist is 1/2 cathode thickness
+            self._cathode_thickness = abs(anode_to_cathode - self._max_drift_distance) * 2.0
+        else: 
+            self._cathode_thickness = 0.0
 
-            # Get zy coordinates for io_group
-            zy = self.pixel_coordinates_2D[(io_group[mask], io_channel[mask], chip_id[mask], channel_id[mask])]
-            
-            # Assign min and max y,z coordinates for drift region
-            min_y, max_y = zy[:,1].min(), zy[:,1].max()
-            min_z, max_z = zy[:,0].min(), zy[:,0].max()
-
-            # Get x coordinates for anode and cathode corresponding to io_group
-            tile_id = self.tile_id[(io_group[mask], io_channel[mask])]
-            anode_drift_coordinate = np.unique(self.anode_drift_coordinate[(tile_id,)])[0]
-            cathode_drift_coordinate = cathode_drift_coordinates[0]
-            if abs(anode_drift_coordinate - cathode_drift_coordinates[1]) \
-                < abs(anode_drift_coordinate - cathode_drift_coordinate):
-                cathode_drift_coordinate = cathode_drift_coordinates[1]
-
-            # Append drift region to _drift_regions list
-            self._drift_regions.append(np.array([[cathode_drift_coordinate, min_y, min_z],
-                                                 [anode_drift_coordinate, max_y, max_z]]))
-            
-        #print("Drift Regions:", self._drift_regions)
+        print("Module RO Bounds:", self._module_RO_bounds)
+        print("LAr Detector Bounds:", self._lar_detector_bounds)
+        print("Max Drift Distance:", self._max_drift_distance)
+        print("Cathode Thickness:", self._cathode_thickness)
