@@ -14,15 +14,18 @@ import proto_nd_flow.util.units as units
 class Geometry(H5FlowResource):
     '''
         Provides helper functions for looking up geometric properties. 
-        **!! Unlike previous versions of this module, all output attributes and datasets
-        are saved in units of cm !!**
+        **!! All output attributes and datasets are saved in units of cm !!**
 
         Parameters:
          - ``path``: ``str``, path to stored geometry data within file
          - ``crs_geometry_file``: ``str``, path to yaml file describing charge readout system geometry
          - ``lrs_geometry_file``: ``str``, path to yaml file describing light readout system
+         - ``beam_direction``: ``str``, Cartesian coordinate of beam direction, e.g. ``'x'``, ``'y'``, ``'z'``
+         - ``drift_direction``: ``str``, Cartesian coordinate of drift direction, e.g. ``'x'``, ``'y'``, ``'z'``
 
         Provides (for charge geometry):
+         - ``beam_direction``         [attr]: Cartesian coordinate of beam direction
+         - ``drift_direction``        [attr]: Cartesian coordinate of drift direction
          - ``pixel_pitch``            [attr]: distance between pixel centers 
          - ``cathode_thickness``      [attr]: thickness of cathode [cm]
          - ``lar_detector_bounds``    [attr]: min and max xyz coordinates for full LAr detector [cm]
@@ -65,6 +68,8 @@ class Geometry(H5FlowResource):
     default_det_geometry_file = '-'
     default_crs_geometry_file = '-'
     default_lrs_geometry_file = '-'
+    default_beam_direction    = 'z'
+    default_drift_direction   = 'x'
 
 
     def __init__(self, **params):
@@ -74,6 +79,8 @@ class Geometry(H5FlowResource):
         self.det_geometry_file = params.get('det_geometry_file', self.default_crs_geometry_file)
         self.crs_geometry_file = params.get('crs_geometry_file', self.default_crs_geometry_file)
         self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
+        self.beam_direction = params.get('beam_direction', self.default_beam_direction)
+        self.drift_direction = params.get('drift_direction', self.default_drift_direction)
         self._cathode_thickness = 0.0 # thickness of cathode [cm]
         self._lar_detector_bounds = None # min and max xyz coordinates for full LAr detector
         self._module_RO_bounds = None # min and max xyz coordinates for each pixel LArTPC module
@@ -100,7 +107,9 @@ class Geometry(H5FlowResource):
                                         lar_detector_bounds=self.lar_detector_bounds,
                                         module_RO_bounds=self.module_RO_bounds,
                                         max_drift_distance=self.max_drift_distance,
-                                        crs_geometry_file=self.crs_geometry_file
+                                        crs_geometry_file=self.crs_geometry_file, 
+                                        beam_direction=self.beam_direction,
+                                        drift_direction=self.drift_direction
                                         )
             write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
             write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
@@ -136,6 +145,8 @@ class Geometry(H5FlowResource):
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
 
+
+    ## Charge geometry methods ##
     @property
     def pixel_pitch(self):
         ''' Distance between pixel centers [cm] '''
@@ -161,7 +172,7 @@ class Geometry(H5FlowResource):
     @property
     def module_RO_bounds(self):
         '''
-            List of active volume extent for each module, each shape: ``(2,3)`` 
+            Array of active volume extent for each module shape: ``(# modules,2,3)`` 
             representing the minimum xyz coordinate and the maximum xyz coordinate  
             for each module in the LAr detector [cm]
         '''
@@ -235,54 +246,36 @@ class Geometry(H5FlowResource):
             :returns: boolean array, ``shape: (N,)``, True indicates point is within fiducial volume
 
         '''
-        # Define xyz coordinates of fiducial boundaries separately for each limiting boundary
-        fid_cathode = np.array([cathode_fid, 0., 0.])
-        fid_anode = np.array([anode_fid, 0., 0.])
-        fid_field_cage = np.array([0., field_cage_fid, field_cage_fid])
+        # Define xyz coordinates of fiducial boundaries
+        fid_cathode = np.array([cathode_fid, field_cage_fid, field_cage_fid])
+        fid_anode = np.array([anode_fid, field_cage_fid, field_cage_fid])
 
-        drift_regions_fid = self.drift_regions
-        num_tpcs = len(drift_regions_fid)
-        drift_direction = np.ones(num_tpcs, dtype=int) # Start with default positive drift direction
-        coord_in_fid = np.zeros(num_tpcs, dtype=bool)
-
-        # Loop through drift regions
-        # Notes: Cases are separated by drift direction because drift region boundaries are 
-        #       defined using the convention [[cathode_x, min_y, min_z], [anode_x, max_y, max_z]]
-        #       Positive drift direction: anode_x > cathode_x
-        #       Negative drift direction: anode_x < cathode_x
-        for i in range(num_tpcs):
-
-            # Redefine drift regions to account for fiducial boundaries
-            if drift_regions_fid[i][0][0] < drift_regions_fid[i][1][0]:
-
-                drift_regions_fid[i][0] = drift_regions_fid[i][0] + fid_cathode + fid_field_cage
-                drift_regions_fid[i][1] = drift_regions_fid[i][1] - fid_anode - fid_field_cage
-            
-            elif drift_regions_fid[i][0][0] > drift_regions_fid[i][1][0]:
-
-                drift_direction[i] = -1 # Record negative drift direction
-                drift_regions_fid[i][0] = drift_regions_fid[i][0] - fid_cathode + fid_field_cage
-                drift_regions_fid[i][1] = drift_regions_fid[i][1] + fid_anode - fid_field_cage
-
-            else:
-                raise ValueError('Drift distance is 0.')
-
-            # Check if xyz point is in each fiducial drift region
-            if drift_direction[i] == 1:
-                coord_in_fid[i] = ma.all(ma.concatenate(\
-                    [np.expand_dims((xyz > np.expand_dims(drift_regions_fid[i][0], 0))
-                                  & (xyz < np.expand_dims(drift_regions_fid[i][1], 0)), axis=-1)]), axis=1)
-            elif drift_direction[i] == -1:
-                coord_in_fid[i] = ma.all(ma.concatenate(\
-                    [np.expand_dims((xyz[0] < np.expand_dims(drift_regions_fid[i][0][0], 0))
-                                  & (xyz[0] > np.expand_dims(drift_regions_fid[i][1][0], 0))
-                                  & (xyz[1:] > np.expand_dims(drift_regions_fid[i][0][1:], 0))
-                                  & (xyz[1:] < np.expand_dims(drift_regions_fid[i][1][1:], 0)), axis=-1)]), axis=1)
-
-            else: 
-                raise ValueError('Drift direction is invalid.')
+        # Define drift regions
+        positive_drift_regions = self.module_RO_bounds
+        negative_drift_regions = self.module_RO_bounds
         
-        in_any_fid = ma.any(coord_in_fid, axis=-1)
+        for i in range(len(self.module_RO_bounds)):
+            positive_drift_regions[i][0][0] = positive_drift_regions[i][1][0] - self.max_drift_distance
+            negative_drift_regions[i][1][0] = negative_drift_regions[i][0][0] + self.max_drift_distance
+        
+        # Define fiducial boundaries for each drift region
+        fid_positive_drift = [np.array([fid_cathode, fid_anode]) for module in self.module_RO_bounds]
+        fid_negative_drift = [np.array([fid_anode, fid_cathode]) for module in self.module_RO_bounds]
+
+        # Check if coordinate is in fiducial volume for any drift region
+        coord_in_positive_drift_fid = ma.concatenate([np.expand_dims(\
+                                    (xyz < np.expand_dims(boundary[1] - fid_positive_drift[i][1], 0)) &\
+                                    (xyz > np.expand_dims(boundary[0] + fid_positive_drift[i][0], 0)), axis=-1)\
+                                    for i,boundary in enumerate(positive_drift_regions)], axis=-1)
+        coord_in_negative_drift_fid = ma.concatenate([np.expand_dims(\
+                                    (xyz < np.expand_dims(boundary[1] - fid_negative_drift[i][1], 0)) &\
+                                    (xyz > np.expand_dims(boundary[0] + fid_negative_drift[i][0], 0)), axis=-1)\
+                                    for i,boundary in enumerate(negative_drift_regions)], axis=-1)
+        in_positive_fid = ma.all(coord_in_positive_drift_fid, axis=1)
+        in_negative_fid = ma.all(coord_in_negative_drift_fid, axis=1)
+        in_any_positive_fid = ma.any(in_positive_fid, axis=-1)
+        in_any_negative_fid = ma.any(in_negative_fid, axis=-1)
+        in_any_fid = in_any_positive_fid | in_any_negative_fid
         return in_any_fid
 
 
@@ -307,6 +300,7 @@ class Geometry(H5FlowResource):
         return anode_drift_coord.reshape(drift.shape) + \
             drift_direction.reshape(drift.shape) * drift
 
+    ## Light geometry methods ##
     @staticmethod
     def _rotate_pixel(pixel_pos, tile_orientation):
         return pixel_pos[0] * tile_orientation[2], pixel_pos[1] * tile_orientation[1]
@@ -394,6 +388,7 @@ class Geometry(H5FlowResource):
         return omega
 
 
+    ## Load light and charge geometry ##
     def load_geometry(self):
         self._load_charge_geometry()
         self._load_light_geometry()
@@ -469,7 +464,7 @@ class Geometry(H5FlowResource):
             raise RuntimeError('Only multi-tile geometry configurations are accepted')
 
         self._pixel_pitch = geometry_yaml['pixel_pitch']
-        self._max_drift_distance = det_geometry_yaml['drift_length']
+        self._max_drift_distance = det_geometry_yaml['drift_length'] * units.cm # det geo yaml is in cm; here we convert to mm
         chip_channel_to_position = geometry_yaml['chip_channel_to_position']
         tile_orientations = geometry_yaml['tile_orientations']
         tile_positions = geometry_yaml['tile_positions']
@@ -607,12 +602,15 @@ class Geometry(H5FlowResource):
                                                     [max_x, max_y, max_z]]))
             
         self._module_RO_bounds = np.array(self._module_RO_bounds)
-        self._lar_detector_bounds = np.array([np.amin(self._module_RO_bounds[:,:,0], axis=0),
-                                              np.amax(self._module_RO_bounds[:,:,1], axis=0)])
+        print("Module_RO_Bounds Indexing Test Bounds[0]:", np.array([bound[0] for bound in self._module_RO_bounds]))
+        print("Module_RO_Bounds Indexing Test Bounds[1]:", np.array([bound[1] for bound in self._module_RO_bounds]))
+        self._lar_detector_bounds = np.array([np.min(np.array([bound[0] for bound in self._module_RO_bounds]), axis=0),
+                                              np.max(np.array([bound[1] for bound in self._module_RO_bounds]), axis=0)])
         
-        cathode_x_coords = np.unique(np.array(mod_centers)[:,0])
+        cathode_x_coords = np.unique(np.array(mod_centers)[:,0])*10
         anode_to_cathode = np.min(np.array([abs(self._lar_detector_bounds[0][0] - cathode_x)
                                             for cathode_x in cathode_x_coords]))
+        print("Anode to Cathode:", anode_to_cathode)
         if self._max_drift_distance < anode_to_cathode:
             # Difference b/w max drift dist and anode-cathode dist is 1/2 cathode thickness
             self._cathode_thickness = abs(anode_to_cathode - self._max_drift_distance) * 2.0
@@ -623,3 +621,5 @@ class Geometry(H5FlowResource):
         print("LAr Detector Bounds:", self._lar_detector_bounds)
         print("Max Drift Distance:", self._max_drift_distance)
         print("Cathode Thickness:", self._cathode_thickness)
+        print("Beam Direction:", self.beam_direction)
+        print("Drift Direction:", self.drift_direction)
