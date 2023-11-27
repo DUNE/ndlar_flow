@@ -14,30 +14,40 @@ import proto_nd_flow.util.units as units
 class Geometry(H5FlowResource):
     '''
         Provides helper functions for looking up geometric properties. 
-        **!! All output attributes and datasets are saved in units of cm !!**
+
+        Input charge geometry file is assumed to use distance units of [mm] and input 
+        detector geometry file is assumed to use units of [cm].
+
+        **!! All output CHARGE attributes and datasets are saved in units of cm !!**
 
         Parameters:
          - ``path``: ``str``, path to stored geometry data within file
          - ``crs_geometry_file``: ``str``, path to yaml file describing charge readout system geometry
+         - ``det_geometry_file``: ``str``, path to yaml file describing overall detector geometry
          - ``lrs_geometry_file``: ``str``, path to yaml file describing light readout system
-         - ``beam_direction``: ``str``, Cartesian coordinate of beam direction, e.g. ``'x'``, ``'y'``, ``'z'``
-         - ``drift_direction``: ``str``, Cartesian coordinate of drift direction, e.g. ``'x'``, ``'y'``, ``'z'``
+         - ``beam_direction``   : ``str``, Cartesian coordinate of beam direction, e.g. 'x', 'y', 'z'
+         - ``drift_direction``  : ``str``, Cartesian coordinate of drift direction, e.g. 'x', 'y', 'z'
 
         Provides (for charge geometry):
-         - ``beam_direction``         [attr]: Cartesian coordinate of beam direction
-         - ``drift_direction``        [attr]: Cartesian coordinate of drift direction
-         - ``pixel_pitch``            [attr]: distance between pixel centers 
-         - ``cathode_thickness``      [attr]: thickness of cathode [cm]
-         - ``lar_detector_bounds``    [attr]: min and max xyz coordinates for full LAr detector [cm]
-         - ``module_RO_bounds``       [attr]: min and max xyz coordinates for each pixel LArTPC module [cm]
-         - ``max_drift_distance``     [attr]: max drift distance in each LArTPC (2 TPCs per module) [cm]   
-         - ``pixel_coordinates_2D``   [dset]: lookup table for pixel coordinates in 2D pixel plane
-         - ``tile_id``                [dset]: lookup table for io channel tile ids 
-         - ``anode_drift_coordinate`` [dset]: lookup table for tile drift coordinate (x as of Spring 2023)
-         - ``drift_dir``: lookup table for tile drift direction (either ±x direction as of Spring 2023)
-         - ``in_fid()``: helper function for defining fiducial volumes
-         - ``get_drift_coordinate()``: helper function for converting drift time to drift coordinate 
-                                       (x as of Spring 2023)
+         - ``beam_direction``    [param->attr]: Cartesian coordinate of beam direction
+         - ``crs_geometry_file`` [param->attr]: path to yaml file describing charge 
+                                                readout system geometry
+         - ``drift_direction``   [param->attr]: Cartesian coordinate of drift direction
+
+         - ``cathode_thickness``        [attr]: thickness of cathode [cm]
+         - ``lar_detector_bounds``      [attr]: min and max xyz coordinates for full LAr detector [cm]
+         - ``max_drift_distance``       [attr]: max drift distance in each LArTPC (2 TPCs/module) [cm]
+         - ``module_RO_bounds``         [attr]: min and max xyz coordinates for each module [cm]   
+         - ``pixel_pitch``              [attr]: distance between adjacent pixel centers [cm]
+
+         - ``anode_drift_coordinate``   [dset]: lookup table for tile drift coordinate [cm]
+         - ``drift_dir``                [dset]: lookup table for tile drift direction (either ±1)
+         - ``pixel_coordinates_2D``     [dset]: lookup table for pixel coordinates in 2D pixel plane [cm]
+         - ``tile_id``                  [dset]: lookup table for io channel tile ids 
+
+         - ``get_drift_coordinate()``   [mthd]: class method converting drift time to drift coordinate [cm]
+         - ``in_fid()``                 [mthd]: class method for determing whether an xyz coordinate [cm] 
+                                                is in the LAr fiducial volume
 
         Provides (for light geometry):
          - ``tpc_id``: lookup table for TPC number for light detectors
@@ -76,16 +86,15 @@ class Geometry(H5FlowResource):
         super(Geometry, self).__init__(**params)
 
         self.path = params.get('path', self.default_path)
-        self.det_geometry_file = params.get('det_geometry_file', self.default_crs_geometry_file)
         self.crs_geometry_file = params.get('crs_geometry_file', self.default_crs_geometry_file)
+        self.det_geometry_file = params.get('det_geometry_file', self.default_crs_geometry_file)
         self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
         self.beam_direction = params.get('beam_direction', self.default_beam_direction)
         self.drift_direction = params.get('drift_direction', self.default_drift_direction)
         self._cathode_thickness = 0.0 # thickness of cathode [cm]
         self._lar_detector_bounds = None # min and max xyz coordinates for full LAr detector
-        self._module_RO_bounds = None # min and max xyz coordinates for each pixel LArTPC module
         self._max_drift_distance = None # max drift distance in each LArTPC (2 TPCs per module)
-
+        self._module_RO_bounds = None # min and max xyz coordinates for each pixel LArTPC module
 
     def init(self, source_name):
         super(Geometry, self).init(source_name)
@@ -102,19 +111,19 @@ class Geometry(H5FlowResource):
             self.data_manager.set_attrs(self.path,
                                         classname=self.classname,
                                         class_version=self.class_version,
-                                        pixel_pitch=self.pixel_pitch,
+                                        beam_direction=self.beam_direction,
+                                        crs_geometry_file=self.crs_geometry_file, 
+                                        drift_direction=self.drift_direction,
                                         cathode_thickness=self.cathode_thickness,
                                         lar_detector_bounds=self.lar_detector_bounds,
-                                        module_RO_bounds=self.module_RO_bounds,
                                         max_drift_distance=self.max_drift_distance,
-                                        crs_geometry_file=self.crs_geometry_file, 
-                                        beam_direction=self.beam_direction,
-                                        drift_direction=self.drift_direction
+                                        module_RO_bounds=self.module_RO_bounds,
+                                        pixel_pitch=self.pixel_pitch,
                                         )
-            write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
-            write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
             write_lut(self.data_manager, self.path, self.anode_drift_coordinate, 'anode_drift_coordinate')
             write_lut(self.data_manager, self.path, self.drift_dir, 'drift_dir')
+            write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
+            write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
 
             write_lut(self.data_manager, self.path, self.tpc_id, 'tpc_id')
             write_lut(self.data_manager, self.path, self.det_id, 'det_id')
@@ -123,22 +132,23 @@ class Geometry(H5FlowResource):
             assert_compat_version(self.class_version, self.data['class_version'])
 
             # load geometry from file
-            self._pixel_pitch = self.data['pixel_pitch']
             self._cathode_thickness = self.data['cathode_thickness']
             self._lar_detector_bounds = self.data['lar_detector_bounds']
-            self._module_RO_bounds = self.data['module_RO_bounds']
             self._max_drift_distance = self.data['max_drift_distance']
-            self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
-            self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
+            self._module_RO_bounds = self.data['module_RO_bounds']
+            self._pixel_pitch = self.data['pixel_pitch']
+
             self._anode_drift_coordinate = read_lut(self.data_manager, self.path, 'anode_drift_coordinate')
             self._drift_dir = read_lut(self.data_manager, self.path, 'drift_dir')
+            self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
+            self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
 
             self._tpc_id = read_lut(self.data_manager, self.path, 'tpc_id')
             self._det_id = read_lut(self.data_manager, self.path, 'det_id')
             self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
 
-        lut_size = (self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
-                    + self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
+        lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
+                    + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
                     + self.tpc_id.nbytes + self.det_id.nbytes
                     + self.det_bounds.nbytes) * 4
 
@@ -146,13 +156,7 @@ class Geometry(H5FlowResource):
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
 
 
-    ## Charge geometry methods ##
-    @property
-    def pixel_pitch(self):
-        ''' Distance between pixel centers [cm] '''
-        return self._pixel_pitch
-    
-
+    ## Charge geometry attributes, datasets, and methods ##
     @property
     def cathode_thickness(self):
         ''' Thickness of cathode [cm] '''
@@ -170,6 +174,16 @@ class Geometry(H5FlowResource):
     
 
     @property
+    def max_drift_distance(self):
+        '''
+            Maximum possible drift distance for ionization electrons in each TPC (2 TPCs
+            per module). This is the distance between the surface of the cathode and the
+            surface of one of the two anodes in a module [cm]
+        '''
+        return self._max_drift_distance
+
+
+    @property
     def module_RO_bounds(self):
         '''
             Array of active volume extent for each module shape: ``(# modules,2,3)`` 
@@ -177,22 +191,40 @@ class Geometry(H5FlowResource):
             for each module in the LAr detector [cm]
         '''
         return self._module_RO_bounds
+    
+
+    @property
+    def pixel_pitch(self):
+        ''' Distance between pixel centers [cm] '''
+        return self._pixel_pitch
 
 
     @property
-    def max_drift_distance(self):
+    def anode_drift_coordinate(self):
         '''
-            Maximum possible drift distance for ionization electrons in each TPC (2 TPCs
-            per module). Assuming a zero-thickness cathode, this is the distance between 
-            the cathode and one of the two anodes in a module [cm]
+            Lookup table for anode drift coordinate [cm], usage::
+
+                resource['Geometry'].anode_drift_coordinate[(tile_id,)]
+
         '''
-        return self._max_drift_distance
-    
+        return self._anode_drift_coordinate
+
+
+    @property
+    def drift_dir(self):
+        '''
+            Lookup table for drift direction (+/-1), usage::
+
+                resource['Geometry'].drift_dir[(tile_id,)]
+
+        '''
+        return self._drift_dir 
+
 
     @property
     def pixel_coordinates_2D(self):
         '''
-            Lookup table for pixel coordinates (2D), usage::
+            Lookup table for pixel coordinates (2D) [cm], usage::
 
                 resource['Geometry'].pixel_coordinates_2D[(io_group,io_channel,chip_id,channel_id)]
 
@@ -211,37 +243,37 @@ class Geometry(H5FlowResource):
         return self._tile_id
 
 
-    @property
-    def anode_drift_coordinate(self):
+    def get_drift_coordinate(self, io_group, io_channel, drift):
         '''
-            Lookup table for anode drift coordinate, usage::
+            Convert a drift distance on a set of ``(io group, io channel)`` to
+            the drift coordinate.
 
-                resource['Geometry'].anode_drift_coordinate[(tile_id,)]
+            :param io_group: io group to calculate z coordinate, ``shape: (N,)``
 
-        '''
-        return self._anode_drift_coordinate
+            :param io_channel: io channel to calculate z coordinate, ``shape: (N,)``
 
+            :param drift: drift distance [cm], ``shape: (N,)``
 
-    @property
-    def drift_dir(self):
-        '''
-            Lookup table for drift direction, usage::
-
-                resource['Geometry'].drift_dir[(tile_id,)]
+            :returns: drift coordinate [cm], ``shape: (N,)``
 
         '''
-        return self._drift_dir
+        tile_id = self.tile_id[(io_group, io_channel)]
+        anode_drift_coord = self.anode_drift_coordinate[(np.array(tile_id),)]
+        drift_direction = self.drift_dir[(np.array(tile_id),)]
+
+        return anode_drift_coord.reshape(drift.shape) + \
+            drift_direction.reshape(drift.shape) * drift
 
 
     def in_fid(self, xyz, cathode_fid=0.0, field_cage_fid=0.0, anode_fid=0.0):
         '''
             Check if xyz point is contained in the specified fiducial volume
 
-            :param xyz: point to check, array ``shape: (N,3)``
+            :param xyz: point to check, array ``shape: (N,3)`` [cm]
 
-            :param cathode_fid: fiducial boundary for cathode and anode, ``float``, optional
+            :param cathode_fid: fiducial boundary for cathode and anode [cm], ``float``, optional
 
-            :param field_cage_fid: fiducial boundary for field cage walls, ``float``, optional
+            :param field_cage_fid: fiducial boundary for field cage walls [cm], ``float``, optional
 
             :returns: boolean array, ``shape: (N,)``, True indicates point is within fiducial volume
 
@@ -279,33 +311,12 @@ class Geometry(H5FlowResource):
         return in_any_fid
 
 
-    def get_drift_coordinate(self, io_group, io_channel, drift):
-        '''
-            Convert a drift distance on a set of ``(io group, io channel)`` to
-            the drift coordinate.
-
-            :param io_group: io group to calculate z coordinate, ``shape: (N,)``
-
-            :param io_channel: io channel to calculate z coordinate, ``shape: (N,)``
-
-            :param drift: drift distance [mm], ``shape: (N,)``
-
-            :returns: drift coordinate [mm], ``shape: (N,)``
-
-        '''
-        tile_id = self.tile_id[(io_group, io_channel)]
-        anode_drift_coord = self.anode_drift_coordinate[(np.array(tile_id),)]
-        drift_direction = self.drift_dir[(np.array(tile_id),)]
-
-        return anode_drift_coord.reshape(drift.shape) + \
-            drift_direction.reshape(drift.shape) * drift
-
-    ## Light geometry methods ##
     @staticmethod
     def _rotate_pixel(pixel_pos, tile_orientation):
         return pixel_pos[0] * tile_orientation[2], pixel_pos[1] * tile_orientation[1]
 
 
+    ## Light geometry methods ##
     @property
     def tpc_id(self):
         '''
@@ -463,8 +474,8 @@ class Geometry(H5FlowResource):
         if 'multitile_layout_version' not in geometry_yaml.keys():
             raise RuntimeError('Only multi-tile geometry configurations are accepted')
 
-        self._pixel_pitch = geometry_yaml['pixel_pitch']
-        self._max_drift_distance = det_geometry_yaml['drift_length'] * units.cm # det geo yaml is in cm; here we convert to mm
+        self._pixel_pitch = geometry_yaml['pixel_pitch'] / units.cm # convert mm -> cm
+        self._max_drift_distance = det_geometry_yaml['drift_length'] # det geo yaml is already in cm
         chip_channel_to_position = geometry_yaml['chip_channel_to_position']
         tile_orientations = geometry_yaml['tile_orientations']
         tile_positions = geometry_yaml['tile_positions']
@@ -518,7 +529,7 @@ class Geometry(H5FlowResource):
         self._drift_dir.default = 0.
 
         # Warning: number of tiles (16) and number of modules (4) are hard-coded here
-        self._anode_drift_coordinate[(tiles,)] = [tile_positions[(tile-1)%16+1][0]+units.cm*mod_centers[((tile-1)//16)%4][0] for tile in tiles] # det geo yaml is in cm; here we convert to mm
+        self._anode_drift_coordinate[(tiles,)] = [tile_positions[(tile-1)%16+1][0]/units.cm+mod_centers[((tile-1)//16)%4][0] for tile in tiles] # convert mm -> cm for crs yaml; det geo yaml in cm already
 
         self._drift_dir[(tiles,)] = [tile_orientations[(tile-1)%16+1][0] for tile in tiles]
         self._module_RO_bounds = []
@@ -527,7 +538,7 @@ class Geometry(H5FlowResource):
         for module_id in module_to_io_groups:
             for tile in tile_chip_to_io:
                 tile_orientation = tile_orientations[tile]
-                tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
+                tile_geometry[tile] = tile_positions[tile]/units.cm, tile_orientations[tile] # convert mm -> cm
 
                 for chip in tile_chip_to_io[tile]:
                     io_group_io_channel = tile_chip_to_io[tile][chip]
@@ -554,10 +565,10 @@ class Geometry(H5FlowResource):
 
                     z, y = self._rotate_pixel((z, y), tile_orientation)
 
-                    z += tile_positions[tile][2]
-                    y += tile_positions[tile][1]
-                    z += mod_centers[module_id-1][2]*units.cm # det geo yaml is in cm; here we convert to mm 
-                    y += mod_centers[module_id-1][1]*units.cm # det geo yaml is in cm; here we convert to mm
+                    z += tile_positions[tile][2]/units.cm # convert mm -> cm 
+                    y += tile_positions[tile][1]/units.cm # convert mm -> cm
+                    z += mod_centers[module_id-1][2] # det geo yaml is already in cm
+                    y += mod_centers[module_id-1][1] # det geo yaml is already in cm
                     self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = z, y
 
             io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
@@ -598,16 +609,16 @@ class Geometry(H5FlowResource):
 
 
             # Append module boundaries to module readout bounds list
-            self._module_RO_bounds.append(np.array([[min_x, min_y, min_z],
-                                                    [max_x, max_y, max_z]]))
+            # Subtract/add half of pixel pitch to pixel 2D coordinates (yz here) to get true module boundaries
+            self._module_RO_bounds.append(np.array([[min_x, min_y-self.pixel_pitch/2., min_z-self.pixel_pitch/2.],
+                                                    [max_x, max_y+self.pixel_pitch/2., max_z+self.pixel_pitch/2.]]))
             
         self._module_RO_bounds = np.array(self._module_RO_bounds)
-        print("Module_RO_Bounds Indexing Test Bounds[0]:", np.array([bound[0] for bound in self._module_RO_bounds]))
-        print("Module_RO_Bounds Indexing Test Bounds[1]:", np.array([bound[1] for bound in self._module_RO_bounds]))
+
         self._lar_detector_bounds = np.array([np.min(np.array([bound[0] for bound in self._module_RO_bounds]), axis=0),
                                               np.max(np.array([bound[1] for bound in self._module_RO_bounds]), axis=0)])
         
-        cathode_x_coords = np.unique(np.array(mod_centers)[:,0])*10
+        cathode_x_coords = np.unique(np.array(mod_centers)[:,0])
         anode_to_cathode = np.min(np.array([abs(self._lar_detector_bounds[0][0] - cathode_x)
                                             for cathode_x in cathode_x_coords]))
         print("Anode to Cathode:", anode_to_cathode)

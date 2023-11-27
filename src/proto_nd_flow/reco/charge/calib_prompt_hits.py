@@ -4,6 +4,7 @@ from collections import defaultdict
 import json
 
 from h5flow.core import H5FlowStage, resources
+import proto_nd_flow.util.units as units
 
 
 class CalibHitBuilder(H5FlowStage):
@@ -188,7 +189,7 @@ class CalibHitBuilder(H5FlowStage):
 
             drift_t = raw_hits_arr['ts_pps'] - hit_t0
 
-            drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks)
+            drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks) / units.cm # convert mm -> cm
             x = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
 
             zy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
@@ -206,10 +207,9 @@ class CalibHitBuilder(H5FlowStage):
             ped = np.array([self.pedestal[unique_id]['pedestal_mv']
                             for unique_id in hit_uniqueid_str])
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
-            # NOTE: dividing positions by 10 to convert from mm to cm
-            calib_hits_arr['x'] = x/10.
-            calib_hits_arr['y'] = zy[:,1]/10.
-            calib_hits_arr['z'] = zy[:,0]/10.
+            calib_hits_arr['x'] = x
+            calib_hits_arr['y'] = zy[:,1]
+            calib_hits_arr['z'] = zy[:,0]
             calib_hits_arr['ts_pps'] = raw_hits_arr['ts_pps']
             calib_hits_arr['t_drift'] = drift_t
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
