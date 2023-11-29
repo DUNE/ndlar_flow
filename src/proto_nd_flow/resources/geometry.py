@@ -625,16 +625,9 @@ class Geometry(H5FlowResource):
         cathode_x_coords = np.unique(np.array(mod_centers)[:,0])
         anode_to_cathode = np.min(np.array([abs(self.lar_detector_bounds[0][0] - cathode_x)
                                             for cathode_x in cathode_x_coords]))
-        print("Anode to Cathode:", anode_to_cathode)
+        
         if self.max_drift_distance < anode_to_cathode:
             # Difference b/w max drift dist and anode-cathode dist is 1/2 cathode thickness
             self._cathode_thickness = abs(anode_to_cathode - self.max_drift_distance) * 2.0
         else: 
             self._cathode_thickness = 0.0
-
-        print("Module RO Bounds:", self.module_RO_bounds)
-        print("LAr Detector Bounds:", self.lar_detector_bounds)
-        print("Max Drift Distance:", self.max_drift_distance)
-        print("Cathode Thickness:", self.cathode_thickness)
-        print("Beam Direction:", self.beam_direction)
-        print("Drift Direction:", self.drift_direction)
