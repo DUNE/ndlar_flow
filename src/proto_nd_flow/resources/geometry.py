@@ -283,18 +283,22 @@ class Geometry(H5FlowResource):
         fid_anode = np.array([anode_fid, field_cage_fid, field_cage_fid])
 
         # Define drift regions
-        positive_drift_regions = self.module_RO_bounds
-        negative_drift_regions = self.module_RO_bounds
+        positive_drift_regions = np.array([bound for bound in self.module_RO_bounds])
+        negative_drift_regions = np.array([bound for bound in self.module_RO_bounds])
         
         for i in range(len(self.module_RO_bounds)):
             positive_drift_regions[i][0][0] = positive_drift_regions[i][1][0] - self.max_drift_distance
             negative_drift_regions[i][1][0] = negative_drift_regions[i][0][0] + self.max_drift_distance
-        
+
         # Define fiducial boundaries for each drift region
-        fid_positive_drift = [np.array([fid_cathode, fid_anode]) for module in self.module_RO_bounds]
-        fid_negative_drift = [np.array([fid_anode, fid_cathode]) for module in self.module_RO_bounds]
+        fid_positive_drift = np.array([[fid_cathode, fid_anode] for module in self.module_RO_bounds])
+        fid_negative_drift = np.array([[fid_anode, fid_cathode] for module in self.module_RO_bounds])
 
         # Check if coordinate is in fiducial volume for any drift region
+        # In very rare situations, a coordinate very close (<1e-7 cm) to a fiducial volume boundary
+        # may be classified as outside the fiducial volume due to floating point precision
+        # errors. To avoid this, we should explore rounding position coordinates based on detector
+        # resolution. For now, we can tolerate treating these hits as outside the fiducial volume.
         coord_in_positive_drift_fid = ma.concatenate([np.expand_dims(\
                                     (xyz < np.expand_dims(boundary[1] - fid_positive_drift[i][1], 0)) &\
                                     (xyz > np.expand_dims(boundary[0] + fid_positive_drift[i][0], 0)), axis=-1)\
@@ -538,7 +542,7 @@ class Geometry(H5FlowResource):
         for module_id in module_to_io_groups:
             for tile in tile_chip_to_io:
                 tile_orientation = tile_orientations[tile]
-                tile_geometry[tile] = tile_positions[tile]/units.cm, tile_orientations[tile] # convert mm -> cm
+                tile_geometry[tile] = [pos / units.cm for pos in tile_positions[tile]], tile_orientations[tile] # convert mm -> cm
 
                 for chip in tile_chip_to_io[tile]:
                     io_group_io_channel = tile_chip_to_io[tile][chip]
@@ -619,18 +623,18 @@ class Geometry(H5FlowResource):
                                               np.max(np.array([bound[1] for bound in self._module_RO_bounds]), axis=0)])
         
         cathode_x_coords = np.unique(np.array(mod_centers)[:,0])
-        anode_to_cathode = np.min(np.array([abs(self._lar_detector_bounds[0][0] - cathode_x)
+        anode_to_cathode = np.min(np.array([abs(self.lar_detector_bounds[0][0] - cathode_x)
                                             for cathode_x in cathode_x_coords]))
         print("Anode to Cathode:", anode_to_cathode)
-        if self._max_drift_distance < anode_to_cathode:
+        if self.max_drift_distance < anode_to_cathode:
             # Difference b/w max drift dist and anode-cathode dist is 1/2 cathode thickness
-            self._cathode_thickness = abs(anode_to_cathode - self._max_drift_distance) * 2.0
+            self._cathode_thickness = abs(anode_to_cathode - self.max_drift_distance) * 2.0
         else: 
             self._cathode_thickness = 0.0
 
-        print("Module RO Bounds:", self._module_RO_bounds)
-        print("LAr Detector Bounds:", self._lar_detector_bounds)
-        print("Max Drift Distance:", self._max_drift_distance)
-        print("Cathode Thickness:", self._cathode_thickness)
+        print("Module RO Bounds:", self.module_RO_bounds)
+        print("LAr Detector Bounds:", self.lar_detector_bounds)
+        print("Max Drift Distance:", self.max_drift_distance)
+        print("Cathode Thickness:", self.cathode_thickness)
         print("Beam Direction:", self.beam_direction)
         print("Drift Direction:", self.drift_direction)
