@@ -1,0 +1,13 @@
+classname: LineFinder
+path: module0_flow.reco.charge.line_finder
+
+requires:
+  - 'charge/hough_i'
+
+params:
+  # inputs
+  hough_i_dset_name: 'charge/hough_i'
+
+  # output
+  hough_o_dset_name: 'charge/hough_o'
+

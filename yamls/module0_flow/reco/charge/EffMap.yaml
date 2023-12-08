@@ -1,0 +1,13 @@
+classname: EffMap
+path: module0_flow.reco.charge.eff_map
+requires:
+  - 'charge/hough_i'
+  - 'charge/hough_o'
+
+params:
+  # inputs
+  hough_i_dset_name: 'charge/hough_i'
+  hough_o_dset_name: 'charge/hough_o'
+
+  # output
+  effs_dset_name: 'charge/effs'

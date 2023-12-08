@@ -1,0 +1,15 @@
+classname: ZConvert
+path: module0_flow.reco.charge.z_convert
+requires:
+  - 'charge/hits'
+  - 'charge/ext_trigs'
+  - 'charge/events'
+
+params:
+  # inputs
+  hits_dset_name: 'charge/hits'
+  ext_trigs_dset_name: 'charge/ext_trigs'
+  events_dset_name: 'charge/events'
+
+  # output
+  hough_i_dset_name: 'charge/hough_i'

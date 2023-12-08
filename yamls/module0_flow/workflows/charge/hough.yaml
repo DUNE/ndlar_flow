@@ -1,0 +1,50 @@
+# Generates hough lines from the charge_event_reconstruction workflow output
+# h5flow --nompi -c yamls/module0_flow/workflows/charge/hough.yaml -i input.h5 -o output.h5
+# three stages; z_convert, line_finder & eff_map
+
+flow:
+  source: 'charge/hits'
+  stages: [eff_map]
+#  stages: [z_convert]
+  drop: []
+
+resources:
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+
+hits:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/hits'
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/events'
+
+hough_i:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/hough_i'
+  params:
+    chunk_size: 1
+
+hough_o:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/hough_o'
+  params:
+    chunk_size: 1
+
+# Convert time to z coordinate
+z_convert:
+  !include yamls/module0_flow/reco/charge/ZConvert.yaml
+
+# Line finding yaml file
+line_finder:
+  !include yamls/module0_flow/reco/charge/LineFinder.yaml
+
+# Efficiency map yaml file
+eff_map:
+  !include yamls/module0_flow/reco/charge/EffMap.yaml
+
