@@ -576,9 +576,11 @@ class Geometry(H5FlowResource):
                     self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = z, y
 
             io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
-            min_x, max_x = -999999999, 999999999
-            min_y, max_y = -999999999, 999999999
-            min_z, max_z = -999999999, 999999999
+            min_coord = np.finfo(self.pixel_coordinates_2D.dtype).min
+            max_coord = np.finfo(self.pixel_coordinates_2D.dtype).max
+            min_x, max_x = min_coord, max_coord
+            min_y, max_y = min_coord, max_coord
+            min_z, max_z = min_coord, max_coord
             
             # Loop through io_groups
             for iog in module_to_io_groups[module_id]:
@@ -588,8 +590,8 @@ class Geometry(H5FlowResource):
                 # Get zy coordinates for io_group
                 zy = self.pixel_coordinates_2D[(io_group[mask], io_channel[mask], chip_id[mask], channel_id[mask])]
             
-                if (abs(min_y) == 999999999) and (abs(max_y) == 999999999) \
-                    and (abs(min_z) == 999999999) and (abs(max_z) == 999999999):
+                if (min_y == min_coord) and (max_y == max_coord) \
+                    and (min_z == min_coord) and (max_z == max_coord):
 
                     # Assign min and max y,z coordinates for initial io_group
                     min_y, max_y = zy[:,1].min(), zy[:,1].max()
@@ -604,7 +606,7 @@ class Geometry(H5FlowResource):
                 tile_id = self.tile_id[(io_group[mask], io_channel[mask])]
                 anode_drift_coordinate = np.unique(self.anode_drift_coordinate[(tile_id,)])[0]
 
-                if (abs(min_x) == 999999999) and (abs(max_x) == 999999999):
+                if (min_x == min_coord) and (max_x == max_coord):
 
                     min_x, max_x = anode_drift_coordinate, anode_drift_coordinate
 
@@ -631,3 +633,9 @@ class Geometry(H5FlowResource):
             self._cathode_thickness = abs(anode_to_cathode - self.max_drift_distance) * 2.0
         else: 
             self._cathode_thickness = 0.0
+
+        print(f'Cathode thickness: {self.cathode_thickness} cm')
+        print(f'LAr detector bounds: {self.lar_detector_bounds} cm')
+        print(f'Max drift distance: {self.max_drift_distance} cm')
+        print(f'Module RO bounds: {self.module_RO_bounds} cm')
+        print(f'Pixel pitch: {self.pixel_pitch} cm')
