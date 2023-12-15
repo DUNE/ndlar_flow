@@ -313,6 +313,68 @@ class Geometry(H5FlowResource):
         in_any_negative_fid = ma.any(in_negative_fid, axis=-1)
         in_any_fid = in_any_positive_fid | in_any_negative_fid
         return in_any_fid
+    
+
+    def _get_module_RO_bounds(self):
+        '''
+            Get module_RO_bounds from pre-saved 2D pixel coordinates and anode drift coordinates 
+        '''
+        with open(self.det_geometry_file) as dgf:
+            det_geometry_yaml = yaml.load(dgf, Loader=yaml.FullLoader)
+
+        module_to_io_groups = det_geometry_yaml['module_to_io_groups']
+
+        self._module_RO_bounds = []
+
+        # Loop through modules
+        for module_id in module_to_io_groups:  
+            io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
+            min_coord = np.finfo(self.pixel_coordinates_2D.dtype).min
+            max_coord = np.finfo(self.pixel_coordinates_2D.dtype).max
+            min_x, max_x = min_coord, max_coord
+            min_y, max_y = min_coord, max_coord
+            min_z, max_z = min_coord, max_coord
+            
+            # Loop through io_groups
+            for iog in module_to_io_groups[module_id]:
+                
+                mask = (io_group == iog)
+
+                # Get zy coordinates for io_group
+                zy = self.pixel_coordinates_2D[(io_group[mask], io_channel[mask], chip_id[mask], channel_id[mask])]
+            
+                if (min_y == min_coord) and (max_y == max_coord) \
+                    and (min_z == min_coord) and (max_z == max_coord):
+
+                    # Assign min and max y,z coordinates for initial io_group
+                    min_y, max_y = zy[:,1].min(), zy[:,1].max()
+                    min_z, max_z = zy[:,0].min(), zy[:,0].max()
+
+                else:
+                    # Update min and max y,z coordinates based on subsequent io_group
+                    min_y, max_y = min(min_y, zy[:,1].min()), max(max_y, zy[:,1].max())
+                    min_z, max_z = min(min_z, zy[:,0].min()), max(max_z, zy[:,0].max())
+
+                # Get x coordinates for anode corresponding to io_group
+                tile_id = self.tile_id[(io_group[mask], io_channel[mask])]
+                anode_drift_coordinate = np.unique(self.anode_drift_coordinate[(tile_id,)])[0]
+
+                # For first io_group in loop, set min_x and max_x to io_group anode drift coordinate
+                if (min_x == min_coord) and (max_x == max_coord):
+
+                    min_x, max_x = anode_drift_coordinate, anode_drift_coordinate
+
+                # For subsequent io_groups, update min_x and max_x based on new io_group anode drift coordinates
+                else: 
+                    min_x, max_x = min(min_x, anode_drift_coordinate), max(max_x, anode_drift_coordinate)
+
+
+            # Append module boundaries to module readout bounds list
+            # Subtract/add half of pixel pitch to pixel 2D coordinates (yz here) to get true module boundaries
+            self._module_RO_bounds.append(np.array([[min_x, min_y-self.pixel_pitch/2., min_z-self.pixel_pitch/2.],
+                                                    [max_x, max_y+self.pixel_pitch/2., max_z+self.pixel_pitch/2.]]))
+            
+        self._module_RO_bounds = np.array(self._module_RO_bounds)
 
 
     @staticmethod
@@ -575,55 +637,14 @@ class Geometry(H5FlowResource):
                     y += mod_centers[module_id-1][1] # det geo yaml is already in cm
                     self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = z, y
 
-            io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
-            min_coord = np.finfo(self.pixel_coordinates_2D.dtype).min
-            max_coord = np.finfo(self.pixel_coordinates_2D.dtype).max
-            min_x, max_x = min_coord, max_coord
-            min_y, max_y = min_coord, max_coord
-            min_z, max_z = min_coord, max_coord
-            
-            # Loop through io_groups
-            for iog in module_to_io_groups[module_id]:
-                
-                mask = (io_group == iog)
+        # Determine module readout bounds
+        self._get_module_RO_bounds()
 
-                # Get zy coordinates for io_group
-                zy = self.pixel_coordinates_2D[(io_group[mask], io_channel[mask], chip_id[mask], channel_id[mask])]
-            
-                if (min_y == min_coord) and (max_y == max_coord) \
-                    and (min_z == min_coord) and (max_z == max_coord):
-
-                    # Assign min and max y,z coordinates for initial io_group
-                    min_y, max_y = zy[:,1].min(), zy[:,1].max()
-                    min_z, max_z = zy[:,0].min(), zy[:,0].max()
-
-                else:
-                    # Update min and max y,z coordinates based on subsequent io_group
-                    min_y, max_y = min(min_y, zy[:,1].min()), max(max_y, zy[:,1].max())
-                    min_z, max_z = min(min_z, zy[:,0].min()), max(max_z, zy[:,0].max())
-
-                # Get x coordinates for anode corresponding to io_group
-                tile_id = self.tile_id[(io_group[mask], io_channel[mask])]
-                anode_drift_coordinate = np.unique(self.anode_drift_coordinate[(tile_id,)])[0]
-
-                if (min_x == min_coord) and (max_x == max_coord):
-
-                    min_x, max_x = anode_drift_coordinate, anode_drift_coordinate
-
-                else: 
-                    min_x, max_x = min(min_x, anode_drift_coordinate), max(max_x, anode_drift_coordinate)
-
-
-            # Append module boundaries to module readout bounds list
-            # Subtract/add half of pixel pitch to pixel 2D coordinates (yz here) to get true module boundaries
-            self._module_RO_bounds.append(np.array([[min_x, min_y-self.pixel_pitch/2., min_z-self.pixel_pitch/2.],
-                                                    [max_x, max_y+self.pixel_pitch/2., max_z+self.pixel_pitch/2.]]))
-            
-        self._module_RO_bounds = np.array(self._module_RO_bounds)
-
+        # Determine LAr detector bounds
         self._lar_detector_bounds = np.array([np.min(np.array([bound[0] for bound in self._module_RO_bounds]), axis=0),
                                               np.max(np.array([bound[1] for bound in self._module_RO_bounds]), axis=0)])
         
+        # Determine cathode thickness
         cathode_x_coords = np.unique(np.array(mod_centers)[:,0])
         anode_to_cathode = np.min(np.array([abs(self.lar_detector_bounds[0][0] - cathode_x)
                                             for cathode_x in cathode_x_coords]))
