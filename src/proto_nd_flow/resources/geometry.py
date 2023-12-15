@@ -654,9 +654,3 @@ class Geometry(H5FlowResource):
             self._cathode_thickness = abs(anode_to_cathode - self.max_drift_distance) * 2.0
         else: 
             self._cathode_thickness = 0.0
-
-        print(f'Cathode thickness: {self.cathode_thickness} cm')
-        print(f'LAr detector bounds: {self.lar_detector_bounds} cm')
-        print(f'Max drift distance: {self.max_drift_distance} cm')
-        print(f'Module RO bounds: {self.module_RO_bounds} cm')
-        print(f'Pixel pitch: {self.pixel_pitch} cm')
