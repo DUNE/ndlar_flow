@@ -57,6 +57,8 @@ class CalibHitBuilder(H5FlowStage):
             z              f8, pixel z location [cm]
             t_drift        u8, drift time [ticks???]
             ts_pps         f8, PPS packet timestamp [ns]
+            io_group       u8, io group ID (PACMAN number)
+            io_channel     u8, io channel ID (related to PACMAN number & PACMAN UART Number)
             Q              f8, hit charge [ke-]
             E              f8, hit energy [MeV]
 
@@ -81,6 +83,8 @@ class CalibHitBuilder(H5FlowStage):
         ('z', 'f8'),
         ('t_drift', 'f8'),
         ('ts_pps', 'u8'),
+        ('io_group', 'u8'),
+        ('io_channel', 'u8'),
         ('Q', 'f8'),
         ('E', 'f8')
     ])
@@ -213,6 +217,8 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['z'] = xy[:,0]/10.
             calib_hits_arr['ts_pps'] = raw_hits_arr['ts_pps']
             calib_hits_arr['t_drift'] = drift_t
+            calib_hits_arr['io_group'] = packets_arr['io_group']
+            calib_hits_arr['io_channel'] = packets_arr['io_channel']
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
             calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 # hardcoding W_ion and not accounting for finite electron lifetime
 

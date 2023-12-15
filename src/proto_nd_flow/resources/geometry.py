@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.ma as ma
 import logging
+import warnings
 import yaml
 
 from h5flow.core import H5FlowResource
@@ -16,6 +17,8 @@ class Geometry(H5FlowResource):
 
         Parameters:
          - ``path``: ``str``, path to stored geometry data within file
+         - ``network_agnostic``: ``bool``, optional, ignore the (io_channel % 4), useful if the io_channel mapping changes run-to-run (``True == ignore``)
+         - ``n_io_channels_per_tile``: ``int``, optional, only used with ``network_agnostic == True``, sets the number of io channels to have same geometry info
          - ``crs_geometry_file``: ``str``, path to yaml file describing charge readout system geometry
          - ``lrs_geometry_file``: ``str``, path to yaml file describing light readout system
 
@@ -52,9 +55,11 @@ class Geometry(H5FlowResource):
                     lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-0.0.0.yaml'
 
     '''
-    class_version = '0.1.0'
+    class_version = '0.2.0'
 
     default_path = 'geometry_info'
+    default_network_agnostic = False
+    default_n_io_channels_per_tile = 4
     default_det_geometry_file = '-'
     default_crs_geometry_file = '-'
     default_lrs_geometry_file = '-'
@@ -64,6 +69,8 @@ class Geometry(H5FlowResource):
         super(Geometry, self).__init__(**params)
 
         self.path = params.get('path', self.default_path)
+        self.network_agnostic = params.get('network_agnostic', self.default_network_agnostic)
+        self.n_io_channels_per_tile = params.get('n_io_channels_per_tile', self.default_n_io_channels_per_tile)
         self.det_geometry_file = params.get('det_geometry_file', self.default_crs_geometry_file)
         self.crs_geometry_file = params.get('crs_geometry_file', self.default_crs_geometry_file)
         self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
@@ -86,6 +93,8 @@ class Geometry(H5FlowResource):
                                         classname=self.classname,
                                         class_version=self.class_version,
                                         pixel_pitch=self.pixel_pitch,
+                                        network_agnostic=self.network_agnostic,
+                                        n_io_channels_per_tile=self.n_io_channels_per_tile,
                                         crs_geometry_file=self.crs_geometry_file
                                         )
             write_lut(self.data_manager, self.path, self.pixel_xy, 'pixel_xy')
@@ -113,7 +122,7 @@ class Geometry(H5FlowResource):
         lut_size = (self.pixel_xy.nbytes + self.tile_id.nbytes
                     + self.anode_z.nbytes + self.drift_dir.nbytes
                     + self.tpc_id.nbytes + self.det_id.nbytes
-                    + self.det_bounds.nbytes) * 4
+                    + self.det_bounds.nbytes)
 
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
@@ -426,7 +435,7 @@ class Geometry(H5FlowResource):
 
         tiles = np.arange(1,len(geometry_yaml['tile_chip_to_io'])*len(det_geometry_yaml['module_to_io_groups'])+1)
         io_groups = [
-            geometry_yaml['tile_chip_to_io'][tile][chip] // 1000 * (mod-1)*2
+            geometry_yaml['tile_chip_to_io'][tile][chip] // 1000 + (mod-1)*2
             for tile in geometry_yaml['tile_chip_to_io']
             for chip in geometry_yaml['tile_chip_to_io'][tile]
             for mod in det_geometry_yaml['module_to_io_groups']
@@ -450,7 +459,7 @@ class Geometry(H5FlowResource):
  
         pixel_xy_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
         self._pixel_xy = LUT('f4', *pixel_xy_min_max, shape=(2,))
-        self._pixel_xy.default = 0.
+        self._pixel_xy.default = np.nan
     
         tile_min_max = [(min(v), len(det_geometry_yaml['module_to_io_groups'])*max(v)) for v in (io_groups, io_channels)]
         self._tile_id = LUT('i4', *tile_min_max)
@@ -476,6 +485,13 @@ class Geometry(H5FlowResource):
                     io_channel = io_group_io_channel % 1000
                     self._tile_id[([io_group], [io_channel])] = tile+(module_id-1)*len(tile_chip_to_io)
 
+                    if self.network_agnostic == True:
+                        # if we don't care about the network configuration, then we
+                        # can just loop over every N io channels and add them to the LUT
+                        start_io_channel = ((io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
+                        for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
+                            self._tile_id[([io_group], [io_channel])] = tile
+
                 for chip_channel in chip_channel_to_position:
                     chip = chip_channel // 1000
                     channel = chip_channel % 1000
@@ -483,7 +499,12 @@ class Geometry(H5FlowResource):
                     try:
                         io_group_io_channel = tile_chip_to_io[tile][chip]
                     except KeyError:
-                        continue
+                        if self.network_agnostic == True:
+                            warnings.warn('Encountered an out-of-network chip, but because you enabled ``network_agnostic``, we will carry on with assumptions about the io group and io channel')
+                            # using the info about the first chip on the tile for all others
+                            io_group_io_channel = list(geometry_yaml['tile_chip_to_io'][tile].values())[0]
+                        else:
+                            continue
 
                     io_group = io_group_io_channel // 1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
