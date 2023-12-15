@@ -129,8 +129,8 @@ class Charge2LightAssociation(H5FlowStage):
 
     def match_on_timestamp(self, charge_unix_ts, charge_pps_ts):
         unix_ts_start = charge_unix_ts.min()
-        unix_ts_end = charge_unix_ts.max()
-
+        unix_ts_end = charge_unix_ts.max()  
+        
         if self.light_unix_ts_start >= unix_ts_end + self.unix_ts_window or \
            self.light_unix_ts_end <= unix_ts_start - self.unix_ts_window:
             # no overlap, short circuit
@@ -138,13 +138,11 @@ class Charge2LightAssociation(H5FlowStage):
 
         # subselect only portion of light events that overlaps with unix timestamps
         i_min = np.argmax((self.light_unix_ts >= unix_ts_start - self.unix_ts_window))
-        i_max = len(self.light_unix_ts) - 1 - np.argmax((self.light_unix_ts <= unix_ts_end + self.unix_ts_window)[::-1])
+        i_max = len(self.light_unix_ts) - np.argmax((self.light_unix_ts <= unix_ts_end + self.unix_ts_window)[::-1])
         sl = slice(i_min, i_max)
-
         assoc_mat = (np.abs(self.light_unix_ts[sl].reshape(1, -1) - charge_unix_ts.reshape(-1, 1)) <= self.unix_ts_window) \
                      & (np.abs(self.light_ts[sl].reshape(1, -1) - charge_pps_ts.reshape(-1, 1)) <= self.ts_window)
         idcs = np.argwhere(assoc_mat)
-        #idcs = 1000
         if len(idcs):
             idcs[:, 1] = self.light_event_id[sl][idcs[:, 1]]  # idcs now contains ext trigger index <-> global light event id
         else:
@@ -161,7 +159,6 @@ class Charge2LightAssociation(H5FlowStage):
         ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
 
         nevents = len(event_data)
-        print('nevents')
         ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int)
         ext_trig_ref = np.empty((0, 2), dtype=int)
         ev_ref = np.empty((0, 2), dtype=int)        
