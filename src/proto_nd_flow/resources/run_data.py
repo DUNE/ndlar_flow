@@ -170,7 +170,7 @@ class RunData(H5FlowResource):
             # mc info has already exists, return
             return
 
-        if self.input_filename[-3:] == '.h5' or '.h5' in self.input_filename:
+        if any(self.input_filename.endswith(ext) for ext in ['.h5', '.hdf5']):
             if H5FLOW_MPI:
                 with h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm) as f:
                     is_mc = 'mc_packets_assn' in f
