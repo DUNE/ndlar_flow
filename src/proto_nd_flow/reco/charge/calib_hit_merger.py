@@ -152,6 +152,7 @@ class CalibHitMerger(H5FlowStage):
             same_channel = (
                 (new_hits['z'][..., :-1] == new_hits['z'][..., 1:])
                 & (new_hits['y'][..., :-1] == new_hits['y'][..., 1:])
+                & (new_hits['io_group'][..., :-1] == new_hits['io_group'][..., 1:])
             )
 
             # flag valid hits if they are on the same channel and are close in time
