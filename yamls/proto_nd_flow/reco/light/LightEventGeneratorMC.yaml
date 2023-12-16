@@ -8,8 +8,8 @@ params:
   # configuration parameters
   n_adcs: 8
   n_channels: 64
-  n_sipms: 384
-  n_modules: 4
+  n_sipms_per_module: 96
+  n_modules_per_trig: 4
   adc_sn:
    - 0
    - 1
