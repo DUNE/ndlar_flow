@@ -49,9 +49,9 @@ class RawHitBuilder(H5FlowStage):
 
         ``raw_hits`` datatype::
 
-            x_pix          f8, pixel x location [mm]
-            y_pix          f8, pixel y location [mm]
-            z_pix          f8, pixel z location [mm]
+            x_pix          f8, pixel x location [cm]
+            y_pix          f8, pixel y location [cm]
+            z_pix          f8, pixel z location [cm]
             ts_pps         u8, PPS packet timestamp [ticks]
             ADC            u1, hit charge [ADC]
 
@@ -145,17 +145,16 @@ class RawHitBuilder(H5FlowStage):
         # convert to hits array
         raw_hits_arr = np.zeros((n,), dtype=self.hits_dtype)
         if n:
-            xy = resources['Geometry'].pixel_xy[packets_arr['io_group'],
+            zy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
             print(min(tile_id), max(tile_id))
-            z = resources['Geometry'].anode_z[(tile_id,)]
+            x = resources['Geometry'].anode_drift_coordinate[(tile_id,)]
 
             raw_hits_arr['id'] = raw_hits_slice.start + np.arange(n, dtype=int)
-            # NOTE: swapping x <--> z coordinates so the z is ~ in the beam direction
-            raw_hits_arr['x_pix'] = z
-            raw_hits_arr['y_pix'] = xy[:,1]
-            raw_hits_arr['z_pix'] = xy[:,0]
+            raw_hits_arr['x_pix'] = x
+            raw_hits_arr['y_pix'] = zy[:,1]
+            raw_hits_arr['z_pix'] = zy[:,0]
             raw_hits_arr['ts_pps'] = ts_arr['ts']
             raw_hits_arr['ADC'] = packets_arr['dataword']
 

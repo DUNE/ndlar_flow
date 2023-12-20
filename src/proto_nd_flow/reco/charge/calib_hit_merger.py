@@ -152,6 +152,7 @@ class CalibHitMerger(H5FlowStage):
             same_channel = (
                 (new_hits['z'][..., :-1] == new_hits['z'][..., 1:])
                 & (new_hits['y'][..., :-1] == new_hits['y'][..., 1:])
+                & (new_hits['io_group'][..., :-1] == new_hits['io_group'][..., 1:])
             )
 
             # flag valid hits if they are on the same channel and are close in time
@@ -241,7 +242,6 @@ class CalibHitMerger(H5FlowStage):
 
         # calculate segment contributions for each merged hit
         if has_mc_truth:
-            tmp_bt = np.full(shape=new_hits.shape+(2,self.max_contrib_segments),fill_value=0.)
             back_track = np.full(shape=new_hits.shape,fill_value=0.,dtype=self.hit_frac_dtype)
             # loop over hits
             for hit_it, hit in np.ndenumerate(new_hits):
@@ -250,12 +250,12 @@ class CalibHitMerger(H5FlowStage):
                 # renormalize the fractional contributions given the charge weighted average
                 norm = np.sum(np.multiply(hit_contr[0],hit_contr[1]))
                 if norm == 0.: norm = 1.
-                tmp_bt[hit_it][0] = np.multiply(hit_contr[0],hit_contr[1])/norm # fractional contributions
-                tmp_bt[hit_it][1] = hit_contr[2] # segment_ids
+                tmp_bt_0 = np.multiply(hit_contr[0],hit_contr[1])/norm # fractional contributions
+                tmp_bt_1 = hit_contr[2] # segment_ids
 
                 # merge unique track contributions
                 track_dict = defaultdict(lambda:0)
-                for track in zip(tmp_bt[hit_it][0],tmp_bt[hit_it][1]):
+                for track in zip(tmp_bt_0,tmp_bt_1):
                     track_dict[track[1]] += track[0]
                 track_dict = dict(track_dict)
                 bt_unique_segs = np.array(list(track_dict.keys()))

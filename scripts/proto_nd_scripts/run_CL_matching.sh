@@ -7,11 +7,11 @@
 
 INPUT_FILE=$1
 
-OUTPUT_DIR=`pwd` #!!! change me
+OUTPUT_DIR='/global/cfs/cdirs/dune/users/kwresilo/data/MiniRun4'
 OUTPUT_NAME=(${INPUT_FILE//"/"/ })
 OUTPUT_NAME=${OUTPUT_NAME[-1]}
 OUTPUT_FILE="${OUTPUT_DIR}/${OUTPUT_NAME}"
-OUTPUT_FILE=${OUTPUT_FILE//.h5/.proto_nd_flow.h5}
+OUTPUT_FILE=${OUTPUT_FILE//.h5/.matched_taco.h5}
 echo ${OUTPUT_FILE}
 
 # for running on a login node
@@ -20,12 +20,7 @@ H5FLOW_CMD='h5flow'
 #H5FLOW_CMD='srun -n32 h5flow'
 
 # run all stages
-WORKFLOW1='yamls/proto_nd_flow/workflows/charge/charge_event_building.yaml'
-WORKFLOW2='yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction.yaml'
-WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml'
-WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration.yaml'
-WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration.yaml'
-
+WORKFLOW1='yamls/proto_nd_flow/workflows/charge/charge_light_assoc.yaml'
 HERE=`pwd`
 #cd ndlar_flow
 # assumes this is being run from ndlar_flow/scripts/proto_nd_flow:
@@ -37,7 +32,7 @@ if [ -e $OUTPUT_FILE ]; then
     rm $OUTPUT_FILE
 fi
 
-$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 -i $INPUT_FILE -o $OUTPUT_FILE
+$H5FLOW_CMD -c $WORKFLOW1 -i $INPUT_FILE -o $OUTPUT_FILE
 
 echo "Done!"
 echo "Output can be found at $OUTPUT_FILE"
