@@ -77,7 +77,7 @@ class ProtoNDFlowEventDisplay:
             self.x_vals = 'x_pix' 
             self.y_vals = 'y_pix'
             self.z_vals = 'z_pix' 
-            self.convert_to_mm = 1 # already in mm
+            self.convert_to_mm = 10 # xyz starts in cm
             self.y_offset = 218.236 # mm
             self.packets = f['charge/packets/data']
             self.packets_hits_ref = f['charge/'+self.hits_dset+'/ref/charge/packets/ref']
