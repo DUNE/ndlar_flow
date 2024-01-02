@@ -1,7 +1,7 @@
 import pytest
 
 from h5flow.data import H5FlowDataManager
-from module0_flow.resources.geometry import Geometry
+from proto_nd_flow.resources.geometry import Geometry
 
 
 @pytest.fixture
