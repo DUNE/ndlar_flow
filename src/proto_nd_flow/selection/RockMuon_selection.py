@@ -56,16 +56,17 @@ class RockMuonSelection(H5FlowStage):
         ('x', 'f8'),
         ('y', 'f8'),
         ('z', 'f8'),
-        ('track_id', 'u4'),
-        ('hit_id', 'u4'),
+        ('rock_muon_id', 'u4'),
+        ('id', 'u4'),
         ('t_drift', 'f8'),
         ('ts_pps', 'u8'),
         ('Q', 'f8'),
-        ('E', 'f8')
+        ('E', 'f8'),
+        ('rock_segment_id','u8')
     ])
     
     rock_muon_segments_dtype = np.dtype([
-        ('segment_id', 'u8'),
+        ('rock_segment_id', 'u8'),
         ('x_start', 'f8'),
         ('y_start','f8'),
         ('z_start','f8'),
@@ -130,7 +131,7 @@ class RockMuonSelection(H5FlowStage):
     #@staticmethod
     def cluster(self, PromptHits_ev):
         
-        hits = np.zeros((PromptHits_ev.shape[1],9))
+        hits = np.zeros((PromptHits_ev.shape[1],10))
 
         for i in range(PromptHits_ev.shape[1]):
             hits[i][0] = PromptHits_ev['x'].data[0][i]
@@ -160,9 +161,10 @@ class RockMuonSelection(H5FlowStage):
         pca.fit(X_train)
 
         explained_var = pca.explained_variance_ratio_
-        variance = pca.explained_variance_
+        vector = pca.components_
 
-        return  explained_var,variance
+        return  explained_var,vector
+
     #@staticmethod
     def length_track(self, hits_of_track):
         far_hit = np.max(hits_of_track[:,2])
@@ -312,56 +314,86 @@ class RockMuonSelection(H5FlowStage):
             return muon_hits
     
     #@staticmethod
-    def segments(self,muon_hits, rock_muon_slice):
+    def segments(self,muon_hits):
+        hits_of_segment = []
         hit_segments = []
-        
+
         ref = []
-        for each_track in np.unique(muon_hits['track_id']):
-            hits_wanted = muon_hits['track_id'] == each_track
-    
+
+        for each_track in np.unique(muon_hits['rock_muon_id']):
+            hits_wanted = muon_hits['rock_muon_id'] == each_track
+
             track = muon_hits[hits_wanted]
 
             positions = np.column_stack((track['x'], track['y'], track['z']))
 
-            hit_cluster = DBSCAN(eps = 0.7, min_samples = 5).fit(positions)
+            ex_var, fit = self.PCAs(positions)
+        
+            #Steps in beam direction using pca fit(z)
+            step_size = 7*abs(fit[0][2])
+            
 
-            for segment in np.unique(hit_cluster.labels_):
-                self.segment_count += 1
+            lowest_z = np.min(track['z'])
 
-                index = np.where(hit_cluster.labels_ == segment)[0]
+            for i in range(1,1000):
+                mask = ma.masked_where((track['z'] >= lowest_z + step_size*(i-1)) & (track['z'] < lowest_z + step_size*(i)),track)
 
-                hits_of_segment = muon_hits[index]
+                indices_of_masked_values = np.ma.where(mask.mask)[0]
+
+                segment = track[indices_of_masked_values]
+                
+                if len(segment) > 5:
+                    self.segment_count += 1
+                    hits_of_segment.append(segment)
+                    
+                j = len(hits_of_segment)
+                 
+                if (len(segment) <= 5) & (len(hits_of_segment) == 0):
+                    hits_of_segment.append(segment)
+
+                if (len(segment) <= 5) & (len(hits_of_segment) != 0):
+                    np.append(hits_of_segment[j-1],segment)
+                
+                hits_wanted = np.where(np.in1d(muon_hits['id'],segment['id']))[0]
+                
+                for hit in hits_wanted:
+                    ref.append([hit,self.segment_count])
+
+                track = np.delete(track, indices_of_masked_values)
+
+                #print(j, len(hits_of_segment), j-1)
+                #print(segment)
+                
                 
                 #Starting, mid, and end points of segment
-                z_start = np.min(hits_of_segment['z'])
+                z_start = np.min(hits_of_segment[j-1]['z'])
 
-                index1 = np.where(hits_of_segment['z'] == z_start)[0][0]
+                index1 = np.where(hits_of_segment[j-1]['z'] == z_start)[0][0]
 
-                x_start, y_start, z_start = hits_of_segment[index1]['x'], hits_of_segment[index1]['y'], hits_of_segment[index1]['z']
+                x_start, y_start, z_start = hits_of_segment[j-1][index1]['x'], hits_of_segment[j-1][index1]['y'], hits_of_segment[j-1][index1]['z']
 
-                z_end = np.max(hits_of_segment['z'])
+                z_end = np.max(hits_of_segment[j-1]['z'])
 
-                index2 = np.where(hits_of_segment['z'] == z_end)[0][0]
+                index2 = np.where(hits_of_segment[j-1]['z'] == z_end)[0][0]
 
-                x_end, y_end, z_end = hits_of_segment[index2]['x'], hits_of_segment[index2]['y'], hits_of_segment[index2]['z']
-                
+                x_end, y_end, z_end = hits_of_segment[j-1][index2]['x'], hits_of_segment[j-1][index2]['y'], hits_of_segment[j-1][index2]['z']
+
                 x_mid, y_mid, z_mid = (x_start+x_end)/2 , (y_start+y_end)/2 , (z_start+z_end)/2
+                
                 #dEdx
-                Energy_of_segment = sum(hits_of_segment['E'])
-                
-                Length_of_segment = self.length(hits_of_segment)
-                
+                Energy_of_segment = sum(hits_of_segment[j-1]['E'])
+
+                Length_of_segment = self.length(hits_of_segment[j-1])
+
                 # dQdx
-                Charge_of_segment = sum(hits_of_segment['Q'])
+                Charge_of_segment = sum(hits_of_segment[j-1]['Q'])
 
-                if Length_of_segment > 0:
-                    hit_segments.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment/Length_of_segment, x_end, y_end, z_end, Charge_of_segment/Length_of_segment, x_mid, y_mid, z_mid])
-                
-                for i in range(len(index)):
 
-                    ref.append([self.segment_count,index[i]+rock_muon_slice.start])
+                hit_segments.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment/Length_of_segment, x_end, y_end, z_end, Charge_of_segment/Length_of_segment, x_mid, y_mid, z_mid])
                 
-        return hit_segments, np.array(ref) 
+                if len(track) == 0:
+                    break
+        return hit_segments, ref
 
 
     def run(self, source_name, source_slice, cache):
@@ -370,7 +402,7 @@ class RockMuonSelection(H5FlowStage):
                 
         event_id = np.r_[source_slice]
                 
-        PromptHits_ev = cache[self.PromptHits_dset_name]
+        PromptHits_ev = cache[self.FinalHits_dset_name]
         
         Segs_PromptHits = cache[self.Segs_PromptHits_dset_name]
         
@@ -388,18 +420,28 @@ class RockMuonSelection(H5FlowStage):
             
             flat_muon_hits = np.concatenate(muon_tracks) #Flatten multiple tracks to just an array of hits
 
+
             muon_hits_array = np.array([tuple(sub) for sub in flat_muon_hits], dtype = self.rock_muon_hit_dtype) #Converts array of list to array of tuples
             
-            nMuon_hits = len(muon_hits_array)
+            segments_list, hit_segment_ref = self.segments(muon_hits_array)
             
+            #Reference hits to their segments
+            muon_hits_array['rock_segment_id'] = -1
+
+            for each_ref in hit_segment_ref:
+                index = each_ref[0]
+
+                muon_hits_array[index]['rock_segment_id'] = each_ref[1]
+
+            nMuon_hits = len(muon_hits_array)
+
             #  1. reserve a new data region within the output dataset
             rock_muon_slice = self.data_manager.reserve_data(self.rock_muon_hits_dset_name, nMuon_hits)
-             
+
+
             #  2. write the data to the new data region
             self.data_manager.write_data(self.rock_muon_hits_dset_name, rock_muon_slice, muon_hits_array)
-
-            segments_list, ref = self.segments(muon_hits_array,rock_muon_slice)
-
+            
             segments_array = np.array([tuple(sub) for sub in segments_list], dtype = self.rock_muon_segments_dtype) #Converts array of list to array of tuples
             
             nMuon_segments = len(segments_array)
@@ -418,4 +460,4 @@ class RockMuonSelection(H5FlowStage):
 
             self.data_manager.write_ref(source_name, self.rock_muon_hits_dset_name, events_ref)
             # event -> hit
-            self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.rock_muon_hits_dset_name, ref)
+            #self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.rock_muon_hits_dset_name, ref)
