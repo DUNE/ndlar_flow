@@ -651,7 +651,7 @@ class Geometry(H5FlowResource):
                         if self.network_agnostic == True:
                             warnings.warn('Encountered an out-of-network chip, but because you enabled ``network_agnostic``, we will carry on with assumptions about the io group and io channel')
                             # using the info about the first chip on the tile for all others
-                            io_group_io_channel = list(geometry_yaml['tile_chip_to_io'][tile].values())[0]
+                            io_group_io_channel = list(geometry_yaml[tile]['tile_chip_to_io'][tile].values())[0]
                         else:
                             continue
 
