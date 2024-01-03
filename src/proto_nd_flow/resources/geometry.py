@@ -613,12 +613,13 @@ class Geometry(H5FlowResource):
 
         # Loop through modules
         for module_id in module_to_io_groups:
-            pixel_pitch = geometry_yamls[self.crs_geometry_to_module[module_id-1]]['pixel_pitch'] / units.cm # convert mm -> cm
+            geometry_yaml = geometry_yamls[self.crs_geometry_to_module[module_id-1]]
+            pixel_pitch = geometry_yaml['pixel_pitch'] / units.cm # convert mm -> cm
             self._pixel_pitch[module_id-1] = pixel_pitch
-            chip_channel_to_position = geometry_yamls[self.crs_geometry_to_module[module_id-1]]['chip_channel_to_position']
-            tile_orientations = geometry_yamls[self.crs_geometry_to_module[module_id-1]]['tile_orientations']
-            tile_positions = geometry_yamls[self.crs_geometry_to_module[module_id-1]]['tile_positions']
-            tile_chip_to_io = geometry_yamls[self.crs_geometry_to_module[module_id-1]]['tile_chip_to_io']
+            chip_channel_to_position = geometry_yaml['chip_channel_to_position']
+            tile_orientations = geometry_yaml['tile_orientations']
+            tile_positions = geometry_yaml['tile_positions']
+            tile_chip_to_io = geometry_yaml['tile_chip_to_io']
             zs = np.array(list(chip_channel_to_position.values()))[:, 0] * pixel_pitch
             ys = np.array(list(chip_channel_to_position.values()))[:, 1] * pixel_pitch
             z_size = max(zs) - min(zs) + pixel_pitch
@@ -651,7 +652,7 @@ class Geometry(H5FlowResource):
                         if self.network_agnostic == True:
                             warnings.warn('Encountered an out-of-network chip, but because you enabled ``network_agnostic``, we will carry on with assumptions about the io group and io channel')
                             # using the info about the first chip on the tile for all others
-                            io_group_io_channel = list(geometry_yamls[tile]['tile_chip_to_io'][tile].values())[0]
+                            io_group_io_channel = list(geometry_yaml['tile_chip_to_io'][tile].values())[0]
                         else:
                             continue
 
