@@ -60,6 +60,8 @@ class DisabledChannels(H5FlowResource):
         self.disabled_channels_file_dir = params.get('disabled_channels_file_dir', None)
         self.disabled_channels_common_filename = params.get('disabled_channels_common_filename', None)
         self.disabled_channels_file_format = params.get('disabled_channels_file_format', None)
+        self.disabled_channels_list = self.disabled_channels_file_dir+self.disabled_channels_common_filename+ \
+                                      self.lookup_disabled_channel_file_ts+self.disabled_channels_file_format
         self.missing_asic_list = params.get('missing_asic_list', None)
 
     def init(self, source_name):
@@ -140,7 +142,7 @@ class DisabledChannels(H5FlowResource):
         Loads a disabled channels lookup-table from the json formatted filenames::
 
             disabled_channels_*.json 
-            missing_asic_list
+            missing_asic_list (for Module 1, module1-network-absent-ASICs.json)
 
         ``disabled_channels_*.json`` files contain ``chip-key: [channel_id]`` pairs of
         disabled channels that are defined within the geometry, but should be
@@ -220,34 +222,48 @@ class DisabledChannels(H5FlowResource):
 
         return disable_channels_lut, zy
 
-
-""" TODO: Add version of the following code/methods for time dependent lookup functionality for dis. ch. list
-
-    disabled_channels_config = self.disabled_channels_timestamp_dict
-    charge_filename = resources['RunData'].charge_filename
-
+    @staticmethod
     def convert_ts_str_to_float(filename):
 
+        '''
+        Convert timestamp in charge data file name to float so that timestamps can be compared
+
+        :param filename: charge filename ``str``
+
+        :returns: float with digits of form MMDDhhmmss (M=month, D=day, h=hour(24h), m=min, s=sec)
+        '''
+
         filename = filename.strip('CET')
+        # Removes year from consideration in charge file timestamp bc year not in disabled channel file timestamp
         file_ts_arr = np.array([float(x)/100 for x in filename.split('_') if x and float(x)/100 < 1.])
         file_ts_float = 0.
         len_file_ts_arr = len(file_ts_arr)
         for i in range(len_file_ts_arr): 
-            file_ts_float += file_ts_arr[i]*10**(len_file_ts_arr*2 - i*2)
+            file_ts_float += file_ts_arr[i]*pow(10, 2*(len_file_ts_arr - i))
 
         return file_ts_float
 
-    print("File timestamp float:", convert_ts_to_float(charge_filename))
-    file_ts = convert_ts_to_float(charge_filename)
 
-    def lookup_disabled_channel_file_ts(self, filename): # use self
+    @staticmethod
+    def lookup_disabled_channel_file_ts(self): 
+
+        '''
+        Find timestamp for relevant disabled channels file from charge filename
+
+        :param [None]
+
+        :returns: disabled channel dictionary file timestamp of form MM_DD_hh_mm_ss ``str''
+                  (M=month, D=day, h=hour(24h), m=min, s=sec)
+        '''
 
         dc_file_ts = ''
         dc_config_file = open(self.disabled_channels_timestamp_dict)
         dc_config = json.load(dc_config_file)
+        file_ts = self.convert_ts_str_to_float(self.charge_filename)
+
         for ts in dc_config.keys():
         
-            dc_ts = convert_ts_to_float(ts)
+            dc_ts = self.convert_ts_str_to_float(ts)
 
             if file_ts > dc_ts:
                 dc_file_ts = ts
@@ -259,11 +275,4 @@ class DisabledChannels(H5FlowResource):
             raise ValueError("Disabled channel file timestamp not found.")
 
         return dc_file_ts
-
-    print("Disabled Channel File Timestamp:", lookup_disabled_channel_file_ts(disabled_channels_config, charge_filename))
-
     
-
-
-
-"""
