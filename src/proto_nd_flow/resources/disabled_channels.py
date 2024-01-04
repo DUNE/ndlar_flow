@@ -1,6 +1,7 @@
 import logging
 import json
 import numpy as np
+import random
 
 from h5flow.core import H5FlowResource, resources
 
@@ -63,12 +64,14 @@ class DisabledChannels(H5FlowResource):
         self.disabled_channels_list = self.disabled_channels_file_dir+self.disabled_channels_common_filename+ \
                                       self.lookup_disabled_channel_file_ts+self.disabled_channels_file_format
         self.missing_asic_list = params.get('missing_asic_list', None)
+        self.is_mc = False
 
     def init(self, source_name):
         super(DisabledChannels, self).init(source_name)
 
         # create group (if not present)
         self.data_manager.set_attrs(self.path)
+        self.is_mc = resources['RunData'].is_mc
         # load data (if present)
         self.data = dict(self.data_manager.get_attrs(self.path))
 
@@ -261,15 +264,23 @@ class DisabledChannels(H5FlowResource):
         dc_config = json.load(dc_config_file)
         file_ts = self.convert_ts_str_to_float(self.charge_filename)
 
-        for ts in dc_config.keys():
-        
-            dc_ts = self.convert_ts_str_to_float(ts)
+        # Choose random disabled channels file for MC files
+        if self.is_mc:
 
-            if file_ts > dc_ts:
-                dc_file_ts = ts
-                continue
-            else:
-                break
+            dc_file_ts = random.choice(list(dc_config.keys()))
+
+        # Choose disabled channels file based on timestamp for data files 
+        else:
+            
+            for ts in dc_config.keys():
+        
+                dc_ts = self.convert_ts_str_to_float(ts)
+
+                if file_ts > dc_ts:
+                    dc_file_ts = ts
+                    continue
+                else:
+                    break
 
         if dc_file_ts == '': 
             raise ValueError("Disabled channel file timestamp not found.")
