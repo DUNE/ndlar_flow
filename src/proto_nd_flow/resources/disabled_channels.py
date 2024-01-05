@@ -61,8 +61,9 @@ class DisabledChannels(H5FlowResource):
         self.disabled_channels_file_dir = params.get('disabled_channels_file_dir', None)
         self.disabled_channels_common_filename = params.get('disabled_channels_common_filename', None)
         self.disabled_channels_file_format = params.get('disabled_channels_file_format', None)
+        self.disabled_channels_file_ts = self.lookup_disabled_channel_file_ts
         self.disabled_channels_list = self.disabled_channels_file_dir+self.disabled_channels_common_filename+ \
-                                      self.lookup_disabled_channel_file_ts+self.disabled_channels_file_format
+                                      self.disabled_channels_file_ts+self.disabled_channels_file_format
         self.missing_asic_list = params.get('missing_asic_list', None)
         self.is_mc = False
 

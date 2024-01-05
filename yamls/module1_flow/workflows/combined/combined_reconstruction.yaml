@@ -19,7 +19,7 @@ resources:
   - !include yamls/module1_flow/resources/RunData.yaml
   - !include yamls/module1_flow/resources/Geometry.yaml
   - !include yamls/module1_flow/resources/LArData.yaml
-  - !include yamls/module1_flow/resources/DisabledChannels.yaml
+  #- !include yamls/module1_flow/resources/DisabledChannels.yaml
 
 t0_reco:
   !include yamls/module1_flow/reco/combined/T0Reconstruction.yaml

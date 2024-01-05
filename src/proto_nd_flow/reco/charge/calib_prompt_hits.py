@@ -146,20 +146,22 @@ class CalibHitBuilder(H5FlowStage):
         mask = ~rfn.structured_to_unstructured(packets_data.mask).any(axis=-1)
         rh_mask = ~rfn.structured_to_unstructured(raw_hits.mask).any(axis=-1)
 
+        has_mc_truth = packet_seg_bt is not None # TODO: change to using RunData "is_mc" field?
+
         # get event boundaries
         if np.count_nonzero(mask):
             raw_hits_arr = raw_hits.data[rh_mask]
             mask = (packets_data['packet_type'] == 0) & mask
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
-            packet_frac_bt_arr = packet_frac_bt.data[mask]
-            packet_seg_bt_arr = packet_seg_bt.data[mask]
             index_arr = packets_index.data[mask]
+            if has_mc_truth:
+                packet_frac_bt_arr = packet_frac_bt.data[mask]
+                packet_seg_bt_arr = packet_seg_bt.data[mask]
         else:
             n = 0
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
 
-        has_mc_truth = packet_seg_bt is not None
 
         # reserve new data
         calib_hits_slice = self.data_manager.reserve_data(self.calib_hits_dset_name, n)
