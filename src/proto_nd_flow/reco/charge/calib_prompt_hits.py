@@ -256,7 +256,7 @@ class CalibHitBuilder(H5FlowStage):
 
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped):
-        return (dw / 256. * (vref - vcm) + vcm - ped) / 4. # hardcoding 1 ke/mV conv.
+        return (dw / 256. * (vref - vcm) + vcm - ped) / 4. # hardcoding 4 mV/ke- conv.
 
     def load_pedestals(self):
         if self.pedestal_file != '' and not resources['RunData'].is_mc:
