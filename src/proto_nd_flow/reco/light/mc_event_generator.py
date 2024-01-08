@@ -20,10 +20,10 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, path to dataset to store raw waveforms
+         - ``n_modules`` : ``int``, number of modules
          - ``n_adcs`` : ``int``, number of ADC serial numbers
          - ``n_channels`` : ``int``, number of channels per ADC
-         - ``n_sipms`` : ``int``, total number of SiPM channels in simulation data
-         - ``n_modules`` : ``int``, number of proto ND modules
+         - ``n_sipms_per_module`` : ``int``, total number of SiPM channels per module
          - ``adc_sn`` : ``list`` of ``int``, serial number of each ADC
          - ``channel_map``: ``list`` of ``list`` of ``int``, mapping from simulation optical detector to adc, channel, ``-1`` values indicate channel is not connected
          - ``busy_channel``: ``list`` of ``int``, channel used for busy signal on each ADC (if relevant)
@@ -43,9 +43,10 @@ class LightEventGeneratorMC(H5FlowGenerator):
                 dset_name: 'light/events'
                 params:
                     wvfm_dset_name: 'light/wvfm'
-                    n_adcs: 2
+                    n_modules: 4
+                    n_adcs: 8
                     n_channels: 64
-                    n_simps: 96
+                    n_sipms_per_module: 96
                     adc_sn:
                      - 0
                      - 1
@@ -77,10 +78,10 @@ class LightEventGeneratorMC(H5FlowGenerator):
     defaults = dict(
         wvfm_dset_name='light/wvfm',
         mc_truth_dset_name='mc_truth/light',
+        n_modules=4,
         n_adcs=2,
         n_channels=64,
-        n_sipms=96,
-        n_modules=4,
+        n_sipms_per_module= 96,
         busy_delay=123,
         busy_ampl=20e3,
         chunk_size=32
@@ -165,10 +166,10 @@ class LightEventGeneratorMC(H5FlowGenerator):
         self.data_manager.set_attrs(self.event_dset_name,
                                     classname=self.classname,
                                     class_version=self.class_version,
+                                    n_modules=self.n_modules,
                                     n_adcs=self.n_adcs,
                                     n_channels=self.n_channels,
-                                    n_sipms=self.n_sipms,
-                                    n_modules=self.n_modules,
+                                    n_sipms_per_module=self.n_sipms_per_module,
                                     n_samples=self.n_samples,
                                     chunk_size=self.chunk_size,
                                     busy_delay=self.busy_delay,
@@ -210,9 +211,9 @@ class LightEventGeneratorMC(H5FlowGenerator):
         next_startch = [tr_ev[0][0] for tr_ev in next_trig]
         
         # convert channel map
-        tmp_wvfms = np.zeros((next_wvfms.shape[0], self.n_sipms, next_wvfms.shape[-1]),dtype=next_wvfms.dtype)
+        tmp_wvfms = np.zeros((next_wvfms.shape[0], self.n_modules*self.n_sipms_per_module, next_wvfms.shape[-1]),dtype=next_wvfms.dtype)
         for ev in range(next_wvfms.shape[0]):
-            tmp_wvfms[ev,next_startch[ev]:next_startch[ev]+(self.n_sipms//self.n_modules),:] = next_wvfms[ev]
+            tmp_wvfms[ev,next_startch[ev]:(next_startch[ev]+next_wvfms[ev].shape[0]),:] = next_wvfms[ev]
         next_wvfms=tmp_wvfms
         del tmp_wvfms
         remapped_wvfms = self._remap_array(self.channel_map, -next_wvfms, axis=-2)

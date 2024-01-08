@@ -1,0 +1,20 @@
+# Copied and modified from yamls/proto_nd_flow/reco/charge/TimestampCorrector.yaml
+
+classname: TimestampCorrector
+path: proto_nd_flow.reco.charge.timestamp_corrector
+requires:
+  - 'charge/packets'
+  - name: 'charge/packets_index'
+    path: 'charge/packets'
+    index_only: True
+params:
+  # input
+  packets_dset_name: 'charge/packets'
+
+  # output
+  ts_dset_name: 'charge/packets_corr_ts' # new dataset
+
+  # configuration parameters
+  correction:
+    1: [-9.5, -2.57e-07]
+    2: [-9.5,  4.14e-07]

@@ -432,8 +432,9 @@ class RawEventGenerator(H5FlowGenerator):
             # write mc data to file
             mc_assn = (np.concatenate(event_mc_assn, axis=0)
                        if len(event_mc_assn) else np.full((0,), -1, dtype=self.mc_assn.dtype))
-            mc_assn_mask = (mc_assn['track_ids'] == -1) | (mc_assn['fraction'] == 0.)
-            event_tracks = ma.array(mc_assn['track_ids'], mask=mc_assn_mask)
+            id_field = 'segment_ids' if 'segment_ids' in mc_assn.dtype.fields else 'track_ids'
+            mc_assn_mask = (mc_assn[id_field] == -1) | (mc_assn['fraction'] == 0.)
+            event_tracks = ma.array(mc_assn[id_field], mask=mc_assn_mask)
             event_packet_fraction = ma.array(mc_assn['fraction'], mask=mc_assn_mask)
 
             # set up packet references

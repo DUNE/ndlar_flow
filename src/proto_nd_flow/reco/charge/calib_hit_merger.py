@@ -104,36 +104,30 @@ class CalibHitMerger(H5FlowStage):
 
         '''
 
-        new_seg_bt = np.array(seg_fracs[0])
-        new_frac_bt = np.array(seg_fracs[1])
+        has_mc_truth = seg_fracs[0] is not None
         iteration_count = 0
         mask = hits.mask['id'].copy()
         new_hits = hits.data.copy()
         weights = weights.data.copy()
         old_ids = hits.data['id'].copy()[...,np.newaxis]
         old_id_mask = hits.mask['id'].copy()[...,np.newaxis]
-
-        hit_contributions = np.full(shape=weights.shape+(3,self.max_contrib_segments),fill_value=0.)
-        #print('weights shape',weights.shape) 
-        #print('hit_contr shape',hit_contributions.shape) 
-        for it, q in np.ndenumerate(weights):
-            #print('it',it)
-            #hit_contributions[it].append([])
-            #print('---------------')
-            if len(new_frac_bt[it]) > 1:
-                print('!!!!!!!!!!!!!!!!!')
-                break
-            counter=0
-            for entry_it, entry in enumerate(new_frac_bt[it][0]):
-                #print('frac =',entry)
-                if abs(entry) < 0.001: continue
-                hit_contributions[it][0][counter] = q
-                hit_contributions[it][1][counter] = new_frac_bt[it][0][entry_it]
-                hit_contributions[it][2][counter] = new_seg_bt[it][0][entry_it]['segment_id']
-                counter+=1
-
-        #print('hit_contributions.shape =',hit_contributions.shape)
-        #print(hit_contributions)
+        if has_mc_truth:
+            new_seg_bt = np.array(seg_fracs[0])
+            new_frac_bt = np.array(seg_fracs[1])
+            hit_contributions = np.full(shape=weights.shape+(3,self.max_contrib_segments),fill_value=0.)
+            # initialize hit contribution lists with unmerged data.
+            # [there is probably a more pythonic way of doing this...]
+            for it, q in np.ndenumerate(weights):
+                if len(new_frac_bt[it]) > 1:
+                    print('!!!!!!!!!!!!!!!!!')
+                    break
+                counter=0
+                for entry_it, entry in enumerate(new_frac_bt[it][0]):
+                    if abs(entry) < 0.001: continue
+                    hit_contributions[it][0][counter] = q
+                    hit_contributions[it][1][counter] = new_frac_bt[it][0][entry_it]
+                    hit_contributions[it][2][counter] = new_seg_bt[it][0][entry_it]['segment_id']
+                    counter+=1
 
         while new_hits.size > 0 and iteration_count != max_steps:
             iteration_count += 1
@@ -147,7 +141,7 @@ class CalibHitMerger(H5FlowStage):
             mask = np.take_along_axis(mask, isort, axis=-1)
             new_hits = np.take_along_axis(new_hits, isort, axis=-1)
             weights = np.take_along_axis(weights, isort, axis=-1)
-            hit_contributions = np.take_along_axis(hit_contributions,isort[...,np.newaxis,np.newaxis],axis=-3)
+            if has_mc_truth: hit_contributions = np.take_along_axis(hit_contributions,isort[...,np.newaxis,np.newaxis],axis=-3)
             old_ids = np.take_along_axis(old_ids, isort[...,np.newaxis], axis=-2)
             old_id_mask = np.take_along_axis(old_id_mask, isort[...,np.newaxis], axis=-2)
             N_new_hits = new_hits.shape[0]*new_hits.shape[1]-np.count_nonzero(mask)
@@ -158,6 +152,7 @@ class CalibHitMerger(H5FlowStage):
             same_channel = (
                 (new_hits['z'][..., :-1] == new_hits['z'][..., 1:])
                 & (new_hits['y'][..., :-1] == new_hits['y'][..., 1:])
+                & (new_hits['io_group'][..., :-1] == new_hits['io_group'][..., 1:])
             )
 
             # flag valid hits if they are on the same channel and are close in time
@@ -203,22 +198,22 @@ class CalibHitMerger(H5FlowStage):
                         np.place(new_hits[...,:-1][field], to_merge, ((hit0[field]-base) * w0 + (hit1[field]-base) * w1).astype(new_hits.dtype[field]) + base)
                 # combine weights for next iteration
                 np.place(weights[...,:-1], to_merge, weights[...,:-1] + weights[...,1:])
-                for hit_it, hit_cont in np.ndenumerate(weights[...,:-1]):
-                    if (not to_merge[hit_it]) | mask[hit_it]:
-                        #print('skipping')
-                        continue
-                    #if hit_contributions[hit_it][1].shape[0] < self.max_contrib_segments: print('a shape :',hit_contributions[hit_it][1].shape)
-                    e = np.argwhere(hit_contributions[...,:-1][hit_it][1]==0)[0][0]
-                    f = np.argwhere(hit_contributions[...,:][hit_it[0],hit_it[1]+1][1]==0)[0][0]
-                    # merge the hit contributions:
-                    for comb_it in range(f):
-                        hit_contributions[...,:-1][hit_it][1][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][1][comb_it]
-                        hit_contributions[...,:-1][hit_it][0][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][0][comb_it]
-                        hit_contributions[...,:-1][hit_it][2][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][2][comb_it]
-                        # and remove them from the hit that was merged in
-                        hit_contributions[hit_it[0],hit_it[1]+1][1][comb_it] = 0
-                        hit_contributions[hit_it[0],hit_it[1]+1][0][comb_it] = 0.
-                        hit_contributions[hit_it[0],hit_it[1]+1][2][comb_it] = 0.
+                if has_mc_truth:
+                    for hit_it, hit_cont in np.ndenumerate(weights[...,:-1]):
+                        if (not to_merge[hit_it]) | mask[hit_it]:
+                            #print('skipping')
+                            continue
+                        e = np.argwhere(hit_contributions[...,:-1][hit_it][1]==0)[0][0]
+                        f = np.argwhere(hit_contributions[...,:][hit_it[0],hit_it[1]+1][1]==0)[0][0]
+                        # merge the hit contributions:
+                        for comb_it in range(f):
+                            hit_contributions[...,:-1][hit_it][1][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][1][comb_it]
+                            hit_contributions[...,:-1][hit_it][0][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][0][comb_it]
+                            hit_contributions[...,:-1][hit_it][2][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][2][comb_it]
+                            # and remove them from the hit that was merged in
+                            hit_contributions[hit_it[0],hit_it[1]+1][1][comb_it] = 0
+                            hit_contributions[hit_it[0],hit_it[1]+1][0][comb_it] = 0.
+                            hit_contributions[hit_it[0],hit_it[1]+1][2][comb_it] = 0.
 
                 # now we mask off hits that have already been merged
                 mask[...,1:] = mask[...,1:] | to_merge
@@ -246,40 +241,41 @@ class CalibHitMerger(H5FlowStage):
                 break
 
         # calculate segment contributions for each merged hit
-        tmp_bt = np.full(shape=new_hits.shape+(2,self.max_contrib_segments),fill_value=0.)
-        back_track = np.full(shape=new_hits.shape,fill_value=0.,dtype=self.hit_frac_dtype)
-        # loop over hits
-        for hit_it, hit in np.ndenumerate(new_hits):
-            if mask[hit_it]: continue
-            hit_contr = hit_contributions[hit_it]
-            # renormalize the fractional contributions given the charge weighted average
-            norm = np.sum(np.multiply(hit_contr[0],hit_contr[1]))
-            if norm == 0.: norm = 1.
-            tmp_bt[hit_it][0] = np.multiply(hit_contr[0],hit_contr[1])/norm # fractional contributions
-            tmp_bt[hit_it][1] = hit_contr[2] # segment_ids
+        if has_mc_truth:
+            back_track = np.full(shape=new_hits.shape,fill_value=0.,dtype=self.hit_frac_dtype)
+            # loop over hits
+            for hit_it, hit in np.ndenumerate(new_hits):
+                if mask[hit_it]: continue
+                hit_contr = hit_contributions[hit_it]
+                # renormalize the fractional contributions given the charge weighted average
+                norm = np.sum(np.multiply(hit_contr[0],hit_contr[1]))
+                if norm == 0.: norm = 1.
+                tmp_bt_0 = np.multiply(hit_contr[0],hit_contr[1])/norm # fractional contributions
+                tmp_bt_1 = hit_contr[2] # segment_ids
 
-            # merge unique track contributions
-            track_dict = defaultdict(lambda:0)
-            for track in zip(tmp_bt[hit_it][0],tmp_bt[hit_it][1]):
-                track_dict[track[1]] += track[0]
-            track_dict = dict(track_dict)
-            bt_unique_segs = np.array(list(track_dict.keys()))
-            bt_unique_frac = np.array(list(track_dict.values()))
-            n_conts = bt_unique_frac.shape[0]
-            isort = np.flip(np.argsort(np.abs(bt_unique_frac), axis=-1, kind='stable'))
-            bt_unique_segs = np.take_along_axis(bt_unique_segs, isort, axis=-1)
-            bt_unique_frac = np.take_along_axis(bt_unique_frac, isort, axis=-1)
-            back_track[hit_it]['fraction'] = [0.]*self.max_contrib_segments
-            back_track[hit_it]['segment_id'] = [0]*self.max_contrib_segments
-            back_track[hit_it]['fraction'][:bt_unique_frac.shape[0]] = bt_unique_frac
-            back_track[hit_it]['segment_id'][:bt_unique_segs.shape[0]] = bt_unique_segs
+                # merge unique track contributions
+                track_dict = defaultdict(lambda:0)
+                for track in zip(tmp_bt_0,tmp_bt_1):
+                    track_dict[track[1]] += track[0]
+                track_dict = dict(track_dict)
+                bt_unique_segs = np.array(list(track_dict.keys()))
+                bt_unique_frac = np.array(list(track_dict.values()))
+                n_conts = bt_unique_frac.shape[0]
+                isort = np.flip(np.argsort(np.abs(bt_unique_frac), axis=-1, kind='stable'))
+                bt_unique_segs = np.take_along_axis(bt_unique_segs, isort, axis=-1)
+                bt_unique_frac = np.take_along_axis(bt_unique_frac, isort, axis=-1)
+                back_track[hit_it]['fraction'] = [0.]*self.max_contrib_segments
+                back_track[hit_it]['segment_id'] = [0]*self.max_contrib_segments
+                back_track[hit_it]['fraction'][:bt_unique_frac.shape[0]] = bt_unique_frac
+                back_track[hit_it]['segment_id'][:bt_unique_segs.shape[0]] = bt_unique_segs
+        else: back_track = None
 
         new_hit_idx = np.broadcast_to(np.cumsum(~mask.ravel(), axis=0).reshape(mask.shape + (1,)), old_ids.shape)-1
 
         return (
             ma.array(new_hits, mask=mask),
             np.c_[np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids), np.extract(~(old_id_mask | mask[...,np.newaxis]), new_hit_idx)],
-            ma.array(back_track, mask=mask)
+            ma.array(back_track, mask=mask) if back_track is not None else None
             )
 
     def run(self, source_name, source_slice, cache):
@@ -303,18 +299,21 @@ class CalibHitMerger(H5FlowStage):
             np.place(merged['id'], ~merged_mask, merge_idx)
 
         self.data_manager.write_data(self.merged_name, merge_idx, merged[~merged_mask])
-        merge_bt_slice = self.data_manager.reserve_data(self.mc_hit_frac_dset_name, new_nhit)
-        self.data_manager.write_data(self.mc_hit_frac_dset_name, merge_idx, back_track[~merged_mask])
 
         # HACK: Remove duplicate refs. Would be nice to actually understand and
         # fix the origin of these duplicates.
         ref = np.unique(ref, axis=0)
         # sort based on the ID of the prompt hit, to make analysis more convenient
         ref = ref[np.argsort(ref[:, 0])]
-
-        # finally, write the references
         self.data_manager.write_ref(self.hits_name, self.merged_name, ref)
-        self.data_manager.write_ref(self.merged_name,self.mc_hit_frac_dset_name,np.c_[merge_idx,merge_idx])
+
+        # if back tracking information was available, write the merged back tracking
+        # dataset to file 
+        if back_track is not None:
+            merge_bt_slice = self.data_manager.reserve_data(self.mc_hit_frac_dset_name, new_nhit)
+            self.data_manager.write_data(self.mc_hit_frac_dset_name, merge_idx, back_track[~merged_mask])
+            self.data_manager.write_ref(self.merged_name,self.mc_hit_frac_dset_name,np.c_[merge_idx,merge_idx])
+
         ev_ref = np.c_[(np.indices(merged_mask.shape)[0] + source_slice.start)[~merged_mask], merge_idx]
         self.data_manager.write_ref(source_name, self.merged_name, ev_ref)
         self.data_manager.write_ref(self.events_dset_name, self.merged_name, ev_ref)

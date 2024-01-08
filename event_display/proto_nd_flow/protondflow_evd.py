@@ -82,7 +82,7 @@ class ProtoNDFlowEventDisplay:
             self.x_vals = 'x_pix' 
             self.y_vals = 'y_pix'
             self.z_vals = 'z_pix' 
-            self.convert_to_mm = 1 # already in mm
+            self.convert_to_mm = 10 # xyz starts in cm
             self.y_offset = 218.236 # mm
             self.packets = f['charge/packets/data']
             self.packets_hits_ref = f['charge/'+self.hits_dset+'/ref/charge/packets/ref']
@@ -395,9 +395,9 @@ class ProtoNDFlowEventDisplay:
         self.ax_zyx.set_box_aspect((2, 2, 4))
         self.ax_zyx.xaxis.set_major_locator(plt.MaxNLocator(3))
         self.ax_zyx.yaxis.set_major_locator(plt.MaxNLocator(3))
-        self.ax_zyx.w_xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-        self.ax_zyx.w_yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-        self.ax_zyx.w_zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        self.ax_zyx.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        self.ax_zyx.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        self.ax_zyx.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
         self.ax_zyx.zaxis.labelpad = 20
 
     def clear_axes(self):

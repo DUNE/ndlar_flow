@@ -1,0 +1,9 @@
+# Copied from yaml/proto_nd_flow/resources/LArData.yaml
+
+classname: LArData
+path: proto_nd_flow.resources.lar_data
+params:
+  path: 'lar_info'
+  # electron_lifetime_file: 'data/module0_flow/ElecLifetimeFit_Module0.npz'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/electronLifetime/ElecLifetimeFit_Module0.root
+  electron_lifetime: 900 # us

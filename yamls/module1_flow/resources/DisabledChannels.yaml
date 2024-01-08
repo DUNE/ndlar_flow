@@ -1,0 +1,13 @@
+classname: DisabledChannels # resources/disabled_channels.py
+path: proto_nd_flow.resources.disabled_channels
+params:
+  path: 'disabled_channels'
+  disabled_channels_timestamp_dict: 'data/module0_flow/module1_config_to_data_map.json'
+  # download link: https://portal.nersc.gov/project/dune/data/Module1/TPC12/disabled/module1_config_to_data_map.json
+  # format: key=ASIC config file timestamp
+  #         value=[[row in run log spreadsheet, data file timestamp]]
+  disabled_channels_file_dir: '/global/cfs/cdirs/dune/www/data/Module1/TPC12/disabled/' 
+  disabled_channels_common_filename: 'disabled_channels_'
+  disabled_channels_file_format: '.json'
+  missing_asic_list: 'data/module1_flow/module1-network-absent-ASICs.json'
+  # download link: https://portal.nersc.gov/project/dune/data/Module1/TPC12/module1-network-absent-ASICs.json
