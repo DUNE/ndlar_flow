@@ -1,0 +1,36 @@
+classname: HIPSelection # hip_selection.py
+path: proto_nd_flow.analysis.hip_selection
+requires:
+  - 'combined/tracklets'
+  - 'combined/t0'
+  - 'charge/calib_prompt_hits'
+  - name: 'mc_truth/trajectories'
+    path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories']
+  #- name: 'combined/track_hits'
+  #  path: ['combined/tracklets', 'charge/hits']
+  #- name: 'combined/track_hit_drift'
+  #  path: ['combined/tracklets', 'charge/hits', 'combined/hit_drift']
+
+params:
+  # inputs
+  hits_dset_name: 'charge/calib_prompt_hits'
+  ext_trigs_dset_name: 'charge/ext_trigs'
+  t0_dset_name: 'combined/t0'
+  tracklet_dset_name: 'combined/tracklets'
+  hit_drift_dset_name: 'charge/calib_prompt_hits'
+  truth_trajectories_dset_name: 'mc_truth/trajectories'
+  charge_dset_name: 'charge/calib_prompt_hits'
+  
+  # configuration parameters
+  fid_cut: 1.0 # cm
+  cathode_fid_cut: 0.0 # cm
+  anode_fid_cut: 1.0 # cm
+  profile_dx: 1.0 # cm
+  larpix_gain:
+    mc: 250 # e/mV
+    medm: 221 # e/mV
+    high: 221 # e/mV
+  curvature_rr_correction:
+    mc: 1.0
+    medm: 1.0
+    high: 1.0

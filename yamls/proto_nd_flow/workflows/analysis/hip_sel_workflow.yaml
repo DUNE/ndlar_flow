@@ -1,0 +1,22 @@
+flow:
+  source: events
+  stages: [hip_sel]
+  drop: []
+
+
+resources:
+  - !include yamls/proto_nd_flow/resources/RunData.yaml
+  - !include yamls/proto_nd_flow/resources/LArData.yaml
+  - !include yamls/proto_nd_flow/resources/Geometry.yaml
+  #- !include yamls/proto_nd_flow/resources/ParticleData.yaml
+  #- !include yamls/module0_flow/resources/DisabledChannels.yaml
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/events'
+  params:
+    chunk_size: 32
+
+hip_sel:
+  !include yamls/proto_nd_flow/analysis/hip_selection.yaml

@@ -1,0 +1,26 @@
+# Generates the mid-level event built data for charge data (i.e. hits and
+# external triggers)
+
+flow:
+  source: raw_events
+  #source: calib_prompt_hits
+  #stages: [temp_hit_builder, calib_hit_merger]
+  stages: [hough]
+  drop: []
+
+
+resources:
+  - !include yamls/proto_nd_flow/resources/RunData.yaml
+  - !include yamls/proto_nd_flow/resources/LArData.yaml
+  - !include yamls/proto_nd_flow/resources/Geometry.yaml
+
+raw_events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/raw_events'
+  params:
+    chunk_size: 32
+
+hough:
+  !include yamls/proto_nd_flow/util/hough.yaml
+

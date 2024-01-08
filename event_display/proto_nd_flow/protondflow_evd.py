@@ -24,6 +24,10 @@ class ProtoNDFlowEventDisplay:
             - nhits         (int): hit threshold for events to be made available in interactive display
             - hits_dset     (str): dataset of hits within the file that you want to display
                                    options are 'raw_hits', 'calib_prompt_hits', and 'calib_final_hits'
+            - tracklets     (bool): bool denoting whether or not file contains 'combined/tracklets' dataset;
+                                   default is False. Right now, tracklets plotting is only set up to plot
+                                   with hits dataset from which tracklets were made (either 'calib_prompt_hits'
+                                   OR 'calib_final_hits')
         
         In order to run the display, set up a Jupyter Notebook, import everything in this file,
         and execute the run() method, e.g.:
@@ -36,12 +40,13 @@ class ProtoNDFlowEventDisplay:
         g = '/path/to/geometry/file/name_of_geometry_file'
         hd = 'hits_dataset_you_want_to_display'
 
-        evd = ProtoNDFlowEventDisplay(filedir=d, filename=f, geometry_file=g,nhits=1, hits_dset=hd)
+        evd = ProtoNDFlowEventDisplay(filedir=d, filename=f, geometry_file=g,nhits=1, hits_dset=hd, tracklets=False)
         test_evd.run()
     '''
-    def __init__(self, filedir, filename, geometry_file=None, nhits=1, hits_dset='calib_final_hits'):
+    def __init__(self, filedir, filename, geometry_file=None, nhits=1, hits_dset='calib_final_hits', tracklets=False):
         f = h5py.File(filedir+filename, 'r')
         self.filename = filename
+        self.tracklets = tracklets
 
         # Set name of hits dataset to be used
         self.hits_dset = hits_dset
@@ -49,14 +54,14 @@ class ProtoNDFlowEventDisplay:
         # Load datasets
         events = f['charge/events/data']
         self.events = events[events['nhit'] > nhits]
-        try:
+        if self.tracklets:
             self.tracks = f['combined/tracklets/data']
             self.tracks_ref = f['charge/events/ref/combined/tracklets/ref']
             self.tracks_region = f['charge/events/ref/combined/tracklets/ref_region']
-            self.hits_trk_ref = f['combined/tracklets/ref/charge/hits/ref']
-            self.hits_trk_region = f['combined/tracklets/ref/charge/hits/ref_region']
-            self.hits_drift = f['combined/hit_drift/data']
-        except KeyError:
+            self.hits_trk_ref = f['combined/tracklets/ref/charge/'+self.hits_dset+'/ref']
+            self.hits_trk_region = f['combined/tracklets/ref/charge/'+self.hits_dset+'/ref_region']
+            #self.hits_drift = f['combined/hit_drift/data']
+        else:
             print("No tracklets found")
         self.hits = f['charge/'+self.hits_dset+'/data']
         self.hits_ref = f['charge/events/ref/charge/'+self.hits_dset+'/ref']
@@ -472,100 +477,42 @@ class ProtoNDFlowEventDisplay:
                 self.ax_time_1.axvline(x=trig, c='g')
                 self.ax_time_2.axvline(x=trig, c='g')
 
-        unassoc_hit_mask = np.ones(event['nhit']).astype(bool)
-
-        if 'ntracks' in event.dtype.name and event['ntracks']:
-            track_ref = event['track_ref']
-            tracks = self.tracks[track_ref]
-            track_start = tracks['start']
-            track_end = tracks['end']
-            for i, track in enumerate(tracks):
-
-                hit_trk_ref = track['hit_ref']
-                hits_trk = self.hits[hit_trk_ref]
-
-                # Difference between the z coordinate using the event ts_start (used in the track fitter)
-                # and the start time found by get_event_start_time
-                z_correction = (self._get_z_coordinate(hits_trk['iogroup'][0], hits_trk['iochannel'][0], event_start_time)
-                                - self._get_z_coordinate(hits_trk['iogroup'][0], hits_trk['iochannel'][0], event['ts_start']))
-
-                self.ax_zy.plot((track_start[i][0], track_end[i][0]),
-                                (track_start[i][1], track_end[i][1]),
-                                c='C{}'.format(i+1), alpha=0.75, lw=1)
-
-                self.ax_xy.plot((track_start[i][2], track_end[i][2]),
-                                (track_start[i][1], track_end[i][1]),
-                                c='C{}'.format(i+1), alpha=0.75, lw=1)
-
-                hits_anode1 = hits_trk[hits_trk[self.x_vals]*self.convert_to_mm <= 0]
-                hits_anode2 = hits_trk[hits_trk[self.x_vals]*self.convert_to_mm >0]
-
-                if self.hits_dset == 'raw_hits':
-                    self.ax_zy.scatter(hits_trk['px'], hits_trk['py'], lw=0.2, ec='C{}'.format(
-                        i+1), c=cmap(norm(self.charge_from_ADC(hits_trk[self.charge]), self.vref_mv, self.vcm_mv, self.ped_mv)), s=5, alpha=0.75)
-
-                    hit_xvals = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(
-                        hits_trk['iogroup'], hits_trk['iochannel'], hits_trk['ts']-track['t0'])]
-
-                    self.ax_xy.scatter(hit_xvals, hits_trk['py'], lw=0.2, ec='C{}'.format(
-                        i+1), c=cmap(norm(self.charge_from_ADC(hits_trk[self.charge], self.vref_mv, self.vcm_mv, self.ped_mv))), s=5, alpha=0.75)
-                    self.ax_zyx.scatter(hits_trk['px'], hit_xvals, hits_trk['py'], lw=0.2, ec='C{}'.format(
-                        i+1), c=cmap(norm(self.charge_from_ADC(hits_trk[self.charge], self.vref_mv, self.vcm_mv, self.ped_mv))), s=5, alpha=0.75)
-                else:
-                    self.ax_zy.scatter(hits_trk['px'], hits_trk['py'], lw=0.2, ec='C{}'.format(
-                        i+1), c=cmap(norm(hits_trk[self.charge])), s=5, alpha=0.75)
-
-                    hit_xvals = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(
-                        hits_trk['iogroup'], hits_trk['iochannel'], hits_trk['ts']-track['t0'])]
-
-                    self.ax_xy.scatter(hit_xvals, hits_trk['py'], lw=0.2, ec='C{}'.format(
-                        i+1), c=cmap(norm(hits_trk[self.charge])), s=5, alpha=0.75)
-                    self.ax_zyx.scatter(hits_trk['px'], hit_xvals, hits_trk['py'], lw=0.2, ec='C{}'.format(
-                        i+1), c=cmap(norm(hits_trk[self.charge])), s=5, alpha=0.75)
-
-                self.ax_zyx.plot((track_start[i][0], track_end[i][0]),
-                                 (track_start[i][2], track_end[i][2]),
-                                 (track_start[i][1], track_end[i][1]),
-                                 c='C{}'.format(i+1), alpha=0.5, lw=4)
-
-                unassoc_hit_mask[np.in1d(hits['hid'], hits_trk['hid'])] = 0
-                
+        unassoc_hit_mask = np.ones(len(hits['id'])).astype(bool)
 
         ev_id = event['id']
         
-        ''' For now, all tracklet plotting is just commented out'''
-        '''
-        track_ref = self.tracks_ref[self.tracks_region[ev_id,'start']:self.tracks_region[ev_id,'stop']]
-        track_ref = np.sort(track_ref[track_ref[:,0] == ev_id, 1])
-        tracks = self.tracks[track_ref]
-        track_start = tracks['start']
-        track_end = tracks['end']
-        for itrk, (ts, te) in enumerate(zip(track_start, track_end)):
-            hit_ref = self.hits_trk_ref[self.hits_trk_region[tracks[itrk]['id'],'start']:self.hits_trk_region[tracks[itrk]['id'],'stop']]
-            hit_ref = np.sort(hit_ref[hit_ref[:,0] == tracks[itrk]['id'], 1])
-            hits_trk = self.hits[hit_ref]
-            hits_drift_trk = self.hits_drift[hit_ref]
-            self.ax_zyx.scatter(hits_trk['px'], hits_drift_trk[self.z_vals]*self.convert_to_mm, hits_trk['py'], lw=0.2, ec='C{}'.format(
+        if self.tracklets and (self.hits_dset == 'calib_final_hits' or self.hits_dset == 'calib_prompt_hits'):
+            track_ref = self.tracks_ref[self.tracks_region[ev_id,'start']:self.tracks_region[ev_id,'stop']]
+            track_ref = np.sort(track_ref[track_ref[:,0] == ev_id, 1])
+            tracks = self.tracks[track_ref]
+            track_start = tracks['start']
+            track_end = tracks['end']
+            for itrk, (ts, te) in enumerate(zip(track_start, track_end)):
+                hit_ref = self.hits_trk_ref[self.hits_trk_region[tracks[itrk]['id'],'start']:self.hits_trk_region[tracks[itrk]['id'],'stop']]
+                hit_ref = np.sort(hit_ref[hit_ref[:,0] == tracks[itrk]['id'], 1])
+                hits_trk = self.hits[hit_ref]
+                self.ax_zyx.scatter(hits_trk[self.z_vals]*self.convert_to_mm, hits_trk[self.x_vals]*self.convert_to_mm, hits_trk[self.y_vals]*self.convert_to_mm+self.y_offset, lw=0.2, ec='C{}'.format(
                 itrk+1), c=cmap(norm(hits_trk[self.charge])), s=5, alpha=0.75)
-            self.ax_xy.scatter(hits_drift_trk[self.z_vals]*self.convert_to_mm, hits_trk['py'], lw=0.2, ec='C{}'.format(
+                self.ax_xy.scatter(hits_trk[self.x_vals]*self.convert_to_mm, hits_trk[self.y_vals]*self.convert_to_mm+self.y_offset, lw=0.2, ec='C{}'.format(
                 itrk+1), c=cmap(norm(hits_trk[self.charge])), s=5, alpha=0.75)
-            self.ax_zy.scatter(hits_trk['px'], hits_trk['py'], lw=0.2, ec='C{}'.format(
+                self.ax_zy.scatter(hits_trk[self.z_vals]*self.convert_to_mm, hits_trk[self.y_vals]*self.convert_to_mm+self.y_offset, lw=0.2, ec='C{}'.format(
                 itrk+1), c=cmap(norm(hits_trk[self.charge])), s=5, alpha=0.75)
-            self.ax_zy.plot((ts[0], te[0]),
-                            (ts[1], te[1]),
+                self.ax_zy.plot((ts[2]*self.convert_to_mm, te[2]*self.convert_to_mm),
+                            (ts[1]*self.convert_to_mm+self.y_offset, te[1]*self.convert_to_mm+self.y_offset),
                             c='C{}'.format(itrk+1), alpha=0.75, lw=1)
-            self.ax_xy.plot((ts[2], te[2]),
-                            (ts[1], te[1]),
+                self.ax_xy.plot((ts[0]*self.convert_to_mm, te[0]*self.convert_to_mm),
+                            (ts[1]*self.convert_to_mm+self.y_offset, te[1]*self.convert_to_mm+self.y_offset),
                             c='C{}'.format(itrk+1), alpha=0.75, lw=1)
-            self.ax_zyx.plot((ts[0], te[0]),
-                             (ts[2], te[2]),
-                             (ts[1], te[1]),
+                self.ax_zyx.plot((ts[2]*self.convert_to_mm, te[2]*self.convert_to_mm),
+                             (ts[0]*self.convert_to_mm, te[0]*self.convert_to_mm),
+                             (ts[1]*self.convert_to_mm+self.y_offset, te[1]*self.convert_to_mm+self.y_offset),
                              c='C{}'.format(itrk+1), alpha=0.5, lw=4)
-            unassoc_hit_mask[np.in1d(hits['id'], hits_trk['id'])] = 0
+                unassoc_hit_mask[np.in1d(hits['id'], hits_trk['id'])] = 0
+        
         if np.any(unassoc_hit_mask):
-        '''
-
-        unassoc_hits = hits#[unassoc_hit_mask]
+            unassoc_hits = hits[unassoc_hit_mask]
+        else: 
+            unassoc_hits = hits
         BG = np.asarray([1., 1., 1., ])
         my_cmap = cmap(np.arange(cmap.N))
         alphas = np.linspace(0, 1, cmap.N)
@@ -588,10 +535,14 @@ class ProtoNDFlowEventDisplay:
             self.ax_xy.scatter(hit_xvals, unassoc_hits[self.y_vals]*self.convert_to_mm+self.y_offset, lw=0, ec='C0', c=cmap(
                 norm(self.charge_from_ADC(unassoc_hits[self.charge], self.vref_mv, self.vcm_mv, self.ped_mv))), s=5, alpha=1)
         else:
+            if self.tracklets:
+                a = 0.75
+            else: 
+                a = 1.0
             hit_xvals = unassoc_hits[self.x_vals]*self.convert_to_mm
             self.ax_zyx.scatter(unassoc_hits[self.z_vals]*self.convert_to_mm, hit_xvals, unassoc_hits[self.y_vals]*self.convert_to_mm+self.y_offset, lw=0, ec='C0', c=cmap(
-                norm(unassoc_hits[self.charge])), s=5, alpha=1)
+                norm(unassoc_hits[self.charge])), s=5, alpha=a)
             self.ax_zy.scatter(unassoc_hits[self.z_vals]*self.convert_to_mm, unassoc_hits[self.y_vals]*self.convert_to_mm+self.y_offset, lw=0, ec='C0', c=cmap(
-                norm(unassoc_hits[self.charge])), s=5, alpha=1)
+                norm(unassoc_hits[self.charge])), s=5, alpha=a)
             self.ax_xy.scatter(hit_xvals, unassoc_hits[self.y_vals]*self.convert_to_mm+self.y_offset, lw=0, ec='C0', c=cmap(
-                norm(unassoc_hits[self.charge])), s=5, alpha=1)
+                norm(unassoc_hits[self.charge])), s=5, alpha=a)
