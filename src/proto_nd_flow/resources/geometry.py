@@ -55,7 +55,6 @@ class Geometry(H5FlowResource):
         Provides (for light geometry):
          - ``det_rel_pos``: lookup table for relative position (TPC,side,vertical position from bottom) of light detectors (Full ArCLight or LCM)
          - ``sipm_rel_pos``: lookup table for lookup table for relative position (TPC,side,vertical position from bottom) of SiPMs (Single SiPM)
-         - ``tpc_id``: lookup table for TPC number for light detectors
          - ``det_id``: lookup table for detector number from adc, channel id
          - ``det_bounds``: lookup table for detector minimum and maximum corners light detectors
          - ``sipm_abs_pos``: lookup table for sipm absolute position (x,y,z) in cm
@@ -118,13 +117,14 @@ class Geometry(H5FlowResource):
 
         if not self.data:
             # first time loading geometry, save to file
-            self.load_geometry()
 
             with open(self.det_geometry_file) as dgf:
                 self.det_geometry_yaml = yaml.load(dgf, Loader=yaml.FullLoader)
 
             with open(self.lrs_geometry_file) as gf:
                 self.lrs_geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
+
+            self.load_geometry()
 
             self.data_manager.set_attrs(self.path,
                                         classname=self.classname,
@@ -175,7 +175,8 @@ class Geometry(H5FlowResource):
         lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
                     + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
                     + self.det_rel_pos.nbytes + self.det_rel_pos.nbytes 
-                    + self.det_id.nbytes + self.det_bounds.nbytes)
+                    + self.det_id.nbytes + self.det_bounds.nbytes
+                    + self.sipm_abs_pos.nbytes)
 
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
@@ -450,9 +451,10 @@ class Geometry(H5FlowResource):
         '''
         return self._det_bounds
 
+    @property
     def sipm_abs_pos(self):
         '''
-            Lookup table for detector relative position, usage::
+            Lookup table for SiPM center xyz coordinate, usage::
 
                 resource['Geometry'].sipm_abs_pos[(adc_index, channel_index)]
 
@@ -509,7 +511,7 @@ class Geometry(H5FlowResource):
 
         return omega
 
-   def get_sipm_rel_pos(self, adc, channel):
+    def get_sipm_rel_pos(self, adc, channel):
         ''' Returns 
         - TPC number starting at 0 (Attention not to be confused wiht CRS IO group)
         - TPC side with 0: -z direction 1: +z direction
@@ -587,11 +589,8 @@ class Geometry(H5FlowResource):
         if self.rank == 0:
             logging.warning(f'Loading geometry from {self.lrs_geometry_file}...')
 
-        with open(self.lrs_geometry_file) as gf:
-            geometry = yaml.load(gf, Loader=yaml.FullLoader)
-
         # enforce that light geometry formatting is as expected
-        assert_compat_version(geometry['format_version'], '0.2.0')
+        assert_compat_version(self.lrs_geometry_yaml['format_version'], '0.2.0')
 
         mod_ids = np.array([v for v in self.det_geometry_yaml['module_to_tpcs'].keys()])
         tpc_ids = np.array([v for v in self.lrs_geometry_yaml['tpc_center_offset'].keys()])
@@ -642,6 +641,9 @@ class Geometry(H5FlowResource):
         self._sipm_abs_pos = LUT('f4', *adc_chan_min_max, shape=(3,))
         self._sipm_abs_pos.default = -1
 
+        self._sipm_rel_pos = LUT('i4', *adc_chan_min_max, shape=(3,))
+        self._sipm_rel_pos.default = -1
+
         self._det_id = LUT('i4', *adc_chan_min_max)
         self._det_id.default = -1
 
@@ -649,6 +651,7 @@ class Geometry(H5FlowResource):
         self._det_bounds.default = 0.
 
         self._det_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = det_ids[det_chan_mask]
+
         for adc in adc_ids:
             for chan in chan_ids:
                 self._sipm_rel_pos = np.array(self.get_sipm_rel_pos)
