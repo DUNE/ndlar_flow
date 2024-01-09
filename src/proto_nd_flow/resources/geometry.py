@@ -654,7 +654,7 @@ class Geometry(H5FlowResource):
 
         for adc in adc_ids:
             for chan in chan_ids:
-                self._sipm_rel_pos = np.array(self.get_sipm_rel_pos)
+                self._sipm_rel_pos[(adc,chan)] = np.array(self.get_sipm_rel_pos(adc,chan))
                 self._sipm_abs_pos[(adc,chan)] = np.array(self.get_sipm_abs_pos(adc,chan))
 
         tpc_ids, det_ids, det_chan_mask = tpc_ids[...,0], det_ids[...,0], det_chan_mask[...,0]
