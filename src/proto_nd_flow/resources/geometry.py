@@ -53,9 +53,11 @@ class Geometry(H5FlowResource):
                                                 is in the LAr fiducial volume
 
         Provides (for light geometry):
-         - ``tpc_id``: lookup table for TPC number for light detectors
+         - ``det_rel_pos``: lookup table for relative position (TPC,side,vertical position from bottom) of light detectors (Full ArCLight or LCM)
+         - ``sipm_rel_pos``: lookup table for lookup table for relative position (TPC,side,vertical position from bottom) of SiPMs (Single SiPM)
          - ``det_id``: lookup table for detector number from adc, channel id
          - ``det_bounds``: lookup table for detector minimum and maximum corners light detectors
+         - ``sipm_abs_pos``: lookup table for sipm absolute position (x,y,z) in cm
          - ``solid_angle()``: helper function for determining the solid angle of a given detector
 
         Example usage::
@@ -115,6 +117,13 @@ class Geometry(H5FlowResource):
 
         if not self.data:
             # first time loading geometry, save to file
+
+            with open(self.det_geometry_file) as dgf:
+                self.det_geometry_yaml = yaml.load(dgf, Loader=yaml.FullLoader)
+
+            with open(self.lrs_geometry_file) as gf:
+                self.lrs_geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
+
             self.load_geometry()
 
             self.data_manager.set_attrs(self.path,
@@ -137,9 +146,11 @@ class Geometry(H5FlowResource):
             write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
             write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
 
-            write_lut(self.data_manager, self.path, self.tpc_id, 'tpc_id')
+            write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
+            write_lut(self.data_manager, self.path, self.sipm_rel_pos, 'sipm_rel_pos')
             write_lut(self.data_manager, self.path, self.det_id, 'det_id')
             write_lut(self.data_manager, self.path, self.det_bounds, 'det_bounds')
+            write_lut(self.data_manager, self.path, self.sipm_abs_pos, 'sipm_abs_pos')
         else:
             assert_compat_version(self.class_version, self.data['class_version'])
 
@@ -154,15 +165,18 @@ class Geometry(H5FlowResource):
             self._drift_dir = read_lut(self.data_manager, self.path, 'drift_dir')
             self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
+            self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
+            self._sipm_rel_pos = read_lut(self.data_manager, self.path, 'sipm_rel_pos')
 
-            self._tpc_id = read_lut(self.data_manager, self.path, 'tpc_id')
             self._det_id = read_lut(self.data_manager, self.path, 'det_id')
             self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
+            self._sipm_abs_pos = read_lut(self.data_manager, self.path, 'sipm_abs_pos')
 
         lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
                     + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
-                    + self.tpc_id.nbytes + self.det_id.nbytes
-                    + self.det_bounds.nbytes)
+                    + self.det_rel_pos.nbytes + self.det_rel_pos.nbytes 
+                    + self.det_id.nbytes + self.det_bounds.nbytes
+                    + self.sipm_abs_pos.nbytes)
 
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
@@ -396,20 +410,30 @@ class Geometry(H5FlowResource):
 
     ## Light geometry methods ##
     @property
-    def tpc_id(self):
+    def det_rel_pos(self):
         '''
-            Lookup table for TPC id, usage::
+            Lookup table for detector relative position, usage::
 
-                resource['Geometry'].tpc_id[(adc_index, channel_index)]
+                resource['Geometry'].det_rel_pos[(tpc_index, detector_index)]
 
         '''
-        return self._tpc_id
+        return self._det_rel_pos
+
+    @property
+    def sipm_rel_pos(self):
+        '''
+            Lookup table for detector relative position, usage::
+
+                resource['Geometry'].sipm_rel_pos[(adc_index, channel_index)]
+
+        '''
+        return self._sipm_rel_pos
 
 
     @property
     def det_id(self):
         '''
-            Lookup table for detector id within a TPC, usage::
+            Lookup table for TPC and detector id, usage::
 
                 resource['Geometry'].det_id[(adc_index, channel_index)]
 
@@ -426,6 +450,17 @@ class Geometry(H5FlowResource):
 
         '''
         return self._det_bounds
+
+    @property
+    def sipm_abs_pos(self):
+        '''
+            Lookup table for SiPM center xyz coordinate, usage::
+
+                resource['Geometry'].sipm_abs_pos[(adc_index, channel_index)]
+
+        '''
+        return self._sipm_abs_pos
+
 
 
     @staticmethod
@@ -476,6 +511,73 @@ class Geometry(H5FlowResource):
 
         return omega
 
+    def get_sipm_rel_pos(self, adc, channel):
+        ''' Returns 
+        - TPC number starting at 0 (Attention not to be confused wiht CRS IO group)
+        - TPC side with 0: -z direction 1: +z direction
+        - Vertical position starting from bottom
+        if channel not used, returns NaN,NaN,NaN
+        '''
+
+        # Get TPC/det number
+        tpc = -1
+        det = -1
+        for tpc_temp, det_map in self.lrs_geometry_yaml["det_adc"].items():
+            for det_temp, adc_map in det_map.items():
+                if adc_map == adc:
+                    if channel in self.lrs_geometry_yaml["det_chan"][tpc_temp][det_temp]:
+                        tpc = tpc_temp
+                        det = det_temp
+
+        # Return NaN if adc-channel does not exist
+        if tpc == -1 or det == -1:
+            return [-1,-1,-1]
+
+        det_type = self.lrs_geometry_yaml["adc_to_det_type"][adc]
+
+        # Get TPC side
+        side = self.lrs_geometry_yaml["det_side"][det]
+
+        # Get vertical position
+        # Get Y pos
+        if det_type == 0:
+            vert_pos = self.lrs_geometry_yaml["ch_to_vert_bin"][0][channel]
+        else:
+            vert_pos = self.lrs_geometry_yaml["ch_to_vert_bin"][1][channel]
+
+        return tpc, side, vert_pos
+
+
+    def get_sipm_abs_pos(self,adc,channel):
+        '''Returns x,y,z position of each SiPM in cm (z=beam direction)
+        if channel not used, returns NaN,NaN,NaN'''
+
+        tpc, side, vert_pos = self.get_sipm_rel_pos(adc,channel)
+        tpc_channel = vert_pos + side*(len(self.lrs_geometry_yaml["sipm_center"])//2)
+
+        if np.isnan(tpc):
+            return [-1,-1,-1]
+
+        # Get X pos
+        x_pos = self.det_geometry_yaml["tpc_offsets"][tpc//2][0] + self.lrs_geometry_yaml["tpc_center_offset"][tpc][0] 
+        if tpc % 2 == 0:
+            x_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][0]
+        else:
+            x_pos -= self.lrs_geometry_yaml["sipm_center"][tpc_channel][0]
+
+        # Get Y pos
+        y_pos = self.det_geometry_yaml["tpc_offsets"][tpc//2][1] + self.lrs_geometry_yaml["tpc_center_offset"][tpc][1] 
+        y_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][1]
+
+        # Get Z pos
+        z_pos = self.det_geometry_yaml["tpc_offsets"][tpc//2][2] + self.lrs_geometry_yaml["tpc_center_offset"][tpc][2]
+        if tpc % 2 == 0:
+            z_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][2]
+        else:
+            z_pos -= self.lrs_geometry_yaml["sipm_center"][tpc_channel][2]
+
+        return x_pos, y_pos, z_pos
+
 
     ## Load light and charge geometry ##
     def load_geometry(self):
@@ -487,53 +589,73 @@ class Geometry(H5FlowResource):
         if self.rank == 0:
             logging.warning(f'Loading geometry from {self.lrs_geometry_file}...')
 
-        with open(self.lrs_geometry_file) as gf:
-            geometry = yaml.load(gf, Loader=yaml.FullLoader)
-
         # enforce that light geometry formatting is as expected
-        assert_compat_version(geometry['format_version'], '0.0.0')
+        assert_compat_version(self.lrs_geometry_yaml['format_version'], '0.2.0')
 
-        tpc_ids = np.array([v for v in geometry['tpc_center'].keys()])
-        det_ids = np.array([v for v in geometry['det_center'].keys()])
-        max_chan = max([len(chan) for tpc in geometry['det_chan'].values() for chan in tpc.values()])
+        mod_ids = np.array([v for v in self.det_geometry_yaml['module_to_tpcs'].keys()])
+        tpc_ids = np.array([v for v in self.lrs_geometry_yaml['tpc_center_offset'].keys()])
+        det_ids = np.array([v for v in self.lrs_geometry_yaml['det_center'].keys()])
+        adc_ids = np.array([v for v in self.lrs_geometry_yaml['adc_to_det_type'].keys()])
+        max_chan_per_det = max([len(chan) for tpc in self.lrs_geometry_yaml['det_chan'].values() for chan in tpc.values()])
+        chan_ids = np.unique(sum([chan for tpc in self.lrs_geometry_yaml['det_chan'].values() for chan in tpc.values()],[]))
+
+        tpc_mod = np.full(tpc_ids.shape, -1, dtype=int)
+        for i, mod in enumerate(self.det_geometry_yaml["module_to_tpcs"]):
+            for j, tpc in enumerate(self.det_geometry_yaml["module_to_tpcs"][mod]):
+                tpc_mod[tpc] = i
+
+        det_min_max = [(min(tpc_ids), max(tpc_ids)),
+                       (min(det_ids), max(det_ids))]
+        self._det_rel_pos = LUT('i4', *det_min_max, shape=(3,))
+        self._det_rel_pos.default = -1
 
         shape = tpc_ids.shape + det_ids.shape
         det_adc = np.full(shape, -1, dtype=int)
-        det_chan = np.full(shape + (max_chan,), -1, dtype=int)
-        det_chan_mask = np.zeros(shape + (max_chan,), dtype=bool)
+        det_side = np.full(shape, -1, dtype=int)
+        det_vert_pos = np.full(shape, -1, dtype=int)
+        det_chan = np.full(shape + (max_chan_per_det,), -1, dtype=int)
+        det_chan_mask = np.zeros(shape + (max_chan_per_det,), dtype=bool)
         det_bounds = np.zeros(shape + (2,3), dtype=float)
         for i, tpc in enumerate(tpc_ids):
             for j, det in enumerate(det_ids):
-                det_adc[i,j] = geometry['det_adc'][tpc][det]
-                det_chan[i,j,:len(geometry['det_chan'][tpc][det])] = geometry['det_chan'][tpc][det]
-
-                tpc_center = np.array(geometry['tpc_center'][tpc])
-                det_geom = geometry['geom'][geometry['det_geom'][det]]
-                det_center = np.array(geometry['det_center'][det])
+                det_adc[i,j] = self.lrs_geometry_yaml['det_adc'][tpc][det]
+                det_side[i,j] = self.lrs_geometry_yaml['det_side'][det]
+                det_vert_pos[i,j] = [key for key, value in self.lrs_geometry_yaml['det_side'].items() if value == det_side[i,j]].index(det)
+                det_chan[i,j,:len(self.lrs_geometry_yaml['det_chan'][tpc][det])] = self.lrs_geometry_yaml['det_chan'][tpc][det]
+                tpc_center = (np.array(self.lrs_geometry_yaml['tpc_center_offset'][tpc])
+                    + np.array(self.det_geometry_yaml["tpc_offsets"][tpc_mod[i]]))
+                det_geom = self.lrs_geometry_yaml['geom'][self.lrs_geometry_yaml['det_geom'][det]]
+                det_center = np.array(self.lrs_geometry_yaml['det_center'][det])
                 det_bounds[i,j,0] = tpc_center + det_center + np.array(det_geom['min'])
                 det_bounds[i,j,1] = tpc_center + det_center + np.array(det_geom['max'])
+                self._det_rel_pos[i,j] = np.array((tpc,det_side[i,j],det_vert_pos[i,j]))
 
         det_chan_mask = det_chan != -1
 
         det_adc, det_chan, tpc_ids, det_ids = np.broadcast_arrays(
-            det_adc[...,np.newaxis], det_chan,
-            tpc_ids[...,np.newaxis,np.newaxis], det_ids[...,np.newaxis])
+            det_adc[...,np.newaxis],
+            det_chan, tpc_ids[...,np.newaxis,np.newaxis], det_ids[...,np.newaxis])
 
-        adc_chan_min_max = [(min(det_adc[det_chan_mask]), max(det_adc[det_chan_mask])),
-                            (min(det_chan[det_chan_mask]), max(det_chan[det_chan_mask]))]
-        self._tpc_id = LUT('i4', *adc_chan_min_max)
-        self._tpc_id.default = -1
+        adc_chan_min_max = [(min(adc_ids), max(adc_ids)), 
+                            (min(chan_ids), max(chan_ids))]
+        self._sipm_abs_pos = LUT('f4', *adc_chan_min_max, shape=(3,))
+        self._sipm_abs_pos.default = -1
+
+        self._sipm_rel_pos = LUT('i4', *adc_chan_min_max, shape=(3,))
+        self._sipm_rel_pos.default = -1
 
         self._det_id = LUT('i4', *adc_chan_min_max)
         self._det_id.default = -1
 
-        det_min_max = [(min(tpc_ids[det_chan_mask]), max(tpc_ids[det_chan_mask])),
-                       (min(det_ids[det_chan_mask]), max(det_ids[det_chan_mask]))]
         self._det_bounds = LUT('f4', *det_min_max, shape=(2,3))
         self._det_bounds.default = 0.
 
-        self._tpc_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = tpc_ids[det_chan_mask]
         self._det_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = det_ids[det_chan_mask]
+
+        for adc in adc_ids:
+            for chan in chan_ids:
+                self._sipm_rel_pos = np.array(self.get_sipm_rel_pos)
+                self._sipm_abs_pos[(adc,chan)] = np.array(self.get_sipm_abs_pos(adc,chan))
 
         tpc_ids, det_ids, det_chan_mask = tpc_ids[...,0], det_ids[...,0], det_chan_mask[...,0]
         self._det_bounds[(tpc_ids[det_chan_mask], det_ids[det_chan_mask])] = det_bounds[det_chan_mask]
@@ -609,7 +731,7 @@ class Geometry(H5FlowResource):
 
         self._drift_dir[(tiles,)] = [tile_or[(tile-1)%16+1][0] for tile in tiles]
         self._module_RO_bounds = []
-        self._pixel_pitch = [0.]*8 # per module!
+        self._pixel_pitch = [0.]*4 # per module!
 
         # Loop through modules
         for module_id in module_to_io_groups:
@@ -624,7 +746,6 @@ class Geometry(H5FlowResource):
             ys = np.array(list(chip_channel_to_position.values()))[:, 1] * pixel_pitch
             z_size = max(zs) - min(zs) + pixel_pitch
             y_size = max(ys) - min(ys) + pixel_pitch
-
             for tile in tile_chip_to_io:
                 tile_orientation = tile_orientations[tile]
                 tile_geometry[tile] = [pos / units.cm for pos in tile_positions[tile]], tile_orientations[tile] # convert mm -> cm
