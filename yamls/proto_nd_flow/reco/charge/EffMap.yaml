@@ -1,5 +1,5 @@
 classname: EffMap
-path: module0_flow.reco.charge.eff_map
+path: proto_nd_flow.reco.charge.eff_map
 requires:
   - 'charge/hough_hits_o'
   - 'charge/hough_o'
@@ -12,7 +12,7 @@ params:
   # output
   effs_dset_name: 'charge/effs'
 
-  mode: 'external'
-  module: 'mod1'
-  iogroup: '1'
+  mode: '5by5'
   within_rad: False
+  radius: 40
+  num_pixels_plot: 5

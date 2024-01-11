@@ -1,0 +1,24 @@
+# Generates hough lines from the charge_event_reconstruction workflow output
+# h5flow --nompi -c yamls/module0_flow/workflows/charge/produce_maps.yaml -i eff.h5 -o map.npy
+# two stages; produce full pixel plane map, produce pixel pad efficiency map
+
+flow:
+  source: effs
+  stages: [produce_effmap]
+  drop: []
+
+resources:
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/Geometry.yaml
+
+effs:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/effs'
+  params:
+    chunk_size: 100000000
+
+# Produce map yaml file
+produce_effmap:
+  !include yamls/module0_flow/reco/charge/ProdEffMap.yaml
+

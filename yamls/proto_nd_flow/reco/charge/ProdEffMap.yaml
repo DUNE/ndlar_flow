@@ -1,0 +1,17 @@
+classname: ProdEffMap
+path: proto_nd_flow.reco.charge.prod_effmap
+requires:
+  - 'charge/effs'
+
+params:
+  # inputs
+  effs_dset_name: 'charge/effs'
+
+  within_rad: False
+  mode: '5x5'
+  module: '2by2'
+  axis_bounds: 20
+  output_dir: './randomsegments'
+  plot: True
+  plot_dir: './plots'
+

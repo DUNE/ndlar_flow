@@ -1,0 +1,18 @@
+classname: ProdEffMap
+path: module0_flow.reco.charge.prod_effmap
+requires:
+  - 'charge/effs'
+
+params:
+  # inputs
+  effs_dset_name: 'charge/effs'
+
+  module: 'mod1'
+  iogroup: '1'
+  within_rad: False
+  mode: '5x5'
+  axis_bounds: 20
+  output_dir: './randomsegments'
+  plot: True
+  plot_dir: './plots'
+

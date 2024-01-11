@@ -1,0 +1,25 @@
+classname: LineFinder
+path: proto_nd_flow.reco.charge.line_finder
+
+requires:
+  - 'charge/events'
+  - 'charge/calib_final_hits'
+  - 'charge/rock_muon_hits'
+
+params:
+  # inputs
+  events_dset_name: 'charge/events'
+  calib_hits_dset_name: 'charge/calib_final_hits'
+  rock_muon_dset_name: 'rock_muon_hits'
+
+  # output
+  hough_o_dset_name: 'charge/hough_o'
+  hough_hits_o_dset_name: 'charge/hough_hits_o'
+
+  # hough transform config
+  max_peaks: 1
+  min_pixels: 10
+  # define if individual module run or 2x2
+  # modes: 2by2, single, rockmuon
+  radius: 8
+  mode: 'external'  

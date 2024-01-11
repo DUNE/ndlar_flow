@@ -13,3 +13,5 @@ params:
 
   # output
   hough_i_dset_name: 'charge/hough_i'
+
+  module: 'mod0'

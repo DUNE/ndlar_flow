@@ -1,7 +1,7 @@
 import numpy as np
-import logging
-from module0_flow.util.functions import get_pixel_bins, HoughOnArray, d_pnt2line, trackLengthhoughcenter
 import numpy.lib.recfunctions as rfn
+import logging
+from proto_nd_flow.util.functions import get_pixel_bins, HoughOnArray, d_pnt2line, trackLengthhoughcenter
 
 from skimage.transform import (hough_line, hough_line_peaks,
                                probabilistic_hough_line)
@@ -17,14 +17,14 @@ from matplotlib import cm
 class LineFinder(H5FlowStage):
 
     defaults = dict(
-        hough_i_dset_name='charge/hough_i',
+        calib_hits_dset_name='charge/calib_final_hits',
+        rock_muon_dset_name='rock_muon_hits',
         hough_o_dset_name='charge/hough_o',
         hough_hits_o_dset_name='charge/hough_hits_o',
         events_dset_name='charge/events',
         max_peaks=1,
         min_pixels=10,
         mode = 'external',
-        events_start = 0,
         radius = 8
         )
 
@@ -40,8 +40,8 @@ class LineFinder(H5FlowStage):
         for key in self.defaults:
             setattr(self, key, params.get(key, self.defaults[key]))
 
-    def init(self, source_name):
 
+    def init(self, source_name):
         super(LineFinder, self).init(source_name)
 
         self.data_manager.create_dset(self.hough_o_dset_name, dtype=self.hough_o_dtype)
@@ -50,18 +50,53 @@ class LineFinder(H5FlowStage):
         self.data_manager.create_ref(self.events_dset_name, self.hough_hits_o_dset_name)
         self.data_manager.create_ref(self.hough_o_dset_name, self.events_dset_name)
 
+
     def run(self, source_name, source_slice, cache):
         super(LineFinder, self).run(source_name, source_slice, cache)
 
-        if self.mode == 'external':
 
-            # hits array should at least have 'x', 'y', 'z', 'Q', 'E' and 'id'
+        if self.mode == '2by2':
 
-            hits = cache[self.hough_i_dset_name]
+            hits = cache[self.calib_hits_dset_name]
             events = cache[self.events_dset_name]
+            id = events['id'][0]
+
+            bins_x, bins_y = get_pixel_bins('mod0', 'edge')
+            hist, x, y = np.histogram2d(hits['x'][0], hits['y'][0], bins = (bins_x, bins_y))
+            hist[hist>1] == 1
+            h, theta, d = hough_line(hist)
+
+            for votes, angle, dist in zip(*hough_line_peaks(h, theta, d, num_peaks = self.max_peaks, threshold=self.min_pixels)):
+
+                hough_o_array = np.empty(events['id'].shape, dtype=self.hough_o_dtype)
+
+                y0 = (dist - 0 * np.cos(angle)) / np.sin(angle)
+                y1 = (dist - hist.shape[1] * np.cos(angle)) / np.sin(angle)
+
+                hough_o_array['hi_x'] = 0
+                hough_o_array['hi_y'] = y0
+                hough_o_array['hf_x'] = hist.shape[1]
+                hough_o_array['hf_y'] = y1
+                hough_o_array['angle'] = angle
+                hough_o_array['evid'] = id
+                hough_o_array['votes'] = votes
+
+                hough_o_slice = self.data_manager.reserve_data(self.hough_o_dset_name, 1)
+                self.data_manager.write_data(self.hough_o_dset_name, hough_o_slice, hough_o_array[0])
+
+
+        elif self.mode == 'rockmuon':
+
+            hits = cache[self.rock_muon_dset_name]
+
+        elif self.mode == 'external':
+
+            hits = cache[self.calib_hits_dset_name]
+            events = cache[self.events_dset_name]
+
             hit_pass = 1
 
-            if len(hits[hits['next']>0]) < 50:
+            if len(hits[0]) < 50:
                 hit_pass = 0
 
             hough_o_array = np.empty(events['id'].shape, dtype=self.hough_o_dtype)
@@ -80,6 +115,7 @@ class LineFinder(H5FlowStage):
 
             if len(dist[dist<self.radius]) < 25:
                 hit_pass = 0
+
 
             tracklength, aX_nl, aY_nl, aZ_nl, mask_dist = trackLengthhoughcenter(hits, aX, aY, aZ, bX, bY, bZ, self.radius, dist)
 
@@ -129,41 +165,68 @@ class LineFinder(H5FlowStage):
             ref = np.c_[hough_line_id[0], [hough_o_array['evid']]]
             self.data_manager.write_ref(self.hough_o_dset_name, self.events_dset_name, ref)
 
-        if self.mode == 'selfmade':
 
-            hits = cache[self.hough_i_dset_name]
+# old method in case external seems to fail
 
-            io = 1
+        elif self.mode == 'external2':
 
-            for id in np.unique(hits['evid']):
+            hits = cache[self.calib_hits_dset_name]
+            events = cache[self.events_dset_name]
 
-                data_i = hits[hits['evid']==id]
+            hit_pass = 1
 
-                data_i = data_i[data_i['iogroup'] == int(io)]
+            if len(hits>0) < 50:
+                hit_pass = 0
 
-                if len(data_i) < 50:
-                    continue
+            hough_o_array = np.empty(events['id'].shape, dtype=self.hough_o_dtype)
 
-                bins_x, bins_y = get_pixel_bins('mod0', 'edge')
-                hist, x, y = np.histogram2d(data_i['x'], data_i['y'], bins = (bins_x, bins_y))
-                hist[hist>1] == 1
-                h, theta, d = hough_line(hist)
+            id = events['id'][0]
 
-                for votes, angle, dist in zip(*hough_line_peaks(h, theta, d, num_peaks = self.max_peaks, threshold=self.min_pixels)):
+            aX, aY, aZ, bX, bY, bZ, npoints, hi_x, hf_x, hi_y, hf_y, hi_z, hf_z = HoughOnArray(hits, id, self.min_pixels, self.max_peaks)
 
-                    hough_o_array = np.empty(hits['evid'].shape, dtype=self.hough_o_dtype)
+            dist = d_pnt2line(hits, hi_x, hf_x, hi_y, hf_y, hi_z, hf_z)
 
-                    y0 = (dist - 0 * np.cos(angle)) / np.sin(angle)
-                    y1 = (dist - hist.shape[1] * np.cos(angle)) / np.sin(angle)
+            hits_in_rad, dist_cp, tracklength, aX_nl, aY_nl, aZ_nl = trackLengthhoughcenter(hits, aX, aY, aZ, bX, bY, bZ, self.radius, dist)
 
-                    hough_o_array['iogroup'] = np.unique(data_i['iogroup'])
-                    hough_o_array['hi_x'] = 0
-                    hough_o_array['hi_y'] = y0
-                    hough_o_array['hf_x'] = hist.shape[1]
-                    hough_o_array['hf_y'] = y1
-                    hough_o_array['angle'] = angle
-                    hough_o_array['evid'] = id
-                    hough_o_array['votes'] = votes
+            hough_o_array['hi_x'] = hi_x
+            hough_o_array['hi_y'] = hi_y
+            hough_o_array['hi_z'] = hi_z
+            hough_o_array['hf_x'] = hf_x
+            hough_o_array['hf_y'] = hf_y
+            hough_o_array['hf_z'] = hf_z
+            hough_o_array['h_ax'] = aX_nl
+            hough_o_array['h_ay'] = aY_nl
+            hough_o_array['h_az'] = aZ_nl
+            hough_o_array['h_bx'] = bX
+            hough_o_array['h_by'] = bY
+            hough_o_array['h_bz'] = bZ
+            hough_o_array['evid'] = id
+            hough_o_array['votes'] = npoints
+            hough_o_array['length'] = tracklength
 
-                    hough_o_slice = self.data_manager.reserve_data(self.hough_o_dset_name, 1)
-                    self.data_manager.write_data(self.hough_o_dset_name, hough_o_slice, hough_o_array[0])
+            hough_hits_o_array = np.empty(hits_in_rad[:,0].shape, dtype=self.hough_hits_o_dtype)
+
+            hough_hits_o_array['x'] = hits_in_rad[:,0]
+            hough_hits_o_array['y'] = hits_in_rad[:,1]
+            hough_hits_o_array['z'] = hits_in_rad[:,2]
+            hough_hits_o_array['Q'] = hits_in_rad[:,3]
+            hough_hits_o_array['E'] = hits_in_rad[:,4]
+            hough_hits_o_array['dist'] = dist_cp
+            hough_hits_o_array['id'] = hits_in_rad[:,5]
+
+            hough_hits_o_slice = self.data_manager.reserve_data(self.hough_hits_o_dset_name, len(hits_in_rad[:,0]))
+            self.data_manager.write_data(self.hough_hits_o_dset_name, hough_hits_o_slice, hough_hits_o_array)
+
+            hough_o_slice = self.data_manager.reserve_data(self.hough_o_dset_name, 1)
+            self.data_manager.write_data(self.hough_o_dset_name, hough_o_slice, hough_o_array[0])
+
+            ev_id = np.arange(source_slice.start, source_slice.stop, dtype=int).reshape(-1, 1)
+
+            hits_ev_id = np.broadcast_to(ev_id, (1, len(hough_hits_o_array)))
+            ref = np.c_[hits_ev_id[0], hough_hits_o_array['id']]
+            self.data_manager.write_ref(self.events_dset_name, self.hough_hits_o_dset_name, ref)
+
+            hough_line_id = np.broadcast_to(ev_id, (1, len(events)))
+            ref = np.c_[hough_line_id, [hough_o_array['evid']]]
+            self.data_manager.write_ref(self.hough_o_dset_name, self.events_dset_name, ref)
+
