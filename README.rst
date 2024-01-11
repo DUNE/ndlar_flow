@@ -201,6 +201,13 @@ version 0.1.8, you can combine them into only two commands::
         -i <input charge file> \
         -o $output_file
 
+Hough transform & Pixel efficiency studies
+==========================================
+
+
+
+
+
 
 file structure and access
 =========================
