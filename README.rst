@@ -201,13 +201,6 @@ version 0.1.8, you can combine them into only two commands::
         -i <input charge file> \
         -o $output_file
 
-Hough transform & Pixel efficiency studies
-==========================================
-
-
-
-
-
 
 file structure and access
 =========================
@@ -477,3 +470,21 @@ And that concludes the intro into the data access!
 For more details on what different fields in the datatypes mean, look at the
 module-specific documentation. For more details on how to use the dereferencing
 schema, look at the h5flow documentation [https://h5flow.readthedocs.io/en/latest/].
+
+Hough transform & Pixel efficiency studies
+==========================================
+
+With the pixel hit level output in charge/events and charge/hits correctly assembled, one can utilize 
+this information to run diagnostics. To this end, a hough workflow has been added. This workflow allows
+for the reconstruction of lines from the hit cloud in order to study pixel efficiencies. A second workflow
+produce_maps has been added to take care of the plotting of the efficiency maps from its output. One runs
+these workflows in similar fashion to what is described above, but now takes a reconstructed file as input. 
+For more information on how to run commands, change the stages and general information on what this piece of 
+the code does, please see the link below:
+
+https://docs.google.com/document/d/1d9saeZz5S1iX4xVQaQSndlTupLrUjHYPcfTMUZ5hCMU/edit?usp=sharing
+
+
+
+
+
