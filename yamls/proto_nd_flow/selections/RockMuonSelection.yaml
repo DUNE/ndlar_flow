@@ -7,20 +7,16 @@ requires:
 
   - name: 'charge/calib_prompt_hits'
     path: ["charge/events", "charge/calib_prompt_hits"]
-        
-  - name: 'mc_truth/segments'
-    path: ["charge/raw_events","charge/calib_prompt_hits", "charge/packets" ,"mc_truth/segments"]
-        
-  - name: 'mc_truth/trajectories'
-    path: ["charge/raw_events","charge/calib_prompt_hits","charge/packets","mc_truth/segments", "mc_truth/trajectories"]
-    
+  
+  - name: 'charge/calib_final_hits'
+    path: ["charge/events","charge/calib_final_hits"]
+   
 params:
     #Inputs
     events_dset_name: 'charge/events'
     PromptHits_dset_name: 'charge/calib_prompt_hits'
-    Segs_PromptHits_dset_name: 'mc_truth/segments'
-    Traj_PromptHits_dset_name: 'mc_truth/trajectories'
-        
+    FinalHits_dset_name: 'charge/calib_final_hits'
+       
     #Outputs
     rock_muon_hits_dset_name: 'rock_muon_hits'
     rock_muon_segments_dset_name: 'rock_muon_segments'

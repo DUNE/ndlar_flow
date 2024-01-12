@@ -47,24 +47,12 @@ class RockMuonSelection(H5FlowStage):
     #Datasets
     events_dset_name = 'charge/events'
     PromptHits_dset_name = 'charge/calib_prompt_hits'
-    Segs_PromptHits_dset_name = 'mc_truth/segments'
-    Traj_PromptHits_dset_name = 'mc_truth/trajectories'
-    
+    FinalHits_dset_name = 'charge/calib_final_hits'
+     
     #Datatype wanted
     
-    rock_muon_hit_dtype = np.dtype([
-        ('x', 'f8'),
-        ('y', 'f8'),
-        ('z', 'f8'),
-        ('rock_muon_id', 'u4'),
-        ('id', 'u4'),
-        ('t_drift', 'f8'),
-        ('ts_pps', 'u8'),
-        ('Q', 'f8'),
-        ('E', 'f8'),
-        ('rock_segment_id','u8')
-    ])
-    
+    rock_muon_hit_dtype = np.dtype([('id', 'u4'), ('x', 'f8'), ('y', 'f8'), ('z', 'f8'), ('t_drift', 'f8'), ('ts_pps', 'u8'), ('Q', 'f8'), ('E', 'f8'), ('rock_muon_id','u4'), ('rock_segment_id','u4')])
+   
     rock_muon_segments_dtype = np.dtype([
         ('rock_segment_id', 'u8'),
         ('x_start', 'f8'),
@@ -74,7 +62,8 @@ class RockMuonSelection(H5FlowStage):
         ('x_end', 'f8'),
         ('y_end','f8'),
         ('z_end', 'f8'),
-        ('dQdx','f8'),
+        ('dQ','f8'),
+        ('dx','f8'),
         ('x_mid','f8'),
         ('y_mid','f8'),
         ('z_mid','f8')
@@ -128,32 +117,29 @@ class RockMuonSelection(H5FlowStage):
         self.data_manager.create_ref(self.rock_muon_segments_dset_name, self.rock_muon_hits_dset_name)
         
         self.data_manager.create_ref(source_name, self.rock_muon_hits_dset_name)
+    
     #@staticmethod
     def cluster(self, PromptHits_ev):
         
-        hits = np.zeros((PromptHits_ev.shape[1],10))
-
-        for i in range(PromptHits_ev.shape[1]):
-            hits[i][0] = PromptHits_ev['x'].data[0][i]
-            hits[i][1] = PromptHits_ev['y'].data[0][i]
-            hits[i][2] = PromptHits_ev['z'].data[0][i]
-
-        hit_cluster = DBSCAN(eps = 8, min_samples = 1).fit(hits)
-
-        for i in range(PromptHits_ev.shape[1]):
-            hits[i][3] = hit_cluster.labels_[i]
-            hits[i][4] = PromptHits_ev['id'].data[0][i]
-            hits[i][5] = PromptHits_ev['t_drift'].data[0][i]
-            hits[i][6] = PromptHits_ev['ts_pps'].data[0][i]
-            hits[i][7] = PromptHits_ev['Q'].data[0][i]
-            hits[i][8] = PromptHits_ev['E'].data[0][i]
+        positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
+        
+        hit_cluster = DBSCAN(eps = 8, min_samples = 1).fit(positions)
+         
+        dummy_segment_id = np.full(len(positions), -1)
+        
+        hits_no_dtype = np.column_stack((PromptHits_ev['id'],PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z'], PromptHits_ev['t_drift'],PromptHits_ev['ts_pps'], PromptHits_ev['Q'], PromptHits_ev['E'], hit_cluster.labels_, dummy_segment_id))
+        
+        hits = np.array([tuple(sub) for sub in hits_no_dtype], dtype = self.rock_muon_hit_dtype)
+         
         return hits
     
     #@staticmethod
     
     def PCAs(self,hits_of_track):
         scaler = StandardScaler()
-        X_train = hits_of_track
+
+        positions = np.column_stack((hits_of_track['x'], hits_of_track['y'], hits_of_track['z']))
+        X_train = positions
         X_train = scaler.fit_transform(X_train.reshape(-1, X_train.shape[-1])).reshape(X_train.shape)
 
         pca = PCA(1) # 1 component
@@ -164,45 +150,6 @@ class RockMuonSelection(H5FlowStage):
         vector = pca.components_
 
         return  explained_var,vector
-
-    #@staticmethod
-    def length_track(self, hits_of_track):
-        far_hit = np.max(hits_of_track[:,2])
-
-        close_hit = np.min(hits_of_track[:,2])
-
-        if far_hit != close_hit:
-
-            ind_far = np.where(hits_of_track[:,2]==np.max(hits_of_track[:,2]))[0][0]
-
-            ind_close = np.where(hits_of_track[:,2]==np.min(hits_of_track[:,2]))[0][0]
-
-            length = np.linalg.norm(hits_of_track[ind_far][:3]-hits_of_track[ind_close][:3])
-
-        elif far_hit == close_hit:
-            far_hit_y = np.max(hits_of_track[:,1])
-
-            close_hit_y = np.min(hits_of_track[:,1])
-
-            ind_far = np.where(hits_of_track[:,1]==np.max(hits_of_track[:,1]))[0][0]
-
-            ind_close = np.where(hits_of_track[:,1]==np.min(hits_of_track[:,1]))[0][0]
-
-            length = np.linalg.norm(hits_of_track[ind_far][:3]-hits_of_track[ind_close][:3])
-
-        else:
-            far_hit_x = np.max(hits_of_track[:,0])
-
-            close_hit_x = np.min(hits_of_track[:,0])
-
-            ind_far = np.where(hits_of_track[:,0]==np.max(hits_of_track[:,0]))[0][0]
-
-            ind_close = np.where(hits_of_track[:,0]==np.min(hits_of_track[:,0]))[0][0]
-
-            length = np.linalg.norm(hits_of_track[ind_far][:3]-hits_of_track[ind_close][:3])
-
-
-        return length
 
     #@staticmethod
     def length(self, hits):
@@ -246,8 +193,8 @@ class RockMuonSelection(H5FlowStage):
     #@staticmethod
     def select_muon_track(self,hits):
 
-            tracks = np.unique(hits[:,3]) #This gets how many tracks there are
-
+            tracks = np.unique(hits['rock_muon_id']) #This gets how many tracks there are
+            
             muon_hits = []
 
             a = []
@@ -265,13 +212,16 @@ class RockMuonSelection(H5FlowStage):
             max_boundariess = np.array([x_boundaries[-1], y_boundaries[-1], z_boundaries[-1]])
             max_boundaries = [eval(i) for i in max_boundariess] #turn the str values into floats
             
-            for n in range(len(np.unique(tracks))):
-
-                hits1 = hits[:,3] == n #get the hits with track number equal to n
+            for each_track in tracks:
+                
+                hits1 = hits['rock_muon_id'] == each_track #get the hits with track number equal to n
 
                 hits_with_track = hits[hits1] #position of the hits with their associated track number
 
-                hits_of_track = np.delete(hits_with_track, (3,4,5,6,7,8), axis = 1) #hits without their track number
+                hits_of_track_no_dtype = np.column_stack((hits_with_track['x'], hits_with_track['y'], hits_with_track['z'])) #hits without their track number
+                
+                hits_of_track = np.array([tuple(sub) for sub in hits_of_track_no_dtype], dtype = np.dtype([('x', 'f8'),('y', 'f8'),('z', 'f8')]))
+                
 
                 for i in range(len(max_boundaries)):
                     d = 2 #Distance away from a TPC face
@@ -281,33 +231,33 @@ class RockMuonSelection(H5FlowStage):
                     b = self.length_cut #minimum track length requirement
 
                     #Does the track penetrate two faces?
-                    if min_boundaries[i]-d < np.min(hits_of_track[:,i]) < (min_boundaries[i] + d) and (max_boundaries[i] -d) < np.max(hits_of_track[:,i]) < max_boundaries[i]+d:
+                    if min_boundaries[i]-d < np.min(hits_of_track_no_dtype[:,i]) < (min_boundaries[i] + d) and (max_boundaries[i] -d) < np.max(hits_of_track_no_dtype[:,i]) < max_boundaries[i]+d:
                         a, p  = self.PCAs(hits_of_track)
-                        l = self.length_track(hits_of_track)
+                        l = self.length(hits_of_track)
                         if np.logical_and(a > v, l > b):
                             muon_hits.append(hits_with_track)
                             break
-                    elif min_boundaries[i]-d < np.min(hits_of_track[:,i]) < (min_boundaries[i] + d) and (max_boundaries[i-2] -d) < np.max(hits_of_track[:,i-2]) < (max_boundaries[i-2]+d):
+                    elif min_boundaries[i]-d < np.min(hits_of_track_no_dtype[:,i]) < (min_boundaries[i] + d) and (max_boundaries[i-2] -d) < np.max(hits_of_track_no_dtype[:,i-2]) < (max_boundaries[i-2]+d):
                         a, p = self.PCAs(hits_of_track)
-                        l = self.length_track(hits_of_track)
+                        l = self.length(hits_of_track)
                         if np.logical_and(a > v, l > b):
                             muon_hits.append(hits_with_track)
                             break
-                    elif min_boundaries[i]-d < np.min(hits_of_track[:,i]) < (min_boundaries[i] + d) and (max_boundaries[i-1] -d) < np.max(hits_of_track[:,i-1]) < max_boundaries[i-1]+d:
+                    elif min_boundaries[i]-d < np.min(hits_of_track_no_dtype[:,i]) < (min_boundaries[i] + d) and (max_boundaries[i-1] -d) < np.max(hits_of_track_no_dtype[:,i-1]) < max_boundaries[i-1]+d:
                         a, p = self.PCAs(hits_of_track)
-                        l = self.length_track(hits_of_track)
+                        l = self.length(hits_of_track)
                         if np.logical_and(a > v, l > b):
                             muon_hits.append(hits_with_track)
                             break
-                    elif min_boundaries[i]-d < np.min(hits_of_track[:,i]) < (min_boundaries[i] + d) and (min_boundaries[i-1] -d) < np.min(hits_of_track[:,i-1]) < min_boundaries[i-1]+d:
+                    elif min_boundaries[i]-d < np.min(hits_of_track_no_dtype[:,i]) < (min_boundaries[i] + d) and (min_boundaries[i-1] -d) < np.min(hits_of_track_no_dtype[:,i-1]) < min_boundaries[i-1]+d:
                         a, p = self.PCAs(hits_of_track)
-                        l = self.length_track(hits_of_track)
+                        l = self.length(hits_of_track)
                         if np.logical_and(a > v, l > b):
                             muon_hits.append(hits_with_track)
                             break
-                    elif min_boundaries[i]-d < np.min(hits_of_track[:,i]) < (min_boundaries[i] + d) and (min_boundaries[i-2] -d) < np.min(hits_of_track[:,i-2]) < min_boundaries[i-2]+d:
+                    elif min_boundaries[i]-d < np.min(hits_of_track_no_dtype[:,i]) < (min_boundaries[i] + d) and (min_boundaries[i-2] -d) < np.min(hits_of_track_no_dtype[:,i-2]) < min_boundaries[i-2]+d:
                         a, p = self.PCAs(hits_of_track)
-                        l = self.length_track(hits_of_track)
+                        l = self.length(hits_of_track)
                         if np.logical_and(a > v, l > b):
                             muon_hits.append(hits_with_track)
                             break
@@ -325,13 +275,24 @@ class RockMuonSelection(H5FlowStage):
 
             track = muon_hits[hits_wanted]
 
-            positions = np.column_stack((track['x'], track['y'], track['z']))
-
-            ex_var, fit = self.PCAs(positions)
-        
-            #Steps in beam direction using pca fit(z)
-            step_size = 7*abs(fit[0][2])
+            ex_var, fit = self.PCAs(track)
             
+            choice = (.2/14) * len(track)
+            #Steps in beam direction using pca fit(z)
+            step_size = choice*abs(fit[0][2])
+            
+            '''
+            #Lets make sure the segments aren't longer than 5cm
+            step_vector = np.array([fit[0][0], fit[0][1],step_size])
+            
+            length_of_segment = np.linalg.norm(step_vector)
+            
+            
+            while length_of_segment > 8:
+                step_size -= .2
+                step_vector = np.array([fit[0][0], fit[0][1],step_size])
+                length_of_segment = np.linalg.norm(step_vector)
+            '''
 
             lowest_z = np.min(track['z'])
 
@@ -342,16 +303,16 @@ class RockMuonSelection(H5FlowStage):
 
                 segment = track[indices_of_masked_values]
                 
-                if len(segment) > 5:
+                if len(segment) > 1:
                     self.segment_count += 1
                     hits_of_segment.append(segment)
                     
                 j = len(hits_of_segment)
                  
-                if (len(segment) <= 5) & (len(hits_of_segment) == 0):
+                if (len(segment) <= 1) & (len(hits_of_segment) == 0):
                     hits_of_segment.append(segment)
 
-                if (len(segment) <= 5) & (len(hits_of_segment) != 0):
+                if (len(segment) <= 1) & (len(hits_of_segment) != 0):
                     np.append(hits_of_segment[j-1],segment)
                 
                 hits_wanted = np.where(np.in1d(muon_hits['id'],segment['id']))[0]
@@ -389,7 +350,7 @@ class RockMuonSelection(H5FlowStage):
                 Charge_of_segment = sum(hits_of_segment[j-1]['Q'])
 
 
-                hit_segments.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment/Length_of_segment, x_end, y_end, z_end, Charge_of_segment/Length_of_segment, x_mid, y_mid, z_mid])
+                hit_segments.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment,Length_of_segment, x_mid, y_mid, z_mid])
                 
                 if len(track) == 0:
                     break
@@ -402,32 +363,23 @@ class RockMuonSelection(H5FlowStage):
                 
         event_id = np.r_[source_slice]
                 
-        PromptHits_ev = cache[self.FinalHits_dset_name]
+        PromptHits_ev = cache[self.PromptHits_dset_name]
         
-        Segs_PromptHits = cache[self.Segs_PromptHits_dset_name]
-        
-        Traj_PromptHits = cache[self.Traj_PromptHits_dset_name]
-        
-        hits = self.cluster(PromptHits_ev)
+        hits = self.cluster(PromptHits_ev[0])
         
         muon_tracks = self.select_muon_track(hits)
-
+        
         if muon_tracks:
             #Loop through tracks and changes the DBSCAN cluster_id to a given track number
             for i in range(len(muon_tracks)):
                 self.track_count += 1
-                muon_tracks[i][:,3] = self.track_count 
+                muon_tracks[i]['rock_muon_id'] = self.track_count 
             
-            flat_muon_hits = np.concatenate(muon_tracks) #Flatten multiple tracks to just an array of hits
+            muon_hits_array = np.concatenate(muon_tracks) #Flatten multiple tracks to just an array of hits
 
-
-            muon_hits_array = np.array([tuple(sub) for sub in flat_muon_hits], dtype = self.rock_muon_hit_dtype) #Converts array of list to array of tuples
-            
             segments_list, hit_segment_ref = self.segments(muon_hits_array)
             
             #Reference hits to their segments
-            muon_hits_array['rock_segment_id'] = -1
-
             for each_ref in hit_segment_ref:
                 index = each_ref[0]
 
