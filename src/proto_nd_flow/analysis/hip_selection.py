@@ -37,9 +37,9 @@ class HIPSelection(H5FlowStage):
     class_version = '2.0.0' # change for getting around assertion error in geometry files
 
     default_params = dict(
-        fid_cut=1.0, # cm
-        cathode_fid_cut=1.0, # cm
-        anode_fid_cut=1.0, # cm
+        fid_cut=5.0, # cm
+        cathode_fid_cut=0.0, # cm
+        anode_fid_cut=5.0, # cm
         profile_dx=2.2, # cm
         profile_max_range=200.0, # cm
         larpix_gain=250, # e/mV
@@ -227,8 +227,8 @@ class HIPSelection(H5FlowStage):
             proton_r / w * resources['ParticleData'].landau_width(self.proton_range_table['t'],
                                                                   resources['ParticleData'].p_mass,
                                                                   self.profile_dx) / self.profile_dx)
-        noise = (self.larpix_noise * np.sqrt(self.profile_dx / resources['Geometry'].pixel_pitch)
-                 / resources['Geometry'].pixel_pitch)
+        noise = (self.larpix_noise * np.sqrt(self.profile_dx / resources['Geometry'].pixel_pitch*units.cm) # converting cm -> mm
+                 / resources['Geometry'].pixel_pitch*units.cm) # converting cm -> mm
         post_dedx = resources['ParticleData'].landau_peak(50 * units.MeV,
                                                           resources['ParticleData'].e_mass,
                                                           self.profile_dx) / self.profile_dx
@@ -729,14 +729,14 @@ class HIPSelection(H5FlowStage):
             hit_xyz = ma.array(np.concatenate([
                 hits['x'][..., np.newaxis], hits['y'][..., np.newaxis],
                 hits['z'][..., np.newaxis]], axis=-1), shrink=False, mask=np.zeros(hits['y'].shape + (3,), dtype=bool) | hit_q.mask[...,np.newaxis] | ~hit_mask[...,np.newaxis])
-            hit_in_fid = resources['Geometry'].in_fid(
-                hit_xyz.reshape(-1, 3), cathode_fid=2.0, field_cage_fid=2.0, anode_fid=2.0).reshape(hit_xyz.shape[:-1])
+            hit_in_fid = resources['Geometry'].in_fid(hit_xyz.reshape(-1, 3), cathode_fid=self.cathode_fid_cut, \
+                                                      field_cage_fid=self.fid_cut, anode_fid=self.anode_fid_cut).reshape(hit_xyz.shape[:-1])
             hit_q.mask = hit_q.mask | ~hit_in_fid
 
             # find value for the most charge in one hit in each event
             #print("HIt q", hit_q[~hit_q.mask]/self.larpix_gain)
             #print("HIt q", hit_q.shape)
-            max_hit_charge = ma.array([int(ma.filled(hit_q[i,:].astype(float) > 25., False).sum()) for i in range(len(hits))])
+            max_hit_charge = ma.array([int(ma.filled(hit_q[i,:].astype(float) > 37.5, False).sum()) for i in range(len(hits))]) # 75 ke -> 300 mV with conversion in calib hits
             #print("test max hit charge:", ma.filled(hit_q[0,:].astype(float)/self.larpix_gain > 300., False)== True)
             #print("NEW MAX HIT CHARGE SHAPE:", max_hit_charge.shape)
             #print("Max Hit Charge:", max_hit_charge)
@@ -745,7 +745,8 @@ class HIPSelection(H5FlowStage):
             # find all tracks that end in the fiducial volume
             track_start = tracks.ravel()['trajectory'][..., 0, :]
             track_stop = tracks.ravel()['trajectory'][..., -1, :]
-            #print("Tracks trajectory:", tracks.ravel()['trajectory'][:5])
+            #print("Track start:", track_start)
+            #print("Track stop:", track_stop)
             #track_dqdx = tracks.ravel()['dq']/np.sqrt(np.sum(tracks.ravel()['dx']**2, axis=-1))
             #print("Tracks dq/dx:", track_dqdx[:5])
             #print("Tracks dn:", tracks.ravel()['dn'][:5])
@@ -797,8 +798,13 @@ class HIPSelection(H5FlowStage):
             #print("Number of hits:", nhits_cut)
             hit_charge_threshold_cut = (max_hit_charge > 1) # cut on number of hits over threshold, which is currently 300 mV
             external_trigger_cut = (event_next_trigs > 0)
-            ntracks_in_fid_cut = (event_ntracks_in_fid == event_ntracks) & (event_ntracks == 1) #& (event_ntracks <= 3)
+            ntracks_in_fid_cut = (event_ntracks_in_fid == event_ntracks) & (event_ntracks == 1)# & (event_ntracks <= 3)
             event_level_cuts = nhits_cut & hit_charge_threshold_cut & external_trigger_cut & ntracks_in_fid_cut
+            print("Event level cuts:", event_level_cuts)
+
+            
+            print("Passing Tracks:", tracks['trajectory'][event_level_cuts])
+            print("Event id:", events['id'][event_level_cuts])
 
             max_tracks = contained_in_fid.shape[1]
             #print("Max tracks shape:",max_tracks)
@@ -808,7 +814,8 @@ class HIPSelection(H5FlowStage):
             #print("Event level cuts extended shape:", event_level_cuts_ext.shape)
 
             #all_initial_cuts_ext = contained_in_fid & event_level_cuts_ext
-            contained_in_fid_red = np.logical_and.reduce(contained_in_fid, -1, dtype=bool)
+            #contained_in_fid_red = np.logical_and.reduce(contained_in_fid, -1, dtype=bool)
+            #print("Contained in FID Reduced:", contained_in_fid_red)
             
             #print("All initial cuts shape:", all_initial_cuts.shape)
 
@@ -1089,7 +1096,7 @@ class HIPSelection(H5FlowStage):
             pid_mip_proton = (np.mean(mip_likelihood_dqdx, axis=-1) - (np.mean(proton_likelihood_dqdx, axis=-1)))
 
             '''
-            event_sel = (contained_in_fid_red & event_level_cuts)
+            event_sel = (event_level_cuts)
                          #& (pid_muon_proton > -1.)
                          #& (pid_mip_proton > -1.))   # dQ/dx profile more consistent with stopping muon than MIP
                         #& (-np.mean(muon_likelihood_dqdx, axis=-1)

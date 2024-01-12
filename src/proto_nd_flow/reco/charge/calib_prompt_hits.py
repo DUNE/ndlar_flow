@@ -60,6 +60,8 @@ class CalibHitBuilder(H5FlowStage):
             ts_pps         f8, PPS packet timestamp [ns]
             io_group       u8, io group ID (PACMAN number)
             io_channel     u8, io channel ID (related to PACMAN number & PACMAN UART Number)
+            chip_id        u8, chip ID (ASIC number on PACMAN UART)
+            channel_id     u8, channel ID (channel number on ASIC)
             Q              f8, hit charge [ke-]
             E              f8, hit energy [MeV]
 
@@ -86,6 +88,8 @@ class CalibHitBuilder(H5FlowStage):
         ('ts_pps', 'u8'),
         ('io_group', 'u8'),
         ('io_channel', 'u8'),
+        ('chip_id', 'u8'),
+        ('channel_id', 'u8'),
         ('Q', 'f8'),
         ('E', 'f8')
     ])
@@ -220,6 +224,8 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['t_drift'] = drift_t
             calib_hits_arr['io_group'] = packets_arr['io_group']
             calib_hits_arr['io_channel'] = packets_arr['io_channel']
+            calib_hits_arr['chip_id'] = packets_arr['chip_id']
+            calib_hits_arr['channel_id'] = packets_arr['channel_id']
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
             calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 # hardcoding W_ion and not accounting for finite electron lifetime
 
@@ -258,7 +264,7 @@ class CalibHitBuilder(H5FlowStage):
 
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped):
-        return (dw / 256. * (vref - vcm) + vcm - ped) / 4. # hardcoding 1 ke/mV conv.
+        return (dw / 256. * (vref - vcm) + vcm - ped) / 4. # hardcoding 4 mV/ke- conv.
 
     def load_pedestals(self):
         if self.pedestal_file != '' and not resources['RunData'].is_mc:

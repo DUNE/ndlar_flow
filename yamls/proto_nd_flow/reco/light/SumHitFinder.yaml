@@ -14,6 +14,7 @@ params:
 
   # configuration parameters
   near_samples: 4
+  hit_level: 'sum'
 
   #threshold: !include yamls/proto_nd_flow/reco/light/sipm_threshold.yaml
   threshold: 

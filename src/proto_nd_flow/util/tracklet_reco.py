@@ -73,7 +73,7 @@ class TrackletReconstruction(H5FlowStage):
     default_ransac_max_trials = 100
     default_max_iterations = 100
     default_trajectory_pts = 5
-    default_trajectory_dx = 10
+    default_trajectory_dx = 1.0
     default_max_nhit = 3000
     default_trajectory_residual_mode = 1
 

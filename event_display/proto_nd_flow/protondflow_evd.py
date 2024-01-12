@@ -7,6 +7,7 @@ from IPython.display import display, clear_output
 import yaml
 import matplotlib
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import mpl_toolkits.mplot3d.art3d as art3d
 from matplotlib.colors import ListedColormap
 from mpl_toolkits.axes_grid1.inset_locator import InsetPosition
@@ -265,6 +266,7 @@ class ProtoNDFlowEventDisplay:
             ext_trig_ref = self.ext_trigs_ref[self.ext_trigs_region[ev_id,'start']:self.ext_trigs_region[ev_id,'stop']]
             ext_trig_ref = np.sort(ext_trig_ref[ext_trig_ref[:,0] == ev_id, 1])
 
+            print("EST from earliest light system trigger in event.")
             return np.min(self.ext_trigs[ext_trig_ref]['ts'])
         # Second Choice:
         #  Try to determine the start time from a 'bump' in charge.
@@ -301,9 +303,11 @@ class ProtoNDFlowEventDisplay:
             start_time = time_bins[t0_bin_index]
             # Check if qsum exceed threshold
             if start_time < max_ts:
+                print("EST from `bump in charge'.")
                 return start_time
         # Fallback is to use the first hit
         return event['ts_start']
+        print("EST from first hit start time.")
 
     # Set up axes
     def set_axes(self):
@@ -546,3 +550,5 @@ class ProtoNDFlowEventDisplay:
                 norm(unassoc_hits[self.charge])), s=5, alpha=a)
             self.ax_xy.scatter(hit_xvals, unassoc_hits[self.y_vals]*self.convert_to_mm+self.y_offset, lw=0, ec='C0', c=cmap(
                 norm(unassoc_hits[self.charge])), s=5, alpha=a)
+        #plt.gcf()
+        #plt.show()

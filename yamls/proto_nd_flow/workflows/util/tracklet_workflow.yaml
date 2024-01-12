@@ -7,9 +7,9 @@ flow:
 
 
 resources:
-  - !include yamls/proto_nd_flow/resources/RunData.yaml
-  - !include yamls/proto_nd_flow/resources/LArData.yaml
-  - !include yamls/proto_nd_flow/resources/Geometry.yaml
+  - !include yamls/module1_flow/resources/RunData.yaml
+  - !include yamls/module1_flow/resources/LArData.yaml
+  - !include yamls/module1_flow/resources/Geometry.yaml
 
 events:
   classname: H5FlowDatasetLoopGenerator
