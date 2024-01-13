@@ -190,8 +190,6 @@ class ProtoNDFlowEventDisplay:
         self.ax_time_2 = ax_time_2
         self.ax_xy = ax_xy
 
-        self.run()
-
     def run(self):
         
         print("Number of available events:", len(self.events))
@@ -255,6 +253,7 @@ class ProtoNDFlowEventDisplay:
     def get_event_start_time(self, event):
         """Estimate the event start time"""
         if event['n_ext_trigs']:
+            print("First choice")
             # First Choice: Use earliest light system trigger in event
             ev_id = event['id']
             ext_trig_ref = self.ext_trigs_ref[self.ext_trigs_region[ev_id,'start']:self.ext_trigs_region[ev_id,'stop']]
@@ -296,8 +295,10 @@ class ProtoNDFlowEventDisplay:
             start_time = time_bins[t0_bin_index]
             # Check if qsum exceed threshold
             if start_time < max_ts:
+                print("Second choice")
                 return start_time
         # Fallback is to use the first hit
+        print("Last choice")
         return event['ts_start']
 
     # Set up axes
@@ -420,8 +421,25 @@ class ProtoNDFlowEventDisplay:
         ext_trig_ref = np.sort(ext_trig_ref[ext_trig_ref[:,0] == ev_id, 1])
 
         event_start_time = self.get_event_start_time(event)
+        print(event_start_time)
 
         hits = self.hits[hit_ref]
+
+        if self.hits_dset == 'raw_hits':
+            packets_hits_ref_mask = np.isin(self.packets_hits_ref[:,0], hit_ref)
+            packets_hits_ref_masked = self.packets_hits_ref[packets_hits_ref_mask]
+
+            io_groups = np.zeros(hit_ref.shape)
+            for i, hit_element in enumerate(hit_ref):
+                argwhere = np.argwhere(packets_hits_ref_masked[:,0] == hit_element)[0,0]
+                packet_index = packets_hits_ref_masked[argwhere][1]
+                io_groups[i] = self.packets[packet_index]['io_group']
+                
+            packets = self.packets[hit_ref]
+            print(np.all(io_groups == packets['io_group']))
+        else:
+            io_groups = hits['io_group']
+
         cmap = plt.cm.get_cmap('plasma')
 
         # Need to convert charge if using charge/raw_hits dataset
@@ -434,9 +452,11 @@ class ProtoNDFlowEventDisplay:
                 vmin=min(self.hits[hit_ref][self.charge]),
                 vmax=max(self.hits[hit_ref][self.charge]))           
         mcharge = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-        hits_anode1 = hits[hits[self.x_vals]*self.convert_to_mm <= 0]
-        hits_anode2 = hits[hits[self.x_vals]*self.convert_to_mm > 0]
+        hits_anode1 = hits[io_groups == 1]
+        hits_anode2 = hits[io_groups == 2]
 
+        #hits_anode1 = hits[packets['io_group']*self.convert_to_mm <= 0]
+        #hits_anode2 = hits[hits[self.x_vals]*self.convert_to_mm > 0]
         if self.hits_dset == 'raw_hits':
             q_anode1 = self.charge_from_ADC(hits_anode1[self.charge], self.vref_mv, self.vcm_mv, self.ped_mv) 
             q_anode2 = self.charge_from_ADC(hits_anode2[self.charge], self.vref_mv, self.vcm_mv, self.ped_mv)
