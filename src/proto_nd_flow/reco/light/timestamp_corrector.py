@@ -47,7 +47,7 @@ class LightTimestampCorrector(H5FlowStage):
 
         events_dset = self.data_manager.get_dset(source_name)
 
-        self.t_ns_dtype = self.t_ns_dtype(*events_dset.dtype['tai_ns'].shape[0:1])
+        self.t_ns_dtype = self.t_ns_dtype(*events_dset.dtype['tai_ns'].shape[0:2])
 
         self.slope_array = np.zeros(self.t_ns_dtype['t_ns'].shape)
         for key, val in self.slope.items():
