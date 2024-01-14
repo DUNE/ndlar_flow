@@ -10,9 +10,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 import file_parsing
+import json
 from plot_hit_level_metrics import plot_event_hit_summ_metrics, plot_channel_metrics 
 
-def main(file_dir, is_sim, hits_dset):
+def main(file_dir, is_sim, hits_dset, sel_event_dict):
 
     is_sim = bool(is_sim == 'True')
     # initialize plotting datasets
@@ -39,18 +40,21 @@ def main(file_dir, is_sim, hits_dset):
         tracks_region = f['charge/events/ref/combined/tracklets/ref_region']
         hits_trk_ref = f['combined/tracklets/ref/charge/'+hits_dset+'/ref']
         hits_trk_region = f['combined/tracklets/ref/charge/'+hits_dset+'/ref_region']
-        hits_drift = f['combined/hit_drift/data']
-        hits = f['charge/'+hits_dset+'/data']
-        hits_ref = f['charge/events/ref/charge/'+hits_dset+'/ref']
-        hits_region = f['charge/events/ref/charge/'+hits_dset+'/ref_region']
-        if not is_sim:
-            charge_hits = hits#f['combined/q_calib_el/data']
-            charge_hits_ref = hits_ref#f['charge/events/ref/combined/q_calib_el/ref']
-            charge_hits_region = hits_region#f['charge/events/ref/combined/q_calib_el/ref_region']
-        else:
-            charge_hits = hits
-            charge_hits_ref = hits_ref
-            charge_hits_region = hits_region
+        #hits_drift = f['combined/hit_drift/data']
+        hits_dsets = ['calib_final_hits', 'calib_prompt_hits']
+        hits = [f['charge/calib_final_hits/data'], f['charge/calib_prompt_hits/data']]
+        hits_ref = [f['charge/events/ref/charge/calib_final_hits/ref'], \
+                    f['charge/events/ref/charge/calib_prompt_hits/ref']]
+        hits_region = [f['charge/events/ref/charge/calib_final_hits/ref_region'], \
+                       f['charge/events/ref/charge/calib_prompt_hits/ref_region']]
+        #if not is_sim:
+        #    charge_hits = hits#f['combined/q_calib_el/data']
+        #    charge_hits_ref = hits_ref#f['charge/events/ref/combined/q_calib_el/ref']
+        #    charge_hits_region = hits_region#f['charge/events/ref/combined/q_calib_el/ref_region']
+        #else:
+        #    charge_hits = hits
+        #    charge_hits_ref = hits_ref
+        #    charge_hits_region = hits_region
         ext_trigs = f['charge/ext_trigs/data']
         ext_trigs_ref = f['charge/events/ref/charge/ext_trigs/ref']
         ext_trigs_region = f['charge/events/ref/charge/ext_trigs/ref_region']
@@ -61,101 +65,115 @@ def main(file_dir, is_sim, hits_dset):
             mc_truth_events = f['mc_truth/events/data']
         
         print("File:", file)
-        sel_mask = (sel_reco['sel'] == True)
-        sel_event_ids = sel_reco[sel_mask]['event_id']
-        print("Selected Event Ids:", sel_event_ids)
-        if is_sim==True:
-            sel_truth_mask = (sel_truth['sel'] == True)
-            sel_truth_protons = sel_truth[sel_mask]['hips']
-            sel_truth_sel = sel_truth[sel_truth_mask]['event_id']
-            sel_pdg_mask = (sel_truth[sel_truth_mask]['pdg_id'] != 0)
-            sel_truth_pdg = sel_truth[sel_truth_mask]['pdg_id'][sel_pdg_mask]
-            print("Selected Proton?:", sel_truth_protons)
-            print("Selected True?:", sel_truth_sel)
-            print("Selected PDG IDs:", sel_truth_pdg)
-            for event in sel_event_ids:
-                event_sel_mask = f['high_purity_sel']['hips']['sel_truth']['data']['event_id'] == event
-                zero_mask = f['high_purity_sel']['hips']['sel_truth']['data'][event_sel_mask]['pdg_id'] != 0.
-                print('Selected event true PID:', f['high_purity_sel']['hips']['sel_truth']['data'][event_sel_mask]['pdg_id'][zero_mask], "| Event ID:", event)
+        #sel_mask = (sel_reco['sel'] == True)
+        #sel_event_ids = sel_reco[sel_mask]['event_id']
+        #print("Selected Event Ids:", sel_event_ids)
+        #if is_sim==True:
+            #sel_truth_mask = (sel_truth['sel'] == True)
+            #sel_truth_protons = sel_truth[sel_mask]['hips']
+            #sel_truth_sel = sel_truth[sel_truth_mask]['event_id']
+            #sel_pdg_mask = (sel_truth[sel_truth_mask]['pdg_id'] != 0)
+            #sel_truth_pdg = sel_truth[sel_truth_mask]['pdg_id'][sel_pdg_mask]
+            #print("Selected Proton?:", sel_truth_protons)
+            #print("Selected True?:", sel_truth_sel)
+            #print("Selected PDG IDs:", sel_truth_pdg)
+            #for event in sel_event_ids:
+                #event_sel_mask = f['high_purity_sel']['hips']['sel_truth']['data']['event_id'] == event
+                #zero_mask = f['high_purity_sel']['hips']['sel_truth']['data'][event_sel_mask]['pdg_id'] != 0.
+                #print('Selected event true PID:', f['high_purity_sel']['hips']['sel_truth']['data'][event_sel_mask]['pdg_id'][zero_mask], "| Event ID:", event)
 
         ### partition file by selected events
-        sel_event_mask = np.isin(events['id'], sel_event_ids)
+        #sel_event_mask = np.isin(events['id'], sel_event_ids)
         #print("Events:", events[sel_event_mask])
-        for event_id in sel_event_ids:
 
-            # Get hit information related to given event_id
-            charge_hit_ref = charge_hits_ref[charge_hits_region[int(event_id),'start']:charge_hits_region[int(event_id),'stop']]
-            charge_hit_ref = np.sort(charge_hit_ref[charge_hit_ref[:,0] == event_id, 1])
-            
-            # Event-level hit metrics
-            charge_hits_data = charge_hits[charge_hit_ref]['Q']
-            ts_hits_data = charge_hits[charge_hit_ref]['ts_pps']
-            num_charge_hits = len(charge_hits_data)
+        # TO DO: Make this variable based on input file
+        sel_event_id_file = open(file_dir+'/'+sel_event_dict)
+        sel_event_id_data = json.load(sel_event_id_file)
+        sel_event_pdgs = sel_event_id_data.keys()
+        for pdg in sel_event_pdgs:
+            sel_event_ids = sel_event_id_data[pdg]
+            for event_id in sel_event_ids:
+                for x in range(len(hits_dsets)):
+                    charge_hits_dset = hits_dsets[x]
+                    charge_hits = hits[x]
+                    charge_hits_ref = hits_ref[x]
+                    charge_hits_region = hits_region[x]
 
-            # Channel-level hit metrics
-            iogroup_hits = charge_hits[charge_hit_ref]['io_group']
-            iochannel_hits = charge_hits[charge_hit_ref]['io_channel']
-            chipid_hits = charge_hits[charge_hit_ref]['chip_id']
-            channelid_hits = charge_hits[charge_hit_ref]['channel_id']
+                    # Get hit information related to given event_id
+                    charge_hit_ref = charge_hits_ref[charge_hits_region[int(event_id),'start']:charge_hits_region[int(event_id),'stop']]
+                    charge_hit_ref = np.sort(charge_hit_ref[charge_hit_ref[:,0] == event_id, 1])
 
-            channel_id = np.array([int(str(iogroup_hits[i])+str(iochannel_hits[i])+str(chipid_hits[i])+str(channelid_hits[i])) for i in range(num_charge_hits)])
-            unique_channels, unique_channel_hit_counts = np.unique(channel_id, return_counts=True)
-            num_channels = len(unique_channels)
+                    # Event-level hit metrics
+                    charge_hits_data = charge_hits[charge_hit_ref]['Q']
+                    ts_hits_data = charge_hits[charge_hit_ref]['ts_pps']
+                    num_charge_hits = len(charge_hits_data)
 
-            #print("String of channels:", channel_id)
-            #print("Number of unique channels:", num_channels)
-            #print("Hits per channel:", unique_channel_hit_counts)
-            #print("Length of hits per channel:", len(unique_channel_hit_counts))
-            for i in range(num_channels):
+                    # Channel-level hit metrics
+                    iogroup_hits = charge_hits[charge_hit_ref]['io_group']
+                    iochannel_hits = charge_hits[charge_hit_ref]['io_channel']
+                    chipid_hits = charge_hits[charge_hit_ref]['chip_id']
+                    channelid_hits = charge_hits[charge_hit_ref]['channel_id']
 
-                channel = unique_channels[i]
-                hits_per_channel = unique_channel_hit_counts[i]
-                channel_mask = np.argwhere(channel_id == channel).flatten()
-                channel_hit_amps = charge_hits_data[channel_mask]
-                channel_hit_ts = ts_hits_data[channel_mask] / 10. # convert to us
-                
-                max_hit_amp = max(channel_hit_amps)
-                min_hit_amp = min(channel_hit_amps)
+                    channel_id = np.array([int(str(iogroup_hits[i])+str(iochannel_hits[i])+str(chipid_hits[i])+str(channelid_hits[i])) for i in range(num_charge_hits)])
+                    unique_channels, unique_channel_hit_counts = np.unique(channel_id, return_counts=True)
+                    num_channels = len(unique_channels)
 
-                first_hit_idx = np.argmin(channel_hit_ts)
-                last_hit_idx = np.argmax(channel_hit_ts)
-                first_hit_amp = channel_hit_amps[first_hit_idx]
-                last_hit_amp = channel_hit_amps[last_hit_idx]
-                first_last_hit_delta_t = abs(channel_hit_ts[last_hit_idx] - channel_hit_ts[first_hit_idx])
+                    #print("String of channels:", channel_id)
+                    #print("Number of unique channels:", num_channels)
+                    #print("Hits per channel:", unique_channel_hit_counts)
+                    #print("Length of hits per channel:", len(unique_channel_hit_counts))
+                    for i in range(num_channels):
 
-                #print("Channel hit amplitudes:", channel_hit_amps)
-                #print("Channel hit timestamps:", channel_hit_ts)
-                #print("Maximum hit amplitude:", max_hit_amp)
-                #print("Minimum hit amplitude:", min_hit_amp)
-                #print("First hit amplitude:", first_hit_amp)
-                #print("Last hit amplitude:", last_hit_amp)
-                #print("First/Last hit delta t:", first_last_hit_delta_t)
+                        channel = unique_channels[i]
+                        hits_per_channel = unique_channel_hit_counts[i]
+                        channel_mask = np.argwhere(channel_id == channel).flatten()
+                        channel_hit_amps = charge_hits_data[channel_mask]
+                        channel_hit_ts = ts_hits_data[channel_mask] / 10. # convert to us
+
+                        max_hit_amp = max(channel_hit_amps)
+                        min_hit_amp = min(channel_hit_amps)
+
+                        first_hit_idx = np.argmin(channel_hit_ts)
+                        last_hit_idx = np.argmax(channel_hit_ts)
+                        first_hit_amp = channel_hit_amps[first_hit_idx]
+                        last_hit_amp = channel_hit_amps[last_hit_idx]
+                        first_last_hit_delta_t = abs(channel_hit_ts[last_hit_idx] - channel_hit_ts[first_hit_idx])
+
+                        #print("Channel hit amplitudes:", channel_hit_amps)
+                        #print("Channel hit timestamps:", channel_hit_ts)
+                        #print("Maximum hit amplitude:", max_hit_amp)
+                        #print("Minimum hit amplitude:", min_hit_amp)
+                        #print("First hit amplitude:", first_hit_amp)
+                        #print("Last hit amplitude:", last_hit_amp)
+                        #print("First/Last hit delta t:", first_last_hit_delta_t)
+                        
+                        channel_metric_dict[(file, pdg, charge_hits_dset, event_id, channel)]=dict(
+                            hit_mult = int(hits_per_channel), 
+                            max_hit_amp = float(max_hit_amp),
+                            min_hit_amp = float(min_hit_amp),
+                            first_hit_amp = float(first_hit_amp),
+                            last_hit_amp = float(last_hit_amp),
+                            first_last_hit_delta_t = float(first_last_hit_delta_t),
+                            event_pdg = int(pdg),
+                            hits_dset = str(charge_hits_dset)
+                        )
+
+                    event_hit_summ_dict[(file, pdg, charge_hits_dset, event_id)]=dict(
+                        event_pdg = int(pdg),
+                        total_charge=float(sum(charge_hits_data)),
+                        num_hits=int(num_charge_hits),
+                        num_channels=int(num_channels),
+                        hits_dset = str(charge_hits_dset)
+                    )
+
+        ## Save all Python dictionaries to JSON files
+        file_parsing.save_dict_to_json(event_hit_summ_dict, sample_type+"_event_hit_summ_dict", True)
+        file_parsing.save_dict_to_json(channel_metric_dict, sample_type+"_channel_metric_dict", True)
 
 
-
-                channel_metric_dict[(file, event_id, channel)]=dict(
-                    hit_mult = int(hits_per_channel), 
-                    max_hit_amp = float(max_hit_amp),
-                    min_hit_amp = float(min_hit_amp),
-                    first_hit_amp = float(first_hit_amp),
-                    last_hit_amp = float(last_hit_amp),
-                    first_last_hit_delta_t = float(first_last_hit_delta_t)
-                )
-
-            event_hit_summ_dict[(file, event_id)]=dict(
-                total_charge=float(sum(charge_hits_data)),
-                num_hits=int(num_charge_hits),
-                num_channels=int(num_channels)
-            )
-        
-    ## Save all Python dictionaries to JSON files
-    file_parsing.save_dict_to_json(event_hit_summ_dict, sample_type+"event_hit_summ_dict", True)
-    file_parsing.save_dict_to_json(channel_metric_dict, sample_type+"channel_metric_dict", True)
-
-
-    # PLOT: Signal Event Info      
-    plot_event_hit_summ_metrics(event_hit_summ_dict, is_sim==True)
-    plot_channel_metrics(channel_metric_dict, is_sim==True)
+        # PLOT: Signal Event Info      
+        plot_event_hit_summ_metrics(event_hit_summ_dict, is_sim)
+        plot_channel_metrics(channel_metric_dict, is_sim)
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
@@ -164,6 +182,8 @@ if __name__=='__main__':
     parser.add_argument('-mc', '--is_sim', default=False, required=True, type=str, \
                         help='''str corresponding to bool whether files are simulation (MC) or data''')
     parser.add_argument('-hd', '--hits_dset', default='calib_final_hits', required=True, type=str,\
-                        help='''str corresponding to bool of hits dataset name''')
+                        help='''str corresponding to hits dataset name associated with tracklets''')
+    parser.add_argument('-sed', '--sel_event_dict', default=None, required=True, type=str,\
+                        help='''str corresponding name of json file containing selected event ids''')
     args = parser.parse_args()
     main(**vars(args))

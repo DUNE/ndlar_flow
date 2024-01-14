@@ -23,8 +23,8 @@ WORKFLOW1='yamls/proto_nd_flow/workflows/analysis/hip_sel_workflow.yaml'
 
 HERE=`pwd`
 #cd ndlar_flow
-# assumes this is being run from ndlar_flow/scripts/proto_nd_flow:
-cd ../../
+# assumes this is being run from ndlar_flow/scripts/proto_nd_flow/analysis/hip_selection/:
+cd ../../../../
 
 # avoid being asked if we want to overwrite the file if it exists.
 # this is us answering "yes".
