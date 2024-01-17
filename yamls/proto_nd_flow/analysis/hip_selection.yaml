@@ -3,7 +3,7 @@ path: proto_nd_flow.analysis.hip_selection
 requires:
   - 'combined/tracklets'
   - 'combined/t0'
-  - 'charge/calib_final_hits'
+  - 'charge/calib_prompt_hits'
   - name: 'mc_truth/trajectories'
     path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories']
   #- name: 'combined/track_hits'
@@ -13,13 +13,13 @@ requires:
 
 params:
   # inputs
-  hits_dset_name: 'charge/calib_final_hits'
+  hits_dset_name: 'charge/calib_prompt_hits'
   ext_trigs_dset_name: 'charge/ext_trigs'
   t0_dset_name: 'combined/t0'
   tracklet_dset_name: 'combined/tracklets'
-  hit_drift_dset_name: 'charge/calib_final_hits'
+  hit_drift_dset_name: 'charge/calib_prompt_hits'
   truth_trajectories_dset_name: 'mc_truth/trajectories'
-  charge_dset_name: 'charge/calib_final_hits'
+  charge_dset_name: 'charge/calib_prompt_hits'
   
   # configuration parameters
   fid_cut: 5.0 # cm
