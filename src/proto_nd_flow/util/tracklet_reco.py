@@ -528,7 +528,7 @@ class TrackletReconstruction(H5FlowStage):
 
             :returns: orientation of axis about x-axis
         '''
-        return np.arctan2(axis[1], axis[2])
+        return np.arctan2(axis[2], axis[1])
 
     @staticmethod
     def yzp(axis, centroid):

@@ -443,8 +443,8 @@ class ProtoNDFlowEventDisplay:
                 vmin=min(self.hits[hit_ref][self.charge]),
                 vmax=max(self.hits[hit_ref][self.charge]))           
         mcharge = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-        hits_anode1 = hits[hits[self.x_vals]*self.convert_to_mm <= 0]
-        hits_anode2 = hits[hits[self.x_vals]*self.convert_to_mm > 0]
+        hits_anode1 = hits[hits['io_group']== 1]
+        hits_anode2 = hits[hits['io_group']== 2]
 
         if self.hits_dset == 'raw_hits':
             q_anode1 = self.charge_from_ADC(hits_anode1[self.charge], self.vref_mv, self.vcm_mv, self.ped_mv) 

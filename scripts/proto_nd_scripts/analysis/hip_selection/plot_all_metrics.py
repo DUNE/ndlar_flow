@@ -20,8 +20,8 @@ def plot_event_hit_summ_metrics(d, is_mc):
 
     sel_pdg = np.unique([d[key]['event_pdg'] for key in d.keys()])
     hits_dsets = np.unique([d[key]['hits_dset'] for key in d.keys()])
-    alpha_options = [[0.8, 0.8], [0.8, 0.8]]
-    color_options = [['#4daf4a', '#ff7f00'], ['#377eb8', '#e41a1c']]
+    alpha_options = [[0.8, 0.9], [0.8, 0.9]]
+    color_options = [['#D62728', '#FF9896'], ['#1F77B4', '#AEC7E8']]
     linestyle_options = [['--', '--'], ['-', '-']]
     linewidth_options = [[1.5, 1.5], [1.5, 1.5]]
     fill_options = [[False, False], [False, False]]
@@ -101,8 +101,8 @@ def plot_channel_metrics(d, is_mc):
 
     sel_pdg = np.unique([d[key]['event_pdg'] for key in d.keys()])
     hits_dsets = np.unique([d[key]['hits_dset'] for key in d.keys()])
-    alpha_options = [[0.8, 0.8], [0.8, 0.8]]
-    color_options = [['#4daf4a', '#ff7f00'], ['#377eb8', '#e41a1c']]
+    alpha_options = [[0.8, 0.9], [0.8, 0.9]]
+    color_options = [['#D62728', '#FF9896'], ['#1F77B4', '#AEC7E8']]
     linestyle_options = [['--', '--'], ['-', '-']]
     linewidth_options = [[1.5, 1.5], [1.5, 1.5]]
     fill_options = [[False, False], [False, False]]
@@ -122,6 +122,8 @@ def plot_channel_metrics(d, is_mc):
                      linestyle=linestyle_options[pdg_idx][dset_idx], fill = fill_options[pdg_idx][dset_idx])
     ax0.set_xlabel('Hit Multiplicity / Channel / Event')
     ax0.set_ylabel('Channel Count / Hit')
+    ax0.set_yscale('log')
+    ax0.set_xlim(0,8)
     ax0.set_title(r'Hit Multiplicity Per Channel in Selected Events '+mc_title)
     ax0.legend()
     plt.savefig(sample_type+"_selected_events_hits_per_channel_per_event.png")
@@ -134,14 +136,16 @@ def plot_channel_metrics(d, is_mc):
         for hits_dset in hits_dsets:
             dset_idx = hits_dsets.tolist().index(hits_dset)
             data1 = np.array([d[key]['max_hit_amp'] for key in d.keys() if d[key]['event_pdg']==pdg and d[key]['hits_dset']==hits_dset])
-            counts1, bins1 = np.histogram(data1, bins=np.linspace(0,200,41))
-            ax1.hist(bins1[:-1], bins=bins1, weights = counts1, histtype='stepfilled',\
+            counts1, bins1 = np.histogram(data1, bins=np.linspace(0,200,21))
+            ax1.hist(bins1[:-1], bins=bins1, weights = counts1/sum(counts1), histtype='stepfilled',\
                      label=pdg_defs.selection_pdg_dict[pdg]+", "+hits_dset, \
                      linewidth=linewidth_options[pdg_idx][dset_idx], alpha=alpha_options[pdg_idx][dset_idx], \
                      color=color_options[pdg_idx][dset_idx], edgecolor=color_options[pdg_idx][dset_idx], \
                      linestyle=linestyle_options[pdg_idx][dset_idx], fill = fill_options[pdg_idx][dset_idx])
     ax1.set_xlabel('Max Hit Amplitude / Channel / Event [ke-]')
-    ax1.set_ylabel('Channel Count / 5 ke-')
+    ax1.set_ylabel('Channel Count / 10 ke- [Area Normalized]')
+    ax1.set_xlim(0,150)
+    ax1.set_yscale('log')
     ax1.set_title(r'Maximum Hit Amplitiude Per Channel in Selected Events '+mc_title)
     ax1.legend()
     plt.savefig(sample_type+"_selected_events_max_hit_amp_per_channel_per_event.png")
@@ -214,15 +218,16 @@ def plot_channel_metrics(d, is_mc):
         for hits_dset in hits_dsets:
             dset_idx = hits_dsets.tolist().index(hits_dset)
             data4 = np.array([d[key]['first_last_hit_delta_t'] for key in d.keys() if d[key]['event_pdg']==pdg and d[key]['hits_dset']==hits_dset])
-            counts4, bins4 = np.histogram(data4, bins=np.linspace(0,150,76))
+            counts4, bins4 = np.histogram(data4, bins=np.linspace(0,25,51))
             ax4.hist(bins4[:-1], bins=bins4, weights = counts4, histtype='stepfilled',\
                      label=pdg_defs.selection_pdg_dict[pdg]+", "+hits_dset, \
                      linewidth=linewidth_options[pdg_idx][dset_idx], alpha=alpha_options[pdg_idx][dset_idx], \
                      color=color_options[pdg_idx][dset_idx], edgecolor=color_options[pdg_idx][dset_idx], \
                      linestyle=linestyle_options[pdg_idx][dset_idx], fill = fill_options[pdg_idx][dset_idx])
     ax4.set_xlabel(r'First/Last Hit $\Delta$t / Channel / Event [$\mu$s]')
-    ax4.set_ylabel(r'Channel Count / 2 $\mu$s')
+    ax4.set_ylabel(r'Channel Count / 0.5 $\mu$s')
     ax4.set_yscale('log')
+    ax4.set_xlim(0,21)
     ax4.set_title("Difference in Time between First and Last Hit\nPer Channel in Selected Events "+mc_title)
     ax4.legend()
     plt.savefig(sample_type+"_selected_events_first_last_hit_deltat_per_channel_per_event.png")
@@ -241,8 +246,8 @@ def plot_track_metrics(d, is_mc):
 
     sel_pdg = np.unique([d[key]['event_pdg'] for key in d.keys()])
     hits_dsets = np.unique([d[key]['hits_dset'] for key in d.keys()])
-    alpha_options = [[0.8, 0.8], [0.8, 0.8]]
-    color_options = [['#4daf4a', '#ff7f00'], ['#ff7f00', '#e41a1c']]
+    alpha_options = [[0.8, 0.9], [0.8, 0.9]]
+    color_options = [['#D62728', '#FF9896'], ['#1F77B4', '#AEC7E8']]
     linestyle_options = [['--', '--'], ['-', '-']]
     linewidth_options = [[1.5, 1.5], [1.5, 1.5]]
     fill_options = [[False, False], [False, False]]
@@ -274,6 +279,69 @@ def plot_track_metrics(d, is_mc):
     ax0.legend()
     plt.savefig(sample_type+"_selected_events_dqdx_vs_resid_range.png")
     plt.close(fig0)
+
+    # PLOT: track theta (inclination w.r.t. anode)
+    fig1, ax1 = plt.subplots(figsize=(6,4))
+    for pdg in sel_pdg:
+        pdg_idx = sel_pdg.tolist().index(pdg)
+        for hits_dset in hits_dsets:
+            dset_idx = hits_dsets.tolist().index(hits_dset)
+            data1 = np.array([d[key]['theta'] for key in d.keys() if d[key]['event_pdg']==pdg and d[key]['hits_dset']==hits_dset])
+            counts1, bins1 = np.histogram(data1, bins=np.linspace(0,3.0,16))
+            ax1.hist(bins1[:-1], bins=bins1, weights = counts1, histtype='stepfilled',\
+                     label=pdg_defs.selection_pdg_dict[pdg]+", "+hits_dset, \
+                     linewidth=linewidth_options[pdg_idx][dset_idx], alpha=alpha_options[pdg_idx][dset_idx], \
+                     color=color_options[pdg_idx][dset_idx], edgecolor=color_options[pdg_idx][dset_idx], \
+                     linestyle=linestyle_options[pdg_idx][dset_idx], fill = fill_options[pdg_idx][dset_idx]) 
+    ax1.set_xlabel('Selected Event Track Inclination w.r.t Anode [rad]')
+    ax1.set_ylabel('Event Count / 0.2 rad')
+    ax1.set_title(r'Selected Event Inclination w.r.t. Anode '+mc_title)
+    ax1.legend()
+    ax1.set_xlim(0,3.2)
+    plt.savefig(sample_type+"_selected_events_theta_angle.png")
+    plt.close(fig1)
+
+    # PLOT: track phi (orientation w.r.t. anode)
+    fig2, ax2 = plt.subplots(figsize=(8,4))
+    for pdg in sel_pdg:
+        pdg_idx = sel_pdg.tolist().index(pdg)
+        for hits_dset in hits_dsets:
+            dset_idx = hits_dsets.tolist().index(hits_dset)
+            data2 = np.array([d[key]['phi'] for key in d.keys() if d[key]['event_pdg']==pdg and d[key]['hits_dset']==hits_dset])
+            counts2, bins2 = np.histogram(data2, bins=np.linspace(-6,6.0,61))
+            ax2.hist(bins2[:-1], bins=bins2, weights = counts2, histtype='stepfilled',\
+                     label=pdg_defs.selection_pdg_dict[pdg]+", "+hits_dset, \
+                     linewidth=linewidth_options[pdg_idx][dset_idx], alpha=alpha_options[pdg_idx][dset_idx], \
+                     color=color_options[pdg_idx][dset_idx], edgecolor=color_options[pdg_idx][dset_idx], \
+                     linestyle=linestyle_options[pdg_idx][dset_idx], fill = fill_options[pdg_idx][dset_idx]) 
+    ax2.set_xlabel('Selected Event Track Orientation w.r.t Anode [rad]')
+    ax2.set_ylabel('Event Count / 0.2 rad')
+    ax2.set_xlim(-3.3, 3.3)
+    ax2.set_title(r'Selected Event Orientation w.r.t. Anode '+mc_title)
+    ax2.legend()
+    plt.savefig(sample_type+"_selected_events_phi_angle.png")
+    plt.close(fig2)
+
+    fig3, ax3 = plt.subplots(figsize=(8,4))
+    for pdg in sel_pdg:
+        pdg_idx = sel_pdg.tolist().index(pdg)
+        for hits_dset in hits_dsets:
+            dset_idx = hits_dsets.tolist().index(hits_dset)
+            data3 = np.array([d[key]['avg_q_per_unit_length'] for key in d.keys() if d[key]['event_pdg']==pdg and d[key]['hits_dset']==hits_dset])
+            counts3, bins3 = np.histogram(data3, bins=np.linspace(0,500,26))
+            ax3.hist(bins3[:-1], bins=bins3, weights = counts3, histtype='stepfilled',\
+                     label=pdg_defs.selection_pdg_dict[pdg]+", "+hits_dset, \
+                     linewidth=linewidth_options[pdg_idx][dset_idx], alpha=alpha_options[pdg_idx][dset_idx], \
+                     color=color_options[pdg_idx][dset_idx], edgecolor=color_options[pdg_idx][dset_idx], \
+                     linestyle=linestyle_options[pdg_idx][dset_idx], fill = fill_options[pdg_idx][dset_idx])
+    ax3.set_xlabel('Average Charge per Unit Length [ke-/cm]')
+    ax3.set_ylabel('Count / 20 ke-/cm')
+    ax3.set_xlim(0,500)
+    ax3.set_yscale('log')
+    ax3.set_title(r'Average Charge per Unit Length for Selected Event Tracks '+mc_title)
+    ax3.legend()
+    plt.savefig(sample_type+"_selected_events_avg_q_per_unit_length.png")
+    plt.close(fig3)
 
 
     return

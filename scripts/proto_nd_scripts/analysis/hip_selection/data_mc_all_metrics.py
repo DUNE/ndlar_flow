@@ -64,10 +64,10 @@ def main(file_dir, is_sim, sel_event_dict):
         ext_trigs_ref = f['charge/events/ref/charge/ext_trigs/ref']
         ext_trigs_region = f['charge/events/ref/charge/ext_trigs/ref_region']
         print("Available datasets:",f.keys(),'\n')
-        sel_reco = f['high_purity_sel']['hips']['sel_reco']['data']
-        if is_sim:
-            sel_truth = f['high_purity_sel']['hips']['sel_truth']['data']
-            mc_truth_events = f['mc_truth/events/data']
+        #sel_reco = f['high_purity_sel']['hips']['sel_reco']['data']
+        #if is_sim:
+        #    sel_truth = f['high_purity_sel']['hips']['sel_truth']['data']
+        #    mc_truth_events = f['mc_truth/events/data']
         
         print("File:", file)
         #sel_mask = (sel_reco['sel'] == True)
@@ -222,6 +222,7 @@ def main(file_dir, is_sim, sel_event_dict):
                     total_charge = float(track_charge_data),
                     length = float(track_length_data),
                     hits_in_track = int(track_num_hits_data),
+                    avg_q_per_unit_length = float(track_charge_data/track_length_data),
                     theta = float(track_theta_data),
                     phi = float(track_phi_data),
                     ts_start = float(track_ts_start_data),
