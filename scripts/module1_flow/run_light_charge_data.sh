@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -o errexit
+
 module load python
 source ~/reflow/flow.venv/bin/activate
 
@@ -42,14 +44,13 @@ WORKFLOW7='yamls/module1_flow/workflows/charge/final_calibration.yaml'
 
 $H5FLOW_CMD -c $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 $WORKFLOW6 $WORKFLOW7 -i $CHARGE_INPUT_FILE -o $OUTPUT_FILE
 
-WORKFLOW8='yamls/proto_nd_flow/workflows/charge/charge_light_assoc.yaml'
+#WORKFLOW8='yamls/proto_nd_flow/workflows/charge/charge_light_assoc.yaml'
 
-$H5FLOW_CMD -c $WORKFLOW8 -i $OUTPUT_FILE -o $OUTPUT_FILE
+#$H5FLOW_CMD -c $WORKFLOW8 -i $OUTPUT_FILE -o $OUTPUT_FILE
 
 echo "Done!"
 
-FINALOUTDIR="/global/homes/d/diaza/reflow/ndlar_flow/scripts/module1_flow/position_reconstruction/"
-FINALOUTDIR=$HERE
+FINALOUTDIR=$3
 mkdir -p $FINALOUTDIR
 echo "Move file to $FINALOUTDIR"
 mv $OUTPUT_FILE $FINALOUTDIR

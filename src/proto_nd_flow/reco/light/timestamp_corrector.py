@@ -29,8 +29,8 @@ class LightTimestampCorrector(H5FlowStage):
     default_t_ns_dset_name = 'light/t_ns'
     default_slope = defaultdict(float)
 
-    def t_ns_dtype(self, nadcs): return np.dtype([
-        ('t_ns', 'f8', (nadcs,))
+    def t_ns_dtype(self, nadcs, nchannels): return np.dtype([
+        ('t_ns', 'f8', (nadcs, nchannels))
     ])
 
     def __init__(self, **params):
