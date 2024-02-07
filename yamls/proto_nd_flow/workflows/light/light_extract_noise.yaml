@@ -1,0 +1,10 @@
+classname: LightNoiseExtraction # reco/light/lightnoiseXtract.py
+path: proto_nd_flow.reco.light.lightnoiseXtract
+
+params:
+  # inputs
+  light_event_dset_name: 'light/events'
+  light_wvfm_dset_name: 'light/wvfm'
+
+  # configuration parameters
+  
