@@ -1,0 +1,15 @@
+classname: LightNoiseExtraction # reco/light/lightnoiseXtract.py
+path: proto_nd_flow.reco.light.lightnoiseXtract
+#requires:
+#  - 'charge/ext_trigs'
+#  - name: 'charge/ext_trigs_idcs'
+#    path: 'charge/ext_trigs'
+#    index_only: True
+params:
+  # inputs
+  light_event_dset_name: 'light/events'
+  light_wvfm_dset_name: 'light/wvfm'
+
+  # configuration parameters
+  #unix_ts_window: 1
+  #ts_window: 1000000
