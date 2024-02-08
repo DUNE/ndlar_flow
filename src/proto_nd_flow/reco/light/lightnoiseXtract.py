@@ -33,13 +33,13 @@ class LightNoiseExtraction(H5FlowStage):
     sel = slice(50,1050)  # choose 1000 light events to use, avoiding the beginning just in case things are weird
     SAMPLES = resources['RunData'].light_samples
     SAMPLE_RATE = resources['RunData'].lrs_ticks
-    BIT = 4  # factor from unused ADC bits on LRS: would be nice to have in a resource .yaml
+    BIT = 2**(16 - resources['RunData'].lrs_bit)  # factor from unused ADC bits on LRS: would be nice to have in a resource .yaml
 
     def __init__(self, **params):
         super(LightNoiseExtractor, self).__init__(**params)
 
-        self.light_event_dset_name = params.get('light_event_dset_name')[sel]
-        self.light_wvfm_dset_name = params.get('ligt_wvfm_dset_name')[sel]
+        self.light_event_dset_name = params.get('light_event_dset_name')[self.sel]
+        self.light_wvfm_dset_name = params.get('ligt_wvfm_dset_name')[self.sel]
         self.n_file = params.get('n_file', self.n_file)
         self.events_dset_name = None  # put off until init stage
 
@@ -61,7 +61,7 @@ class LightNoiseExtraction(H5FlowStage):
         self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid']
 
         # only keep the positive fft frequencies
-        self.fft_freq = np.fft.fftfreq(SAMPLES, SAMPLE_RATE)[:SAMPLES//2]
+        self.fft_freq = np.fft.fftfreq(self.SAMPLES, self.SAMPLE_RATE)[:self.SAMPLES//2]
         
         # load in light system timestamps (use max to get non-null timestamp entries)
         #self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['id'][:]
@@ -101,7 +101,8 @@ class LightNoiseExtraction(H5FlowStage):
             print(f'Total charge event matching: {self.total_matched_events}/{self.total_charge_events} ({event_eff:0.04f})')
             print(f'Total light event matching: {self.total_matched_light}/{self.total_light_events} ({light_eff:0.04f})') 
 
-    def fast_fourier(self, adc, thd, SAMPLES):
+    def fast_fourier(self, adc):
+        spectra_array = []
         adc_matrix = self.light_event_dset_name[:,adc,:,:]
         valid_wvfm = self.light_event_mask[:,adc,:]
 
@@ -110,39 +111,39 @@ class LightNoiseExtraction(H5FlowStage):
         t_adc_matrix = np.transpose(adc_matrix, (1, 0, 2))[channel_mask==1]
 
         for i in range(48):
-            valid_chan_wvfm = t_adc_matrix[i][t_valid_wvfm[i]==1]/BIT
+            valid_chan_wvfm = t_adc_matrix[i][t_valid_wvfm[i]==1]/self.BIT
+            
+            # choose first 45 samples as signal-free
+            # calculate mean and standard deviation to define signal vs. no sigal
+            stdev = np.std(valid_chan_wvfm[:,0:45], axis=-1)
+            mean = np.mean(valid_chan_wvfm[:,0:45],axis=-1)
+            thd = (stdev*3.5) + mean
+            no_signal_mask = (valid_chan_wvfm.max(axis=1) < thd)
+
+            # remove the pedestal and select "signal-free" waveforms
+            valid_chan_nped = (valid_chan_wvfm.astype(float) - (valid_chan_wvfm[:,0:45]).mean(axis=-1, keepdims=True))
+            noise_wvfms = valid_chan_nped[no_signal_mask==1][:,:self.SAMPLES]
+            try:
+                spectrum = np.fft.fft(noise_wvfms)
+                normalized_spectrum = np.abs(spectrum[:,:self.SAMPLES//2) / (1e3*self.SAMPLE_RATE)
+                # remove the DC component
+                normalized_spectrum[:,0] = 0
+                # calculate an average fft
+                spectrum_average = (np.sum(normalized_spectrum, axis=0))/len(normalized_spectrum)
+                spectra_array.append(spectrum_average)
+            except:
+                pass
+        return np.array(spectra_array)
+
+    def flow2sim(self, adc):
+        
     def run(self, source_name, source_slice, cache):
         super(LightNoiseExtraction, self).run(source_name, source_slice, cache)
 
-        adc_matrix = cache[self.light_event_dset_name][:,adc,:,:]
-        valid_wvfm = cache[self.light_event_mask][:,adc,:]
-        
-        channel_mask = valid_wvfm[0,:]
-        
-        
-    def match_on_timestamp(self, charge_unix_ts, charge_pps_ts):
-        unix_ts_start = charge_unix_ts.min()
-        unix_ts_end = charge_unix_ts.max()  
-        
-        if self.light_unix_ts_start >= unix_ts_end + self.unix_ts_window or \
-           self.light_unix_ts_end <= unix_ts_start - self.unix_ts_window:
-            # no overlap, short circuit
-            return np.empty((0, 2), dtype=int)
+        adc_list = np.arange(cache[self.nadc])
 
-        # subselect only portion of light events that overlaps with unix timestamps
-        i_min = np.argmax((self.light_unix_ts >= unix_ts_start - self.unix_ts_window))
-        i_max = len(self.light_unix_ts) - np.argmax((self.light_unix_ts <= unix_ts_end + self.unix_ts_window)[::-1])
-        sl = slice(i_min, i_max)
-        assoc_mat = (np.abs(self.light_unix_ts[sl].reshape(1, -1) - charge_unix_ts.reshape(-1, 1)) <= self.unix_ts_window) \
-                     & (np.abs(self.light_ts[sl].reshape(1, -1) - charge_pps_ts.reshape(-1, 1)) <= self.ts_window)
-        idcs = np.argwhere(assoc_mat)
-        if len(idcs):
-            idcs[:, 1] = self.light_event_id[sl][idcs[:, 1]]  # idcs now contains ext trigger index <-> global light event id
-        else:
-            idcs = np.empty((0,2), dtype=int)
+    
 
-        return idcs
-            
     def run(self, source_name, source_slice, cache):
         super(LightNoiseExtraction, self).run(source_name, source_slice, cache)
 
