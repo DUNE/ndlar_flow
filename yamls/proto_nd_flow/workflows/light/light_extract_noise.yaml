@@ -1,7 +1,7 @@
 # Generates light channel noise arrays for simulation from data
 
 flow:
-  source: 'light/events'
+  source: 'light/wvfm'
   stages: [light_noise_extractor]
 
 resources:
