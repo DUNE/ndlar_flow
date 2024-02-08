@@ -2,9 +2,8 @@ classname: LightNoiseExtraction # reco/light/lightnoiseXtract.py
 path: proto_nd_flow.reco.light.lightnoiseXtract
 requires:
   - name: 'light/wvfm'
-    path: ['light/events', 'light/wvfm']
+    path: ['light/wvfm']
 params:
   # inputs
-  light_event_dset_name: 'light/events'
   light_wvfm_dset_name: 'light/wvfm'
   n_file: 2x2_light_noise.data.v1.npz
