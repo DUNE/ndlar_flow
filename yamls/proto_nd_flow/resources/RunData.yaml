@@ -15,3 +15,4 @@ params:
     is_mc: True
     crs_ticks: 0.1 # us
     lrs_ticks: 0.016 # us
+    lrs_bit: 14 # bits out of 16 used to save LRS data
