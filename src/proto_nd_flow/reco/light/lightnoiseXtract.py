@@ -61,26 +61,7 @@ class LightNoiseExtraction(H5FlowStage):
         self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid']
 
         # only keep the positive fft frequencies
-        self.fft_freq = np.fft.fftfreq(self.SAMPLES, self.SAMPLE_RATE)[:self.SAMPLES//2]
-        
-        # load in light system timestamps (use max to get non-null timestamp entries)
-        #self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['id'][:]
-        #self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
-        #self.light_unix_ts = self.data_manager.get_dset(self.light_event_dset_name)['utime_ms'][:]
-        #self.light_unix_ts = self.light_unix_ts.mean(axis=-1)
-        # reshape unix ts array to use with mask
-        #self.light_unix_ts = self.light_unix_ts * (units.ms / units.s)  # convert ms -> s
-        #self.light_ts = self.data_manager.get_dset(self.light_event_dset_name)['tai_ns'][:]
-        #self.light_ts = self.light_ts.mean(axis=-1)
-        # reshape tai_ns array as above
-        #if not resources['RunData'].is_mc:
-        #    self.light_ts = self.light_ts % int(1e9)
-        #self.light_ts = self.light_ts * (units.ns / resources['RunData'].crs_ticks)  # convert ns -> larpix clock ticks
-
-        #self.light_unix_ts_start = self.light_unix_ts.min()
-        #self.light_unix_ts_end = self.light_unix_ts.max()
-        #self.total_light_events = len(self.light_unix_ts)
-        #self.matched_light = np.zeros((self.total_light_events,), dtype=bool)        
+        self.fft_freq = np.fft.fftfreq(self.SAMPLES, self.SAMPLE_RATE)[:self.SAMPLES//2]      
 
     def finish(self, source_name):
         super(LightNoiseExtraction, self).finish(source_name)
