@@ -1,6 +1,0 @@
-classname: LightNoiseExtraction # reco/light/lightnoiseXtract.py
-path: proto_nd_flow.reco.light.lightnoiseXtract
-params:
-  # inputs
-  light_wvfm_dset_name: 'light/wvfm'
-  n_file: 2x2_light_noise.data.v1.npz
