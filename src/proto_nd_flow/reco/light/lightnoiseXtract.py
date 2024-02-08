@@ -33,6 +33,7 @@ class LightNoiseExtraction(H5FlowStage):
     sel = slice(50,1050)  # choose 1000 light events to use, avoiding the beginning just in case things are weird
     SAMPLES = resources['RunData'].light_samples
     SAMPLE_RATE = resources['RunData'].lrs_ticks
+    BIT = 4  # factor from unused ADC bits on LRS: would be nice to have in a resource .yaml
 
     def __init__(self, **params):
         super(LightNoiseExtractor, self).__init__(**params)
@@ -57,35 +58,29 @@ class LightNoiseExtraction(H5FlowStage):
 
         # load in light system waveforms (only take 1000, since they take a lot of space)
         _, nadc, nchan, _ = self.data_manager.get_dset(self.light_wvfm_dset_name).dtype['samples'].shape
-        self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
+        self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid']
 
         # only keep the positive fft frequencies
         self.fft_freq = np.fft.fftfreq(SAMPLES, SAMPLE_RATE)[:SAMPLES//2]
         
         # load in light system timestamps (use max to get non-null timestamp entries)
-        self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['id'][:]
-        self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
-        self.light_unix_ts = self.data_manager.get_dset(self.light_event_dset_name)['utime_ms'][:]
-        self.light_unix_ts = self.light_unix_ts.mean(axis=-1)
+        #self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['id'][:]
+        #self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
+        #self.light_unix_ts = self.data_manager.get_dset(self.light_event_dset_name)['utime_ms'][:]
+        #self.light_unix_ts = self.light_unix_ts.mean(axis=-1)
         # reshape unix ts array to use with mask
-        # self.light_unix_ts = self.light_unix_ts[:, :, np.newaxis]
-        # self.light_unix_ts = np.where(self.light_event_mask, self.light_unix_ts, 0)
-        # self.light_unix_ts = ma.array(self.light_unix_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
-        self.light_unix_ts = self.light_unix_ts * (units.ms / units.s)  # convert ms -> s
-        self.light_ts = self.data_manager.get_dset(self.light_event_dset_name)['tai_ns'][:]
-        self.light_ts = self.light_ts.mean(axis=-1)
+        #self.light_unix_ts = self.light_unix_ts * (units.ms / units.s)  # convert ms -> s
+        #self.light_ts = self.data_manager.get_dset(self.light_event_dset_name)['tai_ns'][:]
+        #self.light_ts = self.light_ts.mean(axis=-1)
         # reshape tai_ns array as above
-        # self.light_ts = self.light_ts[:, :, np.newaxis]
-        # self.light_ts =  np.where(self.light_event_mask, self.light_ts, 0)
-        # self.light_ts = ma.array(self.light_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
-        if not resources['RunData'].is_mc:
-            self.light_ts = self.light_ts % int(1e9)
-        self.light_ts = self.light_ts * (units.ns / resources['RunData'].crs_ticks)  # convert ns -> larpix clock ticks
+        #if not resources['RunData'].is_mc:
+        #    self.light_ts = self.light_ts % int(1e9)
+        #self.light_ts = self.light_ts * (units.ns / resources['RunData'].crs_ticks)  # convert ns -> larpix clock ticks
 
-        self.light_unix_ts_start = self.light_unix_ts.min()
-        self.light_unix_ts_end = self.light_unix_ts.max()
-        self.total_light_events = len(self.light_unix_ts)
-        self.matched_light = np.zeros((self.total_light_events,), dtype=bool)        
+        #self.light_unix_ts_start = self.light_unix_ts.min()
+        #self.light_unix_ts_end = self.light_unix_ts.max()
+        #self.total_light_events = len(self.light_unix_ts)
+        #self.matched_light = np.zeros((self.total_light_events,), dtype=bool)        
 
     def finish(self, source_name):
         super(LightNoiseExtraction, self).finish(source_name)
@@ -106,6 +101,25 @@ class LightNoiseExtraction(H5FlowStage):
             print(f'Total charge event matching: {self.total_matched_events}/{self.total_charge_events} ({event_eff:0.04f})')
             print(f'Total light event matching: {self.total_matched_light}/{self.total_light_events} ({light_eff:0.04f})') 
 
+    def fast_fourier(self, adc, thd, SAMPLES):
+        adc_matrix = self.light_event_dset_name[:,adc,:,:]
+        valid_wvfm = self.light_event_mask[:,adc,:]
+
+        channel_mask = valid_wvfm[0,:]
+        t_valid_wvfm = np.transpose(valid_wvfm, (1,0))[channel_mask==1]
+        t_adc_matrix = np.transpose(adc_matrix, (1, 0, 2))[channel_mask==1]
+
+        for i in range(48):
+            valid_chan_wvfm = t_adc_matrix[i][t_valid_wvfm[i]==1]/BIT
+    def run(self, source_name, source_slice, cache):
+        super(LightNoiseExtraction, self).run(source_name, source_slice, cache)
+
+        adc_matrix = cache[self.light_event_dset_name][:,adc,:,:]
+        valid_wvfm = cache[self.light_event_mask][:,adc,:]
+        
+        channel_mask = valid_wvfm[0,:]
+        
+        
     def match_on_timestamp(self, charge_unix_ts, charge_pps_ts):
         unix_ts_start = charge_unix_ts.min()
         unix_ts_end = charge_unix_ts.max()  
