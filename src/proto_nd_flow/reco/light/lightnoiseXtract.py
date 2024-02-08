@@ -1,7 +1,6 @@
 import numpy as np
 import numpy.ma as ma
-import numpy.lib.recfunctions as rfn
-import logging
+import os
 
 from h5flow.core import H5FlowStage, resources
 from h5flow import H5FLOW_MPI
@@ -38,6 +37,7 @@ class LightNoiseExtraction(H5FlowStage):
 
         self.light_event_dset_name = params.get('light_event_dset_name')
         self.light_wvfm_dset_name = params.get('ligt_wvfm_dset_name')
+        self.n_file = params.get('n_file', self.n_file)
         self.events_dset_name = None  # put off until init stage
 
         #self.unix_ts_window = params.get('unix_ts_window', self.default_unix_ts_window)
@@ -64,10 +64,9 @@ class LightNoiseExtraction(H5FlowStage):
                                     charge_to_light_assoc_ts_window=self.ts_window
                                     )
 
-        # then set up new datasets
-        self.data_manager.create_ref(self.events_dset_name, self.light_event_dset_name)
-        self.data_manager.create_ref(self.ext_trigs_dset_name, self.light_event_dset_name)
-
+        # load in light system waveforms (only take 1000, since they take a lot of space)
+        _, 
+        
         # load in light system timestamps (use max to get non-null timestamp entries)
         self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['id'][:]
         self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
