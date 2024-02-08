@@ -30,18 +30,17 @@ class LightNoiseExtraction(H5FlowStage):
     '''
     class_version = '0.0.1'
 
-    sel = slice(50,1050)  # choose 1000 light events to use, avoiding the beginning just in case things are weird
-    SAMPLES = resources['RunData'].light_samples
-    SAMPLE_RATE = resources['RunData'].lrs_ticks
+    #sel = slice(50,1050)  # choose 1000 light events to use, avoiding the beginning just in case things are weird
+    #SAMPLES = resources['RunData'].light_samples
+    SAMPLE_RATE = 0.016 # us
     BIT = 2**(16 - resources['RunData'].lrs_bit)  # factor from unused ADC bits on LRS: would be nice to have in a resource .yaml
 
     def __init__(self, **params):
         super(LightNoiseExtractor, self).__init__(**params)
 
-        self.light_event_dset_name = params.get('light_event_dset_name')[self.sel]
-        self.light_wvfm_dset_name = params.get('ligt_wvfm_dset_name')[self.sel]
+        self.light_event_dset_name = params.get('light_event_dset_name')
+        self.light_wvfm_dset_name = params.get('ligt_wvfm_dset_name')
         self.n_file = params.get('n_file', self.n_file)
-        self.events_dset_name = None  # put off until init stage
 
     def init(self, source_name):
         super(LightNoiseExtraction, self).init(source_name)
@@ -57,7 +56,7 @@ class LightNoiseExtraction(H5FlowStage):
                                     )
 
         # load in light system waveforms (only take 1000, since they take a lot of space)
-        _, nadc, nchan, _ = self.data_manager.get_dset(self.light_wvfm_dset_name).dtype['samples'].shape
+        _, ADC, CHAN, SAMPLES = self.data_manager.get_dset(self.light_wvfm_dset_name).dtype['samples'].shape
         self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid']
 
         # only keep the positive fft frequencies
