@@ -3,12 +3,11 @@
 flow:
   source: 'light/events'
   stages: [light_noise_extractor]
-  drop: []
-
 
 resources:
-  - !include yamls/proto_nd_flow/resources/RunData.yaml
-
+  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/RunData.yaml
+  - !include yamls/module0_flow/resources/LArData.yaml
 
 light_noise_extractor:
   !include yamls/proto_nd_flow/reco/light/LightNoiseExtraction.yaml
