@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.ma as ma
+from scipy.fft import rfft, rfftfreq
 import os
 
 from h5flow.core import H5FlowStage, resources
@@ -29,27 +30,17 @@ class LightNoiseExtraction(H5FlowStage):
     '''
     class_version = '0.0.1'
 
-    default_unix_ts_window = 1  # how big of a symmetric window to use with unix timestamps (0=exact match, 1=±1 second, ...) [s]
-    default_ts_window = 1000  # how big of a symmetric window to use with PPS timestamps (0=exact match, 10=±10 ticks, ...) [ticks]
+    sel = slice(50,1050)  # choose 1000 light events to use, avoiding the beginning just in case things are weird
+    SAMPLES = resources['RunData'].light_samples
+    SAMPLE_RATE = resources['RunData'].lrs_ticks
 
     def __init__(self, **params):
         super(LightNoiseExtractor, self).__init__(**params)
 
-        self.light_event_dset_name = params.get('light_event_dset_name')
-        self.light_wvfm_dset_name = params.get('ligt_wvfm_dset_name')
+        self.light_event_dset_name = params.get('light_event_dset_name')[sel]
+        self.light_wvfm_dset_name = params.get('ligt_wvfm_dset_name')[sel]
         self.n_file = params.get('n_file', self.n_file)
         self.events_dset_name = None  # put off until init stage
-
-        #self.unix_ts_window = params.get('unix_ts_window', self.default_unix_ts_window)
-        #self.ts_window = params.get('ts_window', self.default_ts_window)
-
-        #self.total_charge_events = 0
-        #self.total_charge_triggers = 0
-        #self.total_light_events = 0
-        #self.total_matched_triggers = 0
-        #self.total_matched_events = 0
-        #self.matched_light = np.zeros((0,), dtype=bool)
-        #self.total_matched_light = 0
 
     def init(self, source_name):
         super(LightNoiseExtraction, self).init(source_name)
@@ -65,7 +56,11 @@ class LightNoiseExtraction(H5FlowStage):
                                     )
 
         # load in light system waveforms (only take 1000, since they take a lot of space)
-        _, 
+        _, nadc, nchan, _ = self.data_manager.get_dset(self.light_wvfm_dset_name).dtype['samples'].shape
+        self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
+
+        # only keep the positive fft frequencies
+        self.fft_freq = np.fft.fftfreq(SAMPLES, SAMPLE_RATE)[:SAMPLES//2]
         
         # load in light system timestamps (use max to get non-null timestamp entries)
         self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['id'][:]
