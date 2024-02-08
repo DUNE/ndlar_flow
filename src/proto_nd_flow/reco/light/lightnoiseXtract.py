@@ -30,8 +30,6 @@ class LightNoiseExtraction(H5FlowStage):
     '''
     class_version = '0.0.1'
 
-    #sel = slice(50,1050)  # choose 1000 light events to use, avoiding the beginning just in case things are weird
-    #SAMPLES = resources['RunData'].light_samples
     SAMPLE_RATE = 0.016 # us
     BIT = 2**(16 - resources['RunData'].lrs_bit)  # factor from unused ADC bits on LRS: would be nice to have in a resource .yaml
 
