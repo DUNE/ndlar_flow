@@ -31,14 +31,16 @@ class LightNoiseExtraction(H5FlowStage):
     class_version = '0.0.1'
 
     SAMPLE_RATE = 0.016 # us
-    BIT = 2**(16 - resources['RunData'].lrs_bit)  # factor from unused ADC bits on LRS: would be nice to have in a resource .yaml
+    BIT = 14  # factor from unused ADC bits on LRS: would be nice to have in a resource .yaml
 
     def __init__(self, **params):
         super(LightNoiseExtractor, self).__init__(**params)
 
-        self.light_event_dset_name = params.get('light_event_dset_name')
+        self.light_event_dset_name = params.get('light_evnt_dset_name')
         self.light_wvfm_dset_name = params.get('ligt_wvfm_dset_name')
         self.n_file = params.get('n_file', self.n_file)
+        
+        self.BIT = 2**(16 - resources['RunData'].lrs_bit)
 
     def init(self, source_name):
         super(LightNoiseExtraction, self).init(source_name)
@@ -58,7 +60,7 @@ class LightNoiseExtraction(H5FlowStage):
         self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid']
 
         # only keep the positive fft frequencies
-        self.fft_freq = np.fft.fftfreq(self.SAMPLES, self.SAMPLE_RATE)[:self.SAMPLES//2]      
+        #self.fft_freq = np.fft.fftfreq(self.SAMPLES, self.SAMPLE_RATE)[:self.SAMPLES//2]      
 
     def finish(self, source_name):
         super(LightNoiseExtraction, self).finish(source_name)
@@ -80,16 +82,18 @@ class LightNoiseExtraction(H5FlowStage):
             print(f'Total light event matching: {self.total_matched_light}/{self.total_light_events} ({light_eff:0.04f})') 
 
     def fast_fourier(self, adc):
+        # output is an array shape (64, 1000) for each adc
         spectra_array = []
         adc_matrix = self.light_event_dset_name[:,adc,:,:]
-        valid_wvfm = self.light_event_mask[:,adc,:]
+        #valid_wvfm = self.light_event_mask[:,adc,:]
 
-        channel_mask = valid_wvfm[0,:]
-        t_valid_wvfm = np.transpose(valid_wvfm, (1,0))[channel_mask==1]
-        t_adc_matrix = np.transpose(adc_matrix, (1, 0, 2))[channel_mask==1]
+        #channel_mask = valid_wvfm[0,:]
+        #t_valid_wvfm = np.transpose(valid_wvfm, (1,0))[channel_mask==1]
+        t_adc_matrix = np.transpose(adc_matrix, (1, 0, 2))#[channel_mask==1]
 
-        for i in range(48):
-            valid_chan_wvfm = t_adc_matrix[i][t_valid_wvfm[i]==1]/self.BIT
+        for i in range(64):
+            #valid_chan_wvfm = t_adc_matrix[i][t_valid_wvfm[i]==1]/self.BIT
+            valid_chan_wvfm = t_adc_matrix[i]/self.BIT
             
             # choose first 45 samples as signal-free
             # calculate mean and standard deviation to define signal vs. no sigal
@@ -108,7 +112,7 @@ class LightNoiseExtraction(H5FlowStage):
                 normalized_spectrum[:,0] = 0
                 # calculate an average fft
                 spectrum_average = (np.sum(normalized_spectrum, axis=0))/len(normalized_spectrum)
-                spectra_array.append(spectrum_average)
+                spectra_array.append(np.nan_to_num(spec_sum, nan=0))
             except:
                 pass
         return np.array(spectra_array)
