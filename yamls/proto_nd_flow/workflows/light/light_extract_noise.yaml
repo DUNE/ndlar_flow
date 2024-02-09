@@ -16,5 +16,6 @@ light_noise_extractor:
       path: ['light/events', 'light/wvfm']
   params:
     # inputs
+    light_evnt_dset_name: 'light/events'
     light_wvfm_dset_name: 'light/wvfm'
     n_file: 2x2_light_noise.data.v1.npz
