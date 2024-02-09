@@ -87,18 +87,18 @@ class Charge2LightAssociation(H5FlowStage):
         self.light_event_id = self.data_manager.get_dset(self.light_event_dset_name)['id'][:]
         self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid'][:].astype(bool)
         self.light_unix_ts = self.data_manager.get_dset(self.light_event_dset_name)['utime_ms'][:]
-        self.light_unix_ts = self.light_unix_ts.mean(axis=-1)
         # reshape unix ts array to use with mask
         # self.light_unix_ts = self.light_unix_ts[:, :, np.newaxis]
         # self.light_unix_ts = np.where(self.light_event_mask, self.light_unix_ts, 0)
         # self.light_unix_ts = ma.array(self.light_unix_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
+        self.light_unix_ts = ma.array(self.light_unix_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
         self.light_unix_ts = self.light_unix_ts * (units.ms / units.s)  # convert ms -> s
         self.light_ts = self.data_manager.get_dset(self.light_event_dset_name)['tai_ns'][:]
-        self.light_ts = self.light_ts.mean(axis=-1)
         # reshape tai_ns array as above
         # self.light_ts = self.light_ts[:, :, np.newaxis]
         # self.light_ts =  np.where(self.light_event_mask, self.light_ts, 0)
         # self.light_ts = ma.array(self.light_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
+        self.light_ts = ma.array(self.light_ts, mask=~self.light_event_mask).mean(axis=-1).mean(axis=-1)
         if not resources['RunData'].is_mc:
             self.light_ts = self.light_ts % int(1e9)
         self.light_ts = self.light_ts * (units.ns / resources['RunData'].crs_ticks)  # convert ns -> larpix clock ticks
