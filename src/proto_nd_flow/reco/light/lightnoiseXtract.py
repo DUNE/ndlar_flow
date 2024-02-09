@@ -44,7 +44,7 @@ class LightNoiseExtraction(H5FlowStage):
         super(LightNoiseExtraction, self).init(source_name)
 
         # save all config info
-        self.events_dset_name = source_name
+        self.light_wvfm_dset_name = source_name
         self.data_manager.set_attrs(self.events_dset_name,
                                     charge_to_light_assoc_classname=self.classname,
                                     charge_to_light_assoc_class_version=self.class_version,
