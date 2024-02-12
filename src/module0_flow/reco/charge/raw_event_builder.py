@@ -375,3 +375,124 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         # only return packets from events
         return zip(*[v for i, v in enumerate(zip(events, event_unix_ts)) if is_event[i]]) if mc_assn is None \
             else zip(*[v for i, v in enumerate(zip(events, event_unix_ts, event_mc_assn)) if is_event[i]])
+
+
+#class BeamTrigEventBuilder(RawEventBuilder):
+#    '''
+#    Attempt to use beam trigger to build events
+#    '''
+#    version = '0.0.1'
+#    def __init__(self, **params):
+#        super(BeamTrigEventBuilder, self).__init__(**params)
+        
+#    def get_config(self):
+#        return dict(
+#            ???
+#        )
+    
+#    def build_events(self, packets, unix_ts, mc_assn=None):
+       
+    
+class BeamTrigEventBuilder(RawEventBuilder):
+    '''
+    A raw event builder that defines events based on beam triggers! Packets spills are sliced into events!
+
+    Events start when a beam trigger is encountered (io_group=1 and packet_type=7)
+    and end when another beam trigger is found or when there are no more packets.
+    
+    If the last event does not end with a beam trigger, it is treated as a partial event that is processed into the beggining of the first new event the next time build_events is called.
+    '''
+    # copied from SymmetricWindowRawEventBuilder, starting here
+    version = '0.0.3'
+
+    default_window = 1820 // 2
+    default_threshold = 10
+    default_rollover_ticks = 10000000
+    
+    def __init__(self, **params):
+        super(BeamTrigEventBuilder, self).__init__(**params)
+        self.window = params.get('window', self.default_window)
+        self.threshold = params.get('threshold', self.default_threshold)
+        self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
+
+        self.event_buffer = np.empty((0,))  # keep track of partial events from previous calls
+        self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
+        self.event_buffer_mc_assn = np.empty((0,))
+
+    def get_config(self):
+        return dict(
+            window=self.window,
+            threshold=self.threshold,
+            rollover_ticks=self.rollover_ticks,
+        )    
+    def build_events(self, packets, unix_ts, mc_assn=None):
+        # Fetch attribute from appropriate process (if using MPI); check for partial events
+        self.cross_rank_get_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
+
+        if len(packets) == 0:
+            self.event_buffer = np.empty((0,), dtype=packets.dtype)
+            self.event_buffer_unix_ts = np.empty((0,), dtype=unix_ts.dtype)
+            if mc_assn is not None:
+                self.event_buffer_mc_assn = np.empty((0,), dtype=mc_assn.dtype)
+            self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
+            return ([], []) if mc_assn is None \
+                else ([], [], [])
+
+        # sort packets to fix 512 bug, appending incomplete events!?
+        packets = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
+
+        # correct for rollovers
+        rollover = np.zeros((len(packets),), dtype='i8')
+        for io_group in np.unique(packets['io_group']):
+            # find rollovers
+            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type'] == 83)
+            rollover[mask] = self.rollover_ticks
+            # calculate sum of rollovers
+            mask = (packets['io_group'] == io_group)
+            rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
+            # correct for readout delay (only in real data)
+            if mc_assn is None:
+                mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
+                    & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
+                rollover[mask] -= self.rollover_ticks
+
+        ts = packets['timestamp'].astype('i8') + rollover
+        
+
+        # Sort packets by timestamp
+        sorted_idcs = np.argsort(ts)
+        packets = packets[sorted_idcs]
+        unix_ts = unix_ts[sorted_idcs]
+        if mc_assn is not None:
+            mc_assn = mc_assn[sorted_idcs]
+
+        # copying from SymmetricWindowRawEventBuilder stops here!!!
+        
+        
+        # Identify beam trigger indices
+        beam_trigger_idxs = np.where((packets['io_group'] == 1) & (packets['packet_type'] == 7))[0]
+
+        # Split events based on beam triggers
+        events = np.split(packets, beam_trigger_idxs[1:])  # Split after each trigger (except the last one)
+        event_unix_ts = np.split(unix_ts, beam_trigger_idxs[1:])
+        if mc_assn is not None:
+            event_mc_assn = np.split(mc_assn, beam_trigger_idxs[1:])
+
+        # Handle the last event if it does not even with a beam trigger (as explained above)
+        if packets[-1]['io_group'] != 1 or packets[-1]['packet_type'] != 7:
+            self.event_buffer = packets[beam_trigger_idxs[-1]:]
+            self.event_buffer_unix_ts = unix_ts[beam_trigger_idxs[-1]:]
+            if mc_assn is not None:
+                self.event_buffer_mc_assn = mc_assn[beam_trigger_idxs[-1]:]
+            
+            # events is now eveything exept the last event!     
+            events = events[:-1]
+            event_unix_ts = event_unix_ts[:-1]
+            if mc_assn is not None:
+                event_mc_assn = event_mc_assn[:-1]
+
+        # set information from partial events into next build_events call 
+        self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
+
+        return zip(*[v for v in zip(events, event_unix_ts)]) if mc_assn is None \
+            else zip(*[v for v in zip(events, event_unix_ts, event_mc_assn)])
