@@ -57,6 +57,7 @@ class LightNoiseExtraction(H5FlowStage):
 
         # load in light system waveforms (only take 1000, since they take a lot of space)
         _, ADC, CHAN, SAMPLES = self.data_manager.get_dset(self.light_wvfm_dset_name).dtype['samples'].shape
+        self.samples = self.data_manager.get_dset(self.light_wvfm_dset_name).dtype['samples']
         self.light_event_mask = self.data_manager.get_dset(self.light_event_dset_name)['wvfm_valid']
 
         # only keep the positive fft frequencies
@@ -117,7 +118,7 @@ class LightNoiseExtraction(H5FlowStage):
                 pass
         return np.array(spectra_array)
 
-    def flow2sim(self, adc_lcm, adc_acl):
+    def flow2sim(self, lcm_adc, acl_adc):
         f2s_idx = [63,62,61,60,59,58,\
                     57,56,55,54,53,52,\
                     47,46,45,44,43,42,\
@@ -126,6 +127,10 @@ class LightNoiseExtraction(H5FlowStage):
                     25,24,23,22,21,20,\
                     15,14,13,12,11,10,\
                     9,8,7,6,5,4]
+
+        adc_lcm = self.fast_fourier(self, lcm_adc)
+        adc_acl = self.fast_fourier(self, acl_adc)
+        
         mod_array = np.concatenate((adc_lcm[f2s_idx[0:6]],adc_acl[f2s_idx[0:6]],\
                                     adc_lcm[f2s_idx[6:12]],adc_acl[f2s_idx[6:12]],\
                                     adc_lcm[f2s_idx[12:18]],adc_acl[f2s_idx[12:18]],\
@@ -138,8 +143,17 @@ class LightNoiseExtraction(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         super(LightNoiseExtraction, self).run(source_name, source_slice, cache)
 
-        adc_list = np.arange(cache[self.nadc])
+        #adc_list = np.arange(cache[self.nadc])
+        # adc 0: ACL, adc 1: LCM
+        adc_list = [0,2,4,6]
+        mod0_noise = self.flow2sim(self.samples, 1, 0)
+        mod1_noise = self.flow2sim(self.samples, 3, 2)
+        mod2_noise = self.flow2sim(self.samples, 5, 4)
+        mod3_noise = self.flow2sim(self.samples, 7, 6)
 
+        full_dect_noise = np.concatenate((mod0_noise,mod1_noise,mod2_noise,mod3_noise))
+            
+        
     
 
     def run(self, source_name, source_slice, cache):
