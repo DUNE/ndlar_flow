@@ -117,7 +117,23 @@ class LightNoiseExtraction(H5FlowStage):
                 pass
         return np.array(spectra_array)
 
-    def flow2sim(self, adc):
+    def flow2sim(self, adc_lcm, adc_acl):
+        f2s_idx = [63,62,61,60,59,58,\
+                    57,56,55,54,53,52,\
+                    47,46,45,44,43,42,\
+                    41,40,39,38,37,36,\
+                    31,30,29,28,27,26,\
+                    25,24,23,22,21,20,\
+                    15,14,13,12,11,10,\
+                    9,8,7,6,5,4]
+        mod_array = np.concatenate((adc_lcm[f2s_idx[0:6]],adc_acl[f2s_idx[0:6]],\
+                                    adc_lcm[f2s_idx[6:12]],adc_acl[f2s_idx[6:12]],\
+                                    adc_lcm[f2s_idx[12:18]],adc_acl[f2s_idx[12:18]],\
+                                    adc_lcm[f2s_idx[18:24]],adc_acl[f2s_idx[18:24]],\
+                                    adc_lcm[f2s_idx[24:30]],adc_acl[f2s_idx[24:30]],\
+                                    adc_lcm[f2s_idx[30:36]],adc_acl[f2s_idx[30:36]],\
+                                    adc_lcm[f2s_idx[36:42]],adc_acl[f2s_idx[36:42]],\
+                                    adc_lcm[f2s_idx[42:48]],adc_acl[f2s_idx[42:48]]))
         
     def run(self, source_name, source_slice, cache):
         super(LightNoiseExtraction, self).run(source_name, source_slice, cache)
