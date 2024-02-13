@@ -3,7 +3,7 @@
 
 flow:
   source: 'light/events'
-  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_calib, wvfm_sum, sipm_hit_finder, sum_hit_finder]
+  stages: [timestamp_corrector, true_hit_finder, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_calib, wvfm_sum, sipm_hit_finder, sum_hit_finder]
 
   # remove waveforms from output file
   drop: ['light/fwvfm', 'light/deconv', 'light/swvfm', 'light/cwvfm']
@@ -18,6 +18,8 @@ resources:
 timestamp_corrector:
   !include yamls/proto_nd_flow/reco/light/LightTimestampCorrector.yaml
 
+true_hit_finder:
+  !include yamls/proto_nd_flow/reco/light/TrueHitFinder.yaml
 
 wvfm_filt:
   !include yamls/proto_nd_flow/reco/light/WaveformNoiseFilter.yaml
