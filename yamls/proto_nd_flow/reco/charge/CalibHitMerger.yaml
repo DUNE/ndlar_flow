@@ -13,7 +13,7 @@ params:
   # inputs
   events_dset_name: 'charge/events'
   hits_name: 'charge/calib_prompt_hits'
-  max_contrib_segments: 200
+  max_contrib_segments: 250
   merge_cut: 65 # merge hits with delta t < merge_cut [CRS ticks]
   max_merge_steps: 50 # max number of iterations when merging
                        # adjacent packets in time on the same channel
