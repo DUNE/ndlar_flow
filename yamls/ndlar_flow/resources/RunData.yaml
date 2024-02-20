@@ -1,0 +1,14 @@
+classname: RunData
+path: proto_nd_flow.resources.run_data
+params:
+  path: 'run_info'
+  runlist_file: 'data/proto_nd_flow/runlist-2x2-mcexample.txt'
+  defaults:
+    charge_filename: '-'
+    light_filename: '-'
+    e_field: 0.05 # kV/mm
+    light_samples: 256
+    charge_thresholds: 'medm'
+    is_mc: True
+    crs_ticks: 0.1 # us
+    lrs_ticks: 0.016 # us
