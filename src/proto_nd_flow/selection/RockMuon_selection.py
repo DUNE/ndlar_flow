@@ -9,10 +9,11 @@ import h5flow
 from h5flow.data import dereference
 
 from sklearn.cluster import DBSCAN
-
 from sklearn.decomposition import PCA
-
 from sklearn.preprocessing import StandardScaler
+
+from scipy.spatial import ConvexHull
+from scipy.spatial.distance import cdist
 
 import statistics
 
@@ -150,45 +151,32 @@ class RockMuonSelection(H5FlowStage):
         vector = pca.components_
 
         return  explained_var,vector
-
+    
     #@staticmethod
-    def length(self, hits):
-        far_hit = np.max(hits['z'])
+    def length(self,hits):
+        #Get Hit positions
+        hit_positions = np.column_stack((hits['x'], hits['y'], hits['z']))
 
-        close_hit = np.min(hits['z'])
+        #Check to see if a column has hit position of same value
+        hit_result = np.all(hit_positions == hit_positions[0,:], axis = 0)
+        same_result = np.where(hit_result == True)[0]
 
-        if far_hit != close_hit:
+        if (len(same_result) == 0) & (len(hit_positions) > 4):
+            hull = ConvexHull(hit_positions)
+            vertexpoints = hit_positions[hull.vertices]
+            hdist = cdist(vertexpoints, vertexpoints, metric='euclidean')
 
-            ind_far = np.where(hits['z']==np.max(hits['z']))[0][0]
 
-            ind_close = np.where(hits['z']==np.min(hits['z']))[0][0]
- 
-            length = np.linalg.norm(np.array([hits[ind_far]['x'],hits[ind_far]['y'],hits[ind_far]['z']])- np.array([hits[ind_close]['x'],hits[ind_close]['y'],hits[ind_close]['z']]))
-
-        elif far_hit == close_hit:
-            far_hit_y = np.max(hits['y'])
-
-            close_hit_y = np.min(hits['y'])
-
-            ind_far = np.where(hits['y']==np.max(hits['y']))[0][0]
-
-            ind_close = np.where(hits['y']==np.min(hits['y']))[0][0]
-
-            length = np.linalg.norm(np.array([hits[ind_far]['x'],hits[ind_far]['y'],hits[ind_far]['z']])- np.array([hits[ind_close]['x'],hits[ind_close]['y'],hits[ind_close]['z']]))
+        elif (len(same_result) == 1) & (len(hit_positions) > 4):
+            hits_not_same = np.delete(hit_positions, same_result, axis = 1)
+            hull = ConvexHull(hits_not_same)
+            vertexpoints = hits_not_same[hull.vertices]
+            hdist = cdist(vertexpoints, vertexpoints, metric='euclidean')
 
         else:
-            far_hit_x = np.max(hits['x'])
+            hdist = cdist(hit_positions, hit_positions)
 
-            close_hit_x = np.min(hits['x'])
-
-            ind_far = np.where(hits['x']==np.max(hits['x']))[0][0]
-
-            ind_close = np.where(hits['x']==np.min(hits['x']))[0][0]
-
-            length = np.linalg.norm(np.array([hits[ind_far]['x'],hits[ind_far]['y'],hits[ind_far]['z']])- np.array([hits[ind_close]['x'],hits[ind_close]['y'],hits[ind_close]['z']]))
-
-
-        return length
+        return np.max(hdist)
 
     #@staticmethod
     def select_muon_track(self,hits):
@@ -263,6 +251,44 @@ class RockMuonSelection(H5FlowStage):
                             break
             return muon_hits
     
+
+    #@staticmethod
+    def TPC_separation(self, hits):
+        string_x_boundaries = self.x_boundaries
+        string_y_boundaries = self.y_boundaries
+        string_z_boundaries = self.z_boundaries
+
+        x_boundaries = [float(string) for string in string_x_boundaries]
+        y_boundaries= [eval(string) for string in string_y_boundaries]
+        z_boundaries = [eval(string) for string in string_z_boundaries]
+
+         
+        mask_tpc1 = ((hits['x'] > x_boundaries[2]) & (hits['x'] < (x_boundaries[2] + x_boundaries[3]) * 0.5)) & (hits['z'] > z_boundaries[2])
+        mask_tpc2 = (hits['x'] > (x_boundaries[2] + x_boundaries[3]) * 0.5) & (hits['z'] > z_boundaries[2])
+
+        mask_tpc3 = (hits['x'] < (x_boundaries[0] + x_boundaries[1]) * 0.5) & (hits['z'] > z_boundaries[2])
+        mask_tpc4 = ((hits['x'] > (x_boundaries[0] + x_boundaries[1]) * 0.5) & (hits['x']< x_boundaries[1])) & (hits['z'] > z_boundaries[2])
+
+        mask_tpc5 = ((hits['x'] > x_boundaries[2]) & (hits['x'] < (x_boundaries[2] + x_boundaries[3]) * 0.5)) & (hits['z'] < z_boundaries[1])
+        mask_tpc6 = (hits['x'] > (x_boundaries[2] + x_boundaries[3]) * 0.5) & (hits['z'] < z_boundaries[1])
+
+        mask_tpc7 = (hits['x'] < (x_boundaries[0] + x_boundaries[1]) * 0.5) & (hits['z'] < z_boundaries[1])
+        mask_tpc8 = ((hits['x'] > (x_boundaries[0] + x_boundaries[1]) * 0.5) & (hits['x'] < x_boundaries[1])) & (hits['z'] < z_boundaries[1])
+
+        hits_tpc1 = hits[mask_tpc1]
+        hits_tpc2 = hits[mask_tpc2]
+
+        hits_tpc3 = hits[mask_tpc3]
+        hits_tpc4 = hits[mask_tpc4]
+
+        hits_tpc5 = hits[mask_tpc5]
+        hits_tpc6 = hits[mask_tpc6]
+
+        hits_tpc7 = hits[mask_tpc7]
+        hits_tpc8 = hits[mask_tpc8]
+
+        return [hits_tpc1, hits_tpc2, hits_tpc3, hits_tpc4, hits_tpc5, hits_tpc6, hits_tpc7, hits_tpc8]
+    
     #@staticmethod
     def segments(self,muon_hits):
         hits_of_segment = []
@@ -277,83 +303,75 @@ class RockMuonSelection(H5FlowStage):
 
             ex_var, fit = self.PCAs(track)
             
-            choice = (.2/14) * len(track)
+            #prompt_hits_constant = 70
+            final_hits_constant = 45
+            choice = len(track)/final_hits_constant
             #Steps in beam direction using pca fit(z)
-            step_size = choice*abs(fit[0][2])
-            
-            '''
-            #Lets make sure the segments aren't longer than 5cm
-            step_vector = np.array([fit[0][0], fit[0][1],step_size])
-            
-            length_of_segment = np.linalg.norm(step_vector)
-            
-            
-            while length_of_segment > 8:
-                step_size -= .2
-                step_vector = np.array([fit[0][0], fit[0][1],step_size])
-                length_of_segment = np.linalg.norm(step_vector)
-            '''
+            step_size = -choice*abs(fit[0][2])
+            print(step_size)
+            hits_per_tpc = self.TPC_separation(track)
 
-            lowest_z = np.min(track['z'])
+            for each_tpc in hits_per_tpc:
+                if len(each_tpc) != 0:
+                    lowest_z = np.max(each_tpc['z'])
 
-            for i in range(1,1000):
-                mask = ma.masked_where((track['z'] >= lowest_z + step_size*(i-1)) & (track['z'] < lowest_z + step_size*(i)),track)
+                    for i in range(1,1000):
+                        mask = ma.masked_where((each_tpc['z'] <= lowest_z + step_size*(i-1)) & (each_tpc['z'] > lowest_z + step_size*(i)),each_tpc)
 
-                indices_of_masked_values = np.ma.where(mask.mask)[0]
+                        indices_of_masked_values = np.ma.where(mask.mask)[0]
 
-                segment = track[indices_of_masked_values]
+                        min_number_of_hits = 1
+
+                        segment = each_tpc[indices_of_masked_values]
                 
-                if len(segment) > 1:
-                    self.segment_count += 1
-                    hits_of_segment.append(segment)
+                        #If segment has more than min_number_of_hits then consider this a good enough segment and append it to the list of segments
+                        if len(segment) > min_number_of_hits:
+                            self.segment_count += 1
+                            hits_of_segment.append(segment)
+                
+                        #If there is no segments in hits of segment and # of hits of the considered segments in less than min number of hits then still append this segment. This stops code for messing at when first segment of track isn't long enough
+                        elif (len(segment) <= min_number_of_hits) & (len(hits_of_segment) == 0):
+                            hits_of_segment.append(segment)
+
+                        #If # of hits of the considered segments is below min hits and there is already segments then considered this hits as part of the previous segment
+                        elif (len(segment) <= min_number_of_hits) & (len(hits_of_segment) != 0):
+                            np.append(hits_of_segment[-1],segment)
                     
-                j = len(hits_of_segment)
-                 
-                if (len(segment) <= 1) & (len(hits_of_segment) == 0):
-                    hits_of_segment.append(segment)
-
-                if (len(segment) <= 1) & (len(hits_of_segment) != 0):
-                    np.append(hits_of_segment[j-1],segment)
+                        hits_wanted = np.where(np.in1d(muon_hits['id'],segment['id']))[0]
                 
-                hits_wanted = np.where(np.in1d(muon_hits['id'],segment['id']))[0]
+                        for hit in hits_wanted:
+                            ref.append([hit,self.segment_count])
+
+                        each_tpc = np.delete(each_tpc, indices_of_masked_values)         
                 
-                for hit in hits_wanted:
-                    ref.append([hit,self.segment_count])
+                        #Starting, mid, and end points of segment
+                        z_start = np.min(hits_of_segment[-1]['z'])
 
-                track = np.delete(track, indices_of_masked_values)
+                        index1 = np.where(hits_of_segment[-1]['z'] == z_start)[0][0]
 
-                #print(j, len(hits_of_segment), j-1)
-                #print(segment)
+                        x_start, y_start, z_start = hits_of_segment[-1][index1]['x'], hits_of_segment[-1][index1]['y'], hits_of_segment[-1][index1]['z']
+
+                        z_end = np.max(hits_of_segment[-1]['z'])
+
+                        index2 = np.where(hits_of_segment[-1]['z'] == z_end)[0][0]
+
+                        x_end, y_end, z_end = hits_of_segment[-1][index2]['x'], hits_of_segment[-1][index2]['y'], hits_of_segment[-1][index2]['z']
+
+                        x_mid, y_mid, z_mid = (x_start+x_end)/2 , (y_start+y_end)/2 , (z_start+z_end)/2
                 
+                        #dEdx
+                        Energy_of_segment = sum(hits_of_segment[-1]['E'])
+
+                        Length_of_segment = self.length(hits_of_segment[-1])
+
+                        # dQdx
+                        Charge_of_segment = sum(hits_of_segment[-1]['Q'])
+
+
+                        hit_segments.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment,Length_of_segment, x_mid, y_mid, z_mid])
                 
-                #Starting, mid, and end points of segment
-                z_start = np.min(hits_of_segment[j-1]['z'])
-
-                index1 = np.where(hits_of_segment[j-1]['z'] == z_start)[0][0]
-
-                x_start, y_start, z_start = hits_of_segment[j-1][index1]['x'], hits_of_segment[j-1][index1]['y'], hits_of_segment[j-1][index1]['z']
-
-                z_end = np.max(hits_of_segment[j-1]['z'])
-
-                index2 = np.where(hits_of_segment[j-1]['z'] == z_end)[0][0]
-
-                x_end, y_end, z_end = hits_of_segment[j-1][index2]['x'], hits_of_segment[j-1][index2]['y'], hits_of_segment[j-1][index2]['z']
-
-                x_mid, y_mid, z_mid = (x_start+x_end)/2 , (y_start+y_end)/2 , (z_start+z_end)/2
-                
-                #dEdx
-                Energy_of_segment = sum(hits_of_segment[j-1]['E'])
-
-                Length_of_segment = self.length(hits_of_segment[j-1])
-
-                # dQdx
-                Charge_of_segment = sum(hits_of_segment[j-1]['Q'])
-
-
-                hit_segments.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment,Length_of_segment, x_mid, y_mid, z_mid])
-                
-                if len(track) == 0:
-                    break
+                        if len(each_tpc) == 0:
+                            break
         return hit_segments, ref
 
 
@@ -363,7 +381,7 @@ class RockMuonSelection(H5FlowStage):
                 
         event_id = np.r_[source_slice]
                 
-        PromptHits_ev = cache[self.PromptHits_dset_name]
+        PromptHits_ev = cache[self.FinalHits_dset_name]
         
         hits = self.cluster(PromptHits_ev[0])
         
