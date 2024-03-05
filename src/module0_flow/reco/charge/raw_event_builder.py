@@ -243,7 +243,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
 
     default_window = 1820 // 2
     default_threshold = 10
-    default_rollover_ticks = 10000000
+    default_rollover_ticks = 1E7
 
     def __init__(self, **params):
         super(SymmetricWindowRawEventBuilder, self).__init__(**params)
@@ -385,19 +385,19 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             else zip(*[v for i, v in enumerate(zip(events, event_unix_ts, event_mc_assn)) if is_event[i]])
       
 
-class BeamTrigEventBuilder(RawEventBuilder):
+class ExtTrigRawEventBuilder(RawEventBuilder):
     '''
-    A beam trigger based event builder. Events are sliced such that they always follow a beam trigger and end at the following beam trigger (which starts the next event). Events also end after a time window of 182 units or at the end of the datastream.
+    A beam trigger based event builder. Events are sliced such that they always follow a beam trigger and end at the following beam trigger (which starts the next event). Events also end after a time window of 182 x 1.1 units (10% grace period) or at the end of the datastream.
     '''
-    default_window = 1820 // 2
-    default_threshold = 0
-    default_rollover_ticks = 10000000
+    default_window = 1820 * 1.1
+    default_rollover_ticks = 1E7
+    default_trig_io_grp = 1
     
     def __init__(self, **params):
-        super(BeamTrigEventBuilder, self).__init__(**params)
+        super(ExtTrigRawEventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
-        self.threshold = params.get('threshold_', self.default_threshold)
         self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
+        self.trig_io_grp = params.get('trig_io_grp', self.default_trig_io_grp)
         self.event_buffer = np.empty((0,))  
         self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
         self.event_buffer_mc_assn = np.empty((0,))
@@ -407,7 +407,7 @@ class BeamTrigEventBuilder(RawEventBuilder):
     def get_config(self):
         return dict(
             window=self.window,
-            threshold=self.threshold,
+            trig_io_grp=self.trig_io_grp,
             rollover_ticks=self.rollover_ticks,
         )    
     
@@ -426,22 +426,19 @@ class BeamTrigEventBuilder(RawEventBuilder):
         ts = packets['timestamp'].astype('i8') + rollover
         sorted_idcs = np.argsort(ts)
         ts = ts[sorted_idcs]
-        for i in ts:
-            print(i)
         
         packets = packets[sorted_idcs]
         unix_ts = unix_ts[sorted_idcs]
         if mc_assn is not None:
             mc_assn = mc_assn[sorted_idcs]
         
-        beam_trigger_idxs = np.where((packets['io_group'] == 1) & (packets['packet_type'] == 7))[0]
+        beam_trigger_idxs = np.where((packets['io_group'] == self.trig_io_grp) & (packets['packet_type'] == 7))[0]
         if len(beam_trigger_idxs) == 0:
             return ([], []) if mc_assn is None else ([], [], [])
         
         events = []
         event_unix_ts = []
         event_mc_assn = [] if mc_assn is not None else None
-        time_window = np.inf #1820*3  # Time window to check for event ending
         
         for i, start_idx in enumerate(beam_trigger_idxs):
             if i+1 < len(beam_trigger_idxs): # everything but last event
@@ -452,20 +449,20 @@ class BeamTrigEventBuilder(RawEventBuilder):
                 next_start_ts = ts[next_start_idx]
                 
                 # if time stamp of next event is less than time window, then end this event at the next beam trigger (which also starts the next event)
-                if next_start_ts - start_ts <= time_window:  
+                if next_start_ts - start_ts <= self.window:
                     end_idx = next_start_idx
                 # if time stamp of next event is greater than time window then (below)
                 else:
                     time_diffs = ts[start_idx:next_start_idx] - start_ts #return all timestamps within range of start_idx to next_start_idx - start_ts
-                    outside_window_idx = np.argmax(time_diffs > time_window) + start_idx # returns the index of the first occurrence where the condition time_diffs > time_window is True in the array time_diffs + start_idx
+                    outside_window_idx = np.argmax(time_diffs > self.window) + start_idx # returns the index of the first occurrence where the condition time_diffs > window is True in the array time_diffs + start_idx
                     #end_idx = outside_window_idx if outside_window_idx > start_idx else next_start_idx # incase timestamps are not strictly increasing
                     end_idx = outside_window_idx
             else: #last event
                 start_ts = ts[start_idx]
                 if len(ts) - len(ts[start_idx:]) > 0: # are there timestamps, and therefore packet data, left to use to build a final event?
                     time_diffs = ts[start_idx:] - start_ts
-                    if any(time_diffs > time_window): #if the time difference is greater than the window, anywhere
-                        outside_window_idx = np.argmax(time_diffs > time_window) + start_idx #same as above ; grab the index of the window edge if the time condition is met (above)
+                    if any(time_diffs > self.window): #if the time difference is greater than the window, anywhere
+                        outside_window_idx = np.argmax(time_diffs > self.window) + start_idx #same as above ; grab the index of the window edge if the time condition is met (above)
                     else: 
                         outside_window_idx = None
                     #end_idx = outside_window_idx if outside_window_idx > start_idx else len(ts) # wrong logic 
