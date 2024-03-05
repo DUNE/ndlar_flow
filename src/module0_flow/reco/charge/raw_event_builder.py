@@ -424,16 +424,13 @@ class BeamTrigEventBuilder(RawEventBuilder):
                 rollover[mask] -= self.rollover_ticks
 
         ts = packets['timestamp'].astype('i8') + rollover
-        #print("HERE IS TS non-sorted", ts)
         sorted_idcs = np.argsort(ts)
         ts = ts[sorted_idcs]
-        #print("HERE IS TS sorted", ts)
         for i in ts:
             print(i)
         
         packets = packets[sorted_idcs]
         unix_ts = unix_ts[sorted_idcs]
-        #print("HERE IS UNIX_TS", unix_ts)
         if mc_assn is not None:
             mc_assn = mc_assn[sorted_idcs]
         
@@ -451,7 +448,6 @@ class BeamTrigEventBuilder(RawEventBuilder):
                 next_start_idx = beam_trigger_idxs[i+1]
                 start_ts_unix = unix_ts[start_idx]
                 start_ts = ts[start_idx]
-                print("HEREEEEEE", start_ts, len(beam_trigger_idxs))
                 next_start_ts_unix = unix_ts[next_start_idx]
                 next_start_ts = ts[next_start_idx]
                 
@@ -495,130 +491,3 @@ class BeamTrigEventBuilder(RawEventBuilder):
         return zip(*[v for v in zip(events_filtered, event_unix_ts_filtered)]) if mc_assn is None \
             else zip(*[v for v in zip(events_filtered, event_unix_ts_filtered, event_mc_assn_filtered)])
 
-        #return self.filter_events(events, event_unix_ts, event_mc_assn)
-    
-'''
-    def filter_events(self, events, event_unix_ts, event_mc_assn):
-        events_filtered, event_unix_ts_filtered, event_mc_assn_filtered = [], [], []
-        for i, event in enumerate(events):
-            if len(event) > 0:  # Replace 0 with self.threshold if you use the threshold logic
-                events_filtered.append(event)
-                event_unix_ts_filtered.append(event_unix_ts[i])
-                if mc_assn is not None:
-                    event_mc_assn_filtered.append(event_mc_assn[i])
-
-        return zip(*[v for v in zip(events_filtered, event_unix_ts_filtered)]) if mc_assn is None \
-            else zip(*[v for v in zip(events_filtered, event_unix_ts_filtered, event_mc_assn_filtered)])
-'''        
-        
-
-'''
-class BeamTrigEventBuilder(RawEventBuilder):
-    
-'''
-    #A beam trigger based event builder. Events are sliced such that they always follow a beam trigger. The end of a data stream marks the end of the last event in the data stream. There is a threshold check copied from SymmetricWindowRawEventBuilder - checks that events have a certain number of hits. It discards them if not. This threshold check may not actually be doing anything.
-'''
-    # copying from SymmetricWindowRawEventBuilder starts here
-    default_window = 1820 // 2
-    default_threshold = 0
-    default_rollover_ticks = 10000000
-    
-    def __init__(self, **params):
-        super(BeamTrigEventBuilder, self).__init__(**params)
-        self.window = params.get('window', self.default_window)
-        self.threshold = params.get('threshold_', self.default_threshold)
-        self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
-
-        self.event_buffer = np.empty((0,))  
-        self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
-        self.event_buffer_mc_assn = np.empty((0,))
-        
-        self.prepend_count = 0  
-        self.last_beam_trigger_idx = None
-
-    def get_config(self):
-        return dict(
-            window=self.window,
-            threshold=self.threshold,
-            rollover_ticks=self.rollover_ticks,
-        )    
-    
-    def build_events(self, packets, unix_ts, mc_assn=None):
-        #if len(packets) == 0:
-            #return ([], []) if mc_assn is None else ([], [], [])
-
-        # correct for rollovers?
-        # sort packets to fix 512 bug, appending incomplete events!?
-        #packets = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets  #this shouldnt be needed
-
-        # correct for rollovers (copied from symmetric) 
-        rollover = np.zeros((len(packets),), dtype='i8')
-        for io_group in np.unique(packets['io_group']):
-            # find rollovers
-            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type'] == 83)
-            rollover[mask] = self.rollover_ticks
-            # calculate sum of rollovers
-            mask = (packets['io_group'] == io_group)
-            rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
-            # correct for readout delay (only in real data)
-            if mc_assn is None:
-                mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
-                    & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
-                rollover[mask] -= self.rollover_ticks
-
-        ts = packets['timestamp'].astype('i8') + rollover
-
-        # sort packets by timestamp
-        sorted_idcs = np.argsort(ts)
-        packets = packets[sorted_idcs]
-        unix_ts = unix_ts[sorted_idcs]
-        if mc_assn is not None:
-            mc_assn = mc_assn[sorted_idcs]
-            
-        # copying from SymmetricWindowRawEventBuilder ends here
-
-        # identify beam trigger indices
-        beam_trigger_idxs = np.where((packets['io_group'] == 1) & (packets['packet_type'] == 7))[0]
-
-        if len(beam_trigger_idxs) == 0:
-            # no beam triggers found, no events are formed
-            return ([], []) if mc_assn is None else ([], [], [])
-
-        
-        events = []
-        event_unix_ts = []
-        event_mc_assn = [] if mc_assn is not None else None
-
-        # split events based on beam triggers
-        for start, end in zip(beam_trigger_idxs[:-1], beam_trigger_idxs[1:]):
-            events.append(packets[start:end])
-            event_unix_ts.append(unix_ts[start:end])
-            if mc_assn is not None:
-                event_mc_assn.append(mc_assn[start:end])
-
-        # handle the last event so it counts as an actual event
-        events.append(packets[beam_trigger_idxs[-1]:])
-        event_unix_ts.append(unix_ts[beam_trigger_idxs[-1]:])
-        if mc_assn is not None:
-            event_mc_assn.append(mc_assn[beam_trigger_idxs[-1]:])
-
-        # filter events based on hit counts exceeding the threshold
-        events_filtered, event_unix_ts_filtered, event_mc_assn_filtered = [], [], []
-        for i, event in enumerate(events):
-            #if len(event) > self.threshold:
-            if len(event) > 0:
-                events_filtered.append(event)
-                event_unix_ts_filtered.append(event_unix_ts[i])
-                if mc_assn is not None:
-                    event_mc_assn_filtered.append(event_mc_assn[i])
-                    
-        return zip(*[v for v in zip(events_filtered, event_unix_ts_filtered)]) if mc_assn is None \
-            else zip(*[v for v in zip(events_filtered, event_unix_ts_filtered, event_mc_assn_filtered)])
-
-        #return (events_filtered, event_unix_ts_filtered) if mc_assn is None \
-        #    else (events_filtered, event_unix_ts_filtered, event_mc_assn_filtered)    
-    
-'''    
-
-
-    
