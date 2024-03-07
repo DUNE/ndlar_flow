@@ -387,7 +387,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
 
 class ExtTrigRawEventBuilder(RawEventBuilder):
     '''
-    A beam trigger based event builder. Events are sliced such that they always follow a beam trigger and end at the following beam trigger (which starts the next event). Events also end after a time window of 182 x 1.1 units (10% grace period) or at the end of the datastream.
+    An external trigger based event builder. Events are sliced such that they always follow an external trigger and the readout window is configurable. The default is set to 182 x 1.1 units (10% grace period). Note the event builder may contain more than one trigger if they are within a readout window time.
     '''
     default_window = 1820 * 1.1
     default_rollover_ticks = 1E7
@@ -435,56 +435,21 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         beam_trigger_idxs = np.where((packets['io_group'] == self.trig_io_grp) & (packets['packet_type'] == 7))[0]
         if len(beam_trigger_idxs) == 0:
             return ([], []) if mc_assn is None else ([], [], [])
-        
+
         events = []
         event_unix_ts = []
         event_mc_assn = [] if mc_assn is not None else None
         
         for i, start_idx in enumerate(beam_trigger_idxs):
-            if i+1 < len(beam_trigger_idxs): # everything but last event
-                next_start_idx = beam_trigger_idxs[i+1]
-                start_ts_unix = unix_ts[start_idx]
-                start_ts = ts[start_idx]
-                next_start_ts_unix = unix_ts[next_start_idx]
-                next_start_ts = ts[next_start_idx]
-                
-                # if time stamp of next event is less than time window, then end this event at the next beam trigger (which also starts the next event)
-                if next_start_ts - start_ts <= self.window:
-                    end_idx = next_start_idx
-                # if time stamp of next event is greater than time window then (below)
-                else:
-                    time_diffs = ts[start_idx:next_start_idx] - start_ts #return all timestamps within range of start_idx to next_start_idx - start_ts
-                    outside_window_idx = np.argmax(time_diffs > self.window) + start_idx # returns the index of the first occurrence where the condition time_diffs > window is True in the array time_diffs + start_idx
-                    #end_idx = outside_window_idx if outside_window_idx > start_idx else next_start_idx # incase timestamps are not strictly increasing
-                    end_idx = outside_window_idx
-            else: #last event
-                start_ts = ts[start_idx]
-                if len(ts) - len(ts[start_idx:]) > 0: # are there timestamps, and therefore packet data, left to use to build a final event?
-                    time_diffs = ts[start_idx:] - start_ts
-                    if any(time_diffs > self.window): #if the time difference is greater than the window, anywhere
-                        outside_window_idx = np.argmax(time_diffs > self.window) + start_idx #same as above ; grab the index of the window edge if the time condition is met (above)
-                    else: 
-                        outside_window_idx = None
-                    #end_idx = outside_window_idx if outside_window_idx > start_idx else len(ts) # wrong logic 
-                    last_index = len(ts) - 1
-                    end_idx = outside_window_idx if outside_window_idx is not None else last_index  # set to window end or end of datastream
-                else: #if no timestamps left
-                    #end_idx = len(ts) #this would create an empty event 
-                    continue # this should skip empty events
-
-            events.append(packets[start_idx:end_idx])
-            event_unix_ts.append(unix_ts[start_idx:end_idx])
+            this_trig_time = ts[start_idx]
+            # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
+            hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & (packets['io_group'] == self.trig_io_grp) & (packets['packet_type'] == 7))
+            mask = ((ts - this_trig_time) >= 0) & ((ts - this_trig_time) <= self.window) & hotfix_mask
+            events.append(packets[mask])
+            event_unix_ts.append(unix_ts[mask])
             if mc_assn is not None:
-                event_mc_assn.append(mc_assn[start_idx:end_idx])
-                
-        events_filtered, event_unix_ts_filtered, event_mc_assn_filtered = [], [], []        
-        for i, event in enumerate(events):
-            if len(event) > 0:  
-                events_filtered.append(event)
-                event_unix_ts_filtered.append(event_unix_ts[i])
-                if mc_assn is not None:
-                    event_mc_assn_filtered.append(event_mc_assn[i])
+                event_mc_assn.append(mc_assn[mask])
 
-        return zip(*[v for v in zip(events_filtered, event_unix_ts_filtered)]) if mc_assn is None \
-            else zip(*[v for v in zip(events_filtered, event_unix_ts_filtered, event_mc_assn_filtered)])
+        return zip(*[v for v in zip(events, event_unix_ts)]) if mc_assn is None \
+            else zip(*[v for v in zip(events, event_unix_ts, event_mc_assn)])
 
