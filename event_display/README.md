@@ -14,4 +14,10 @@ In general, single module data files can be found [in this file system.](https:/
  - [Module 1 data file run through `module0_flow` (charge only)](https://portal.nersc.gov/project/dune/data/Module1/reco/charge_only/events_2022_02_09_17_23_09_CET.gz.h5)
  - [Module 1 data file run through `proto_nd_flow` (charge only)](https://portal.nersc.gov/project/dune/data/Module1/TPC12/reflow-test/packet_2022_02_09_17_23_09_CET.module1_flow.h5)
  
-Additional Module 1 charge-only data files run through `module0_flow` can be found [here](https://portal.nersc.gov/project/dune/data/Module1/reco/charge_only/), and additional Module 1 charge-only data files run through `proto_nd_flow` can be found [here](https://portal.nersc.gov/project/dune/data/Module1/TPC12/reflow-test/). 
+Additional Module 1 charge-only data files run through `module0_flow` can be found [here](https://portal.nersc.gov/project/dune/data/Module1/reco/charge_only/), and additional Module 1 charge-only data files run through `proto_nd_flow` can be found [here](https://portal.nersc.gov/project/dune/data/Module1/TPC12/reflow-test/).
+
+## 2x2 Event Display
+
+### Overview
+
+The 2x2 event display is web-based. Currently, you can run the application by executing `python3 app.py` and opening thelocalhost link in a browser. You can either upload a flow file or provide a path. The path must be the full path to the file, and the file must be available on the system that the app is running on. Clicking on labels in the legend allows you to toggle what is shown in the plot. Clicking a light trap will display the corresponding waveform. NB. this event display in under development and the displayed information may not be correct.
