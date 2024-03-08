@@ -10,8 +10,8 @@ from h5flow.core import H5FlowGenerator, resources
 from h5flow.data import dereference
 from h5flow import H5FLOW_MPI
 
-from module0_flow.reco.charge.raw_event_builder import *
-import module0_flow.util.units as units
+from proto_nd_flow.reco.charge.raw_event_builder import *
+import proto_nd_flow.util.units as units
 
 
 class RawEventGenerator(H5FlowGenerator):
@@ -491,3 +491,4 @@ class RawEventGenerator(H5FlowGenerator):
         # rank N-1 store max unix timestamp for next iteration
         if self.rank != self.size - 1:
             self.comm.send(max_unix_ts, dest=self.rank + 1)
+
