@@ -114,7 +114,9 @@ Light
 
 * ``yamls/module1_flow/reco/light/WaveformDeconvolution.yaml``
 
-  Copied and modified from ``yamls/proto_nd_flow/reco/light/WaveformDeconvolution.yaml``. ``noise_spectrum_filename``, ``signal_spectrum_filename``, ``signal_impulse_filename`` were set to ``module0`` files. Option ``filter_channels`` differs from other modules.
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/WaveformDeconvolution.yaml``.
+  ``noise_spectrum_filename``, ``signal_spectrum_filename``, ``signal_impulse_filename`` were set generated using ``run_light_extract_response.sh``, with ``0cd913fb_20220211_074023.data`` as the input file.
+  Option ``filter_channels`` differs from other modules.
 
 * ``yamls/module1_flow/reco/light/WaveformAlign.yaml``
 
