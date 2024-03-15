@@ -4,6 +4,6 @@ classname: Geometry # resources/geometry.py
 path: proto_nd_flow.resources.geometry
 params:
   path: 'geometry_info'
-  det_geometry_file: 'data/module1_flow/module0.yaml'
-  crs_geometry_file: '/global/cfs/cdirs/dune/www/data/Module1/TPC12/module1_layout-2.3.16.yaml'
-  lrs_geometry_file: 'data/module1_flow/light_module_desc-0.1.0.yaml'
+  det_geometry_file: 'data/moduleX_flow/module0.yaml'
+  crs_geometry_file: '/global/cfs/cdirs/dune/www/data/data/Module3/flow_data/multi_tile_layout-module3.yaml'
+  lrs_geometry_file: 'data/moduleX_flow/light_module_desc-0.1.0.yaml'
