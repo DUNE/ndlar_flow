@@ -6,16 +6,16 @@ params:
   wvfm_dset_name: 'light/wvfm'
 
   # configuration parameters
-  n_adcs: 2
+  n_adcs: 8
   n_channels: 64
   sn_table:
-   #- 642823167
-   #- 642874879
-   #- 215553019
-   #- 215563696
+   - 642823167
+   - 642874879
+   - 215553019
+   - 215563696
    - 215537224
-   #- 632779263
-   #- 642504959
+   - 632779263
+   - 642504959
    - 215564600
   sync_channel: 0
   sync_threshold: 40000
