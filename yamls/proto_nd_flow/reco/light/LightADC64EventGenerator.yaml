@@ -19,6 +19,6 @@ params:
    - 215564600
   sync_channel: 0
   sync_threshold: 40000
-  batch_size: 1  #FIXME: only works with batch_size=1 at the moment (to be fixed in adc64format)
+  batch_size: 12
   utime_ms_window: 1000
   tai_ns_window: 1000
