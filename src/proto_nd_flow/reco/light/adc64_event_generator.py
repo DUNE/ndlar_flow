@@ -212,6 +212,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
         # write event to file
         event_slice = self.data_manager.reserve_data(self.event_dset_name, len(event_arr))
         event_arr['id'] = np.arange(event_slice.start, event_slice.stop)
+        print(event_arr['id'])
         self.data_manager.write_data(self.event_dset_name, event_slice, event_arr)
 
         self.data_manager.reserve_data(self.wvfm_dset_name, event_slice)
