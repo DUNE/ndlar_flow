@@ -11,8 +11,8 @@ params:
   sn_table:
    - 642823167  # Mod1, Slot 7
    - 642874879  # Mod2, Slot 13
-   - 215564636  # 215553019  # Mod1, Slot 9
-   - 215564617  # Mod2, Slot 11
+   - 215553019  # Mod1, Slot 9
+   - 215563696  #215564617  # Mod2, Slot 11
    - 215537224  # Mod0, Slot 5
    - 632779263  # Mod3, Slot 17
    - 642504959  # Mod3, Slot 15
