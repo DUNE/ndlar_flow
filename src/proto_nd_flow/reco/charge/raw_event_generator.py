@@ -154,6 +154,9 @@ class RawEventGenerator(H5FlowGenerator):
             self.mc_trajectories = self.input_fh['trajectories']
             try:
                 self.mc_events = self.input_fh['mc_hdr']
+            except:
+                self.mc_events = self.input_fh['vertices']
+            try:
                 self.mc_stack = self.input_fh['mc_stack']
             except:
                 self.is_mc_neutrino = False
@@ -183,27 +186,17 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.set_attrs(self.raw_event_dset_name,
                                         mc_tracks_dset_name=self.mc_tracks_dset_name,
                                         mc_trajectories_dset_name=self.mc_trajectories_dset_name,
-                                        mc_packet_fraction_dset_name=self.mc_packet_fraction_dset_name)
+                                        mc_packet_fraction_dset_name=self.mc_packet_fraction_dset_name,
+                                        mc_events_dset_name=self.mc_events_dset_name)
             if self.is_mc_neutrino:
                 self.data_manager.set_attrs(self.raw_event_dset_name,
-                                            mc_events_dset_name=self.mc_events_dset_name,
                                             mc_stack_dset_name=self.mc_stack_dset_name)
 
             self.data_manager.create_dset(self.mc_packet_fraction_dset_name, dtype=self.mc_assn['fraction'].dtype)
             self.data_manager.create_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name)
 
+            # copy datasets from source file
             if self.is_mc_neutrino:
-                # copy datasets from source file
-                # MC interaction summary info
-                self.data_manager.create_dset(self.mc_events_dset_name, dtype=self.mc_events.dtype)
-                ninter = len(self.mc_events)
-                inter_sl = slice(
-                    ceil(ninter / self.size * self.rank),
-                    ceil(ninter / self.size * (self.rank + 1)))
-                self.data_manager.reserve_data(self.mc_events_dset_name, inter_sl)
-                self.data_manager.write_data(self.mc_events_dset_name, inter_sl,
-                                             self.mc_events[inter_sl])
-
                 # MC generator particle stack
                 self.data_manager.create_dset(self.mc_stack_dset_name, dtype=self.mc_stack.dtype)
                 nstack = len(self.mc_stack)
@@ -212,6 +205,16 @@ class RawEventGenerator(H5FlowGenerator):
                     ceil(nstack / self.size * (self.rank + 1)))
                 self.data_manager.reserve_data(self.mc_stack_dset_name, stack_sl)
                 self.data_manager.write_data(self.mc_stack_dset_name, stack_sl, self.mc_stack[stack_sl])
+
+            # MC interaction summary info
+            self.data_manager.create_dset(self.mc_events_dset_name, dtype=self.mc_events.dtype)
+            ninter = len(self.mc_events)
+            inter_sl = slice(
+                ceil(ninter / self.size * self.rank),
+                ceil(ninter / self.size * (self.rank + 1)))
+            self.data_manager.reserve_data(self.mc_events_dset_name, inter_sl)
+            self.data_manager.write_data(self.mc_events_dset_name, inter_sl,
+                                         self.mc_events[inter_sl])
 
             # edep-sim energy segments/deposits
             self.data_manager.create_dset(self.mc_tracks_dset_name, dtype=self.mc_tracks.dtype)
@@ -244,18 +247,18 @@ class RawEventGenerator(H5FlowGenerator):
             # set up references
             self.data_manager.create_ref(self.packets_dset_name, self.mc_tracks_dset_name)
             self.data_manager.create_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name)
+            self.data_manager.create_ref(self.raw_event_dset_name, self.mc_events_dset_name)
+            self.data_manager.create_ref(self.mc_events_dset_name, self.mc_trajectories_dset_name)
+            self.data_manager.create_ref(self.mc_events_dset_name, self.mc_tracks_dset_name)
             if self.is_mc_neutrino:
-                self.data_manager.create_ref(self.raw_event_dset_name, self.mc_events_dset_name)
-                self.data_manager.create_ref(self.mc_events_dset_name, self.mc_trajectories_dset_name)
-                self.data_manager.create_ref(self.mc_events_dset_name, self.mc_tracks_dset_name)
                 self.data_manager.create_ref(self.mc_events_dset_name, self.mc_stack_dset_name)
                 self.data_manager.create_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name)
 
             # create references between trajectories and tracks
             # eventID --> vertexID for latest production files
             if self.is_mc_neutrino:
-                intr_evid = self.mc_events['vertex_id'][:]
                 stack_evid = self.mc_stack['vertex_id'][:]
+            intr_evid = self.mc_events['vertex_id'][:]
             traj_evid = self.mc_trajectories['vertex_id'][:]
             tracks_evid = self.mc_tracks['vertex_id'][:]
             evs, ev_traj_start, ev_track_start = np.intersect1d(
@@ -290,21 +293,21 @@ class RawEventGenerator(H5FlowGenerator):
                     ref[:, 1] += track_start
                     self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, ref)
 
+                    # Create refs for interactions --> traj
+                    intr_evid_block = np.expand_dims(intr_evid[:], 0) # Might need to modify for MPI running
+                    ref = np.argwhere((ev == intr_evid_block) & (ev == traj_evid_block))
+                    ref[:, 0] += traj_start
+                    ref[:, 1] += 0 #i + inter_sl.start # Might need to modify for MPI running
+                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, ref)
+
+                    # Create refs for interactions --> tracks
+                    intr_evid_block = np.expand_dims(intr_evid[:], -1) # Might need to modify for MPI running
+                    ref = np.argwhere((ev == track_evid_block) & (ev == intr_evid_block))
+                    ref[:, 0] += 0 #i + inter_sl.start # Might need to modify for MPI running
+                    ref[:, 1] += track_start
+                    self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, ref)
+
                     if self.is_mc_neutrino:
-                        # Create refs for interactions --> traj
-                        intr_evid_block = np.expand_dims(intr_evid[:], 0) # Might need to modify for MPI running
-                        ref = np.argwhere((ev == intr_evid_block) & (ev == traj_evid_block))
-                        ref[:, 0] += traj_start
-                        ref[:, 1] += 0 #i + inter_sl.start # Might need to modify for MPI running
-                        self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, ref)
-
-                        # Create refs for interactions --> tracks
-                        intr_evid_block = np.expand_dims(intr_evid[:], -1) # Might need to modify for MPI running
-                        ref = np.argwhere((ev == track_evid_block) & (ev == intr_evid_block))
-                        ref[:, 0] += 0 #i + inter_sl.start # Might need to modify for MPI running
-                        ref[:, 1] += track_start
-                        self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, ref)
-
                         # Create refs for interactions --> generator particle stack
                         stack_evid_block = np.expand_dims(stack_evid[:], 0) # Might need to modify for MPI running
                         ref = np.argwhere((ev == intr_evid_block) & (ev == stack_evid_block))
@@ -323,9 +326,9 @@ class RawEventGenerator(H5FlowGenerator):
                         self.data_manager.write_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name, ref)
                 else:
                     self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
+                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, np.empty((0,2)))
+                    self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
                     if self.is_mc_neutrino:
-                        self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, np.empty((0,2)))
-                        self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
                         self.data_manager.write_ref(self.mc_events_dset_name, self.mc_stack_dset_name, np.empty((0,2)))
                         self.data_manager.write_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name, np.empty((0,2)))
 
@@ -461,19 +464,18 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.write_data(self.mc_packet_fraction_dset_name, sl, event_packet_fraction.compressed())
             self.data_manager.write_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name, np.c_[ref[:,0], sl])
 
-            if self.is_mc_neutrino:
-                # find events associated with tracks
-                if H5FLOW_MPI:
-                    self.comm.barrier()
-                ref_dset, ref_dir = self.data_manager.get_ref(self.mc_tracks_dset_name, self.mc_events_dset_name)
-                ref_region = self.data_manager.get_ref_region(self.mc_tracks_dset_name, self.mc_events_dset_name)
-                mc_evs = dereference(ref[:, 1], ref_dset, region=ref_region,
-                                     ref_direction=ref_dir, indices_only=True)
+            # find events associated with tracks
+            if H5FLOW_MPI:
+                self.comm.barrier()
+            ref_dset, ref_dir = self.data_manager.get_ref(self.mc_tracks_dset_name, self.mc_events_dset_name)
+            ref_region = self.data_manager.get_ref_region(self.mc_tracks_dset_name, self.mc_events_dset_name)
+            mc_evs = dereference(ref[:, 1], ref_dset, region=ref_region,
+                                 ref_direction=ref_dir, indices_only=True)
 
-                ev_idcs = np.broadcast_to(np.expand_dims(ev_idcs, axis=-1), event_tracks.shape)
-                ref = np.c_[ev_idcs[~event_tracks.mask].ravel(), mc_evs.ravel()]
-                ref = np.unique(ref, axis=0) if len(ref) else ref
-                self.data_manager.write_ref(self.raw_event_dset_name, self.mc_events_dset_name, ref)
+            ev_idcs = np.broadcast_to(np.expand_dims(ev_idcs, axis=-1), event_tracks.shape)
+            ref = np.c_[ev_idcs[~event_tracks.mask].ravel(), mc_evs.ravel()]
+            ref = np.unique(ref, axis=0) if len(ref) else ref
+            self.data_manager.write_ref(self.raw_event_dset_name, self.mc_events_dset_name, ref)
 
         return raw_event_slice if nevents else H5FlowGenerator.EMPTY
 
