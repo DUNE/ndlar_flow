@@ -20,7 +20,7 @@ params:
   packets_index_name: 'charge/packets_index'
   raw_hits_dset_name: 'charge/raw_hits'
   t0_dset_name: 'combined/t0'
-  max_contrib_segments: 15
+  max_contrib_segments: 10
 
   # output
   calib_hits_dset_name: 'charge/calib_prompt_hits'
