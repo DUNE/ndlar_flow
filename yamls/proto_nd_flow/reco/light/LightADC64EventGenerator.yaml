@@ -9,14 +9,14 @@ params:
   n_adcs: 8
   n_channels: 64
   sn_table:
-   - 642823167
-   - 642874879
-   - 215553019
-   - 215563696
-   - 215537224
-   - 632779263
-   - 642504959
-   - 215564600
+   - 215564600  # Mod0, Slot 3
+   - 215537224  # Mod0, Slot 5
+   - 642823167  # Mod1, Slot 7
+   - 215553019  # Mod1, Slot 9
+   - 215564617  # Mod2, Slot 11
+   - 642874879  # Mod2, Slot 13
+   - 642504959  # Mod3, Slot 15
+   - 632779263  # Mod3, Slot 17
   sync_channel: 0
   sync_threshold: 40000
   batch_size: 12
