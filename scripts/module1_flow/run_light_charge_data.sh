@@ -44,7 +44,7 @@ WORKFLOW7='yamls/module1_flow/workflows/charge/final_calibration.yaml'
 
 $H5FLOW_CMD -c $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 $WORKFLOW6 $WORKFLOW7 -i $CHARGE_INPUT_FILE -o $OUTPUT_FILE
 
-WORKFLOW8='yamls/proto_nd_flow/workflows/charge/charge_light_assoc.yaml'
+WORKFLOW8='yamls/module1_flow/workflows/charge/charge_light_assoc.yaml'
 
 $H5FLOW_CMD -c $WORKFLOW8 -i $OUTPUT_FILE -o $OUTPUT_FILE
 
