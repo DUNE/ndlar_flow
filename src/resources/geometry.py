@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.ma as ma
+import os
 import logging
 import warnings
 import yaml
@@ -42,6 +43,7 @@ class Geometry(H5FlowResource):
          - ``max_drift_distance``       [attr]: max drift distance in each LArTPC (2 TPCs/module) [cm]
          - ``module_RO_bounds``         [attr]: min and max xyz coordinates for each module [cm]   
          - ``pixel_pitch``              [attr]: distance between adjacent pixel centers [cm]
+         - ``charge_only``              [attr]: boolean switch that is set to true when no lrs_geometry_file is provided
 
          - ``anode_drift_coordinate``   [dset]: lookup table for tile drift coordinate [cm]
          - ``drift_dir``                [dset]: lookup table for tile drift direction (either ±1)
@@ -106,6 +108,7 @@ class Geometry(H5FlowResource):
         self._lar_detector_bounds = None # min and max xyz coordinates for full LAr detector
         self._max_drift_distance = None # max drift distance in each LArTPC (2 TPCs per module)
         self._module_RO_bounds = None # min and max xyz coordinates for each pixel LArTPC module
+        self._charge_only = False # Boolean switch that is set to true when no lrs_geometry_file is provided.
 
     def init(self, source_name):
         super(Geometry, self).init(source_name)
@@ -121,8 +124,12 @@ class Geometry(H5FlowResource):
             with open(self.det_geometry_file) as dgf:
                 self.det_geometry_yaml = yaml.load(dgf, Loader=yaml.FullLoader)
 
-            with open(self.lrs_geometry_file) as gf:
-                self.lrs_geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
+            if os.path.isfile(self.lrs_geometry_file):
+                with open(self.lrs_geometry_file) as gf:
+                    self.lrs_geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
+            else:
+                logging.warning("Either no lrs_geometry_yaml was provided or the one provided doesnt exist - lrs geometry will not be loaded")
+                self._charge_only = True
 
             self.load_geometry()
 
@@ -373,6 +380,9 @@ class Geometry(H5FlowResource):
                     and (min_z == min_coord) and (max_z == max_coord):
 
                     # Assign min and max y,z coordinates for initial io_group
+                    print("ZY")
+                    print(zy)
+                    print("END ZY")
                     min_y, max_y = zy[:,1].min(), zy[:,1].max()
                     min_z, max_z = zy[:,0].min(), zy[:,0].max()
 
@@ -582,7 +592,8 @@ class Geometry(H5FlowResource):
     ## Load light and charge geometry ##
     def load_geometry(self):
         self._load_charge_geometry()
-        self._load_light_geometry()
+        if not self._charge_only:
+            self._load_light_geometry()
 
 
     def _load_light_geometry(self):
@@ -722,13 +733,9 @@ class Geometry(H5FlowResource):
 
         mod_centers = det_geometry_yaml['tpc_offsets']
         n_modules = len(det_geometry_yaml['module_to_io_groups'])
-        n_tiles = 0
-        for entry in tile_map:
-            n_tiles += len(tile_map)
-
-        print("IN THE GEOMETRY")
-        print(n_tiles)
-        print(n_modules)
+        n_tiles = sum(len(j) for i in det_geometry_yaml['tile_map'] for j in i)
+        print("n_modules: "+str(n_modules))
+        print("n_tiles: "+str(n_tiles))
         # DOUBLE WARNING!: I'm doing a terrible thing and hardcoding things based on
         #                  the first geometry file option in the list...
         #                  Please, fix me! (move into loop below)
@@ -740,8 +747,14 @@ class Geometry(H5FlowResource):
         self._module_RO_bounds = []
         self._pixel_pitch = [0.]*n_modules
 
-        # Loop through modules
+        # Loop through modules 
+        print("MODULE TO IO GROUPS")
+        print(module_to_io_groups)
+        print("MODULE TO IO GROUPS END")
         for module_id in module_to_io_groups:
+            print("MODULE")
+            print(module_id)
+            print("MODULE END")
             geometry_yaml = geometry_yamls[self.crs_geometry_to_module[module_id-1]]
             pixel_pitch = geometry_yaml['pixel_pitch'] / units.cm # convert mm -> cm
             self._pixel_pitch[module_id-1] = pixel_pitch
@@ -753,7 +766,13 @@ class Geometry(H5FlowResource):
             ys = np.array(list(chip_channel_to_position.values()))[:, 1] * pixel_pitch
             z_size = max(zs) - min(zs) + pixel_pitch
             y_size = max(ys) - min(ys) + pixel_pitch
+            print("TILE CHIP TO IO")
+            print(tile_chip_to_io)
+            print("TILE CHIP TO IO END")
             for tile in tile_chip_to_io:
+                print("TILE")
+                print(tile)
+                print("TILE END")
                 tile_orientation = tile_orientations[tile]
                 tile_geometry[tile] = [pos / units.cm for pos in tile_positions[tile]], tile_orientations[tile] # convert mm -> cm
 
@@ -762,6 +781,7 @@ class Geometry(H5FlowResource):
                     io_group = io_group_io_channel//1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
                     self._tile_id[([io_group], [io_channel])] = tile+(module_id-1)*len(tile_chip_to_io)
+                    print("Chip loop : "+str(io_group) + " " + str(io_channel) + " " + str(chip) + " " + str(tile) + " " + str(module_id) + " " + str(len(tile_chip_to_io))) 
 
                     if self.network_agnostic == True:
                         # if we don't care about the network configuration, then we
@@ -773,6 +793,7 @@ class Geometry(H5FlowResource):
                 for chip_channel in chip_channel_to_position:
                     chip = chip_channel // 1000
                     channel = chip_channel % 1000
+                    print("Chip channel loop: " +str(chip) + " " + str(channel))
 
                     try:
                         io_group_io_channel = tile_chip_to_io[tile][chip]
@@ -798,6 +819,10 @@ class Geometry(H5FlowResource):
                     y += tile_positions[tile][1]/units.cm # convert mm -> cm
                     z += mod_centers[module_id-1][2] # det geo yaml is already in cm
                     y += mod_centers[module_id-1][1] # det geo yaml is already in cm
+                    print("FINAL")
+                    print(str(io_group)+" "+str(io_channel)+" "+str(chip)+" "+str(chip_channel)+" "+str(channel)+" "+str(z)+" "+str(y)+" "+str(module_id)+" "+str(tile))
+                    print("FINAL END")
+
                     self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = z, y
 
         # Determine module readout bounds
