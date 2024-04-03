@@ -124,7 +124,7 @@ Light
 
 * ``yamls/module1_flow/reco/light/WaveformCalib.yaml``
 
-  Copied from ``yamls/proto_nd_flow/reco/light/WaveformCalib.yaml``. Looks like it needs to be updated. Does it assume 8 TPCs? Does everything ``gain_mc`` need to be removed? And does ``gain`` need to be updated. File doesn't exist for other module workflows.
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/WaveformCalib.yaml``. For ``gain``, I created an input file using gain corrections Livio sent me in ``mod1_gain_corrected.csv``. The code to make the gains is found in ``gains_and_thresholds.ipynb   ``. 
 
 * ``yamls/module1_flow/reco/light/WaveformSum.yaml``
 
