@@ -1,4 +1,4 @@
-# Copied from yamls/module0_flow/reco/light/sipm_threshold.yaml
+# Copied and modified from yamls/module0_flow/reco/light/sipm_threshold.yaml
 
 classname: WaveformHitFinder # light/hit_finder.py
 path: proto_nd_flow.reco.light.hit_finder
@@ -17,5 +17,4 @@ params:
   # configuration parameters
   near_samples: 4
 
-  #threshold: !include yamls/proto_nd_flow/reco/light/sipm_threshold.yaml
-  threshold: 80
+  threshold: !include yamls/module1_flow/reco/light/sipm_threshold.yaml

@@ -124,7 +124,7 @@ Light
 
 * ``yamls/module1_flow/reco/light/WaveformCalib.yaml``
 
-  Copied and modified from ``yamls/proto_nd_flow/reco/light/WaveformCalib.yaml``. For ``gain``, I created an input file using gain corrections Livio sent me in ``mod1_gain_corrected.csv``. The code to make the gains is found in ``gains_and_thresholds.ipynb   ``. 
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/WaveformCalib.yaml``. For ``gain``, I created an input file using gain corrections Livio sent me in ``mod1_gain_corrected.csv``. The code to make the gains is found in ``gains_and_thresholds.ipynb``. 
 
 * ``yamls/module1_flow/reco/light/WaveformSum.yaml``
 
@@ -132,8 +132,8 @@ Light
 
 * ``yamls/module1_flow/reco/light/SiPMHitFinder.yaml``
 
-  Copied from ``yamls/proto_nd_flow/reco/light/SiPMHitFinder.yaml``. ``near_sample`` parameter is different. Here, ``threshold`` is a single constant, while other module workflows point to a ``siplm_threshold.yaml`` file. 
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/SiPMHitFinder.yaml``. ``near_sample`` parameter is different. I generated a ``sipm_threshold.yaml`` file using ``gains_and_thresholds.ipynb``. 
 
 * ``yamls/module1_flow/reco/light/SumHitFinder.yaml``
 
-  Copied from ``yamls/proto_nd_flow/reco/light/SumHitFinder.yaml``. Does not exist for other module workflows. Is ``threshold`` assuming 8 TPCSs? 
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/SumHitFinder.yaml``. I generated a ``sum_threshold.yaml`` threshold file using ``gains_and_thresholds.ipynb``. 
