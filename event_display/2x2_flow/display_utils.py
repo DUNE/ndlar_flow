@@ -340,8 +340,15 @@ def get_waveforms_all_detectors(data, match_light):
 def plot_light_traps(data, n_photons, op_indeces, max_integral):
     """Plot optical detectors"""
     drawn_objects = []
+    det_bounds = data["/geometry_info/det_bounds/data"] # doesn't work for all miniruns
+    sipm_rel_pos = data['geometry_info/sipm_rel_pos/data']
+    sipm_rel_pos = sipm_rel_pos[sipm_rel_pos['filled']==True] # 384 filled
 
-    det_bounds = data["/geometry_info/det_bounds/data"]
+    mapping = []
+    for i in range(384):
+        mapping.append((sipm_rel_pos[i][0][0]*2 + sipm_rel_pos[i][0][1])*24 + sipm_rel_pos[i][0][2])
+    sipm_pos = np.argsort(mapping) # this maps from sipm position as 0-383 to (channel, adc) as 0-383
+
     channel_map = np.array([0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 65, 73, 81, 89, 97, 105, 113, 121, 1, 9, 17, 25, 33, 41, 49, 57, 2, 10, 18, 26,
                 34, 42, 50, 58, 66, 74, 82, 90, 98, 106, 114, 122, 67, 75, 83, 91, 99, 107, 115, 123, 3, 11, 19, 27, 35, 43, 51, 59, 4, 12, 20, 28, 36, 44, 52,
                   60, 68, 76, 84, 92, 100, 108, 116, 124, 69, 77, 85, 93, 101, 109, 117, 125, 5, 13, 21, 29, 37, 45, 53, 61, 6, 14, 22, 30, 38, 46, 54, 62, 70,
@@ -372,7 +379,7 @@ def plot_light_traps(data, n_photons, op_indeces, max_integral):
 
     for i in range(len(xs)):
         opid = channel_map[i]
-        sipms = channel_dict[opid]
+        sipms = sipm_pos[channel_dict[opid]]
         opid_str = f"opid_{opid}"
         light_color = [
             [
@@ -398,7 +405,7 @@ def plot_light_traps(data, n_photons, op_indeces, max_integral):
             opacity=0.2,
             hoverinfo="text",
             ids=[[opid_str, opid_str], [opid_str, opid_str]],
-            text=f"Optical detector {opid} waveform integral<br>{sum(n_photons[sipms])/max_integral:.2e}",
+            text=f"Optical detector {opid} waveform integral<br>{max(0, sum(n_photons[sipms]))/max_integral:.2e}",
         )
 
         drawn_objects.append(light_plane)
@@ -428,6 +435,13 @@ def plot_waveform(data, evid, opid):
     fig = go.Figure()
     waveforms_all_detectors = get_waveforms_all_detectors(data, match_light)
 
+    sipm_rel_pos = data['geometry_info/sipm_rel_pos/data']
+    sipm_rel_pos = sipm_rel_pos[sipm_rel_pos['filled']==True] # 384 filled
+    mapping = []
+    for i in range(384):
+        mapping.append((sipm_rel_pos[i][0][0]*2 + sipm_rel_pos[i][0][1])*24 + sipm_rel_pos[i][0][2])
+    sipm_pos = np.argsort(mapping) # this maps from sipm position as 0-383 to (channel, adc) as 0-383
+    
     channel_dict = {}
     for i in range(0, 128, 4):
         j=i*3
@@ -435,14 +449,14 @@ def plot_waveform(data, evid, opid):
         channel_dict[i+1] = [j+7, j+8] # lcm channels
         channel_dict[i+2] = [j+9, j+10]
         channel_dict[i+3] = [j+11, j+12]
-    wvfm_opid = waveforms_all_detectors[:, channel_dict[opid], :]
+    wvfm_opid = waveforms_all_detectors[:, sipm_pos[channel_dict[opid]], :]
 
     x = np.arange(0, 1000, 1)
     y = np.sum(np.sum(wvfm_opid, axis=0),axis=0)
     drawn_objects = go.Scatter(x=x, y=y, name=f"Channel sum for light trap {opid}", visible=True, showlegend=True)
     fig.add_traces(drawn_objects)
     for i in range(0, wvfm_opid.shape[1]):
-        fig.add_traces(go.Scatter(x=x, y=np.sum(wvfm_opid, axis=0)[i, : ], visible="legendonly", showlegend=True, name=f"Channel {channel_dict[opid][i]}"))
+        fig.add_traces(go.Scatter(x=x, y=np.sum(wvfm_opid, axis=0)[i, : ], visible="legendonly", showlegend=True, name=f"Channel {sipm_pos[channel_dict[opid]][i]}"))
 
     fig.update_xaxes(title_text="Time [ticks] (16 ns)")
     fig.update_yaxes(title_text="Adc counts")
