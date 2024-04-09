@@ -5,6 +5,7 @@ Utility functions for displaying data in the app
 # TODO: remove dependency on h5flow
 import h5flow
 import numpy as np
+import pandas as pd
 import plotly
 import plotly.graph_objects as go
 
@@ -244,13 +245,14 @@ def draw_light_detectors(data, evid):
     waveforms_all_detectors = get_waveforms_all_detectors(data, match_light)
 
     # make a list of the sum of the waveform and the channel index
-    integral = np.sum(np.sum(waveforms_all_detectors, axis=2), axis=0)
-    max_integral = np.max(integral)
-    index = np.arange(0, waveforms_all_detectors.shape[1], 1)
+    # integral = np.sum(np.sum(waveforms_all_detectors, axis=2), axis=0)
+    # max_integral = np.max(integral)
+    # print(max_integral)
+    # index = np.arange(0, waveforms_all_detectors.shape[1], 1)
 
     # plot for each of the 96 channels per tpc the sum of the adc values
     drawn_objects = []
-    drawn_objects.extend(plot_light_traps(data, integral, index, max_integral))
+    drawn_objects.extend(plot_light_traps(data, waveforms_all_detectors))
 
     return drawn_objects
 
@@ -284,78 +286,22 @@ def get_waveforms_all_detectors(data, match_light):
     """
     light_wvfm = data["/light/wvfm", match_light]
 
-    samples_mod0 = light_wvfm["samples"][:, 0:2, :, :]
-    samples_mod1 = light_wvfm["samples"][:, 2:4, :, :]
-    samples_mod2 = light_wvfm["samples"][:, 4:6, :, :]
-    samples_mod3 = light_wvfm["samples"][:, 6:8, :, :]
-
-    sipm_channels_module0 = np.array(
-        [2, 3, 4, 5, 6, 7]
-        + [9, 10]
-        + [11, 12]
-        + [13, 14]
-        + [18, 19, 20, 21, 22, 23]
-        + [25, 26]
-        + [27, 28]
-        + [29, 30]
-        + [34, 35, 36, 37, 38, 39]
-        + [41, 42]
-        + [43, 44]
-        + [45, 46]
-        + [50, 51, 52, 53, 54, 55]
-        + [57, 58]
-        + [59, 60]
-        + [61, 62]
-    )
-
-    sipm_channels_modules = np.array(
-        [4, 5, 6, 7, 8, 9]
-        + [10, 11, 12, 13, 14, 15]
-        + [20, 21, 22, 23, 24, 25]
-        + [26, 27, 28, 29, 30, 31]
-        + [36, 37, 38, 39, 40, 41]
-        + [42, 43, 44, 45, 46, 47]
-        + [52, 53, 54, 55, 56, 57]
-        + [58, 59, 60, 61, 62, 63]
-    )
-    adcs_mod0 = samples_mod0[:, :, sipm_channels_module0, :]
-    adcs_mod1 = samples_mod1[:, :, sipm_channels_modules, :]
-    adcs_mod2 = samples_mod2[:, :, sipm_channels_modules, :]
-    adcs_mod3 = samples_mod3[:, :, sipm_channels_modules, :]
-
-    all_adcs = np.concatenate((adcs_mod0, adcs_mod1, adcs_mod2, adcs_mod3), axis=1)
-
-    # instead of a (m, 8, 48, 1000) array, we want a (m, 4, 96, 1000) array
-    # modules instead of tpcs, and 96 channels per module
-    m = len(match_light)
-    all_modules = all_adcs.reshape((m, 4, 96, 1000))
-
-    # now we make a full array for all the modules
-    # could have been done in one step, but this is easier to read
-    all_detector = all_modules.reshape((m, 384, 1000))
-
-    return all_detector
+    return light_wvfm["samples"]
 
 
-def plot_light_traps(data, n_photons, op_indeces, max_integral):
+def plot_light_traps(data, waveforms_all_detectors):
     """Plot optical detectors"""
     drawn_objects = []
-    det_bounds = data["/geometry_info/det_bounds/data"] # doesn't work for all miniruns
-    sipm_rel_pos = data['geometry_info/sipm_rel_pos/data']
-    sipm_rel_pos = sipm_rel_pos[sipm_rel_pos['filled']==True] # 384 filled
 
-    mapping = []
-    for i in range(384):
-        mapping.append((sipm_rel_pos[i][0][0]*2 + sipm_rel_pos[i][0][1])*24 + sipm_rel_pos[i][0][2])
-    sipm_pos = np.argsort(mapping) # this maps from sipm position as 0-383 to (channel, adc) as 0-383
+    det_bounds = data["/geometry_info/det_bounds/data"]
 
     channel_map = np.array([0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 65, 73, 81, 89, 97, 105, 113, 121, 1, 9, 17, 25, 33, 41, 49, 57, 2, 10, 18, 26,
                 34, 42, 50, 58, 66, 74, 82, 90, 98, 106, 114, 122, 67, 75, 83, 91, 99, 107, 115, 123, 3, 11, 19, 27, 35, 43, 51, 59, 4, 12, 20, 28, 36, 44, 52,
                   60, 68, 76, 84, 92, 100, 108, 116, 124, 69, 77, 85, 93, 101, 109, 117, 125, 5, 13, 21, 29, 37, 45, 53, 61, 6, 14, 22, 30, 38, 46, 54, 62, 70,
-                    78, 86, 94, 102, 110, 118, 126, 71, 79, 87, 95, 103, 111, 119, 127, 7, 15, 23, 31, 39, 47, 55, 63])
+                   78, 86, 94, 102, 110, 118, 126, 71, 79, 87, 95, 103, 111, 119, 127, 7, 15, 23, 31, 39, 47, 55, 63]) # this maps detector position to detector number
     # we need to invert the mapping because I'm stupid
     channel_map = np.argsort(channel_map)
-
+    channel_map_deluxe = pd.read_csv('sipm_channel_map.csv')
     xs = []
     ys = []
     zs = []
@@ -368,30 +314,38 @@ def plot_light_traps(data, n_photons, op_indeces, max_integral):
     COLORSCALE = plotly.colors.make_colorscale(
         plotly.colors.convert_colors_to_same_type(plotly.colors.sequential.YlOrRd)[0]
     )
-
-    channel_dict = {}
-    for i in range(0, 128, 4):
-        j=i*3
-        channel_dict[i] = [j, j+1, j+2, j+3, j+4, j+5] # arclight channels
-        channel_dict[i+1] = [j+6, j+7] # lcm channels
-        channel_dict[i+2] = [j+8, j+9]
-        channel_dict[i+3] = [j+10, j+11]
-
+    photon_sums = []
     for i in range(len(xs)):
         opid = channel_map[i]
-        sipms = sipm_pos[channel_dict[opid]]
+        # get all adc, channel belonging to opid=det_id. We have a numpy array channel_map_deluxe with dtype (det_id, tpc, side, sipm_pos, adc, channel)
+        sipms = channel_map_deluxe[channel_map_deluxe['det_id']==opid][['adc', 'channel']].values
+        sum_photons = 0
+        for adc, channel in sipms:
+            wvfm = waveforms_all_detectors[:, adc, channel, :]
+            sum_photons += np.sum(wvfm, axis=0)
+        photon_sums.append(sum_photons)
+    max_integral = np.max(photon_sums)
+    
+    for i in range(len(xs)):
+        opid = channel_map[i]
+        # get all adc, channel belonging to opid=det_id. We have a numpy array channel_map_deluxe with dtype (det_id, tpc, side, sipm_pos, adc, channel)
+        sipms = channel_map_deluxe[channel_map_deluxe['det_id']==opid][['adc', 'channel']].values
+        sum_photons = 0
+        for adc, channel in sipms:
+            wvfm = waveforms_all_detectors[:, adc, channel, :]
+            sum_photons += np.sum(wvfm, axis=0)   
         opid_str = f"opid_{opid}"
         light_color = [
             [
                 0.0,
                 get_continuous_color(
-                    COLORSCALE, intermed=max(0, sum(n_photons[sipms])) / max_integral
+                    COLORSCALE, intermed=max(0, sum(sum_photons)/max_integral)
                 ),
             ],
             [
                 1.0,
                 get_continuous_color(
-                    COLORSCALE, intermed=max(0, sum(n_photons[sipms])) / max_integral
+                    COLORSCALE, intermed=max(0, sum(sum_photons)/max_integral)
                 ),
             ],
         ]
@@ -405,7 +359,7 @@ def plot_light_traps(data, n_photons, op_indeces, max_integral):
             opacity=0.2,
             hoverinfo="text",
             ids=[[opid_str, opid_str], [opid_str, opid_str]],
-            text=f"Optical detector {opid} waveform integral<br>{max(0, sum(n_photons[sipms]))/max_integral:.2e}",
+            text=f"Optical detector {opid} waveform integral<br>{max(0,sum(sum_photons)):.2e}",
         )
 
         drawn_objects.append(light_plane)
@@ -435,28 +389,21 @@ def plot_waveform(data, evid, opid):
     fig = go.Figure()
     waveforms_all_detectors = get_waveforms_all_detectors(data, match_light)
 
-    sipm_rel_pos = data['geometry_info/sipm_rel_pos/data']
-    sipm_rel_pos = sipm_rel_pos[sipm_rel_pos['filled']==True] # 384 filled
-    mapping = []
-    for i in range(384):
-        mapping.append((sipm_rel_pos[i][0][0]*2 + sipm_rel_pos[i][0][1])*24 + sipm_rel_pos[i][0][2])
-    sipm_pos = np.argsort(mapping) # this maps from sipm position as 0-383 to (channel, adc) as 0-383
+    channel_map_deluxe = pd.read_csv('sipm_channel_map.csv')
+    sipms = channel_map_deluxe[channel_map_deluxe['det_id']==opid][['adc', 'channel']].values
     
-    channel_dict = {}
-    for i in range(0, 128, 4):
-        j=i*3
-        channel_dict[i] = [j, j+1, j+2, j+3, j+4, j+5, j+6] # arclight channels
-        channel_dict[i+1] = [j+7, j+8] # lcm channels
-        channel_dict[i+2] = [j+9, j+10]
-        channel_dict[i+3] = [j+11, j+12]
-    wvfm_opid = waveforms_all_detectors[:, sipm_pos[channel_dict[opid]], :]
+    sum_wvfm = np.array([0]*1000)
+    for adc, channel in sipms:
+        wvfm = waveforms_all_detectors[:, adc, channel, :]
+        sum_wvfm += np.sum(wvfm, axis=0)
 
     x = np.arange(0, 1000, 1)
-    y = np.sum(np.sum(wvfm_opid, axis=0),axis=0)
+    y = sum_wvfm
+
     drawn_objects = go.Scatter(x=x, y=y, name=f"Channel sum for light trap {opid}", visible=True, showlegend=True)
     fig.add_traces(drawn_objects)
-    for i in range(0, wvfm_opid.shape[1]):
-        fig.add_traces(go.Scatter(x=x, y=np.sum(wvfm_opid, axis=0)[i, : ], visible="legendonly", showlegend=True, name=f"Channel {sipm_pos[channel_dict[opid]][i]}"))
+    for adc, channel in sipms:
+        fig.add_traces(go.Scatter(x=x, y=waveforms_all_detectors[:, adc, channel, :][0], visible="legendonly", showlegend=True, name=f"Channel {adc, channel}"))
 
     fig.update_xaxes(title_text="Time [ticks] (16 ns)")
     fig.update_yaxes(title_text="Adc counts")
