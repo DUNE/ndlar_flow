@@ -24,6 +24,7 @@ class WaveformHitFinder(H5FlowStage):
          - ``t_ns_dset_name``: ``str``, path to corrected light PPS timestamps
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``near_samples``: ``int``, number of neighboring samples to keep
+         - ``hit_level``: ``str``, "sipm" or "sum" hit finder (defines variable names)
          - ``threshold``: ``dict`` of ``dict`` containing sets of ``tpc_index: {channel_index: threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
          - ``mask``: ``list`` of ``int``, detectors to ignore when finding hits
 
@@ -34,8 +35,9 @@ class WaveformHitFinder(H5FlowStage):
          ``hits`` datatype::
 
             id          u4,             unique identifier
-            tpc         u1,             tpc index
-            det         u1,             detector index
+            tpc/adc     u1,             tpc/adc index (for sum_hit/sipm_hit)
+            det/chan    u1,             detector/channel index (for sum_hit/sipm_hit)
+            pos         f4(3),          (x,y,z) center of det/sipm 
             sample_idx  u2,             sample index of peak within waveform
             ns          f8,             PPS timestamp of waveform [ns]
             busy_ns     f8,             timestamp of peak relative to busy rising edge (aka when the waveform was triggered) [ns]
@@ -62,27 +64,49 @@ class WaveformHitFinder(H5FlowStage):
         return defaultdict(lambda: defaultdict(lambda: global_threshold))
 
     def hits_dtype(self, near_samples):
-        return np.dtype([
-            ('id', 'u4'),
-            ('tpc', 'u1'),
-            ('det', 'u1'),
-            ('sample_idx', 'u2'),
-            ('ns', 'f8'),
-            ('busy_ns', 'f8'),
-            ('samples', 'f4', (2 * near_samples + 1,)),
-            ('sum', 'f4'),
-            ('max', 'f4'),
-            ('sum_spline', 'f4'),
-            ('max_spline', 'f4'),
-            ('ns_spline', 'f4'),
-            ('rising_spline', 'f4'),
-            ('rising_err_spline', 'f4'),
-            ('fwhm_spline', 'f4')
-        ])
+        if self.hit_level=="sum":
+            return np.dtype([
+                ('id', 'u4'),
+                ('tpc', 'u1'),
+                ('det', 'u1'),
+                ('boundary', 'f4', (2,3)),
+                ('sample_idx', 'u2'),
+                ('ns', 'f8'),
+                ('busy_ns', 'f8'),
+                ('samples', 'f4', (2 * near_samples + 1,)),
+                ('sum', 'f4'),
+                ('max', 'f4'),
+                ('sum_spline', 'f4'),
+                ('max_spline', 'f4'),
+                ('ns_spline', 'f4'),
+                ('rising_spline', 'f4'),
+                ('rising_err_spline', 'f4'),
+                ('fwhm_spline', 'f4')
+            ])
+        elif self.hit_level=="sipm":
+            return np.dtype([
+                ('id', 'u4'),
+                ('adc', 'u1'),
+                ('chan', 'u1'),
+                ('pos', 'f4', (3,)),
+                ('sample_idx', 'u2'),
+                ('ns', 'f8'),
+                ('busy_ns', 'f8'),
+                ('samples', 'f4', (2 * near_samples + 1,)),
+                ('sum', 'f4'),
+                ('max', 'f4'),
+                ('sum_spline', 'f4'),
+                ('max_spline', 'f4'),
+                ('ns_spline', 'f4'),
+                ('rising_spline', 'f4'),
+                ('rising_err_spline', 'f4'),
+                ('fwhm_spline', 'f4')
+            ])
+        else:
+            raise RuntimeError(f'Invalid hit level {self.hit_level}')
 
     def __init__(self, **params):
         super(WaveformHitFinder, self).__init__(**params)
-
         self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
         self.t_ns_dset_name = params.get('t_ns_dset_name')
@@ -90,6 +114,7 @@ class WaveformHitFinder(H5FlowStage):
                                          self.default_hits_dset_name)
         self.near_samples = params.get('near_samples',
                                        self.default_near_samples)
+        self.hit_level = params.get('hit_level')
         self.mask = np.array(params.get('mask',
                                                 self.default_mask))
         self.interpolation = params.get('interpolation',
@@ -150,7 +175,8 @@ class WaveformHitFinder(H5FlowStage):
                                     mask=self.mask,
                                     ntpc=self.ntpc,
                                     ndet=self.ndet,
-                                    nsamples=self.nsamples
+                                    nsamples=self.nsamples,
+                                    hit_level=self.hit_level
                                     )
 
     def run(self, source_name, source_slice, cache):
@@ -235,10 +261,16 @@ class WaveformHitFinder(H5FlowStage):
                                                mask=uhm_outlier_mask)
             peak_fwhm_spline = (peak_uhm_spline_samples.mean(axis=-1)
                 - peak_lhm_spline_samples.mean(axis=-1))
-
+            
             hit_data = np.empty((len(peaks[-1])), dtype=self.hits_dtype)
-            hit_data['tpc'] = peaks[1].ravel()
-            hit_data['det'] = wvfm_det[peaks[:3]].ravel()
+            if self.hit_level=="sum":
+                hit_data['tpc'] = peaks[1].ravel()
+                hit_data['det'] = wvfm_det[peaks[:3]].ravel()
+                hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[(tpc,det)][0]) for tpc, det in zip(peaks[1].ravel(),wvfm_det[peaks[:3]].ravel())]
+            elif self.hit_level=="sipm":
+                hit_data['adc'] = peaks[1].ravel()
+                hit_data['chan'] = wvfm_det[peaks[:3]].ravel()
+                hit_data['pos'] = [np.array(resources['Geometry'].sipm_abs_pos[(adc,chan)][0]) for adc, chan in zip(peaks[1].ravel(),wvfm_det[peaks[:3]].ravel())]
             hit_data['ns'] = wvfm_align['ns'][peaks[0]].ravel()
             hit_data['sample_idx'] = peaks[-1].ravel() + 1
 

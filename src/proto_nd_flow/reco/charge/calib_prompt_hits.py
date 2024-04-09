@@ -226,7 +226,8 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['io_group'] = packets_arr['io_group']
             calib_hits_arr['io_channel'] = packets_arr['io_channel']
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
-            calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 # hardcoding W_ion and not accounting for finite electron lifetime
+            #!!! hardcoding W_ion, R=0.7, and not accounting for finite electron lifetime
+            calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 * 0.7
 
             # create truth-level backtracking dataset
             if has_mc_truth:
@@ -263,7 +264,7 @@ class CalibHitBuilder(H5FlowStage):
 
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped):
-        return (dw / 256. * (vref - vcm) + vcm - ped) / 4. # hardcoding 1 ke/mV conv.
+        return (dw / 256. * (vref - vcm) + vcm - ped) / 4. # hardcoding 4 mV/ke- conv.
 
     def load_pedestals(self):
         if self.pedestal_file != '' and not resources['RunData'].is_mc:

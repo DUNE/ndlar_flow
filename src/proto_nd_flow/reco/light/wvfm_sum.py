@@ -87,7 +87,7 @@ class WaveformSum(H5FlowStage):
 
         for adc in range(wvfm_data['samples'].shape[1]):
             for chan in range(wvfm_data['samples'].shape[2]):
-                tpc_id = resources['Geometry'].tpc_id[(adc,chan)]
+                tpc_id = resources['Geometry'].sipm_rel_pos[(adc,chan)][0][0]
                 det_id = resources['Geometry'].det_id[(adc,chan)]
                 if tpc_id < 0 or det_id < 0:
                     continue
@@ -98,7 +98,7 @@ class WaveformSum(H5FlowStage):
 
         for adc in range(wvfm_data['samples'].shape[1]):
             for chan in range(wvfm_data['samples'].shape[2]):
-                tpc_id = resources['Geometry'].tpc_id[(adc,chan)]
+                tpc_id = resources['Geometry'].sipm_rel_pos[(adc,chan)][0][0]
                 det_id = resources['Geometry'].det_id[(adc,chan)]
                 if tpc_id < 0 or det_id < 0:
                     continue

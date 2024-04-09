@@ -391,9 +391,9 @@ class ProtoNDFlowEventDisplay:
         self.ax_zyx.set_box_aspect((2, 2, 4))
         self.ax_zyx.xaxis.set_major_locator(plt.MaxNLocator(3))
         self.ax_zyx.yaxis.set_major_locator(plt.MaxNLocator(3))
-        self.ax_zyx.w_xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-        self.ax_zyx.w_yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-        self.ax_zyx.w_zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        self.ax_zyx.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        self.ax_zyx.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        self.ax_zyx.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
         self.ax_zyx.zaxis.labelpad = 20
 
     def clear_axes(self):
