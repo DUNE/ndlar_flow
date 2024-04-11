@@ -53,8 +53,7 @@ def create_3d_figure(data, evid):
         x=prompthits_ev.data["x"].flatten(),
         y=(prompthits_ev.data["y"].flatten()),
         z=(prompthits_ev.data["z"].flatten()),
-        marker_color=prompthits_ev.data["E"].flatten()
-        * 1000,  # convert to MeV from GeV for minirun4, not sure for minirun3
+        marker_color=prompthits_ev.data["E"].flatten(),  # convert to MeV from GeV for minirun4, not sure for minirun3
         marker={
             "size": 1.75,
             "opacity": 0.7,
@@ -73,7 +72,7 @@ def create_3d_figure(data, evid):
         mode="markers",
         showlegend=True,
         opacity=0.7,
-        customdata=prompthits_ev.data["E"].flatten() * 1000,
+        customdata=prompthits_ev.data["E"].flatten(),
         hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
     )
     fig.add_traces(prompthits_traces)
@@ -83,7 +82,7 @@ def create_3d_figure(data, evid):
         x=finalhits_ev.data["x"].flatten(),
         y=(finalhits_ev.data["y"].flatten()),
         z=(finalhits_ev.data["z"].flatten()),
-        marker_color=finalhits_ev.data["E"].flatten() * 1000,
+        marker_color=finalhits_ev.data["E"].flatten(),
         marker={
             "size": 1.75,
             "opacity": 0.7,
@@ -103,7 +102,7 @@ def create_3d_figure(data, evid):
         visible="legendonly",
         showlegend=True,
         opacity=0.7,
-        customdata=finalhits_ev.data["E"].flatten() * 1000,
+        customdata=finalhits_ev.data["E"].flatten(),
         hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
         # render_mode="svg",
     )
@@ -427,7 +426,7 @@ def plot_charge(data, evid):
             title_text="packets timestamp",
         )
         fig.update_yaxes(
-            title_text="charge",
+            title_text="charge [ke-]",
         )
     fig.update_layout()
     return fig
