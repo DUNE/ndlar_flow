@@ -225,68 +225,45 @@ def draw_anode_planes(x_boundaries, y_boundaries, z_boundaries, **kwargs):
 
 def draw_light_detectors(data, evid):
     try:
-        charge = data["charge/events", evid][["id", "unix_ts"]]
-        num_light = data["light/events/data"].shape[0]
-        light = data["light/events", slice(0, num_light)][
-            ["id", "utime_ms"]
-        ]  # we have to try them all, events may not be time ordered
+        data["charge/events", "light/events", "light/wvfm", evid]
     except:
         print("No light information found, not plotting light detectors")
         return []
-
-    match_light = match_light_to_charge_event(charge, light, evid)
-
+    
+    match_light = match_light_to_charge_event(data, evid)
     if match_light is None:
         print(
             f"No light event matches found for charge event {evid}, not plotting light detectors"
         )
         return []
 
-    waveforms_all_detectors = get_waveforms_all_detectors(data, match_light)
+    waveforms_all_detectors = get_waveforms_all_detectors(match_light)
 
-    # make a list of the sum of the waveform and the channel index
-    # integral = np.sum(np.sum(waveforms_all_detectors, axis=2), axis=0)
-    # max_integral = np.max(integral)
-    # print(max_integral)
-    # index = np.arange(0, waveforms_all_detectors.shape[1], 1)
-
-    # plot for each of the 96 channels per tpc the sum of the adc values
     drawn_objects = []
     drawn_objects.extend(plot_light_traps(data, waveforms_all_detectors))
 
     return drawn_objects
 
 
-def match_light_to_charge_event(charge, light, evid):
+def match_light_to_charge_event(data, evid):
     """
     Match the light events to the charge event by looking at proximity in time.
     Use unix time for this, since it should refer to the same time in both readout systems.
     For now we just take all the light within 1s from the charge event time.
     """
-    matches = []
-    for i in range(len(light)):
-        if np.abs(light["utime_ms"][i][0] / 1000 - charge["unix_ts"][0]) < 0.5:
-            matches.append([charge["id"][0], light["id"][i]])
 
-    match_light = []
-    for i in range(len(matches)):
-        if (
-            matches[i][0] == evid
-        ):  # just checking that we get light for the right charge event
-            match_light.append(matches[i][1])
-    if len(match_light) == 0:
-        match_light = None  # no light for this charge event
+    match_light = data["charge/events", "light/events", "light/wvfm", evid]
 
     return match_light
 
 
-def get_waveforms_all_detectors(data, match_light):
+def get_waveforms_all_detectors(match_light):
     """
     Get the light waveforms for the matched light events.
     """
-    light_wvfm = data["/light/wvfm", match_light]
-
-    return light_wvfm["samples"]
+    n_matches = match_light["samples"].shape[1]
+    waveforms_all_detectors = match_light['samples'].reshape(n_matches,8,64,1000)
+    return waveforms_all_detectors
 
 
 def plot_light_traps(data, waveforms_all_detectors):
@@ -322,7 +299,8 @@ def plot_light_traps(data, waveforms_all_detectors):
         sum_photons = 0
         for adc, channel in sipms:
             wvfm = waveforms_all_detectors[:, adc, channel, :]
-            sum_photons += np.sum(wvfm, axis=0)
+            sum_wvfm = np.sum(wvfm, axis=0) # sum over the events
+            sum_photons += np.sum(sum_wvfm, axis=0) # sum over the time
         photon_sums.append(sum_photons)
     max_integral = np.max(photon_sums)
     
@@ -333,19 +311,20 @@ def plot_light_traps(data, waveforms_all_detectors):
         sum_photons = 0
         for adc, channel in sipms:
             wvfm = waveforms_all_detectors[:, adc, channel, :]
-            sum_photons += np.sum(wvfm, axis=0)   
+            sum_wvfm = np.sum(wvfm, axis=0)
+            sum_photons += np.sum(sum_wvfm, axis=0) 
         opid_str = f"opid_{opid}"
         light_color = [
             [
                 0.0,
                 get_continuous_color(
-                    COLORSCALE, intermed=max(0, sum(sum_photons)/max_integral)
+                    COLORSCALE, intermed=max(0, sum_photons/max_integral)
                 ),
             ],
             [
                 1.0,
                 get_continuous_color(
-                    COLORSCALE, intermed=max(0, sum(sum_photons)/max_integral)
+                    COLORSCALE, intermed=max(0, sum_photons/max_integral)
                 ),
             ],
         ]
@@ -359,7 +338,7 @@ def plot_light_traps(data, waveforms_all_detectors):
             opacity=0.2,
             hoverinfo="text",
             ids=[[opid_str, opid_str], [opid_str, opid_str]],
-            text=f"Optical detector {opid} waveform integral<br>{max(0,sum(sum_photons)):.2e}",
+            text=f"Optical detector {opid} waveform integral<br>{max(0,sum_photons):.2e}",
         )
 
         drawn_objects.append(light_plane)
@@ -378,7 +357,7 @@ def plot_waveform(data, evid, opid):
         print("No light information found, not plotting light waveform")
         return []
 
-    match_light = match_light_to_charge_event(charge, light, evid)
+    match_light = match_light_to_charge_event(data, evid)
 
     if match_light is None:
         print(
@@ -387,7 +366,7 @@ def plot_waveform(data, evid, opid):
         return []
 
     fig = go.Figure()
-    waveforms_all_detectors = get_waveforms_all_detectors(data, match_light)
+    waveforms_all_detectors = get_waveforms_all_detectors( match_light)
 
     channel_map_deluxe = pd.read_csv('sipm_channel_map.csv')
     sipms = channel_map_deluxe[channel_map_deluxe['det_id']==opid][['adc', 'channel']].values
@@ -395,7 +374,8 @@ def plot_waveform(data, evid, opid):
     sum_wvfm = np.array([0]*1000)
     for adc, channel in sipms:
         wvfm = waveforms_all_detectors[:, adc, channel, :]
-        sum_wvfm += np.sum(wvfm, axis=0)
+        event_sum_wvfm = np.sum(wvfm, axis=0) # sum over the events
+        sum_wvfm += event_sum_wvfm # sum over the sipms
 
     x = np.arange(0, 1000, 1)
     y = sum_wvfm
@@ -403,7 +383,9 @@ def plot_waveform(data, evid, opid):
     drawn_objects = go.Scatter(x=x, y=y, name=f"Channel sum for light trap {opid}", visible=True, showlegend=True)
     fig.add_traces(drawn_objects)
     for adc, channel in sipms:
-        fig.add_traces(go.Scatter(x=x, y=waveforms_all_detectors[:, adc, channel, :][0], visible="legendonly", showlegend=True, name=f"Channel {adc, channel}"))
+        wvfm = waveforms_all_detectors[:, adc, channel, :]
+        sum_wvfm = np.sum(wvfm, axis=0)
+        fig.add_traces(go.Scatter(x=x, y=sum_wvfm, visible="legendonly", showlegend=True, name=f"Channel {adc, channel}"))
 
     fig.update_xaxes(title_text="Time [ticks] (16 ns)")
     fig.update_yaxes(title_text="Adc counts")
