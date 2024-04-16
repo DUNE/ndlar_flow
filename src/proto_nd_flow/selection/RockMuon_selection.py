@@ -14,6 +14,7 @@ from sklearn.preprocessing import StandardScaler
 
 from scipy.spatial import ConvexHull
 from scipy.spatial.distance import cdist
+from scipy.ndimage import gaussian_filter
 
 import statistics
 
@@ -67,7 +68,8 @@ class RockMuonSelection(H5FlowStage):
         ('dx','f8'),
         ('x_mid','f8'),
         ('y_mid','f8'),
-        ('z_mid','f8')
+        ('z_mid','f8'),
+        ('t','f8')
     ])
 
     
@@ -295,7 +297,7 @@ class RockMuonSelection(H5FlowStage):
         hit_segments = []
 
         ref = []
-
+        
         for each_track in np.unique(muon_hits['rock_muon_id']):
             hits_wanted = muon_hits['rock_muon_id'] == each_track
 
@@ -303,8 +305,10 @@ class RockMuonSelection(H5FlowStage):
 
             ex_var, fit = self.PCAs(track)
             
-            #prompt_hits_constant = 70
-            final_hits_constant = 45
+            number_of_hits = len(track)
+            
+            #prompt_hits_constant = 100
+            final_hits_constant = 80
             choice = len(track)/final_hits_constant
             #Steps in beam direction using pca fit(z)
             step_size = -choice*abs(fit[0][2])
@@ -330,13 +334,16 @@ class RockMuonSelection(H5FlowStage):
                             hits_of_segment.append(segment)
                 
                         #If there is no segments in hits of segment and # of hits of the considered segments in less than min number of hits then still append this segment. This stops code for messing at when first segment of track isn't long enough
-                        elif (len(segment) <= min_number_of_hits) & (len(hits_of_segment) == 0):
+                        elif (len(segment) == min_number_of_hits) & (len(hits_of_segment) == 0):
                             hits_of_segment.append(segment)
 
                         #If # of hits of the considered segments is below min hits and there is already segments then considered this hits as part of the previous segment
-                        elif (len(segment) <= min_number_of_hits) & (len(hits_of_segment) != 0):
+                        elif (len(segment) == min_number_of_hits) & (len(hits_of_segment) != 0):
                             np.append(hits_of_segment[-1],segment)
-                    
+                        
+                        else:
+                            continue
+                        
                         hits_wanted = np.where(np.in1d(muon_hits['id'],segment['id']))[0]
                 
                         for hit in hits_wanted:
@@ -366,9 +373,11 @@ class RockMuonSelection(H5FlowStage):
 
                         # dQdx
                         Charge_of_segment = sum(hits_of_segment[-1]['Q'])
+                        
+                        #Drift time of segment
+                        drift_time = np.mean(hits_of_segment[-1]['t_drift'])
 
-
-                        hit_segments.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment,Length_of_segment, x_mid, y_mid, z_mid])
+                        hit_segments.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment,Length_of_segment, x_mid, y_mid, z_mid, drift_time])
                 
                         if len(each_tpc) == 0:
                             break
