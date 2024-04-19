@@ -86,8 +86,8 @@ class LightADC64EventGenerator(H5FlowGenerator):
         ('event', 'i4'),  # event number in data file
         ('sn', 'i4', (self.n_adcs,)),  # adc serial number
         ('ch', 'u1', (self.n_adcs, self.n_channels)),  # channel number
-        ('utime_ms', 'u8', (self.n_adcs, self.n_channels)),  # unix time [ms since epoch]
-        ('tai_ns', 'u8', (self.n_adcs, self.n_channels)),  # time since PPS [ns]
+        ('utime_ms', 'u8', (self.n_adcs)),  # unix time [ms since epoch]
+        ('tai_ns', 'u8', (self.n_adcs)),  # time since PPS [ns]
         ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels))  # boolean, 1 if channel present in event
     ])
 
@@ -220,8 +220,8 @@ class LightADC64EventGenerator(H5FlowGenerator):
                         event_arr[ievent]['event'] = event['serial']
                         event_arr[ievent]['sn'][iadc] = device['serial']
                         event_arr[ievent]['ch'][iadc, channels] = channels
-                        event_arr[ievent]['utime_ms'][iadc, channels] = header['unix']
-                        event_arr[ievent]['tai_ns'][iadc, channels] = time['tai_s']*1e9 + time['tai_ns']
+                        event_arr[ievent]['utime_ms'][iadc] = header['unix']
+                        event_arr[ievent]['tai_ns'][iadc] = time['tai_s']*1e9 + time['tai_ns']
                         event_arr[ievent]['wvfm_valid'][iadc, channels] = True
                         wvfm_arr[ievent]['samples'][iadc, channels] = data['voltage']
 

@@ -122,11 +122,10 @@ class WaveformAlign(H5FlowStage):
                     busy_wvfm, rising_edge, axis=-1) / np.take_along_axis(busy_d, rising_edge, axis=-1)
 
                 align_data['sample_idx'][:,adc] = rising_edge.ravel()
-
+            
             i_event_offset = np.argmax(align_data['sample_idx'], axis=-1)[...,np.newaxis]
             align_data['ns'] = np.take_along_axis(
-            ma.median(ma.array(event_data['tai_ns'],
-                mask=~event_data['wvfm_valid'].astype(bool)), axis=-1),
+            event_data['tai_ns'],
             i_event_offset, axis=-1).ravel()
         
 
