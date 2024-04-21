@@ -30,7 +30,23 @@ module_to_io_groups:
   2: [3, 4]
   3: [5, 6]
   4: [7, 8]
-
+# Parameters for generating channel by channel pedestals and larpix configuration values for adc->mV correction
+# Check these values for 2x2! May change, currently based on Bern module values.
+module_to_vref_dac:
+  1: 185
+  2: 182
+  3: 235
+  4: 235
+module_to_vcm_dac:
+  1: 41
+  2: 40
+  3: 68
+  4: 68
+module_to_vdda:
+  1: 1800
+  2: 1800
+  3: 1800
+  4: 1800
 # Light geometry parameters
 module_to_tpcs:
   1: [0, 1]
