@@ -14,7 +14,14 @@ params:
   # output
   hits_dset_name: 'charge/raw_hits'
 
-  # configuration parameters
-
-  configuration_file: '/global/cfs/cdirs/dune/www/data/Module1/TPC12/config_22-02-08_13-37-39.json'
+  ### configuration parameters
+  # Leave 'configuration_file' = '' to calculate vref, vcm values in flow (must specify vcm_dac and vref_dac in det prop file)
+  # Either load in pedestal json file or specify h5 file for pedestal run to generate pedestals on the fly (recommended!)
+  
+  configuration_file: '/global/cfs/cdirs/dune/www/data/Module1/TPC12/config_22-02-08_13-37-39.json' # leave empty string if want to use specified vref_dac and vcm_dac below
   pedestal_file: '/global/cfs/cdirs/dune/www/data/Module1/TPC12/dataRuns/Pedestal/packet_2022_02_08_01_40_31_CETevd_ped.json'
+  #pedestal_file: '/global/cfs/cdirs/dune/www/data/Module1/TPC12/dataRuns/packetData/packet_2022_02_08_01_40_31_CET.h5'
+  
+  # only matter if generating config dict and pedestal dict in flow
+  save_ped_json: True
+  save_config_json: True
