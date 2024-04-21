@@ -11,7 +11,7 @@ class CalibHitBuilder(H5FlowStage):
     '''
         Converts larpix data packets into hits - assigns geometric properties,
         filters by packet type, and performs the conversion from ADC -> mV above
-        pedestal.
+        pedestal. 
 
         The external data files used for ``pedestal_file`` and
         ``configuration_file`` are searched for in the current working
