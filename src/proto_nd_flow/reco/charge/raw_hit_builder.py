@@ -239,7 +239,7 @@ class RawHitBuilder(H5FlowStage):
                 f_ped.close()
                 ped_packets=0
                 if self.save_ped_json:
-                    with open(resources['Geometry'].det_geometry_file.split('/')[-1].strip('.yaml') + '_evd_ped.json', 'w') as fo:
+                    with open(resources['Geometry'].det_geometry_file.split('/')[-1].split('.')[0] + '_evd_ped.json', 'w') as fo:
                         json.dump(self.pedestal, fo, sort_keys=True, indent=4)
                 
     def load_configurations(self):
@@ -273,5 +273,5 @@ class RawHitBuilder(H5FlowStage):
                     vcm_dac=int(vcm_dac)
                     )
             if self.save_config_json:
-                with open(resources['Geometry'].det_geometry_file.split('/')[-1].strip('.yaml') + '_evd_config.json', 'w') as fo:
+                with open(resources['Geometry'].det_geometry_file.split('/')[-1].split('.')[0] + '_evd_config.json', 'w') as fo:
                     json.dump(self.configuration, fo, sort_keys=True, indent=4)
