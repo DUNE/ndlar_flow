@@ -25,6 +25,7 @@ WORKFLOW2='yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction.yaml
 WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml'
 WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration.yaml'
 WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration.yaml'
+WORKFLOW6='yamls/proto_nd_flow/workflows/charge/hough3d.yaml'
 
 HERE=`pwd`
 #cd ndlar_flow
@@ -37,7 +38,9 @@ if [ -e $OUTPUT_FILE ]; then
     rm $OUTPUT_FILE
 fi
 
-$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 -i $INPUT_FILE -o $OUTPUT_FILE
+# $H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 -i $INPUT_FILE -o $OUTPUT_FILE
+# $H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
+$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
 
 echo "Done!"
 echo "Output can be found at $OUTPUT_FILE"

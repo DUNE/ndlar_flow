@@ -1,0 +1,23 @@
+classname: Hough3D # reco/charge/hough3d.py
+path: proto_nd_flow.reco.charge.hough3d
+requires:
+  - 'charge/events'
+  - 'charge/calib_prompt_hits'
+  # - 'charge/calib_final_hits'
+  - name: 'packet_frac_backtrack'
+    path: ['charge/calib_final_hits','charge/calib_prompt_hits','charge/packets','mc_truth/packet_fraction']
+  - name: 'packet_seg_backtrack'
+    path: ['charge/calib_final_hits','charge/calib_prompt_hits','charge/packets','mc_truth/segments']
+
+
+params:
+  # inputs
+  events_dset_name: 'charge/events'
+  hits_name: 'charge/calib_prompt_hits'
+  # hits2_name: 'charge/calib_final_hits'
+  
+
+  # outputs
+  hough3d_dset_name: 'charge/hough3d'
+  mc_hit_frac_dset_name: 'mc_truth/hough3d_backtrack'
+
