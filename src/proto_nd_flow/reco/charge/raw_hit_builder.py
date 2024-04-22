@@ -73,6 +73,11 @@ class RawHitBuilder(H5FlowStage):
         vcm_mv=288
     ))
 
+    pedestal_configuration = defaultdict(lambda: dict(
+        vref_mv=1300,
+        vcm_mv=288
+    ))
+    
     #: pixel pedestal value
     pedestal = defaultdict(lambda: dict(
         pedestal_mv=580
@@ -123,7 +128,9 @@ class RawHitBuilder(H5FlowStage):
                                     packets_dset=self.packets_dset_name,
                                     ts_dset=self.ts_dset_name,
                                     pedestal_file=self.pedestal_file,
-                                    configuration_file=self.configuration_file
+                                    configuration_file=self.configuration_file,
+                                    save_ped_json=self.save_ped_json,
+                                    save_config_json=self.save_config_json
                                     )
 
         # then set up new datasets
@@ -192,7 +199,8 @@ class RawHitBuilder(H5FlowStage):
     
     @staticmethod
     def adc2mv(adc, ref, cm, bits=8):
-        return (ref-cm) * adc/(2**bits) + cm
+        #return (ref-cm) * adc/(2**bits) + cm
+        return (ref-cm) * adc/256. + cm
     
     def load_pedestals(self):
         if self.pedestal_file != '' and not resources['RunData'].is_mc:
@@ -214,29 +222,31 @@ class RawHitBuilder(H5FlowStage):
                     + ped_packets['chip_id'].astype(int))*64 \
                     + ped_packets['channel_id'].astype(int)
                 unique_id_sort = np.argsort(unique_id)
-                ped_packets[:] = ped_packets[unique_id_sort]
+                dataword = ped_packets['dataword'][unique_id_sort]
+                ped_packets=0 # clear some memory
+                #ped_packets[:] = ped_packets[unique_id_sort]
                 unique_id = unique_id[unique_id_sort]
-                
                 # find start and stop indices for each occurrance of a unique id.
                 # this helps to make generating pedestals much faster.
                 unique_id_set, start_indices = np.unique(unique_id, return_index=True)
                 end_indices = np.roll(start_indices, shift=-1)
-                end_indices[-1] = len(ped_packets) - 1
-    
+                end_indices[-1] = len(dataword) - 1
+                
                 unique_id_chunk_indices = {}
                 for val, start_idx, end_idx in zip(unique_id_set, start_indices, end_indices):
                     unique_id_chunk_indices[val] = (start_idx, end_idx)
-                
+                adc_range=np.arange(257)
                 # loop through each channel and calculate mean pedestal in mV
                 for unique in unique_id_set:
-                    vcm = self.configuration[unique]['vcm_mv']
-                    vref = self.configuration[unique]['vref_mv']
+                    vcm = self.pedestal_configuration[unique]['vcm_mv']
+                    vref = self.pedestal_configuration[unique]['vref_mv']
                 
                     start_index, stop_index = unique_id_chunk_indices[unique]
-                    adcs = ped_packets['dataword'][start_index:stop_index]
+                    #adcs = ped_packets[start_index:stop_index]['dataword']
+                    adcs = dataword[start_index:stop_index]
                     if len(adcs) < 1:
                         continue
-                    vals,bins = np.histogram(adcs,bins=np.arange(257))
+                    vals,bins = np.histogram(adcs,bins=adc_range)
                     peak_bin = np.argmax(vals)
                     min_idx,max_idx = max(peak_bin-mean_trunc,0), min(peak_bin+mean_trunc,len(vals))
                     ped_adc = np.average(bins[min_idx:max_idx]+0.5, weights=vals[min_idx:max_idx])
@@ -245,7 +255,7 @@ class RawHitBuilder(H5FlowStage):
                         pedestal_mv=float(self.adc2mv(ped_adc,vref,vcm))
                     )
                 f_ped.close()
-                ped_packets=0
+                
                 if self.save_ped_json:
                     with open(resources['Geometry'].det_geometry_file.split('/')[-1].split('.')[0] + '_evd_ped.json', 'w') as fo:
                         json.dump(self.pedestal, fo, sort_keys=True, indent=4)
@@ -257,11 +267,11 @@ class RawHitBuilder(H5FlowStage):
                 for key, value in json.load(infile).items():
                     self.configuration[key] = value
         elif self.configuration_file == '' and not resources['RunData'].is_mc:
-            # Calculate configuration values and make dictionary on the fly
+            # Calculate configuration values and make dictionary on the fly. Note that one can specify different configuration values for self-trigger and pedestal
+            module_to_vref_dac_vcm_dac_data = resources['Geometry'].det_geometry_yaml['module_to_vref_dac_vcm_dac']
+            module_to_vref_dac_vcm_dac_pedestal = resources['Geometry'].det_geometry_yaml['module_to_vref_dac_vcm_dac_pedestal']
             module_to_io_groups = resources['Geometry'].det_geometry_yaml['module_to_io_groups']
             io_group_to_module = {value: key for key, values in module_to_io_groups.items() for value in values}
-            module_to_vcm_dac = resources['Geometry'].det_geometry_yaml['module_to_vcm_dac']
-            module_to_vref_dac = resources['Geometry'].det_geometry_yaml['module_to_vref_dac']
             module_to_vdda = resources['Geometry'].det_geometry_yaml['module_to_vdda']
             io_groups = resources['Geometry'].pixel_coordinates_2D.keys()[0]
             unique = ((resources['Geometry'].pixel_coordinates_2D.keys()[0]*256 \
@@ -270,9 +280,10 @@ class RawHitBuilder(H5FlowStage):
                     + resources['Geometry'].pixel_coordinates_2D.keys()[3]
             # loop through the channels
             for i in range(len(resources['Geometry'].pixel_coordinates_2D.keys()[0])):
+                # set data configuration
                 module_id = io_group_to_module[io_groups[i]]
-                vcm_dac = module_to_vcm_dac[module_id]
-                vref_dac = module_to_vref_dac[module_id]
+                vcm_dac = module_to_vref_dac_vcm_dac_data[module_id][1]
+                vref_dac = module_to_vref_dac_vcm_dac_data[module_id][0]
                 vdda = module_to_vdda[module_id]
                 self.configuration[str(unique[i])] = dict(
                     vref_mv=float(self.dac2mv(vref_dac, vdda)),
@@ -280,6 +291,19 @@ class RawHitBuilder(H5FlowStage):
                     vref_dac=int(vref_dac),
                     vcm_dac=int(vcm_dac)
                     )
+                # set pedestal configuration
+                vcm_dac = module_to_vref_dac_vcm_dac_pedestal[module_id][1]
+                vref_dac = module_to_vref_dac_vcm_dac_pedestal[module_id][0]
+                self.pedestal_configuration[str(unique[i])] = dict(
+                    vref_mv=float(self.dac2mv(vref_dac, vdda)),
+                    vcm_mv=float(self.dac2mv(vcm_dac, vdda)),
+                    vref_dac=int(vref_dac),
+                    vcm_dac=int(vcm_dac)
+                    )
             if self.save_config_json:
-                with open(resources['Geometry'].det_geometry_file.split('/')[-1].split('.')[0] + '_evd_config.json', 'w') as fo:
-                    json.dump(self.configuration, fo, sort_keys=True, indent=4)
+                with open(resources['Geometry'].det_geometry_file.split('/')[-1].split('.')[0] + f'_evd_data_config.json', 'w') as fo:
+                        json.dump(self.configuration, fo, sort_keys=True, indent=4)
+                with open(resources['Geometry'].det_geometry_file.split('/')[-1].split('.')[0] + f'_evd_pedestal_config.json', 'w') as fo:
+                                json.dump(self.pedestal_configuration, fo, sort_keys=True, indent=4)
+
+                        

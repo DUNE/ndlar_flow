@@ -26,10 +26,10 @@ tile_map:
   - [[16,14,12,10],[15,13,11,9]]
 module_to_io_groups:
   1: [1,2]
-module_to_vref_dac:
-  1: 182
-module_to_vcm_dac:
-  1: 40
+module_to_vref_dac_vcm_dac:
+  1: [182, 40]
+module_to_vref_dac_vcm_dac_pedestal:
+  1: [182, 40]
 module_to_vdda:
   1: 1800
 # Light simulation parameters
