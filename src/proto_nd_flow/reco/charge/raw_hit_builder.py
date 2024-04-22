@@ -16,6 +16,10 @@ class RawHitBuilder(H5FlowStage):
         The external data files used for ``pedestal_file`` and
         ``configuration_file`` are searched for in the current working
         directory, if the paths are not specified as global paths.
+        
+        To generate channel by channel pedestals on the fly, set ``pedestal_file`` to a path to a pedestal run h5 file. 
+        To calculate larpix config values (vcm_mv and vref_mv) on the fly, leave ``configuration_file`` as an empty string ('') 
+        and specify vcm_dac and vref_dac.
 
         Parameters:
          - ``hits_dset_name`` : ``str``, required, output dataset path
@@ -24,7 +28,9 @@ class RawHitBuilder(H5FlowStage):
          - ``ts_dset_name`` : ``str``, required, input dataset path for clock-corrected packet timestamps
          - ``pedestal_file`` : ``str``, optional, path to a pedestal json file
          - ``configuration_file`` : ``str``, optional, path to a vref/vcm config json file
-
+         - ``save_ped_json`` : ``bool``, optional, True to save generated pedestal dictionary to json file
+         - ``save_config_json`` : ``bool``, optional, True to save generated configuration dictionary to json file
+         
         ``packets_dset_name``, ``ts_dset_name``, and ``packets_index_name`` are required in
         the data cache. ``packets_index_name`` must point to the index for ``packets_dset_name``.
 
@@ -47,6 +53,8 @@ class RawHitBuilder(H5FlowStage):
                     ts_dset_name: 'charge/packets_corr_ts'
                     pedestal_file: 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
                     configuration_file: 'evd_config_21-03-31_12-36-13.json'
+                    save_ped_json: False
+                    save_config_json: False
 
         ``raw_hits`` datatype::
 
@@ -99,9 +107,9 @@ class RawHitBuilder(H5FlowStage):
         self.ts_dset_name = params.get('ts_dset_name')
         self.pedestal_file = params.get('pedestal_file', '')
         self.configuration_file = params.get('configuration_file', '')
-        self.save_ped_json = params.get('save_ped_json')
-        self.save_config_json = params.get('save_config_json')
-
+        self.save_ped_json = params.get('save_ped_json', False)
+        self.save_config_json = params.get('save_config_json', False)
+        
     def init(self, source_name):
         super(RawHitBuilder, self).init(source_name)
         self.load_configurations()
