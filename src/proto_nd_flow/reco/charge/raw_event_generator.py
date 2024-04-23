@@ -3,6 +3,7 @@ import numpy.ma as ma
 from numpy.lib import recfunctions as rfn
 import h5py
 import logging
+import warnings
 from math import ceil
 from tqdm import tqdm
 
@@ -163,6 +164,19 @@ class RawEventGenerator(H5FlowGenerator):
                 print("Hope you are not processing neutrino simulation! There is no information for neutrino interactions.")
                 pass
 
+        # set up attribute name for vertex_id and traj_id
+        if 'file_vertex_id' in self.input_fh['vertices'].dtype.names:
+            self.vertex_id_name = 'file_vertex_id'
+        else:
+            self.vertex_id_name = 'vertex_id'
+            print("Using 'vertex_id'(unique for beam simulation, but not for mpvmpr) instead of 'file_vertex_id'.")
+
+        if 'file_traj_id' in self.input_fh['trajectories'].dtype.names:
+            self.traj_id_name = 'file_traj_id'
+        else:
+            self.traj_id_name = 'traj_id'
+            warnings.warn("Using 'traj_id' instead of 'file_traj_id'. 'traj_id' is not unique across the file and will cause reference issues.")
+
         # initialize data objects
         self.data_manager.create_dset(self.raw_event_dset_name, dtype=self.raw_event_dtype)
         self.data_manager.create_dset(self.packets_dset_name, dtype=self.packets_dtype)
@@ -257,24 +271,24 @@ class RawEventGenerator(H5FlowGenerator):
             # create references between trajectories and tracks
             # eventID --> vertexID for latest production files
             if self.is_mc_neutrino:
-                stack_evid = self.mc_stack['vertex_id'][:]
-            intr_evid = self.mc_events['vertex_id'][:]
-            traj_evid = self.mc_trajectories['vertex_id'][:]
-            tracks_evid = self.mc_tracks['vertex_id'][:]
+                stack_evid = self.mc_stack[self.vertex_id_name][:]
+            intr_evid = self.mc_events[self.vertex_id_name][:]
+            traj_evid = self.mc_trajectories[self.vertex_id_name][:]
+            tracks_evid = self.mc_tracks[self.vertex_id_name][:]
             evs, ev_traj_start, ev_track_start = np.intersect1d(
                 traj_evid, tracks_evid, return_indices=True)
             evs, ev_traj_end, ev_track_end = np.intersect1d(
                 traj_evid[::-1], tracks_evid[::-1], return_indices=True)
-            ev_traj_end = len(self.mc_trajectories['vertex_id']) - ev_traj_end
-            ev_track_end = len(self.mc_tracks['vertex_id']) - ev_track_end
+            ev_traj_end = len(self.mc_trajectories[self.vertex_id_name]) - ev_traj_end
+            ev_track_end = len(self.mc_tracks[self.vertex_id_name]) - ev_track_end
             truth_slice = slice(
                 ceil(len(evs) / self.size * self.rank),
                 ceil(len(evs) / self.size * (self.rank + 1)))
 
             if self.is_mc_neutrino:
-                stack_trackid = self.mc_stack['traj_id'][:]
-            traj_trackid = self.mc_trajectories['traj_id'][:]
-            tracks_trackid = self.mc_tracks['traj_id'][:]
+                stack_trackid = self.mc_stack[self.traj_id_name][:]
+            traj_trackid = self.mc_trajectories[self.traj_id_name][:]
+            tracks_trackid = self.mc_tracks[self.traj_id_name][:]
             iter_ = tqdm(range(truth_slice.start, truth_slice.stop), smoothing=1, desc='generating truth references') if self.rank == 0 else range(truth_slice.start, truth_slice.stop)
             for i in iter_:
                 if i < len(evs):
