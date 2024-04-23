@@ -194,12 +194,11 @@ class RawHitBuilder(H5FlowStage):
         return dw / 256. * (vref - vcm) + vcm - ped
     
     @staticmethod
-    def dac2mv(dac, vdda, bits=8):
-        return vdda * dac/(2**bits)
+    def dac2mv(dac, vdda):
+        return vdda * dac/256.
     
     @staticmethod
-    def adc2mv(adc, ref, cm, bits=8):
-        #return (ref-cm) * adc/(2**bits) + cm
+    def adc2mv(adc, ref, cm):
         return (ref-cm) * adc/256. + cm
     
     def load_pedestals(self):
@@ -238,9 +237,9 @@ class RawHitBuilder(H5FlowStage):
                 adc_range=np.arange(257)
                 # loop through each channel and calculate mean pedestal in mV
                 for unique in unique_id_set:
-                    vcm = self.pedestal_configuration[unique]['vcm_mv']
-                    vref = self.pedestal_configuration[unique]['vref_mv']
-                
+                    vcm = self.pedestal_configuration[int(unique)]['vcm_mv']
+                    vref = self.pedestal_configuration[int(unique)]['vref_mv']
+                    
                     start_index, stop_index = unique_id_chunk_indices[unique]
                     #adcs = ped_packets[start_index:stop_index]['dataword']
                     adcs = dataword[start_index:stop_index]
@@ -251,7 +250,7 @@ class RawHitBuilder(H5FlowStage):
                     min_idx,max_idx = max(peak_bin-mean_trunc,0), min(peak_bin+mean_trunc,len(vals))
                     ped_adc = np.average(bins[min_idx:max_idx]+0.5, weights=vals[min_idx:max_idx])
 
-                    self.pedestal[str(unique)] = dict(
+                    self.pedestal[int(unique)] = dict(
                         pedestal_mv=float(self.adc2mv(ped_adc,vref,vcm))
                     )
                 f_ped.close()
@@ -285,7 +284,7 @@ class RawHitBuilder(H5FlowStage):
                 vcm_dac = module_to_vref_dac_vcm_dac_data[module_id][1]
                 vref_dac = module_to_vref_dac_vcm_dac_data[module_id][0]
                 vdda = module_to_vdda[module_id]
-                self.configuration[str(unique[i])] = dict(
+                self.configuration[int(unique[i])] = dict(
                     vref_mv=float(self.dac2mv(vref_dac, vdda)),
                     vcm_mv=float(self.dac2mv(vcm_dac, vdda)),
                     vref_dac=int(vref_dac),
@@ -294,7 +293,7 @@ class RawHitBuilder(H5FlowStage):
                 # set pedestal configuration
                 vcm_dac = module_to_vref_dac_vcm_dac_pedestal[module_id][1]
                 vref_dac = module_to_vref_dac_vcm_dac_pedestal[module_id][0]
-                self.pedestal_configuration[str(unique[i])] = dict(
+                self.pedestal_configuration[int(unique[i])] = dict(
                     vref_mv=float(self.dac2mv(vref_dac, vdda)),
                     vcm_mv=float(self.dac2mv(vcm_dac, vdda)),
                     vref_dac=int(vref_dac),
@@ -304,6 +303,6 @@ class RawHitBuilder(H5FlowStage):
                 with open(resources['Geometry'].det_geometry_file.split('/')[-1].split('.')[0] + f'_evd_data_config.json', 'w') as fo:
                         json.dump(self.configuration, fo, sort_keys=True, indent=4)
                 with open(resources['Geometry'].det_geometry_file.split('/')[-1].split('.')[0] + f'_evd_pedestal_config.json', 'w') as fo:
-                                json.dump(self.pedestal_configuration, fo, sort_keys=True, indent=4)
+                        json.dump(self.pedestal_configuration, fo, sort_keys=True, indent=4)
 
                         
