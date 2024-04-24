@@ -76,7 +76,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
         sync_channel = 32,
         sync_threshold = 5000,
         sync_buffer = 200,        
-        clock_timestamp_factor = 0.625,
+        clock_timestamp_factor = 1,
         utime_ms_window = 1000,
         tai_ns_window = 1000,
         )
