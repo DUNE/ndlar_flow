@@ -262,7 +262,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             rollover_ticks=self.rollover_ticks,
         )
 
-    def build_events(self, packets, unix_ts, mc_assn=None, ts=None):
+    def build_events(self, packets, unix_ts, mc_assn=None, ts=None, return_ts=False):
         # fetch attribute from appropriate process
         self.cross_rank_get_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
 
@@ -326,6 +326,10 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             if mc_assn is not None:
                 self.event_buffer_mc_assn = np.empty((0,), dtype=mc_assn.dtype)
             self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
+            
+            if return_ts: 
+                return (([], []), []) if mc_assn is None \
+                else (([], [], []), [])
             return ([], []) if mc_assn is None \
                 else ([], [], [])
         if not len(event_start_timestamp):
@@ -339,6 +343,10 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             if mc_assn is not None:
                 self.event_buffer_mc_assn = mc_assn[mask]
             self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
+            if return_ts: 
+                return (([], []), []) if mc_assn is None \
+                else (([], [], []), [])
+
             return ([], []) if mc_assn is None \
                 else ([], [], [])
 
@@ -377,11 +385,17 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         is_event = np.r_[False, event_mask[event_idcs]]
 
         events = np.split(packets, event_idcs)
+        event_ts = np.split(ts, event_idcs)
+        event_ts = list( [ np.min(times) for i, times in enumerate(event_ts) if is_event[i] ]  )
         event_unix_ts = np.split(unix_ts, event_idcs)
         if mc_assn is not None:
             event_mc_assn = np.split(mc_assn, event_idcs)
         
         # only return packets from events
+        if return_ts:
+            return (zip(*[v for i, v in enumerate(zip(events, event_unix_ts)) if is_event[i]]), event_ts) if mc_assn is None \
+                else (zip(*[v for i, v in enumerate(zip(events, event_unix_ts, event_mc_assn)) if is_event[i]]), event_ts)
+
         return zip(*[v for i, v in enumerate(zip(events, event_unix_ts)) if is_event[i]]) if mc_assn is None \
             else zip(*[v for i, v in enumerate(zip(events, event_unix_ts, event_mc_assn)) if is_event[i]])
       
@@ -458,12 +472,14 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         event_unix_ts = []
         event_mc_assn = [] if mc_assn is not None else None
        
+        start_times = []
+        
         # Mask to keep track of packets associated to beam events
         # Only used if off-beam events are built later with unused packets
         used_mask = np.zeros( len(unix_ts) ) < -1
-
         for i, start_idx in enumerate(beam_trigger_idxs):
             this_trig_time = ts[start_idx]
+            start_times.append(this_trig_time)
             # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
             hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & (packets['io_group'] == self.trig_io_grp) & (packets['packet_type'] == 7))
             mask = ((ts - this_trig_time) >= 0) & ((ts - this_trig_time) <= self.window) & hotfix_mask
@@ -489,13 +505,15 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         
         off_beam_events, off_beam_event_unix_ts, off_beam_event_mc_assn = [], [], []
         if not mc_assn is None:
-            off_beam_events_list = list(off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], mc_assn[~used_mask], ts=ts[~used_mask]))
+            (off_beam_events_list, off_beam_ts) = off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], mc_assn[~used_mask], ts=ts[~used_mask], return_ts=True)
         
+            off_beam_events_list=list(off_beam_events_list)
             off_beam_events = list(off_beam_events_list[0])
             off_beam_event_unix_ts = list(off_beam_events_list[1]) 
             off_beam_event_mc_assn = list(off_beam_events_list[2])
         else:
-            off_beam_events_list = list(off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], mc_assn, ts[~used_mask])) 
+            (off_beam_events_list, off_beam_ts) = off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], mc_assn, ts[~used_mask], return_ts=True) 
+            off_beam_events_list=list(off_beam_events_list)
             off_beam_events = list(off_beam_events_list[0]) 
             off_beam_event_unix_ts = list(off_beam_events_list[1]) 
 
@@ -510,6 +528,12 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
 
         full_event_unix_ts = event_unix_ts + off_beam_event_unix_ts
         if not mc_assn is None: full_event_mc_assn = event_mc_assn + off_beam_event_mc_assn
+
+        sorted_event_indices = np.argsort( start_times + off_beam_ts   )
+        full_events = [full_events[index] for index in sorted_event_indices]
+        full_event_unix_ts = [full_event_unix_ts[index] for index in sorted_event_indices]
+
+        if not mc_assn is None: full_event_mc_assn = [full_event_mc_assn[index] for index in sorted_event_indices]
 
         return zip(*[v for v in zip(full_events, full_event_unix_ts)]) if mc_assn is None \
                 else zip(*[v for v in zip(full_events, full_event_unix_ts, full_event_mc_assn)])
