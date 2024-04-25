@@ -51,7 +51,7 @@ app.layout = html.Div(
                     "margin": "0",
                 },
                 pause_button=True,
-                filetypes=["h5"],
+                filetypes=["hdf5", "h5"],
             ),
         ),
         # File input
