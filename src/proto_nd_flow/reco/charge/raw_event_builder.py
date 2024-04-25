@@ -262,7 +262,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             rollover_ticks=self.rollover_ticks,
         )
 
-    def build_events(self, packets, unix_ts, mc_assn=None):
+    def build_events(self, packets, unix_ts, mc_assn=None, ts=None):
         # fetch attribute from appropriate process
         self.cross_rank_get_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
 
@@ -278,22 +278,23 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         # sort packets to fix 512 bug
         packets = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
 
-        # correct for rollovers
-        rollover = np.zeros((len(packets),), dtype='i8')
-        for io_group in np.unique(packets['io_group']):
-            # find rollovers
-            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type'] == 83)
-            rollover[mask] = self.rollover_ticks
-            # calculate sum of rollovers
-            mask = (packets['io_group'] == io_group)
-            rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
-            # correct for readout delay (only in real data)
-            if mc_assn is None:
-                mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
-                    & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
-                rollover[mask] -= self.rollover_ticks
+        if ts is None:
+            # correct for rollovers
+            rollover = np.zeros((len(packets),), dtype='i8')
+            for io_group in np.unique(packets['io_group']):
+                # find rollovers
+                mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type'] == 83)
+                rollover[mask] = self.rollover_ticks
+                # calculate sum of rollovers
+                mask = (packets['io_group'] == io_group)
+                rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
+                # correct for readout delay (only in real data)
+                if mc_assn is None:
+                    mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
+                        & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
+                    rollover[mask] -= self.rollover_ticks
 
-        ts = packets['timestamp'].astype('i8') + rollover
+            ts = packets['timestamp'].astype('i8') + rollover
 
         sorted_idcs = np.argsort(ts)
         ts = ts[sorted_idcs]
@@ -393,17 +394,26 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     default_rollover_ticks = 1E7
     default_trig_io_grp = 1
     
+    default_build_off_beam_events=False
+    default_off_beam_window = 1820 // 2
+    default_off_beam_threshold = 10
+
     def __init__(self, **params):
         super(ExtTrigRawEventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
         self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
         self.trig_io_grp = params.get('trig_io_grp', self.default_trig_io_grp)
+        self.build_off_beam_events = params.get('build_off_beam_events', self.default_build_off_beam_events)
+        self.off_beam_window = params.get('off_beam_window', self.default_off_beam_window)
+        self.off_beam_threshold = params.get('off_beam_threshold', self.default_off_beam_threshold)
+        self.VALIDATE_HACK = params.get('VALIDATE_HACK', False)
+
         self.event_buffer = np.empty((0,))  
         self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
         self.event_buffer_mc_assn = np.empty((0,))
         self.prepend_count = 0  
         self.last_beam_trigger_idx = None
-
+         
     def get_config(self):
         return dict(
             window=self.window,
@@ -426,20 +436,32 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         ts = packets['timestamp'].astype('i8') + rollover
         sorted_idcs = np.argsort(ts)
         ts = ts[sorted_idcs]
-        
+
         packets = packets[sorted_idcs]
         unix_ts = unix_ts[sorted_idcs]
         if mc_assn is not None:
             mc_assn = mc_assn[sorted_idcs]
         
         beam_trigger_idxs = np.where((packets['io_group'] == self.trig_io_grp) & (packets['packet_type'] == 7))[0]
+        if self.VALIDATE_HACK: 
+            n_orig = len(beam_trigger_idxs)
+            beam_trigger_idxs = beam_trigger_idxs[::3]
+            print('\n*****************\nValidation HACK! Ommiting beam some triggers:')
+            print('Total beam triggers:', len(beam_trigger_idxs))
+            print('Total off-beam:', n_orig-len(beam_trigger_idxs))
+            print('\n*****************\n')
+
         if len(beam_trigger_idxs) == 0:
             return ([], []) if mc_assn is None else ([], [], [])
 
         events = []
         event_unix_ts = []
         event_mc_assn = [] if mc_assn is not None else None
-        
+       
+        # Mask to keep track of packets associated to beam events
+        # Only used if off-beam events are built later with unused packets
+        used_mask = np.zeros( len(unix_ts) ) < -1
+
         for i, start_idx in enumerate(beam_trigger_idxs):
             this_trig_time = ts[start_idx]
             # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
@@ -450,6 +472,44 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             if mc_assn is not None:
                 event_mc_assn.append(mc_assn[mask])
 
-        return zip(*[v for v in zip(events, event_unix_ts)]) if mc_assn is None \
-            else zip(*[v for v in zip(events, event_unix_ts, event_mc_assn)])
+            used_mask = np.logical_or( used_mask, mask )
 
+        
+        if not self.build_off_beam_events:
+            return zip(*[v for v in zip(events, event_unix_ts)]) if mc_assn is None \
+                else zip(*[v for v in zip(events, event_unix_ts, event_mc_assn)])
+
+        # build off beam events using SymmetricRawEventBuilder
+        if self.VALIDATE_HACK: print('USING OFF BEAM BUILDER!!')
+        off_beam_config = {'window' : self.off_beam_window,
+                           'threshold' : self.off_beam_threshold,
+                           'rollover_ticks' : self.rollover_ticks
+                          }
+        off_beam_builder = SymmetricWindowRawEventBuilder( **off_beam_config )
+        
+        off_beam_events, off_beam_event_unix_ts, off_beam_event_mc_assn = [], [], []
+        if not mc_assn is None:
+            off_beam_events_list = list(off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], mc_assn[~used_mask], ts=ts[~used_mask]))
+        
+            off_beam_events = list(off_beam_events_list[0])
+            off_beam_event_unix_ts = list(off_beam_events_list[1]) 
+            off_beam_event_mc_assn = list(off_beam_events_list[2])
+        else:
+            off_beam_events_list = list(off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], mc_assn, ts[~used_mask])) 
+            off_beam_events = list(off_beam_events_list[0]) 
+            off_beam_event_unix_ts = list(off_beam_events_list[1]) 
+
+        if self.VALIDATE_HACK:
+            print('N Beam events found:', len(events))
+            print('N Off beam events:', len(off_beam_events))
+
+        full_events = events + off_beam_events
+
+        if self.VALIDATE_HACK:
+            print('Total events returning:', len(full_events))
+
+        full_event_unix_ts = event_unix_ts + off_beam_event_unix_ts
+        if not mc_assn is None: full_event_mc_assn = event_mc_assn + off_beam_event_mc_assn
+
+        return zip(*[v for v in zip(full_events, full_event_unix_ts)]) if mc_assn is None \
+                else zip(*[v for v in zip(full_events, full_event_unix_ts, full_event_mc_assn)])
