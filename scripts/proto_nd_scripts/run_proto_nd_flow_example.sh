@@ -11,13 +11,14 @@ OUTPUT_DIR=`pwd` #!!! change me
 OUTPUT_NAME=(${INPUT_FILE//"/"/ })
 OUTPUT_NAME=${OUTPUT_NAME[-1]}
 OUTPUT_FILE="${OUTPUT_DIR}/${OUTPUT_NAME}"
+OUTPUT_FILE2=${OUTPUT_FILE//.h5/.proto_nd_flow_test.h5}
 OUTPUT_FILE=${OUTPUT_FILE//.h5/.proto_nd_flow.h5}
 echo ${OUTPUT_FILE}
 
 # for running on a login node
 H5FLOW_CMD='h5flow'
 # for running on a single compute node with 32 cores
-#H5FLOW_CMD='srun -n32 h5flow'
+# H5FLOW_CMD='sbatch -C cpu -N 1 -J hough_test -t 30:00 -o test.out --export=ALL h5flow'
 
 # run all stages
 WORKFLOW1='yamls/proto_nd_flow/workflows/charge/charge_event_building.yaml'
@@ -32,18 +33,28 @@ HERE=`pwd`
 # assumes this is being run from ndlar_flow/scripts/proto_nd_flow:
 cd ../../
 
-# avoid being asked if we want to overwrite the file if it exists.
-# this is us answering "yes".
-if [ -e $OUTPUT_FILE ]; then
-    rm $OUTPUT_FILE
+# # avoid being asked if we want to overwrite the file if it exists.
+# # this is us answering "yes".
+# if [ -e $OUTPUT_FILE ]; then
+#     rm $OUTPUT_FILE
+# fi
+# # $H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 -i $INPUT_FILE -o $OUTPUT_FILE
+# # $H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
+# # $H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
+# $H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 -i $INPUT_FILE -o $OUTPUT_FILE
+
+# echo "Done!"
+# echo "Output can be found at $OUTPUT_FILE"
+
+
+if [ -e $OUTPUT_FILE2 ]; then
+    rm $OUTPUT_FILE2
 fi
 
-# $H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 -i $INPUT_FILE -o $OUTPUT_FILE
-# $H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
-$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
+$H5FLOW_CMD -c $WORKFLOW6 -i $OUTPUT_FILE -o $OUTPUT_FILE2
 
 echo "Done!"
-echo "Output can be found at $OUTPUT_FILE"
+echo "Output can be found at $OUTPUT_FILE2"
 
 cd ${HERE}
 

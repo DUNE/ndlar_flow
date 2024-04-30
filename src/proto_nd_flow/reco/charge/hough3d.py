@@ -1,9 +1,16 @@
+import math
+import pickle as pkl
+
 import numpy as np
+import numpy.lib.recfunctions as rfn
+import numpy.ma as ma
+from scipy.linalg import eigh
+
+from h5flow.core import H5FlowStage, resources
+
 # import numpy.ma as ma
 # import logging
 # from collections import defaultdict
-
-from h5flow.core import H5FlowStage, resources
 
 # from proto_nd_flow.reco.charge.calib_prompt_hits import CalibHitBuilder
 
@@ -95,11 +102,14 @@ class Hough3D(H5FlowStage):
         # self.merge_mode = 'last-first'
         # self.merge_cut = 50 # CRS ticks
         self.mc_hit_frac_dset_name = params.get('mc_hit_frac_dset_name','mc_truth/hough3d_backtrack')
-
         # self.merge_mode = self.merge_mode.lower()
         # assert self.merge_mode in self.valid_merge_modes, f'invalid merge mode: {self.merge_mode}'
         # self.max_contrib_segments = params.get('max_contrib_segments','')
-
+        with open('/global/homes/s/seschwar/sphere.pkl','rb') as f:
+            sphere_dict = pkl.load(f)
+        # try:
+        self.sphere = np.array(sphere_dict['unique_vertices'][self.sphere_granularity])
+        # except:print('')
     def init(self, source_name):
         super(Hough3D, self).init(source_name)
         # Remove below? #
@@ -115,6 +125,13 @@ class Hough3D(H5FlowStage):
         # set up new datasets
         self.data_manager.create_dset(self.hough3d_dset_name, dtype=self.hough3d_out_dtype)
         self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype) # Keep or no? Seems fishy...
+
+        self.data_manager.create_ref(source_name,self.hough3d_dset_name)
+        self.data_manager.create_ref(self.events_dset_name,self.hough3d_dset_name)
+        # self.data_manager.create_ref(self.calib_hits_dset_name, self.packets_dset_name) # Seems good to remove...
+        self.data_manager.create_ref(self.hits_name, self.hough3d_dset_name) # Need to keep
+        # self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name) # Keep or no? (connected to above)
+
         # self.create_ref()
 
         # self.data_manager.create_dset(self.merged_name, dtype=self.merged_dtype)
@@ -124,207 +141,6 @@ class Hough3D(H5FlowStage):
         # self.data_manager.create_ref(self.merged_name,self.mc_hit_frac_dset_name)
         # self.data_manager.create_ref(self.events_dset_name, self.merged_name)
 
-    {# #@staticmethod
-    # def merge_hits(self,hits, weights, seg_fracs, dt_cut, sum_fields=None, weighted_mean_fields=None, max_steps=-1, mode='last-first'):
-    #     '''
-    #     Combines hits along the second axis on unique channels with a delta t less than dt_cut. Continues
-    #     until no hits (or merged hits) are within dt_cut of each other
-
-    #     :param hits: original hits array, shape: (N,M)
-
-    #     :param weights: values used for weighted mean, shape: (N,M)
-
-    #     :param fracs: fractional contributions of true segments per packet
-
-    #     :param dt_cut: delta t cut to merge hits (float) [CRS ticks]
-
-    #     :sum_fields: list of fields in ``hits`` and that should be *summed* when combined, must not be in ``weighted_mean_fields``
-
-    #     :weighted_mean_fields: list of fields in ``hits`` and that should be averaged using the weights when combined, must not be in ``sum_fields``
-
-    #     :param max_steps: optional, maximum number of merges to apply to pairs of neighboring hits (<0 == no limit, 0 == skip merging, >0 == limit steps)
-
-    #     :param mode: optional, merging strategy, either `'last-first'` (on each iteration merges the last hit pair) or `'pairwise'` (on each iteration merges each unique hit pair)
-
-    #     :returns: new hit array, shape: (N,m), new hit charge array, shape: (N,m), and an index array with shape (L,2), [:,0] being the index into the original hit array and [:,1] being the flattened index into the compressed new array
-
-    #     '''
-
-    #     has_mc_truth = seg_fracs[0] is not None
-    #     iteration_count = 0
-    #     mask = hits.mask['id'].copy()
-    #     new_hits = hits.data.copy()
-    #     weights = weights.data.copy()
-    #     old_ids = hits.data['id'].copy()[...,np.newaxis]
-    #     old_id_mask = hits.mask['id'].copy()[...,np.newaxis]
-    #     if has_mc_truth:
-    #         new_seg_bt = np.array(seg_fracs[0])
-    #         new_frac_bt = np.array(seg_fracs[1])
-    #         hit_contributions = np.full(shape=weights.shape+(3,self.max_contrib_segments),fill_value=0.)
-    #         # initialize hit contribution lists with unmerged data.
-    #         # [there is probably a more pythonic way of doing this...]
-    #         for it, q in np.ndenumerate(weights):
-    #             if len(new_frac_bt[it]) > 1:
-    #                 print('!!!!!!!!!!!!!!!!!')
-    #                 break
-    #             counter=0
-    #             for entry_it, entry in enumerate(new_frac_bt[it][0]):
-    #                 if abs(entry) < 0.001: continue
-    #                 hit_contributions[it][0][counter] = q
-    #                 hit_contributions[it][1][counter] = new_frac_bt[it][0][entry_it]
-    #                 hit_contributions[it][2][counter] = new_seg_bt[it][0][entry_it]['segment_id']
-    #                 counter+=1
-
-    #     while new_hits.size > 0 and iteration_count != max_steps:
-    #         iteration_count += 1
-    #         # algorithm is iterative, but typically only needs to loop a few (~2-3) times
-    #         # so we'll spit a warning if we reach the maximum number of steps
-    #         if iteration_count == max_steps:
-    #             logging.info(f'Hit merging algorithm reached max step limit {max_steps}')
-
-    #         # sort array along last axis to find groups of hits on the same channel, use a stable sort with the aim of improving performance on later iterations
-    #         isort = np.argsort(ma.array(new_hits, mask=mask), axis=-1, order=['z','y','ts_pps','t_drift'], kind='stable')
-    #         mask = np.take_along_axis(mask, isort, axis=-1)
-    #         new_hits = np.take_along_axis(new_hits, isort, axis=-1)
-    #         weights = np.take_along_axis(weights, isort, axis=-1)
-    #         if has_mc_truth: hit_contributions = np.take_along_axis(hit_contributions,isort[...,np.newaxis,np.newaxis],axis=-3)
-    #         old_ids = np.take_along_axis(old_ids, isort[...,np.newaxis], axis=-2)
-    #         old_id_mask = np.take_along_axis(old_id_mask, isort[...,np.newaxis], axis=-2)
-    #         N_new_hits = new_hits.shape[0]*new_hits.shape[1]-np.count_nonzero(mask)
-    #         print('current number of merged hits =',N_new_hits)
-            
-    #         # identify neighboring hits on the same channel
-    #         dt = np.abs(np.diff(new_hits['ts_pps'].astype(int), axis=-1))
-    #         same_channel = (
-    #             (new_hits['z'][..., :-1] == new_hits['z'][..., 1:])
-    #             & (new_hits['y'][..., :-1] == new_hits['y'][..., 1:])
-    #         )
-
-    #         # flag valid hits if they are on the same channel and are close in time
-    #         to_merge = (dt < dt_cut) & same_channel & ~mask[...,:-1] & ~mask[...,1:]
-
-    #         if mode == 'last-first':
-    #             # only combine unambiguous pairs of hits on a channel on each iteration
-    #             to_merge[...,:-1] = ~to_merge[...,1:] & to_merge[...,:-1]
-    #         elif mode == 'pairwise':
-    #             # combine every available pair of hits on each iteration
-    #             to_merge[...,:-1] = to_merge[...,:-1] & (np.cumsum(to_merge, axis=-1) % 2 == 0)[...,:-1]
-    #         else:
-    #             raise RuntimeError(f'invalid merge mode: {mode}')
-
-    #         print("merging:",np.count_nonzero(to_merge))
-
-    #         # exits loop if no remaining hits to combine
-    #         if np.any(to_merge):
-    #             # move 2nd hit into position of first hit, combining attributes along the way
-    #             hit0 = np.extract(to_merge, new_hits[...,:-1])
-    #             hit1 = np.extract(to_merge, new_hits[...,1:])
-
-    #             # these fields will be summed hit[i][field] -> hit[i+1][field] + hit[i][field]
-    #             for field in sum_fields:
-    #                 if field in new_hits.dtype.names:
-    #                     np.place(new_hits[...,:-1][field], to_merge, hit0[field] + hit1[field])
-
-    #             # these fields will use the charge-weighted average hit[i][field] -> (hit[i+1][field] * q[i+1] + hit[i][field] * q[i]) / (q[i+1] + q[i])
-    #             q0 = np.extract(to_merge, weights[...,:-1])
-    #             q1 = np.extract(to_merge, weights[...,1:])
-    #             qsum = np.abs(q0) + np.abs(q1)
-    #             # regularize so there are no nans
-    #             qsum = np.where(qsum == 0, 1e-300, qsum)
-    #             # it is not obvious how to treat the possibility of negative charge values (e.g. noise)
-    #             # this should(?) be rare, so we'll just spit out a warning
-    #             if np.any((q0 < 0) | (q1 < 0)):
-    #                 logging.info(f'Hit merging encountered negative value(s) (count={((q0 < 0) | (q1 < 0)).sum()}) in charge weighting, results may be unreliable')
-    #             w0 = np.abs(q0)/qsum
-    #             w1 = np.abs(q1)/qsum
-    #             for field in weighted_mean_fields:
-    #                 if field in new_hits.dtype.names:
-    #                     base = np.minimum(hit0[field], hit1[field]) # improves precision of weighted sum if values are large (e.g. timestamps)
-    #                     np.place(new_hits[...,:-1][field], to_merge, ((hit0[field]-base) * w0 + (hit1[field]-base) * w1).astype(new_hits.dtype[field]) + base)
-    #             # combine weights for next iteration
-    #             np.place(weights[...,:-1], to_merge, weights[...,:-1] + weights[...,1:])
-    #             if has_mc_truth:
-    #                 for hit_it, hit_cont in np.ndenumerate(weights[...,:-1]):
-    #                     if (not to_merge[hit_it]) | mask[hit_it]:
-    #                         #print('skipping')
-    #                         continue
-    #                     e = np.argwhere(hit_contributions[...,:-1][hit_it][1]==0)[0][0]
-    #                     f = np.argwhere(hit_contributions[...,:][hit_it[0],hit_it[1]+1][1]==0)[0][0]
-    #                     # merge the hit contributions:
-    #                     for comb_it in range(f):
-    #                         hit_contributions[...,:-1][hit_it][1][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][1][comb_it]
-    #                         hit_contributions[...,:-1][hit_it][0][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][0][comb_it]
-    #                         hit_contributions[...,:-1][hit_it][2][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][2][comb_it]
-    #                         # and remove them from the hit that was merged in
-    #                         hit_contributions[hit_it[0],hit_it[1]+1][1][comb_it] = 0
-    #                         hit_contributions[hit_it[0],hit_it[1]+1][0][comb_it] = 0.
-    #                         hit_contributions[hit_it[0],hit_it[1]+1][2][comb_it] = 0.
-
-    #             # now we mask off hits that have already been merged
-    #             mask[...,1:] = mask[...,1:] | to_merge
-
-    #             # and track the hit ids of the hits that were merged by propogating the indices forward
-    #             if mode == 'last-first':
-    #                 old_id_mask = np.concatenate([old_id_mask[...,0:1], old_id_mask], axis=-1)
-    #                 old_ids = np.concatenate([old_ids[...,0:1], old_ids], axis=-1)
-    #                 id_merge = np.broadcast_to(to_merge[...,np.newaxis], to_merge.shape + old_ids.shape[-1:])
-    #                 divider = 1
-    #             elif mode == 'pairwise':
-    #                 old_id_mask = np.concatenate([old_id_mask, old_id_mask], axis=-1)
-    #                 old_ids = np.concatenate([old_ids, old_ids], axis=-1)
-    #                 id_merge = np.broadcast_to(to_merge[...,np.newaxis], to_merge.shape + old_ids.shape[-1:])
-    #                 divider = old_ids.shape[-1]//2
-    #             else:
-    #                 raise RuntimeError(f'invalid mode {mode}')
-    #             # move ids from hit[i+1] to hit[i] (while keeping the ids for hit[i])
-    #             np.place(old_ids[...,:-1,divider:], id_merge[...,divider:], np.extract(id_merge[...,divider:], old_ids[...,1:,divider:]))
-    #             # copy the id mask for hit[i+1] into hit[i] (while keeping the id mask for hit[i])
-    #             np.place(old_id_mask[...,:-1,divider:], id_merge[...,divider:], np.extract(id_merge[...,divider:], old_id_mask[...,1:,divider:]))
-    #             # and clear the id mask for hit[i+1]
-    #             np.place(old_id_mask[...,1:,:], id_merge, True)
-    #         else:
-    #             break
-
-    #     # calculate segment contributions for each merged hit
-    #     if has_mc_truth:
-    #         tmp_bt = np.full(shape=new_hits.shape+(2,self.max_contrib_segments),fill_value=0.)
-    #         back_track = np.full(shape=new_hits.shape,fill_value=0.,dtype=self.hit_frac_dtype)
-    #         # loop over hits
-    #         for hit_it, hit in np.ndenumerate(new_hits):
-    #             if mask[hit_it]: continue
-    #             hit_contr = hit_contributions[hit_it]
-    #             # renormalize the fractional contributions given the charge weighted average
-    #             norm = np.sum(np.multiply(hit_contr[0],hit_contr[1]))
-    #             if norm == 0.: norm = 1.
-    #             tmp_bt[hit_it][0] = np.multiply(hit_contr[0],hit_contr[1])/norm # fractional contributions
-    #             tmp_bt[hit_it][1] = hit_contr[2] # segment_ids
-
-    #             # merge unique track contributions
-    #             track_dict = defaultdict(lambda:0)
-    #             for track in zip(tmp_bt[hit_it][0],tmp_bt[hit_it][1]):
-    #                 track_dict[track[1]] += track[0]
-    #             track_dict = dict(track_dict)
-    #             bt_unique_segs = np.array(list(track_dict.keys()))
-    #             bt_unique_frac = np.array(list(track_dict.values()))
-    #             n_conts = bt_unique_frac.shape[0]
-    #             isort = np.flip(np.argsort(np.abs(bt_unique_frac), axis=-1, kind='stable'))
-    #             bt_unique_segs = np.take_along_axis(bt_unique_segs, isort, axis=-1)
-    #             bt_unique_frac = np.take_along_axis(bt_unique_frac, isort, axis=-1)
-    #             back_track[hit_it]['fraction'] = [0.]*self.max_contrib_segments
-    #             back_track[hit_it]['segment_id'] = [0]*self.max_contrib_segments
-    #             back_track[hit_it]['fraction'][:bt_unique_frac.shape[0]] = bt_unique_frac
-    #             back_track[hit_it]['segment_id'][:bt_unique_segs.shape[0]] = bt_unique_segs
-    #     else: back_track = None
-
-    #     new_hit_idx = np.broadcast_to(np.cumsum(~mask.ravel(), axis=0).reshape(mask.shape + (1,)), old_ids.shape)-1
-
-    #     return (
-    #         ma.array(new_hits, mask=mask),
-    #         np.c_[np.extract(~(old_id_mask | mask[...,np.newaxis]), old_ids), np.extract(~(old_id_mask | mask[...,np.newaxis]), new_hit_idx)],
-    #         ma.array(back_track, mask=mask) if back_track is not None else None
-    #         )
-    }
-
     def run(self, source_name, source_slice, cache):
         super(Hough3D, self).run(source_name, source_slice, cache)
 
@@ -333,14 +149,94 @@ class Hough3D(H5FlowStage):
         packet_seg_bt = cache['packet_seg_backtrack']
         # hits = cache[self.hits_name]
         hits = cache[self.hits_name]
+        # print(np.sum(hits.mask))
+        # x,y,z=hits['x'],hits['y'],hits['z']
+        # xm,ym,zm=x.mask,y.mask,z.mask
+        # print(x[xm])
+        # print(xm,ym,zm,sep='\n')
+        
+        # print(hits_mask.shape)
+        # print(hits.mask.shape)
+        # print(np.sum(hits_mask))
+        # print(np.sum(x.mask))
 
+
+        # hits = ma.array(hits,mask=hits.mask)
+        # print(hits.shape)
+        
+        # # print(hits)
+        # print(np.sum(hits_mask,axis=-1))
+        # print(sum(1 for i in hits[0]))
+        # print(sum(1 for i in hits[1]))
+        # -print(sum(1 for i in hits[2]))
+        # print(hits_mask.shape)
+        # print(hits[hits_mask].shape)
+        # -print(np.sum(hits_mask,axis=-1))
+        # # np.newaxis()
+        # print(*map(len,hits))
+        # print(*map(sum,hits_mask))
+        # print(hits_mask[:,:10])
+        # print(hits_mask[:,-10:])
+        
+        # x,y,z=hits['x'],hits['y'],hits['z']
+        # print(x.shape)
+        # print(x[:,-10:])
+        # print(y[:,:10])
+        # print(z[:,:10])
+        # print(y.shape)
+        # print(z.shape)
+        # print(hits.size)
+        # print()
         # merged, ref, back_track = self.merge_hits(hits, weights=hits['Q'], seg_fracs=[packet_seg_bt,packet_frac_bt],dt_cut=self.merge_cut, sum_fields=self.sum_fields, weighted_mean_fields=self.weighted_mean_fields, max_steps=self.max_merge_steps, mode=self.merge_mode)
-        hough3d_out = self.hough3d(hits)
-
+        
+        hits_mask = ~rfn.structured_to_unstructured(hits.mask).any(axis=-1)
+        print(np.sum(np.sum(hits_mask,-1)>2500))
+        
+        hough3d_out = np.concatenate([*[self.hough3d(np.c_[event_hits['x'],event_hits['y'],event_hits['z']][~event_hits['x'].mask])for event_hits in hits]],-1)
+        # hough3d_out = [self.hough3d(np.c_[event_hits['x'],event_hits['y'],event_hits['z']])for event_hits in ma.array(hits,mask=hits_mask)]
+        
+        # print(*map(len,hough3d_out))
+        # print(hough3d_out.dtype)
         # merged_mask = merged.mask['id']
 
         # first write the new merged hits to the file
-        hough3d_slice = self.data_manager.reserve_data(self.hough3d_dset_name, hits.size)
+        # print(len(hough3d_out))
+        
+        # print(hough3d_out[-1])
+
+        hough3d_slice = self.data_manager.reserve_data(self.hough3d_dset_name, len(hough3d_out))
+        self.data_manager.write_data(self.hough3d_dset_name, hough3d_slice, hough3d_out)
+
+        # save references
+
+        parent_idcs = np.arange(source_slice.start, source_slice.stop).reshape(-1, 1, 1)
+        child_idcs = np.clip(np.arange(hough3d_slice.start, hough3d_slice.start + 10).reshape(1, -1, 1) + parent_idcs - source_slice.start, 0, hough3d_slice.stop - 1)
+        parent_idcs, child_idcs = np.broadcast_arrays(parent_idcs, child_idcs)
+        ref = np.unique(np.concatenate((parent_idcs, child_idcs), axis=-1).reshape(-1, 2), axis=0)  # reshape to (parent, child), and only use unique references (repeats can be used)
+        #  2. then write them into the file (no space reservation needed)
+        self.data_manager.write_ref(source_name, self.hough3d_dset_name, ref)
+
+        # print(source_slice)
+        # raw_ev_id = np.broadcast_to(np.expand_dims(np.r_[source_slice], axis=-1), hits.size)
+        # ref = np.c_[raw_ev_id[hits_mask], hough3d_slice.start+np.arange(hits.size,dtype=int)]
+        # # raw_event -> clusterer
+        # self.data_manager.write_ref(source_name, self.hough3d_dset_name, ref)
+        # event -> clusterer
+        self.data_manager.write_ref(self.events_dset_name, self.hough3d_dset_name, ref)
+
+        # hit -> clusterer
+        ref = np.c_[hits['id'], hits['id']]
+        self.data_manager.write_ref(self.hits_name, self.hough3d_dset_name, ref)
+
+        # # hit -> packet # Almost definitely gets removed?
+        # ref = np.c_[calib_hits_arr['id'], index_arr]
+        # self.data_manager.write_ref(self.calib_hits_dset_name, self.packets_dset_name, ref)
+
+        # # hit -> backtracking
+        # if has_mc_truth:
+        #     self.data_manager.write_ref(self.calib_hits_dset_name,self.mc_hit_frac_dset_name,np.c_[calib_hits_arr['id'],calib_hits_arr['id']])
+
+
         # hough_out
         # new_nhit = int((~merged_mask).sum())
         # merge_slice = self.data_manager.reserve_data(self.merged_name, new_nhit)
@@ -349,7 +245,7 @@ class Hough3D(H5FlowStage):
         #     ref[:,1] += merge_idx[0] # offset references based on reserved region in output file
         #     np.place(merged['id'], ~merged_mask, merge_idx)
 
-        self.data_manager.write_data(self.hough3d_dset_name, hough3d_slice.start + np.arange(hits.size), hough3d_out)
+        # self.data_manager.write_data(self.hough3d_dset_name, hough3d_slice.start + np.arange(hits.size), hough3d_out)
 
         # HACK: Remove duplicate refs. Would be nice to actually understand and
         # fix the origin of these duplicates.
@@ -365,12 +261,164 @@ class Hough3D(H5FlowStage):
         #     self.data_manager.write_data(self.mc_hit_frac_dset_name, merge_idx, back_track[~merged_mask])
         #     self.data_manager.write_ref(self.merged_name,self.mc_hit_frac_dset_name,np.c_[merge_idx,merge_idx])
 
-
+        # RESOLVE ME #
+        # self.sphere = [] # MOVE ME # ***
+        
         # Need to understand below lines... #
         # ev_ref = np.c_[(np.indices(merged_mask.shape)[0] + source_slice.start)[~merged_mask], merge_idx]
         # self.data_manager.write_ref(source_name, self.hough3d_dset_name, ev_ref)
         # self.data_manager.write_ref(self.events_dset_name, self.hough3d_dset_name, ev_ref)
         # ... #
+    
+    # def load_sphere(sphere_granularity=4):
+    #     return []
+        
+    def hough3d(self, hits, max_hits = -1, weights=[], dx=2, max_lines=3, min_votes=10, verbose=0):
+        # refer to hough3dlines.py (for s schwartz only)
+        # print(hits.shape)
+        # print(hits.size)
+        nhits = len(hits)
+        if nhits > 0:
+            clusters = []
+            pw_clusters = np.full(nhits,-1)
+            for cluster_ind, cluster_hit_inds in enumerate(clusters):
+                pw_clusters[cluster_hit_inds] = cluster_ind
+            # print(f'{nhits} > 2500')
+            return pw_clusters
+        # else:print(f'{nhits} <= 2500')
+        # print(nhits)
+        if verbose >= 1:print(f'nhits = {nhits}')
+        if -1 < max_hits < nhits:
+            np.full(nhits,-1)
+        # not using weights for running time optimization
+        if nhits == 0:
+            if verbose >= 1:print('No hits in event')
+            return{}
+        if max_lines < 0:
+            print('max_lines must be 0 or positive')
+            return{}
+        if min_votes < 2:
+            print('min_votes must be >= 2')
+            return{}
 
-    def hough3d(self, hits, weights=[], dx=2, sphere_granularity=4, max_lines=0, minvotes=10, verbose=0):
-        return np.arange(hits.size)
+        # hit_indices = np.arange(nhits)
+
+        # Can make everything a index reference list to the input hit array
+        point_cloud_inds = np.arange(nhits)
+
+        dir_vecs = self.sphere
+        n_dirs = len(dir_vecs)
+        if verbose >= 2:print(f'Successfully loadaed {n_dirs} direction vertices')
+
+        def orthogonal_lsq(point_cloud):
+            if len(point_cloud):
+                a = np.mean(point_cloud)
+            else:
+                a = np.zeros(3)
+            centered = np.matrix(point_cloud - a)
+            scatter = centered.getH() * centered
+            eigen_val, eigen_vec = eigh(scatter)
+            b = eigen_vec[:,2]
+            rc = eigen_val[2]
+            return rc, a, b
+        
+        max_bound_point = np.max(hits,0) # OR [max_x, max_y, max_z]
+        min_bound_point = np.min(hits,0) # OR [min_x, min_y, min_z]
+
+        # shift = (max_bound_point + min_bound_point)/2 # OR DON'T DO THIS - Will need to center coordinate system properly in either case
+
+        # DO NOT Want to apply shift to hits...
+        # Instead will use "Origin"
+
+        origin = (max_bound_point + min_bound_point)/2
+
+        extent_bound_box = np.linalg.norm(max_bound_point - min_bound_point) # Redundant computation? Does it matter?
+
+
+        # Lines below should be removable with fixed bounds...
+        if dx == 0:
+            dx = extent_bound_box / 64
+        elif dx > extent_bound_box:
+            print('dx too large')
+            return{}
+        # else:
+        #     dx = dx
+
+        index_shift_n = int(np.ceil((extent_bound_box/dx-1)/2)) # N = 1+2n, n>=(d/dx-1)/2 [from (2n+1)dx >= d] # Side length of lattice in number of cells # Half of extent[rounded up to odd multiple of dx] over dx
+        lattice_side_len_anchor_points = 1+2*index_shift_n # Number
+        # anchor_point_shift = index_shift_n * dx # End to origin (Anchor Points)
+        # lattice_bounding_box_side_length = (lattice_side_len_anchor_points+1) * dx # End to end length of x' space (= previous + dx)
+
+        def xy_from_index(x_ind,y_ind):
+            return dx*(x_ind - index_shift_n), dx*(y_ind - index_shift_n)
+        def points_close_to_line_inds(point_cloud,a,b): # Return indices of points close to line
+            return point_cloud_inds[np.where(np.linalg.norm(point_cloud - (a + np.array([i*b for i in np.dot(point_cloud-a,b)])),axis=1) <= dx)]
+        def point_vote(point_cloud,add=True):
+            c = [-1,1][add]
+            for b_ind, b in enumerate(dir_vecs):
+                beta = 1/(1+b[2])
+
+                # x = (1-b[0]**2*beta)*point_cloud[:,0] - b[0]*b[1]*beta*point_cloud[:,1] - b[0]*point_cloud[:,2]
+                # y = -b[0]*b[1]*point_cloud[:,0] + (1-b[1]**2*beta)*point_cloud[:,1] - b[1]*point_cloud[:,2]
+                # x_ind, y_ind = np.array(np.rint(x/dx+index_shift_n),dtype=np.int16), np.array(np.rint(y/dx+index_shift_n),dtype=np.int16) # these are indices, of course they can be small ints
+                
+                # Below code could likely be changed from a for loop into a magical np line...
+                for x_ind,y_ind in np.array(np.c_[(1-b[0]**2*beta)*point_cloud[:,0] - b[0]*b[1]*beta*point_cloud[:,1] - b[0]*point_cloud[:,2],-b[0]*b[1]*point_cloud[:,0] + (1-b[1]**2*beta)*point_cloud[:,1] - b[1]*point_cloud[:,2]]/dx+index_shift_n,dtype=int):
+                    if 0 <= x_ind < lattice_side_len_anchor_points > y_ind >= 0:
+                        accumulator_arr[b_ind,x_ind,y_ind] += c
+                        # For flattened accumulator_arr use np.ravel_multi_index
+
+        accumulator_arr = np.zeros((n_dirs,lattice_side_len_anchor_points,lattice_side_len_anchor_points)) # Accumulator Array A, |B| X |X'| X |Y'| 
+        # For flattened accumulator_arr use np.zeros (n_dirs * X * Y) i.e. product - (this should be obvious)
+
+        clusters = []
+
+        # print(len(point_cloud_inds),len(hits))
+        point_vote(hits[point_cloud_inds],True) # fill accumulator array
+
+        nlines = 0
+        point_cluster_inds = []
+
+        while len(point_cloud_inds) >= min_votes and (max_lines == 0 or max_lines > nlines):
+            point_vote(hits[point_cluster_inds],False) # Subtract votes for clustered points (First time does nothing)
+            b_ind, x_ind, y_ind = np.unravel_index(accumulator_arr.argmax(),accumulator_arr.shape) # idrk why this is necessary...
+            # For flattened accumulator use np.unravel_index(A.argmax(),(num_b,num_x,num_y))
+
+            x,y = xy_from_index(x_ind,y_ind)
+            # Get direction vector b
+            b = dir_vecs[b_ind]
+            # Anchor point a
+            a = x*np.array([1-b[0]**2/(1+b[2]),-b[0]*b[1]/(1+b[2]),-b[0]]) + y*np.array([-b[0]*b[1]/(1+b[2]),1-b[1]**2/(1+b[2]),-b[1]]) # Anchor point
+            if verbose >= 2:
+                print(f'Info: Highest number of Hough votes is {accumulator_arr[b_ind,x_ind,y_ind]} for the following line: a=({a[0]},{a[1]},{a[2]}), b=({b[0]},{b[1]},{b[2]})')
+            
+            point_cluster_inds = points_close_to_line_inds(hits[point_cloud_inds],a,b)
+            rc,a,b = orthogonal_lsq(hits[point_cluster_inds])
+            if rc == 0:
+                if verbose >= 1:
+                    print('rc == 0')
+                break
+
+            point_cluster_inds = points_close_to_line_inds(hits[point_cloud_inds],a,b)
+            nvotes = point_cluster_inds.size
+            if nvotes < min_votes:
+                if verbose >= 1:print(f'nvotes = {nvotes} < min_votes = {min_votes}')
+                break
+
+            # rc,a,b = orthogonal_lsq(hits[point_cluster_inds]) # Only necessary if wanting to return line parameters that describe final found lin
+
+            # TODO - OPTIMIZE ME
+            point_cloud_inds = np.setdiff1d(point_cloud_inds,point_cluster_inds)
+
+            nlines += 1
+
+            clusters += [point_cluster_inds]
+        # End of while loop
+
+        if verbose >= 2:print(*clusters,sep='\n')
+
+        # pair-wise cluster indices
+        pw_clusters = np.full(nhits,-1)
+        for cluster_ind, cluster_hit_inds in enumerate(clusters):
+            pw_clusters[cluster_hit_inds] = cluster_ind
+        return pw_clusters
