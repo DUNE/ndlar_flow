@@ -13,16 +13,18 @@ VERBOSE = False
 
 class FlashFinder(H5FlowStage):
     '''
-        ('id', 'u4'),                       Unique flash ID
-        ('tpc', 'u1'),                      TPC ID (0-7)
-        ('n_sum_hits', 'u4'),               Number of sum hits associated
-        ('idx_range', 'u2', (2,)),          Min and Max sample index of sum hits
-        ('hit_time_range', 'f4', (2,))      Min and Max timestamp of hit center relative to trigger time in ns (see busy_ns in hit definition)
-        ('rising_spline_range', 'f4', (2,)) Min and Max timestamp of rising spline projections relative to trigger time in ns (see rising_spline in hit definition)
-        ('tot_sum', 'f4'),                  Sum over hit sum values
-        ('tot_max', 'f4'),                  Sum over hit max values
-        ('tot_sum_spline', 'f4'),           Sum over hit spline sum values
-        ('tot_max_spline', 'f4')            Sum over hit spline max values
+        ('id', 'u4'),                           Unique flash ID
+        ('tpc', 'u1'),                          TPC ID (0-7)
+        ('n_sum_hits', 'u4'),                   Number of sum hits associated
+        ('sample_range', 'u2', (2,)),           Min and Max sample index of sum hits
+        ('hit_time_range', 'f4', (2,))          Min and Max timestamp of hit center relative to trigger time in ns (see busy_ns in hit definition)
+        ('rising_spline_range', 'f4', (2,))     Min and Max timestamp of rising spline projections relative to trigger time in ns (see rising_spline in hit definition)
+        ('tot_sum', 'f4'),                      Sum over hit sum values
+        ('tot_max', 'f4'),                      Sum over hit max values
+        ('tot_sum_spline', 'f4'),               Sum over hit spline sum values
+        ('tot_max_spline', 'f4')                Sum over hit spline max values
+        ('deconv_sum', 'f4', (2,nchantpc//2)),  Sum over flash range for each channel of the TPC (side,vert_pos)
+        ('deconv_max', 'f4', (2,nchantpc//2))   Max over flash range for each channel of the TPC (side,vert_pos)
 
     '''
     class_version = '1.0.0'
@@ -44,7 +46,7 @@ class FlashFinder(H5FlowStage):
             ('id', 'u4'),
             ('tpc', 'u1'),
             ('n_sum_hits', 'u4'),
-            ('idx_range', 'u2', (2,)),
+            ('sample_range', 'u2', (2,)),
             ('hit_time_range', 'f4', (2,)),
             ('rising_spline_range', 'f4', (2,)),
             ('tot_sum', 'f4'),
@@ -174,7 +176,7 @@ class FlashFinder(H5FlowStage):
                         tpc_flashes[cl]["n_sum_hits"] = np.count_nonzero(labels==cl)
 
                         #Timing information
-                        tpc_flashes[cl]["idx_range"] = get_extrema(tpc_hits[labels==cl]["sample_idx"])
+                        tpc_flashes[cl]["sample_range"] = get_extrema(tpc_hits[labels==cl]["sample_idx"])
                         tpc_flashes[cl]['hit_time_range'] = get_extrema(tpc_hits[labels==cl]["busy_ns"])
                         tpc_flashes[cl]['rising_spline_range'] = get_extrema(tpc_hits[labels==cl]["busy_ns"]
                                                                              +tpc_hits[labels==cl]["rising_spline"])
@@ -187,7 +189,7 @@ class FlashFinder(H5FlowStage):
 
                         #All channels information
                         ch_idx = self.get_tpc_channels(itpc)
-                        flash_slice = slice(tpc_flashes[cl]["idx_range"][0], tpc_flashes[cl]["idx_range"][1]+1)
+                        flash_slice = slice(tpc_flashes[cl]["sample_range"][0], tpc_flashes[cl]["sample_range"][1]+1)
                         tpc_flashes[cl]['deconv_sum'] = np.sum(
                             cwvfms[i,ch_idx[...,0], ch_idx[...,1], flash_slice],
                             axis=-1)
