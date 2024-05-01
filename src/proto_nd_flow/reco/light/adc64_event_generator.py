@@ -17,7 +17,6 @@ class LightADC64EventGenerator(H5FlowGenerator):
 
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, path to dataset to store raw waveforms
-         - ``sn_table`` : ``list`` of ``int``, required, serial number of each ADC (determines order of the ADCs in the output data type)
          - ``n_adcs`` : ``int``, number of ADC serial numbers (default = 2)
          - ``n_channels`` : ``int``, number of channels per ADC (default = 64)
          - ``sync_channel`` : ``int``, channel index to use for identifying sync events (default = 32)
@@ -25,6 +24,8 @@ class LightADC64EventGenerator(H5FlowGenerator):
          - ``sync_buffer`` : ``int``, optional, number of events to scan to find the first sync for each event builder process, only relevant if using MPI
          - ``clock_timestamp_factor`` : ``float``, tick size for ``tai_ns`` in raw data [ns] (default = 0.625)
          - ``batch_size`` : ``int``, optional, number of events to buffer before initiating next loop iteration (default = 128)
+         - ``sn_table`` : ``list`` of ``int``, optional, serial number of each ADC (determines order of the ADCs in the output data type,
+            if not give order like in data file)
 
 
         Generates a lightweight "event" dataset along with a dataset containing
@@ -103,7 +104,6 @@ class LightADC64EventGenerator(H5FlowGenerator):
         self.wvfm_dset_name = params['wvfm_dset_name']
         self.event_dset_name = self.dset_name
 
-        self.sn_table = params['sn_table']
 
         self.input_file = adc64format.MPDReader(self.input_filename,self.n_adcs)
         self.input_file.open()
@@ -115,6 +115,11 @@ class LightADC64EventGenerator(H5FlowGenerator):
         total_length_b = self.input_file.stream.seek(0, 2)-self.nbytes_runinfo
         self.input_file.reset()
         self.n_samples = test_event['data'][0].dtype['voltage'].shape[-1]
+
+        if 'sn_table' in params:
+            self.sn_table = [int(value,16) for value in params['sn_table']]
+        else:
+            self.sn_table = [device["serial"].item() for device in test_event["device"]]
 
         #Positions in #chunks/events (not bytes)
         self.end_position = total_length_b // self.chunk_size if self.end_position is None else min(self.end_position, total_length_b // self.chunk_size)
@@ -175,22 +180,24 @@ class LightADC64EventGenerator(H5FlowGenerator):
             event_arr = np.zeros(nevents, dtype=self.event_dtype)
             wvfm_arr = np.zeros(nevents, dtype=self.wvfm_dtype)
             for ievent,events in enumerate(matched_events):
+                if not events:
+                    continue
                 event = events['event']
                 data = np.array(events['data'])
                 device = np.array(events['device'])
                 time = np.array(events['time'])
-                try:
-                    event_arr[ievent]['event'] = event['event']
-                    for iadc, sn in enumerate(self.sn_table):
-                        data_index = np.where(device["serial"] == sn)[0]
+                event_arr[ievent]['event'] = event['event']
+                for iadc, sn in enumerate(self.sn_table):
+                    data_index = np.where(device["serial"] == sn)[0]
+                    if len(data_index):
                         channels = data[data_index]['channel']
                         event_arr[ievent]['sn'][iadc] = device[data_index]['serial']
                         event_arr[ievent]['utime_ms'][iadc] = event['unix_ms']
                         event_arr[ievent]['tai_ns'][iadc] = time[data_index]['tai_s']*1e9 + time[data_index]['tai_ns']
                         event_arr[ievent]['wvfm_valid'][iadc, channels] = True
                         wvfm_arr[ievent]['samples'][iadc, channels] = data[data_index]['voltage']
-                except:
-                    continue
+                    else:
+                        print("ADC", hex(sn)," not found")
 
             # apply different clock frequency
             event_arr['tai_ns'] = (event_arr['tai_ns'] * self.clock_timestamp_factor).astype(event_arr.dtype['tai_ns'].base)
