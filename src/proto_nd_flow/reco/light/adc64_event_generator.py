@@ -167,7 +167,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
         matched_events = None
         if self.rank == 0:
             # only read from single process
-            matched_events = self.input_file.next(self.batch_size)  #FIXME: only works with batch_size=1 at the moment (to be fixed in adc64format)
+            matched_events = self.input_file.next(self.batch_size)
         # format events into output shape / structure
         if matched_events is not None:
             # create new event array / waveform array
@@ -185,7 +185,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
                         data_index = np.where(device["serial"] == sn)[0]
                         channels = data[data_index]['channel']
                         event_arr[ievent]['sn'][iadc] = device[data_index]['serial']
-                        event_arr[ievent]['utime_ms'][iadc] = 0
+                        event_arr[ievent]['utime_ms'][iadc] = event['unix_ms']
                         event_arr[ievent]['tai_ns'][iadc] = time[data_index]['tai_s']*1e9 + time[data_index]['tai_ns']
                         event_arr[ievent]['wvfm_valid'][iadc, channels] = True
                         wvfm_arr[ievent]['samples'][iadc, channels] = data[data_index]['voltage']
