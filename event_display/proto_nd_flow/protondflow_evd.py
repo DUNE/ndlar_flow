@@ -78,7 +78,7 @@ class ProtoNDFlowEventDisplay:
             self.y_vals = 'y_pix'
             self.z_vals = 'z_pix' 
             self.convert_to_mm = 10 # xyz starts in cm
-            self.y_offset = 218.236 # mm
+            self.y_offset = 0. # mm
             self.packets = f['charge/packets/data']
             self.packets_hits_ref = f['charge/'+self.hits_dset+'/ref/charge/packets/ref']
             self.packets_hits_region = f['charge/'+self.hits_dset+'/ref/charge/packets/ref_region']
@@ -93,7 +93,7 @@ class ProtoNDFlowEventDisplay:
             self.y_vals = 'y'
             self.z_vals = 'z'
             self.convert_to_mm = 10 # xyz starts in cm
-            self.y_offset = 218.236 # mm
+            self.y_offset = 0. # mm
 
         # Set up figure and subplots
         self.fig = plt.figure(constrained_layout=False, figsize=(8.5, 6.))
@@ -253,7 +253,6 @@ class ProtoNDFlowEventDisplay:
     def get_event_start_time(self, event):
         """Estimate the event start time"""
         if event['n_ext_trigs']:
-            print("First choice")
             # First Choice: Use earliest light system trigger in event
             ev_id = event['id']
             ext_trig_ref = self.ext_trigs_ref[self.ext_trigs_region[ev_id,'start']:self.ext_trigs_region[ev_id,'stop']]
@@ -295,10 +294,8 @@ class ProtoNDFlowEventDisplay:
             start_time = time_bins[t0_bin_index]
             # Check if qsum exceed threshold
             if start_time < max_ts:
-                print("Second choice")
                 return start_time
         # Fallback is to use the first hit
-        print("Last choice")
         return event['ts_start']
 
     # Set up axes
@@ -421,7 +418,6 @@ class ProtoNDFlowEventDisplay:
         ext_trig_ref = np.sort(ext_trig_ref[ext_trig_ref[:,0] == ev_id, 1])
 
         event_start_time = self.get_event_start_time(event)
-        print(event_start_time)
 
         hits = self.hits[hit_ref]
 
@@ -436,7 +432,6 @@ class ProtoNDFlowEventDisplay:
                 io_groups[i] = self.packets[packet_index]['io_group']
                 
             packets = self.packets[hit_ref]
-            print(np.all(io_groups == packets['io_group']))
         else:
             io_groups = hits['io_group']
 
@@ -464,8 +459,13 @@ class ProtoNDFlowEventDisplay:
             q_anode1 = hits_anode1[self.charge] 
             q_anode2 = hits_anode2[self.charge]
             
-        t_anode1 = hits_anode1['ts_pps']-event_start_time
-        t_anode2 = hits_anode2['ts_pps']-event_start_time
+        if self.hits_dset == 'raw_hits':
+            t_anode1 = hits_anode1['ts_pps']-event_start_time
+            t_anode2 = hits_anode2['ts_pps']-event_start_time
+        else:
+            t_anode1 = hits_anode1['t_drift']
+            t_anode2 = hits_anode2['t_drift']
+        
         self.ax_time_1.hist(t_anode1, weights=q_anode1,
                             bins=200,  # np.linspace(0,self.drift_time,200),
                             histtype='step', label='binned')
