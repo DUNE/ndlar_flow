@@ -123,10 +123,12 @@ def create_3d_figure(data, evid):
     # Draw the TPC
     tpc_center, anodes, cathodes = draw_tpc(sim_version)
     light_detectors = draw_light_detectors(data, evid)
+    minerva = draw_minerva()
 
     fig.add_traces(tpc_center)
     fig.add_traces(anodes)
     fig.add_traces(cathodes)
+    fig.add_traces(minerva)
     fig.add_traces(light_detectors)
 
     return fig
@@ -218,6 +220,49 @@ def draw_anode_planes(x_boundaries, y_boundaries, z_boundaries, **kwargs):
             x = x_boundaries[i_x] * np.ones(z.shape)
 
             traces.append(go.Surface(x=x, y=y, z=z, **kwargs))
+
+    return traces
+
+def draw_minerva():
+    x_base = [0, 108.0, 108.0, 0, -108.0, -108.0]
+    shift = 245.0
+    y_base = [-390.0 + shift, -330.0 + shift, -204.0 + shift, -145.0 + shift, -206.0 + shift, -330.0 + shift]
+
+    z_base = {}
+    z_base["ds"] = [164.0, 310.0]
+    z_base["us"] = [-240.0, -190.0]
+
+    traces = []
+    # Plot the cylindrical hexagon
+    for j in ["ds", "us"]:
+        for i in range(len(x_base)):
+            traces.append(go.Scatter3d(x=[x_base[i], x_base[(i + 1) % len(x_base)]],
+                                       y=[y_base[i], y_base[(i + 1) % len(x_base)]],
+                                       z=[z_base[j][0], z_base[j][0]],
+                                       mode='lines',
+                                       showlegend=False,
+                                       line=dict(color='black')))  # Plot bottom face
+            traces.append(go.Scatter3d(x=[x_base[i], x_base[(i + 1) % len(x_base)]],
+                                       y=[y_base[i], y_base[(i + 1) % len(x_base)]],
+                                       z=[z_base[j][1], z_base[j][1]],
+                                       mode='lines',
+                                       showlegend=False,
+                                       line=dict(color='black')))  # Plot top face
+            traces.append(go.Scatter3d(x=[x_base[i], x_base[i]],
+                                       y=[y_base[i], y_base[i]],
+                                       z=[z_base[j][0], z_base[j][1]],
+                                       mode='lines',
+                                       showlegend=False,
+                                       line=dict(color='blue')))  # Plot vertical edges
+
+        # Plot the line connecting the bottom and top faces
+        for i in range(len(x_base)):
+            traces.append(go.Scatter3d(x=[x_base[i], x_base[i]],
+                                       y=[y_base[i], y_base[i]],
+                                       z=[z_base[j][0], z_base[j][1]],
+                                       mode='lines',
+                                       showlegend=False,
+                                       line=dict(color='black')))
 
     return traces
 
