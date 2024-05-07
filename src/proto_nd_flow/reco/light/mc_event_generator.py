@@ -4,7 +4,6 @@ import numpy.ma as ma
 from collections import defaultdict
 import logging
 from math import ceil
-
 from h5flow.core import H5FlowGenerator, resources
 from h5flow import H5FLOW_MPI
 
@@ -83,16 +82,17 @@ class LightEventGeneratorMC(H5FlowGenerator):
         n_adcs=2,
         n_channels=64,
         n_sipms_per_module= 96,
+        n_sipms_total= 384,
         busy_delay=123,
         busy_ampl=20e3,
         chunk_size=32,
-        max_tracks=20
+        max_tracks=10
         )
-    """
+
     def true_wvfm_dtype(self): return np.dtype([
-        ('samples', 'i2', (self.segID, self.n_adcs, self.n_channels, self.n_samples))  # sample value
+        ('trigger_id', 'i4'),
+        ('samples', np.float32, (self.n_sipms_total, self.max_tracks, self.n_samples))
     ])
-    """
 
     def __init__(self, **params):
         super(LightEventGeneratorMC, self).__init__(**params)
@@ -126,18 +126,20 @@ class LightEventGeneratorMC(H5FlowGenerator):
                     self.end_position, self.size * self.chunk_size)]
         self.slices.append(H5FlowGenerator.EMPTY)
         self.iteration = 0
-        print("self.end_position", self.end_position)
-        print("self.rank", self.rank)
         print("self.slices", self.slices)
-
+        """
         #print(np.unique(self.true_light_wvfms['segment_id']).shape[0])
         #n_truth_seg = np.unique(self.true_light_wvfms['segment_id']).shape[0]
         #self.abc = np.unique(self.true_light_wvfms['segment_id']).shape[0] if self.abc is None else self.abc
-        #self.start_position_truth_seg = 0 if self.start_position_truth_seg is None else self.start_position_truth_seg
-        #self.slices_truth_seg = 1
-        #$iself.iteration_truth_seg = 0
-
-        #self.end_truth = self.true_light_wvfms.shape[0] if self.end_truth is None else self.end_truth
+        self.start_position_true = 0
+        self.end_position_true = len(np.unique(self.true_light_wvfms['trigger_id']))
+        self.slices_true = [slice(
+                min(st, self.end_position_true),
+                min(st + self.chunk_size, self.end_position_true)
+                ) for st in range(self.start_position_true + self.rank * self.chunk_size,
+                    self.end_position_true, self.size * self.chunk_size)]
+        print("self.slices_true", self.slices_true)
+        """
 
     def __len__(self):
         return len(self.slices)
@@ -182,7 +184,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
         # fix dataset dtypes
         self.event_dtype = LightEventGenerator.event_dtype(self)
         self.wvfm_dtype = LightEventGenerator.wvfm_dtype(self)
-        self.true_wvfm_dtype = LightEventGenerator.true_wvfm_dtype(self)
+        self.true_wvfm_dtype = LightEventGeneratorMC.true_wvfm_dtype(self)
 
         # initialize data objects
         self.data_manager.create_dset(self.event_dset_name, dtype=self.event_dtype)
@@ -191,6 +193,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
         print("self.wvfm_dtype", self.wvfm_dtype)
         print("self.true_wvfm_dtype", self.true_wvfm_dtype)
         self.data_manager.create_ref(self.event_dset_name, self.wvfm_dset_name)
+        #self.data_manager.create_ref(self.event_dset_name, self.true_wvfm_dset_name)
         self.data_manager.set_attrs(self.event_dset_name,
                                     classname=self.classname,
                                     class_version=self.class_version,
@@ -208,8 +211,6 @@ class LightEventGeneratorMC(H5FlowGenerator):
                                     wvfm_dset_name=self.wvfm_dset_name,
                                     start_position=self.start_position,
                                     end_position=self.end_position,
-                                    #start_position_truth_seg=self.start_position_truth_seg,
-                                    #end_truth=self.end_truth,
                                     input_filename=self.input_filename,
                                     mc_truth_dset_name=self.mc_truth_dset_name
                                     )
@@ -226,6 +227,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
         self.data_manager.create_dset(self.mc_truth_dset_name, dtype=light_dat.dtype, shape=self.channel_map.shape)
         truth_len = ceil(light_dat.shape[0] // self.size)
         truth_slice = slice(self.rank * truth_len, (self.rank+1) * truth_len)
+        print("truth_slice", truth_slice)
         print("light_dat[truth_slice]", light_dat[truth_slice].shape)
         remapped_light_dat = self._remap_array(self.channel_map, light_dat[truth_slice], axis=-1)
         print("remapped_light_dat", remapped_light_dat.shape)
@@ -233,37 +235,52 @@ class LightEventGeneratorMC(H5FlowGenerator):
         self.data_manager.write_data(self.mc_truth_dset_name, truth_slice, remapped_light_dat)
 
         mc_channel = np.indices(light_dat[0:1].shape)[1]
-    
 
-    """
-    def find_truth_waveform(self):
+
+        #find truth waveforms
         trig_ids = np.unique(self.true_light_wvfms['trigger_id'])
         
         true_wvfm_arr = np.empty(len(trig_ids), self.true_wvfm_dtype)
+        print("true_wvfm_arr['samples'].shape", true_wvfm_arr['samples'].shape)
+        print("true_wvfm_arr['samples'][0].shape", true_wvfm_arr['samples'][0].shape)
+        print("true_wvfm_arr['samples'][0][0].shape", true_wvfm_arr['samples'][0][0].shape)
 
-        for itrig in trig_ids:
-            op_chans = np.unique(self.true_light_wvfms[self.true_light_wvfms['trigger_id']==itrig]['op_channel_id'])
-            true_wvfm_arr['trigger_id'].append(itrig)
-            for ichan in op_chans:
-                seg_ids = np.unique(self.true_light_wvfms[(self.true_light_wvfms['trigger_id']==itrig) & (self.true_light_wvfms['op_channel_id']==ichan)]['segment_id'])
-                for iseg in seg_ids:
-                    tick = self.true_light_wvfms[(self.true_light_wvfms['trigger_id']==itrig) & (self.true_light_wvfms['op_channel_id']==ichan) & (self.true_light_wvfms['segment_id']==iseg)]['tick'] 
-                    pe_current = self.true_light_wvfms[(self.true_light_wvfms['trigger_id']==itrig) & (self.true_light_wvfms['op_channel_id']==ichan) & (self.true_light_wvfms['segment_id']==iseg)]['pe_current'] 
+        #for itrig in range(len(trig_ids)):
+        for itrig in range(1):
+            trig_id = trig_ids[itrig]
+            true_wvfm_arr['trigger_id'][itrig] = trig_id
+            #wvfms = true_wvfm_arr['samples'][itrig]
+            #print("wvfms.shape", wvfms.shape)
+            op_chans = np.unique(self.true_light_wvfms[self.true_light_wvfms['trigger_id']==trig_id]['op_channel_id'])
+
+            #for ichan in range(len(op_chans)):
+            for ichan in range(1):
+                chan_id = op_chans[ichan]
+                seg_ids = np.unique(self.true_light_wvfms[(self.true_light_wvfms['trigger_id']==trig_id) & (self.true_light_wvfms['op_channel_id']==chan_id)]['segment_id'])
+                #wvfms_per_chan = wvfms[ichan]
+                #print("wvfms_per_chan.shape", wvfms_per_chan.shape)
                     
-                    #padding the truth waveform
-                    wvfm_arr = np.empty(self.n_samples)
+                #for iseg in range(len(seg_ids)):
+                for iseg in range(1):
+                    seg_id = seg_ids[iseg]
+                    twvfm_arr = np.empty(self.n_samples)
+
+                    tick = self.true_light_wvfms[(self.true_light_wvfms['trigger_id']==trig_id) & (self.true_light_wvfms['op_channel_id']==chan_id) & (self.true_light_wvfms['segment_id']==seg_id)]['tick'] 
+                    pe_current = self.true_light_wvfms[(self.true_light_wvfms['trigger_id']==trig_id) & (self.true_light_wvfms['op_channel_id']==chan_id) & (self.true_light_wvfms['segment_id']==seg_id)]['pe_current'] 
+                        #padding the truth waveform
                     for i in range(self.n_samples):
                         if i in tick:
-                            wvfm_arr[i] += pe_current[list(tick).index(i)]
+                            twvfm_arr[i] += pe_current[list(tick).index(i)]
                         else:
-                            wvfm_arr[i] = 0.
+                            twvfm_arr[i] = 0.
 
-                    true_wvfm_arr[true_wvfm_arr['trigger_id']==itrig]['samples'][ichan][iseg] = wvfm_arr
-
-        print(true_wvfm_arr['trigger_id'])
-        print(true_wvfm_arr['samples'].shape)
-        self.data_manager.write_data(self.true_wvfm_dset_name, true_wvfm_arr)
-    """
+                    #print(type(twvfm_arr), type(wvfms_per_chan[iseg]))
+                    true_wvfm_arr['samples'][itrig,ichan,iseg] = twvfm_arr
+            self.data_manager.reserve_data(self.true_wvfm_dset_name, itrig)
+            print(true_wvfm_arr[itrig].shape)
+            print(true_wvfm_arr.shape)
+            self.data_manager.write_data(self.true_wvfm_dset_name, itrig, true_wvfm_arr) 
+        #print(true_wvfm_arr[0])
 
 
 
@@ -295,50 +312,14 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
 
 
-
     def next(self):
-
-        # find truth wvfm:
-
-        trig_ids = np.unique(self.true_light_wvfms['trigger_id'])
-        
-        true_wvfm_arr = np.empty(len(trig_ids), self.true_wvfm_dtype)
-
-        for itrig in trig_ids:
-            op_chans = np.unique(self.true_light_wvfms[self.true_light_wvfms['trigger_id']==itrig]['op_channel_id'])
-            true_wvfm_arr['trigger_id'][list(trig_ids).index(itrig)] = itrig
-            for ichan in op_chans:
-                chan_index = list(op_chan).index(ichan)
-                true_wvfm_arr[true_wvfm_arr['trigger_id']==itrig]['samples'][chan_index] = ichan
-                seg_ids = np.unique(self.true_light_wvfms[(self.true_light_wvfms['trigger_id']==itrig) & (self.true_light_wvfms['op_channel_id']==ichan)]['segment_id'])
-                for iseg in seg_ids:
-                    seg_index = list(seg_ids).index(iseg)
-                    tick = self.true_light_wvfms[(self.true_light_wvfms['trigger_id']==itrig) & (self.true_light_wvfms['op_channel_id']==ichan) & (self.true_light_wvfms['segment_id']==iseg)]['tick'] 
-                    pe_current = self.true_light_wvfms[(self.true_light_wvfms['trigger_id']==itrig) & (self.true_light_wvfms['op_channel_id']==ichan) & (self.true_light_wvfms['segment_id']==iseg)]['pe_current'] 
-                    
-                    #padding the truth waveform
-                    twvfm_arr = np.empty(self.n_samples)
-                    for i in range(self.n_samples):
-                        if i in tick:
-                            twvfm_arr[i] += pe_current[list(tick).index(i)]
-                        else:
-                            twvfm_arr[i] = 0.
-
-                    true_wvfm_arr[true_wvfm_arr['trigger_id']==itrig]['samples'][ichan][iseg] = twvfm_arr
-
-        print("true trigger ids", true_wvfm_arr['trigger_id'])
-        print("twvfm shape", true_wvfm_arr['samples'].shape)
-        self.data_manager.write_data(self.true_wvfm_dset_name, true_wvfm_arr)
-
-
-
 
         next_sl = self.slices[self.iteration]
 
         # get next trigger
         next_trig = self.light_trig[next_sl]
         next_wvfms = self.light_wvfms[next_sl]
-        print()
+        print('next_sl', next_sl)
 
         # get module start channel
         next_startch = [tr_ev[0][0] for tr_ev in next_trig]
@@ -393,4 +374,4 @@ class LightEventGeneratorMC(H5FlowGenerator):
             return H5FlowGenerator.EMPTY
         self.iteration += 1
         return event_slice
-
+        
