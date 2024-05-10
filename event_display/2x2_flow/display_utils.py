@@ -8,19 +8,75 @@ import numpy as np
 import pandas as pd
 import plotly
 import plotly.graph_objects as go
+import uproot
 
 
 def parse_contents(filename):
     data = h5flow.data.H5FlowDataManager(filename, "r")
     num_events = data["charge/events/data"].shape[0]
+
     return data, num_events
 
+def parse_minerva_contents(filename):
+    minerva_data = uproot.open(filename)
+    minerva_num_events = len(minerva_data["minerva"]["offsetX"].array(library="np"))
 
-def create_3d_figure(data, evid):
+    return minerva_data, minerva_num_events
+
+
+def create_3d_figure(minerva_data, data, evid):
     fig = go.Figure()
     # Select the hits for the current event
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
     finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
+
+    if minerva_data is not None:
+        minerva = draw_minerva()
+        fig.add_traces(minerva)
+
+        minerva_hits_x_offset = minerva_data["minerva"]["offsetX"].array(library="np")
+        minerva_hits_y_offset = minerva_data["minerva"]["offsetY"].array(library="np")
+        minerva_hits_z_offset = minerva_data["minerva"]["offsetZ"].array(library="np")
+
+        minerva_hits_x = minerva_data["minerva"]["trk_node_X"].array(library="np")
+        minerva_hits_y = minerva_data["minerva"]["trk_node_Y"].array(library="np")
+        minerva_hits_z = minerva_data["minerva"]["trk_node_Z"].array(library="np")
+
+        minerva_trk_index = minerva_data["minerva"]["trk_index"].array(library="np")
+        minerva_trk_nodes = minerva_data["minerva"]["trk_nodes"].array(library="np")
+        minerva_trk_node_qOverP = minerva_data["minerva"]["trk_node_qOverP"].array(library="np")
+
+        for idx in minerva_trk_index[evid]:
+        
+            n_nodes = minerva_trk_nodes[evid][idx]
+            # print(n_nodes)
+            if ((n_nodes >0)):
+                # print( "t", Mx2Hits.trk_node_Z[entry][idx][0])
+
+                x_nodes = minerva_hits_x[evid][idx][:n_nodes] - minerva_hits_x_offset[evid]
+                y_nodes = minerva_hits_y[evid][idx][:n_nodes] - minerva_hits_y_offset[evid]
+                z_nodes = minerva_hits_z[evid][idx][:n_nodes] - minerva_hits_z_offset[evid]
+                q_nodes = minerva_trk_node_qOverP[evid][idx][:n_nodes]
+
+            minerva_hit_traces = go.Scatter3d(x=x_nodes/10, y=y_nodes/10, z=z_nodes/10, marker_color=q_nodes, marker={
+            "size": 1.75,
+            "opacity": 0.7,
+            "colorscale": "cividis",
+            "colorbar": {
+                "title": "Hit energy [MeV]",
+                "titlefont": {"size": 12},
+                "tickfont": {"size": 10},
+                "thickness": 15,
+                "len": 0.5,
+                "xanchor": "left",
+                "x": 0,
+            },
+        },
+        name="minerva hits",
+        mode="markers",
+        showlegend=True,
+        opacity=0.7,)
+            fig.add_traces(minerva_hit_traces)
     # select the segments (truth) for the current event
     try:
         prompthits_segs = data[
@@ -46,7 +102,16 @@ def create_3d_figure(data, evid):
             print("Found truth info in minirun3 format")
         except:
             print("No truth info in minirun3 format found")
-            prompthits_segs = None
+            try:
+                prompthits_segs = data["charge/events",
+                                       "charge/calib_prompt_hits",
+                                       "charge/packets",
+                                       evid]
+                sim_version = "data"
+                print("Found data")
+            except:
+                print("Cannot process this file type")
+                prompthits_segs = None
 
     # Plot the prompt hits
     prompthits_traces = go.Scatter3d(
@@ -108,7 +173,7 @@ def create_3d_figure(data, evid):
     )
     fig.add_traces(finalhits_traces)
 
-    if prompthits_segs is not None:
+    if prompthits_segs is not None and sim_version!="data":
         segs_traces = plot_segs(
             prompthits_segs[0, :, 0, 0],
             sim_version=sim_version,
@@ -122,16 +187,17 @@ def create_3d_figure(data, evid):
 
     # Draw the TPC
     tpc_center, anodes, cathodes = draw_tpc(sim_version)
-    light_detectors = draw_light_detectors(data, evid)
-    minerva = draw_minerva()
+    light_detectors = draw_light_detectors(data, evid, sim_version)
+    
 
     fig.add_traces(tpc_center)
     fig.add_traces(anodes)
     fig.add_traces(cathodes)
-    fig.add_traces(minerva)
     fig.add_traces(light_detectors)
 
-    return fig
+    fig.update_layout(scene=dict(camera=dict(up=dict(x=0, y=1, z=0))))
+
+    return fig, sim_version
 
 
 def plot_segs(segs, sim_version="minirun5", **kwargs):
@@ -170,9 +236,14 @@ def draw_tpc(sim_version="minirun5"):
         anode_xs = anode_xs * 10
         anode_ys = anode_ys * 10
         anode_zs = anode_zs * 10
-    if sim_version == "minirun5":  # hit coordinates are in cm
+    if sim_version == "minirun5" or sim_version=="data":  # hit coordinates are in cm
         detector_center = (0, 0, 0)
         anode_ys = anode_ys - 42
+    if sim_version == "data": # module 1
+        detector_center = (0, 0, 0)
+        anode_xs = anode_xs[1:2]
+        anode_ys = anode_ys
+        anode_zs = anode_zs[0:2] + 33
 
     center = go.Scatter3d(
         x=[detector_center[0]],
@@ -182,12 +253,14 @@ def draw_tpc(sim_version="minirun5"):
         mode="markers",
         name="tpc center",
     )
+
     anodes = draw_anode_planes(
         anode_xs, anode_ys, anode_zs, colorscale="ice", showscale=False, opacity=0.1
     )
     cathodes = draw_cathode_planes(
         anode_xs, anode_ys, anode_zs, colorscale="burg", showscale=False, opacity=0.1
     )
+
     return center, anodes, cathodes
 
 
@@ -241,13 +314,13 @@ def draw_minerva():
                                        z=[z_base[j][0], z_base[j][0]],
                                        mode='lines',
                                        showlegend=False,
-                                       line=dict(color='black')))  # Plot bottom face
+                                       line=dict(color='grey')))  # Plot bottom face
             traces.append(go.Scatter3d(x=[x_base[i], x_base[(i + 1) % len(x_base)]],
                                        y=[y_base[i], y_base[(i + 1) % len(x_base)]],
                                        z=[z_base[j][1], z_base[j][1]],
                                        mode='lines',
                                        showlegend=False,
-                                       line=dict(color='black')))  # Plot top face
+                                       line=dict(color='grey')))  # Plot top face
             traces.append(go.Scatter3d(x=[x_base[i], x_base[i]],
                                        y=[y_base[i], y_base[i]],
                                        z=[z_base[j][0], z_base[j][1]],
@@ -262,12 +335,12 @@ def draw_minerva():
                                        z=[z_base[j][0], z_base[j][1]],
                                        mode='lines',
                                        showlegend=False,
-                                       line=dict(color='black')))
+                                       line=dict(color='grey')))  # Plot vertical edges
 
     return traces
 
 
-def draw_light_detectors(data, evid):
+def draw_light_detectors(data, evid, sim_version):
     try:
         data["charge/events", "light/events", "light/wvfm", evid]
     except:
@@ -281,7 +354,7 @@ def draw_light_detectors(data, evid):
         )
         return []
 
-    waveforms_all_detectors = get_waveforms_all_detectors(match_light)
+    waveforms_all_detectors = get_waveforms_all_detectors(match_light, sim_version)
 
     drawn_objects = []
     drawn_objects.extend(plot_light_traps(data, waveforms_all_detectors))
@@ -301,12 +374,15 @@ def match_light_to_charge_event(data, evid):
     return match_light
 
 
-def get_waveforms_all_detectors(match_light):
+def get_waveforms_all_detectors(match_light, sim_version):
     """
     Get the light waveforms for the matched light events.
     """
     n_matches = match_light["samples"].shape[1]
-    waveforms_all_detectors = match_light['samples'].reshape(n_matches,8,64,1000)
+    if sim_version!="data":
+        waveforms_all_detectors = match_light['samples'].reshape(n_matches,8,64,1000)
+    if sim_version=="data":
+        waveforms_all_detectors = match_light['samples'].reshape(n_matches,2,64,1000)
     return waveforms_all_detectors
 
 
@@ -342,7 +418,10 @@ def plot_light_traps(data, waveforms_all_detectors):
         sipms = channel_map_deluxe[channel_map_deluxe['det_id']==opid][['adc', 'channel']].values
         sum_photons = 0
         for adc, channel in sipms:
-            wvfm = waveforms_all_detectors[:, adc, channel, :]
+            try:
+                wvfm = waveforms_all_detectors[:, adc, channel, :]
+            except:
+                wvfm = np.zeros(waveforms_all_detectors[:,0,0,:].shape, dtype=int)
             sum_wvfm = np.sum(wvfm, axis=0) # sum over the events
             sum_photons += np.sum(sum_wvfm, axis=0) # sum over the time
         photon_sums.append(sum_photons)
@@ -354,7 +433,10 @@ def plot_light_traps(data, waveforms_all_detectors):
         sipms = channel_map_deluxe[channel_map_deluxe['det_id']==opid][['adc', 'channel']].values
         sum_photons = 0
         for adc, channel in sipms:
-            wvfm = waveforms_all_detectors[:, adc, channel, :]
+            try:
+                wvfm = waveforms_all_detectors[:, adc, channel, :]
+            except:
+                wvfm = np.zeros(waveforms_all_detectors[:,0,0,:].shape, dtype=int)
             sum_wvfm = np.sum(wvfm, axis=0)
             sum_photons += np.sum(sum_wvfm, axis=0) 
         opid_str = f"opid_{opid}"
@@ -390,7 +472,7 @@ def plot_light_traps(data, waveforms_all_detectors):
     return drawn_objects
 
 
-def plot_waveform(data, evid, opid):
+def plot_waveform(data, evid, opid, sim_version):
     try:
         charge = data["charge/events", evid][["id", "unix_ts"]]
         num_light = data["light/events/data"].shape[0]
@@ -410,14 +492,17 @@ def plot_waveform(data, evid, opid):
         return []
 
     fig = go.Figure()
-    waveforms_all_detectors = get_waveforms_all_detectors( match_light)
+    waveforms_all_detectors = get_waveforms_all_detectors(match_light, sim_version)
 
     channel_map_deluxe = pd.read_csv('sipm_channel_map.csv')
     sipms = channel_map_deluxe[channel_map_deluxe['det_id']==opid][['adc', 'channel']].values
     
     sum_wvfm = np.array([0]*1000)
     for adc, channel in sipms:
-        wvfm = waveforms_all_detectors[:, adc, channel, :]
+        try:
+            wvfm = waveforms_all_detectors[:, adc, channel, :]
+        except:
+            wvfm = np.zeros(waveforms_all_detectors[:,0,0,:].shape, dtype=int)
         event_sum_wvfm = np.sum(wvfm, axis=0) # sum over the events
         sum_wvfm += event_sum_wvfm # sum over the sipms
 
@@ -427,7 +512,10 @@ def plot_waveform(data, evid, opid):
     drawn_objects = go.Scatter(x=x, y=y, name=f"Channel sum for light trap {opid}", visible=True, showlegend=True)
     fig.add_traces(drawn_objects)
     for adc, channel in sipms:
-        wvfm = waveforms_all_detectors[:, adc, channel, :]
+        try:
+            wvfm = waveforms_all_detectors[:, adc, channel, :]
+        except:
+            wvfm = np.zeros(waveforms_all_detectors[:,0,0,:].shape, dtype=int)
         sum_wvfm = np.sum(wvfm, axis=0)
         fig.add_traces(go.Scatter(x=x, y=sum_wvfm, visible="legendonly", showlegend=True, name=f"Channel {adc, channel}"))
 
