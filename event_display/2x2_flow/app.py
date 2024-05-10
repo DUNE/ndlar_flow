@@ -10,11 +10,18 @@ import shutil
 
 from dash import dcc
 from dash import html
-#from dash import no_update
+
+# from dash import no_update
 from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Output, DashProxy, Input, State
 
-from display_utils import parse_contents, parse_minerva_contents, create_3d_figure, plot_waveform, plot_charge
+from display_utils import (
+    parse_contents,
+    parse_minerva_contents,
+    create_3d_figure,
+    plot_waveform,
+    plot_charge,
+)
 
 from os.path import basename
 from pathlib import Path
@@ -33,12 +40,12 @@ app.layout = html.Div(
         dcc.Location(id="url"),
         dcc.Store(id="filename", storage_type="local", data=""),
         dcc.Store(id="minerva-filename", storage_type="local", data=""),
-        dcc.Store(id='event-id', data=0),
-        dcc.Store(id='minerva-event-id', data=0),
-        dcc.Store(id='data-length', data=0),
-        dcc.Store(id='minerva-data-length', data=0),
-        dcc.Store(id='event-time', data=0),
-        dcc.Store(id='sim-version', data=0),
+        dcc.Store(id="event-id", data=0),
+        dcc.Store(id="minerva-event-id", data=0),
+        dcc.Store(id="data-length", data=0),
+        dcc.Store(id="minerva-data-length", data=0),
+        dcc.Store(id="event-time", data=0),
+        dcc.Store(id="sim-version", data=0),
         # Header
         html.H2(children="2x2 event display", style={"textAlign": "center"}),
         html.Div(children="", id="filename-div", style={"textAlign": "center"}),
@@ -60,47 +67,62 @@ app.layout = html.Div(
             ),
         ),
         # File input
-        dcc.Input(id='file-path', type='text', placeholder='Enter a file path'),
-        html.Button('Load File', id='load-button', n_clicks=0),
-        dcc.Input(id='minerva-file-path', type='text', placeholder='Enter a minerva file path'),
-        html.Button('Load Minerva File', id='load-minerva-button', n_clicks=0),
+        dcc.Input(id="file-path", type="text", placeholder="Enter a file path"),
+        html.Button("Load File", id="load-button", n_clicks=0),
+        dcc.Input(
+            id="minerva-file-path", type="text", placeholder="Enter a minerva file path"
+        ),
+        html.Button("Load Minerva File", id="load-minerva-button", n_clicks=0),
         # Event ID input box
         dcc.Input(
-                id="input-evid",
-                type="number",
-                placeholder="0",
-                debounce=True,
-                style={
-                    "width": "6em",
-                    "display": "inline-block",
-                    "margin-right": "0.5em",
-                    "margin-left": "0.5em",
-                },
-            ),
+            id="input-evid",
+            type="number",
+            placeholder="0",
+            debounce=True,
+            style={
+                "width": "6em",
+                "display": "inline-block",
+                "margin-right": "0.5em",
+                "margin-left": "0.5em",
+            },
+        ),
         # Event ID buttons
-        html.Button('Previous Event', id='prev-button', n_clicks=0),
-        html.Button('Next Event', id='next-button', n_clicks=0),
-        html.Div(id='evid-div', style={"textAlign": "center"}),
-        html.Div(children="", id='event-time-div'),
+        html.Button("Previous Event", id="prev-button", n_clicks=0),
+        html.Button("Next Event", id="next-button", n_clicks=0),
+        html.Div(id="evid-div", style={"textAlign": "center"}),
+        html.Div(children="", id="event-time-div"),
         # Graphs
         html.Div(
             [
                 # Large 3D graph on the left
-                html.Div(dcc.Graph(id='3d-graph', style={'height': '70vh', 'width': '50vw', 'float': 'left'})),
-
+                html.Div(
+                    dcc.Graph(
+                        id="3d-graph",
+                        style={"height": "70vh", "width": "50vw", "float": "left"},
+                    )
+                ),
                 # Smaller Graphs on the right
                 html.Div(
                     [
                         # Light waveform graph on the top
-                        html.Div(dcc.Graph(id="light-waveform", style={'height': '35vh', 'width': '50vw'})),
-
+                        html.Div(
+                            dcc.Graph(
+                                id="light-waveform",
+                                style={"height": "35vh", "width": "50vw"},
+                            )
+                        ),
                         # Charge graph on the bottom
-                        html.Div(dcc.Graph(id="charge-hist", style={'height': '35vh', 'width': '50vw'})),
+                        html.Div(
+                            dcc.Graph(
+                                id="charge-hist",
+                                style={"height": "35vh", "width": "50vw"},
+                            )
+                        ),
                     ],
-                    style={'float': 'right'}
+                    style={"float": "right"},
                 ),
             ],
-            style={'display': 'flex'}
+            style={"display": "flex"},
         ),
     ]
 )
@@ -116,7 +138,7 @@ app.layout = html.Div(
         Output("filename", "data"),
         Output("filename-div", "children"),
         Output("event-id", "data", allow_duplicate=True),
-        Output('data-length', 'data'),
+        Output("data-length", "data"),
     ],
     [
         Input("upload-data-div", "isCompleted"),
@@ -126,7 +148,7 @@ app.layout = html.Div(
         State("upload-data-div", "fileNames"),
         State("upload-data-div", "upload_id"),
     ],
-    prevent_initial_call=True
+    prevent_initial_call=True,
 )
 def upload_file(is_completed, current_filename, filenames, upload_id):
     """
@@ -148,35 +170,37 @@ def upload_file(is_completed, current_filename, filenames, upload_id):
 
     return "", "no file uploaded", 0, 0
 
+
 # Callback to handle file selection from path
 # ============================================
 @app.callback(
-    Input('load-button', 'n_clicks'),
-    Input('file-path', 'value'),
+    Input("load-button", "n_clicks"),
+    Input("file-path", "value"),
     [
         Output("filename", "data", allow_duplicate=True),
         Output("filename-div", "children", allow_duplicate=True),
         Output("event-id", "data", allow_duplicate=True),
-        Output('data-length', 'data', allow_duplicate=True),
+        Output("data-length", "data", allow_duplicate=True),
     ],
 )
 def load_file(n, file_path):
-    if n>0 and file_path!="":
+    if n > 0 and file_path != "":
         _, num_events = parse_contents(file_path)
         return file_path, file_path, 0, num_events
 
+
 @app.callback(
-    Input('load-minerva-button', 'n_clicks'),
-    Input('minerva-file-path', 'value'),
+    Input("load-minerva-button", "n_clicks"),
+    Input("minerva-file-path", "value"),
     [
         Output("minerva-filename", "data", allow_duplicate=True),
         Output("minerva-filename-div", "children", allow_duplicate=True),
         Output("minerva-event-id", "data", allow_duplicate=True),
-        Output('minerva-data-length', 'data', allow_duplicate=True),
+        Output("minerva-data-length", "data", allow_duplicate=True),
     ],
 )
 def load_minerva(n, minerva_file_path):
-    if n>0 and minerva_file_path!= "":
+    if n > 0 and minerva_file_path != "":
         _, minerva_num_events = parse_minerva_contents(minerva_file_path)
         return minerva_file_path, minerva_file_path, 0, minerva_num_events
 
@@ -184,11 +208,11 @@ def load_minerva(n, minerva_file_path):
 # Callbacks to handle the event ID and time display
 # ==================================================
 @app.callback(
-    Output('event-id', 'data', allow_duplicate=True),
-    Input('next-button', 'n_clicks'),
-    State('event-id', 'data'),
-    State('data-length', 'data'),
-    prevent_initial_call=True
+    Output("event-id", "data", allow_duplicate=True),
+    Input("next-button", "n_clicks"),
+    State("event-id", "data"),
+    State("data-length", "data"),
+    prevent_initial_call=True,
 )
 def increment(n, evid, max_value):
     """Increment the event ID with the button"""
@@ -199,25 +223,27 @@ def increment(n, evid, max_value):
         else:
             return new_evid
 
+
 @app.callback(
-    Output('event-id', 'data', allow_duplicate=True),
-    Input('prev-button', 'n_clicks'),
-    State('event-id', 'data'),
-    State('data-length', 'data'),
-    prevent_initial_call=True
+    Output("event-id", "data", allow_duplicate=True),
+    Input("prev-button", "n_clicks"),
+    State("event-id", "data"),
+    State("data-length", "data"),
+    prevent_initial_call=True,
 )
 def decrement(n, evid, max_value):
     """Decrement the event ID with the button"""
     if n > 0:
         if evid > 0:
             return evid - 1
-        return max_value - 1 # wrap around
+        return max_value - 1  # wrap around
+
 
 @app.callback(
-    Output('event-id', 'data', allow_duplicate=True),
-    Input('input-evid', 'value'),
-    State('data-length', 'data'),
-    prevent_initial_call=True
+    Output("event-id", "data", allow_duplicate=True),
+    Input("input-evid", "value"),
+    State("data-length", "data"),
+    prevent_initial_call=True,
 )
 def set_evid(value, max_value):
     """Set the event ID in the input box"""
@@ -227,63 +253,69 @@ def set_evid(value, max_value):
         else:
             return value
 
+
 @app.callback(
-    Output('evid-div', 'children'),
-    Input('event-id', 'data'),
-    State('data-length', 'data'),
+    Output("evid-div", "children"),
+    Input("event-id", "data"),
+    State("data-length", "data"),
 )
 def update_div(evid, max_value):
     """Update the event ID display"""
-    return f'Event ID: {evid}/{max_value}'
+    return f"Event ID: {evid}/{max_value}"
+
 
 @app.callback(
-    Output('event-time-div', 'children'),
-    Input('event-id', 'data'),
-    State('event-time', 'data'),
+    Output("event-time-div", "children"),
+    Input("event-id", "data"),
+    State("event-time", "data"),
 )
-def update_time(_,time):
+def update_time(_, time):
     """Update the time display"""
-    return f'Charge unix_ts: {time}'
-
+    return f"Charge unix_ts: {time}"
 
 
 # Callback to display the event
 # =============================
 @app.callback(
-    Output('3d-graph', 'figure'),
-    Output('sim-version', 'data'),
-    Output('event-time', 'data'),
-    Input('filename', 'data'),
-    Input('minerva-filename', 'data'),
-    Input('event-id', 'data'),
-    prevent_initial_call=True
+    Output("3d-graph", "figure"),
+    Output("sim-version", "data"),
+    Output("event-time", "data"),
+    Input("filename", "data"),
+    Input("minerva-filename", "data"),
+    Input("event-id", "data"),
+    prevent_initial_call=True,
 )
 def update_graph(filename, minerva_filename, evid):
     """Update the 3D graph when the event ID is changed"""
     data = None
     minerva_data = None
-    if minerva_filename!="":
+    if minerva_filename != "":
         minerva_data, _ = parse_minerva_contents(minerva_filename)
-    if filename!="":
+    if filename != "":
         data, _ = parse_contents(filename)
         graph, sim_version = create_3d_figure(minerva_data, data, evid)
 
-    return graph, sim_version, data['charge/events', evid]["unix_ts"] # TODO: move to utils
-    
+    return (
+        graph,
+        sim_version,
+        data["charge/events", evid]["unix_ts"],
+    )  # TODO: move to utils
+
+
 @app.callback(
-    Input('filename', 'data'),
-    Input('event-id', 'data'),
-    Input('sim-version', 'data'),
-    Input('3d-graph', 'figure'),
-    Input('3d-graph', 'clickData'),
-    Output('light-waveform', 'figure'),
+    Input("filename", "data"),
+    Input("event-id", "data"),
+    Input("sim-version", "data"),
+    Input("3d-graph", "figure"),
+    Input("3d-graph", "clickData"),
+    Output("light-waveform", "figure"),
 )
 def update_light_waveform(filename, evid, sim_version, graph, click_data):
     """Update the light waveform graph when the 3D graph is clicked"""
     if click_data:
         curvenum = int(click_data["points"][0]["curveNumber"])
         # try:
-        opid = int(graph['data'][curvenum]['ids'][0][0].split('_')[1])
+        opid = int(graph["data"][curvenum]["ids"][0][0].split("_")[1])
         if filename is not None:
             data, _ = parse_contents(filename)
             return plot_waveform(data, evid, opid, sim_version)
@@ -291,10 +323,11 @@ def update_light_waveform(filename, evid, sim_version, graph, click_data):
         #     print("That is not a light trap, no waveform to plot")
     return go.Figure()
 
+
 @app.callback(
-    Input('filename', 'data'),
-    Input('event-id', 'data'),
-    Output('charge-hist', 'figure'),
+    Input("filename", "data"),
+    Input("event-id", "data"),
+    Output("charge-hist", "figure"),
 )
 def update_charge_histogram(filename, evid):
     """Update the charge graph when the event ID is changed"""
@@ -302,7 +335,6 @@ def update_charge_histogram(filename, evid):
         data, _ = parse_contents(filename)
         return plot_charge(data, evid)
     return go.Figure()
-
 
 
 # Cleaning up
