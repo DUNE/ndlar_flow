@@ -14,7 +14,7 @@ from dash import html
 from dash.exceptions import PreventUpdate
 from dash_extensions.enrich import Output, DashProxy, Input, State
 
-from display_utils import parse_contents, create_3d_figure, plot_waveform, plot_charge
+from display_utils import parse_contents, parse_minerva_contents, create_3d_figure, plot_waveform, plot_charge
 
 from os.path import basename
 from pathlib import Path
@@ -32,12 +32,17 @@ app.layout = html.Div(
         # Hidden divs to store data
         dcc.Location(id="url"),
         dcc.Store(id="filename", storage_type="local", data=""),
+        dcc.Store(id="minerva-filename", storage_type="local", data=""),
         dcc.Store(id='event-id', data=0),
+        dcc.Store(id='minerva-event-id', data=0),
         dcc.Store(id='data-length', data=0),
+        dcc.Store(id='minerva-data-length', data=0),
         dcc.Store(id='event-time', data=0),
+        dcc.Store(id='sim-version', data=0),
         # Header
         html.H2(children="2x2 event display", style={"textAlign": "center"}),
         html.Div(children="", id="filename-div", style={"textAlign": "center"}),
+        html.Div(children="", id="minerva-filename-div", style={"textAlign": "center"}),
         # Upload button
         html.Div(
             du.Upload(
@@ -56,7 +61,9 @@ app.layout = html.Div(
         ),
         # File input
         dcc.Input(id='file-path', type='text', placeholder='Enter a file path'),
-        html.Button('Load File', id='load-button'),
+        html.Button('Load File', id='load-button', n_clicks=0),
+        dcc.Input(id='minerva-file-path', type='text', placeholder='Enter a minerva file path'),
+        html.Button('Load Minerva File', id='load-minerva-button', n_clicks=0),
         # Event ID input box
         dcc.Input(
                 id="input-evid",
@@ -154,9 +161,24 @@ def upload_file(is_completed, current_filename, filenames, upload_id):
     ],
 )
 def load_file(n, file_path):
-    if n>0:
+    if n>0 and file_path!="":
         _, num_events = parse_contents(file_path)
-    return file_path, file_path, 0, num_events
+        return file_path, file_path, 0, num_events
+
+@app.callback(
+    Input('load-minerva-button', 'n_clicks'),
+    Input('minerva-file-path', 'value'),
+    [
+        Output("minerva-filename", "data", allow_duplicate=True),
+        Output("minerva-filename-div", "children", allow_duplicate=True),
+        Output("minerva-event-id", "data", allow_duplicate=True),
+        Output('minerva-data-length', 'data', allow_duplicate=True),
+    ],
+)
+def load_minerva(n, minerva_file_path):
+    if n>0 and minerva_file_path!= "":
+        _, minerva_num_events = parse_minerva_contents(minerva_file_path)
+        return minerva_file_path, minerva_file_path, 0, minerva_num_events
 
 
 # Callbacks to handle the event ID and time display
@@ -229,35 +251,44 @@ def update_time(_,time):
 # =============================
 @app.callback(
     Output('3d-graph', 'figure'),
+    Output('sim-version', 'data'),
     Output('event-time', 'data'),
     Input('filename', 'data'),
+    Input('minerva-filename', 'data'),
     Input('event-id', 'data'),
     prevent_initial_call=True
 )
-def update_graph(filename, evid):
+def update_graph(filename, minerva_filename, evid):
     """Update the 3D graph when the event ID is changed"""
-    if filename is not None:
+    data = None
+    minerva_data = None
+    if minerva_filename!="":
+        minerva_data, _ = parse_minerva_contents(minerva_filename)
+    if filename!="":
         data, _ = parse_contents(filename)
-        return create_3d_figure(data, evid), data['charge/events', evid]["unix_ts"] # TODO: move to utils
+        graph, sim_version = create_3d_figure(minerva_data, data, evid)
+
+    return graph, sim_version, data['charge/events', evid]["unix_ts"] # TODO: move to utils
     
 @app.callback(
     Input('filename', 'data'),
     Input('event-id', 'data'),
+    Input('sim-version', 'data'),
     Input('3d-graph', 'figure'),
     Input('3d-graph', 'clickData'),
     Output('light-waveform', 'figure'),
 )
-def update_light_waveform(filename, evid, graph, click_data):
+def update_light_waveform(filename, evid, sim_version, graph, click_data):
     """Update the light waveform graph when the 3D graph is clicked"""
     if click_data:
         curvenum = int(click_data["points"][0]["curveNumber"])
-        try:
-            opid = int(graph['data'][curvenum]['ids'][0][0].split('_')[1])
-            if filename is not None:
-                data, _ = parse_contents(filename)
-                return plot_waveform(data, evid, opid)
-        except:
-            print("That is not a light trap, no waveform to plot")
+        # try:
+        opid = int(graph['data'][curvenum]['ids'][0][0].split('_')[1])
+        if filename is not None:
+            data, _ = parse_contents(filename)
+            return plot_waveform(data, evid, opid, sim_version)
+        # except:
+        #     print("That is not a light trap, no waveform to plot")
     return go.Figure()
 
 @app.callback(
