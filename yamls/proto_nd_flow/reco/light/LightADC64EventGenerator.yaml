@@ -9,16 +9,16 @@ params:
   n_adcs: 8
   n_channels: 64
   sn_table:
-   - '0xcd94138'  # Mod0, Slot 3
-   - '0xcd8d648'  # Mod0, Slot 5
-   - '0x2650b3ff'  # Mod1, Slot 7
-   - '0xcd913fb'  # Mod1, Slot 9
-   - '0xcd94149'  # Mod2, Slot 11
-   - '0x26517dff'  # Mod2, Slot 13
-   - '0x264bd8ff'  # Mod3, Slot 15
-   - '0x25b771ff'  # Mod3, Slot 17
+   - 642823167
+   - 642874879
+   - 215553019
+   - 215563696
+   - 215537224
+   - 632779263
+   - 642504959
+   - 215564600
   sync_channel: 0
   sync_threshold: 40000
-  batch_size: 12
+  batch_size: 1  #FIXME: only works with batch_size=1 at the moment (to be fixed in adc64format)
   utime_ms_window: 1000
   tai_ns_window: 1000
