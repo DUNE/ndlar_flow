@@ -94,7 +94,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
     ])
 
     def __init__(self, **params):
-        super(LightADC64EventGenerator, self).__init__(**params)
+        super(LightMPDEventGenerator, self).__init__(**params)
 
         # set up parameters
         for key,val in self.defaults.items():
@@ -134,10 +134,10 @@ class LightMPDEventGenerator(H5FlowGenerator):
 
     def finish(self):
         self.input_file.close()
-        super(LightADC64EventGenerator, self).finish()
+        super(LightMPDEventGenerator, self).finish()
 
     def init(self):
-        super(LightADC64EventGenerator, self).init()
+        super(LightMPDEventGenerator, self).init()
 
         # fix dataset dtypes
         self.event_dtype = self.event_dtype()
@@ -161,7 +161,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
                                     )
 
     def finish(self):
-        super(LightADC64EventGenerator, self).finish()
+        super(LightMPDEventGenerator, self).finish()
         self.input_file.close()
 
     @staticmethod
