@@ -20,7 +20,7 @@ H5FLOW_CMD='h5flow'
 #H5FLOW_CMD='srun -n32 h5flow'
 
 # run all stages
-WORKFLOW1='yamls/proto_nd_flow/workflows/light/light_event_building_adc64.yaml'
+WORKFLOW1='yamls/proto_nd_flow/workflows/light/light_event_building_mpd.yaml'
 
 HERE=`pwd`
 #cd ndlar_flow
