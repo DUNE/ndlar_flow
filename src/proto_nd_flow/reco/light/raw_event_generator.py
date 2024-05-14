@@ -59,11 +59,11 @@ class LightEventGenerator(H5FlowGenerator):
     '''
     default_n_adcs = 2
     default_n_channels = 64
+    default_n_channels_MC = 96
     default_chunk_size = 128
     default_utime_ms_window = 1000
     default_tai_ns_window = 1000
     default_tai_ns_mod = 1000000000
-    default_max_tracks = 20
 
     def buffer_dtype(self): return np.dtype([
         ('event', 'i4'),  # event number in source ROOT file
@@ -87,11 +87,12 @@ class LightEventGenerator(H5FlowGenerator):
     def wvfm_dtype(self): return np.dtype([
         ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples))  # sample value
     ])
-    
+    """ 
     def true_wvfm_dtype(self): return np.dtype([
         ('trigger_id', 'i4'),
-        ('samples', 'i2', (self.n_channels, self.max_tracks, self.n_samples))
+        ('samples', 'i2', (self.n_channels_MC, self.max_tracks, self.n_samples))
     ])
+    """
     
 
     def __init__(self, **params):
@@ -107,7 +108,7 @@ class LightEventGenerator(H5FlowGenerator):
         self.tai_ns_mod = int(params.get('tai_ns_mod', self.default_tai_ns_mod))
         self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.event_dset_name = self.dset_name
-        self.segment_id = params.get('segment_id')
+        #self.segment_id = params.get('segment_id')
 
         # set up input file
         import ROOT

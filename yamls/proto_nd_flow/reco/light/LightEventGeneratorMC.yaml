@@ -90,4 +90,3 @@ params:
   disabled_channels:
    - [-1,-1]
 
-  max_tracks: 20
