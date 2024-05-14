@@ -153,6 +153,7 @@ class CalibHitBuilder(H5FlowStage):
         else:
             n = 0
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
+        print(index_arr)
 
         has_mc_truth = packet_seg_bt is not None
 

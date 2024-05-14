@@ -417,8 +417,11 @@ class Hough3D(H5FlowStage):
 
         if verbose >= 2:print(*clusters,sep='\n')
 
-        # pair-wise cluster indices
-        pw_clusters = np.full(nhits,-1)
-        for cluster_ind, cluster_hit_inds in enumerate(clusters):
-            pw_clusters[cluster_hit_inds] = cluster_ind
-        return pw_clusters
+        return clusters
+
+
+        # # pair-wise cluster indices
+        # pw_clusters = np.full(nhits,-1)
+        # for cluster_ind, cluster_hit_inds in enumerate(clusters):
+        #     pw_clusters[cluster_hit_inds] = cluster_ind
+        # return pw_clusters

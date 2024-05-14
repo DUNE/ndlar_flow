@@ -89,6 +89,8 @@ class EventBuilder(H5FlowStage):
         hits_mask = ~rfn.structured_to_unstructured(hits_data.mask).any(axis=-1)
         ext_trigs_mask = ~rfn.structured_to_unstructured(ext_trigs_data.mask).any(axis=-1)
 
+        print(hits_mask.shape)
+
         # write event
         events_slice = self.data_manager.reserve_data(self.events_dset_name, source_slice)
         events_arr = np.zeros((len(raw_event_data,)), dtype=self.events_dtype)
