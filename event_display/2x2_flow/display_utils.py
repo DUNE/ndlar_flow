@@ -31,7 +31,7 @@ def create_3d_figure(minerva_data, data, evid):
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
     finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
 
-    if minerva_data is not None:
+    if minerva_data is not None and evid<len(minerva_data["minerva"]["offsetX"].array(library="np")):
         minerva = draw_minerva()
         fig.add_traces(minerva)
 
@@ -207,7 +207,7 @@ def create_3d_figure(minerva_data, data, evid):
     fig.add_traces(cathodes)
     fig.add_traces(light_detectors)
 
-    fig.update_layout(scene=dict(camera=dict(up=dict(x=0, y=1, z=0))))
+    fig.update_layout(plot_bgcolor='white', scene=dict(camera=dict(up=dict(x=0, y=1, z=0))))
 
     return fig, sim_version
 
@@ -393,7 +393,7 @@ def draw_light_detectors(data, evid, sim_version):
     waveforms_all_detectors = get_waveforms_all_detectors(match_light, sim_version)
 
     drawn_objects = []
-    drawn_objects.extend(plot_light_traps(data, waveforms_all_detectors))
+    drawn_objects.extend(plot_light_traps(data, waveforms_all_detectors, sim_version))
 
     return drawn_objects
 
@@ -406,7 +406,11 @@ def match_light_to_charge_event(data, evid):
     """
 
     match_light = data["charge/events", "light/events", "light/wvfm", evid]
-
+    if match_light.mask:
+        try:
+            match_light = match_light[match_light.mask == False]
+        except:
+            print("No matching light information found, plotting zeros")        
     return match_light
 
 
@@ -418,11 +422,16 @@ def get_waveforms_all_detectors(match_light, sim_version):
     if sim_version != "data":
         waveforms_all_detectors = match_light["samples"].reshape(n_matches, 8, 64, 1000)
     if sim_version == "data":
-        waveforms_all_detectors = match_light["samples"].reshape(n_matches, 2, 64, 1000)
+        waveforms_all_detectors = match_light["samples"].reshape(n_matches, 2, 64, 1000).astype(np.float64) # need to find a way to subtract the baseline?
+        # for each waveform subtract the mean of the first 50 samples
+        # compute the mean of the first 50 samples along the last axis
+        baseline_mean = np.mean(waveforms_all_detectors[:, :, :, :50], axis=-1)
+        # subtract the baseline mean from each waveform
+        waveforms_all_detectors -= baseline_mean[:, :, :, np.newaxis]
     return waveforms_all_detectors
 
 
-def plot_light_traps(data, waveforms_all_detectors):
+def plot_light_traps(data, waveforms_all_detectors, sim_version):
     """Plot optical detectors"""
     drawn_objects = []
 
@@ -430,137 +439,27 @@ def plot_light_traps(data, waveforms_all_detectors):
 
     channel_map = np.array(
         [
-            0,
-            8,
-            16,
-            24,
-            32,
-            40,
-            48,
-            56,
-            64,
-            72,
-            80,
-            88,
-            96,
-            104,
-            112,
-            120,
-            65,
-            73,
-            81,
-            89,
-            97,
-            105,
-            113,
-            121,
-            1,
-            9,
-            17,
-            25,
-            33,
-            41,
-            49,
-            57,
-            2,
-            10,
-            18,
-            26,
-            34,
-            42,
-            50,
-            58,
-            66,
-            74,
-            82,
-            90,
-            98,
-            106,
-            114,
-            122,
-            67,
-            75,
-            83,
-            91,
-            99,
-            107,
-            115,
-            123,
-            3,
-            11,
-            19,
-            27,
-            35,
-            43,
-            51,
-            59,
-            4,
-            12,
-            20,
-            28,
-            36,
-            44,
-            52,
-            60,
-            68,
-            76,
-            84,
-            92,
-            100,
-            108,
-            116,
-            124,
-            69,
-            77,
-            85,
-            93,
-            101,
-            109,
-            117,
-            125,
-            5,
-            13,
-            21,
-            29,
-            37,
-            45,
-            53,
-            61,
-            6,
-            14,
-            22,
-            30,
-            38,
-            46,
-            54,
-            62,
-            70,
-            78,
-            86,
-            94,
-            102,
-            110,
-            118,
-            126,
-            71,
-            79,
-            87,
-            95,
-            103,
-            111,
-            119,
-            127,
-            7,
-            15,
-            23,
-            31,
-            39,
-            47,
-            55,
-            63,
+            0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120,
+            65, 73, 81, 89, 97, 105, 113, 121, 1, 9, 17, 25, 33, 41, 49, 57,
+            2, 10, 18, 26, 34, 42, 50, 58, 66, 74, 82, 90, 98, 106, 114, 122,
+            67, 75, 83, 91, 99, 107, 115, 123, 3, 11, 19, 27, 35, 43, 51, 59,
+            4, 12, 20, 28, 36, 44, 52, 60, 68, 76, 84, 92, 100, 108, 116, 124,
+            69, 77, 85, 93, 101, 109, 117, 125, 5, 13, 21, 29, 37, 45, 53, 61,
+            6, 14, 22, 30, 38, 46, 54, 62, 70, 78, 86, 94, 102, 110, 118, 126,
+            71, 79, 87, 95, 103, 111, 119, 127, 7, 15, 23, 31, 39, 47, 55, 63,
         ]
     )  # this maps detector position to detector number
     # we need to invert the mapping because I'm stupid
+
+    if sim_version == "data":
+        channel_map = np.array(
+            [
+                17, 19, 21, 23, 25, 27, 29, 31,
+                1, 3, 5, 7, 9, 11, 13, 15,
+                0, 2, 4, 6, 8, 10, 12, 14,
+                16, 18, 20, 22, 24, 26, 28, 30
+            ]
+        )
     channel_map = np.argsort(channel_map)
     channel_map_deluxe = pd.read_csv("sipm_channel_map.csv")
     xs = []
@@ -584,14 +483,19 @@ def plot_light_traps(data, waveforms_all_detectors):
         ].values
         sum_photons = 0
         for adc, channel in sipms:
-            try:
-                wvfm = waveforms_all_detectors[:, adc, channel, :]
-            except:
+            # try:
+            wvfm = waveforms_all_detectors[:, adc, channel, :]
+            # except:
+            #     wvfm = np.zeros(waveforms_all_detectors[:, 0, 0, :].shape, dtype=int)
+            # if all values are masked, replace the waveform with zeros
+            if np.ma.all(np.ma.getmaskarray(wvfm)):
                 wvfm = np.zeros(waveforms_all_detectors[:, 0, 0, :].shape, dtype=int)
             sum_wvfm = np.sum(wvfm, axis=0)  # sum over the events
             sum_photons += np.sum(sum_wvfm, axis=0)  # sum over the time
         photon_sums.append(sum_photons)
-    max_integral = np.max(photon_sums)
+    max_integral = np.max(np.abs(photon_sums))
+    if max_integral == 0:
+        max_integral = 1
 
     for i in range(len(xs)):
         opid = channel_map[i]
@@ -601,9 +505,11 @@ def plot_light_traps(data, waveforms_all_detectors):
         ].values
         sum_photons = 0
         for adc, channel in sipms:
-            try:
-                wvfm = waveforms_all_detectors[:, adc, channel, :]
-            except:
+            # try:
+            wvfm = waveforms_all_detectors[:, adc, channel, :]
+            # except:
+                # wvfm = np.zeros(waveforms_all_detectors[:, 0, 0, :].shape, dtype=int)
+            if np.ma.all(np.ma.getmaskarray(wvfm)):
                 wvfm = np.zeros(waveforms_all_detectors[:, 0, 0, :].shape, dtype=int)
             sum_wvfm = np.sum(wvfm, axis=0)
             sum_photons += np.sum(sum_wvfm, axis=0)
@@ -612,13 +518,13 @@ def plot_light_traps(data, waveforms_all_detectors):
             [
                 0.0,
                 get_continuous_color(
-                    COLORSCALE, intermed=max(0, sum_photons / max_integral)
+                    COLORSCALE, intermed=np.abs(sum_photons) / max_integral#max(0, sum_photons / max_integral)
                 ),
             ],
             [
                 1.0,
                 get_continuous_color(
-                    COLORSCALE, intermed=max(0, sum_photons / max_integral)
+                    COLORSCALE, intermed=np.abs(sum_photons) / max_integral#max(0, sum_photons / max_integral)
                 ),
             ],
         ]
@@ -632,7 +538,7 @@ def plot_light_traps(data, waveforms_all_detectors):
             opacity=0.2,
             hoverinfo="text",
             ids=[[opid_str, opid_str], [opid_str, opid_str]],
-            text=f"Optical detector {opid} waveform integral<br>{max(0,sum_photons):.2e}",
+            text=f"Optical detector {opid} waveform integral<br>{np.abs(sum_photons) / np.abs(max_integral):.2e}", #max(0,sum_photons)
         )
 
         drawn_objects.append(light_plane)
@@ -653,7 +559,7 @@ def plot_waveform(data, evid, opid, sim_version):
 
     match_light = match_light_to_charge_event(data, evid)
 
-    if match_light is None:
+    if match_light is None or np.ma.all(match_light.mask)==True:
         print(
             f"No light event matches found for charge event {evid}, not plotting light waveform"
         )
@@ -667,12 +573,12 @@ def plot_waveform(data, evid, opid, sim_version):
         ["adc", "channel"]
     ].values
 
-    sum_wvfm = np.array([0] * 1000)
+    sum_wvfm = np.array([0.0] * 1000)
     for adc, channel in sipms:
-        try:
-            wvfm = waveforms_all_detectors[:, adc, channel, :]
-        except:
-            wvfm = np.zeros(waveforms_all_detectors[:, 0, 0, :].shape, dtype=int)
+        # try:
+        wvfm = waveforms_all_detectors[:, adc, channel, :]
+        # except:
+            # wvfm = np.zeros(waveforms_all_detectors[:, 0, 0, :].shape, dtype=int)
         event_sum_wvfm = np.sum(wvfm, axis=0)  # sum over the events
         sum_wvfm += event_sum_wvfm  # sum over the sipms
 
@@ -688,10 +594,10 @@ def plot_waveform(data, evid, opid, sim_version):
     )
     fig.add_traces(drawn_objects)
     for adc, channel in sipms:
-        try:
-            wvfm = waveforms_all_detectors[:, adc, channel, :]
-        except:
-            wvfm = np.zeros(waveforms_all_detectors[:, 0, 0, :].shape, dtype=int)
+        # try:
+        wvfm = waveforms_all_detectors[:, adc, channel, :]
+        # except:
+            # wvfm = np.zeros(waveforms_all_detectors[:, 0, 0, :].shape, dtype=int)
         sum_wvfm = np.sum(wvfm, axis=0)
         fig.add_traces(
             go.Scatter(
@@ -776,6 +682,13 @@ def get_continuous_color(colorscale, intermed):
         return colorscale[0][1]
     if intermed >= 1:
         return colorscale[-1][1]
+
+    # Initialize low_color and high_color with default values
+    low_color = colorscale[0][1]
+    high_color = colorscale[-1][1]
+    # Initialize low_cutoff and high_cutoff with default values
+    low_cutoff = 0
+    high_cutoff = 1
 
     for cutoff, color in colorscale:
         if intermed > cutoff:
