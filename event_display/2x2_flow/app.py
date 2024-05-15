@@ -38,8 +38,8 @@ app.layout = html.Div(
     [
         # Hidden divs to store data
         dcc.Location(id="url"),
-        dcc.Store(id="filename", storage_type="local", data="-"),
-        dcc.Store(id="minerva-filename", storage_type="local", data="-"),
+        dcc.Store(id="filename", storage_type="local", data=""),
+        dcc.Store(id="minerva-filename", storage_type="local", data=""),
         dcc.Store(id="event-id", data=0),
         dcc.Store(id="minerva-event-id", data=0),
         dcc.Store(id="data-length", data=0),
@@ -185,7 +185,8 @@ def upload_file(is_completed, current_filename, filenames, upload_id):
     prevent_initial_call=True,
 )
 def load_file(n, file_path):
-    if n > 0 and file_path != "-":
+    print(file_path)
+    if n > 0 and file_path is not None:
         _, num_events = parse_contents(file_path)
         return file_path, file_path, 0, num_events
 
@@ -203,7 +204,7 @@ def load_file(n, file_path):
 )
 def load_minerva(n, minerva_file_path):
     print(minerva_file_path)
-    if n > 0 and minerva_file_path != "-":
+    if n > 0 and minerva_file_path is not None:
         _, minerva_num_events = parse_minerva_contents(minerva_file_path)
         return minerva_file_path, minerva_file_path, 0, minerva_num_events
 
@@ -290,9 +291,9 @@ def update_time(_, time):
 )
 def update_graph(filename, minerva_filename, evid):
     """Update the 3D graph when the event ID is changed"""
-    if minerva_filename != "-":
+    if minerva_filename is not None:
         minerva_data, _ = parse_minerva_contents(minerva_filename)
-    if filename != "-":
+    if filename is not None:
         data, _ = parse_contents(filename)
         graph, sim_version = create_3d_figure(minerva_data, data, evid)
 
@@ -334,7 +335,7 @@ def update_light_waveform(filename, evid, sim_version, graph, click_data):
 )
 def update_charge_histogram(filename, evid):
     """Update the charge graph when the event ID is changed"""
-    if filename!="-":
+    if filename!="":
         data, _ = parse_contents(filename)
         return plot_charge(data, evid)
     return go.Figure()
