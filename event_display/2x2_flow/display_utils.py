@@ -12,6 +12,8 @@ import uproot
 
 
 def parse_contents(filename):
+    if filename is None:
+        return None, 0
     data = h5flow.data.H5FlowDataManager(filename, "r")
     num_events = data["charge/events/data"].shape[0]
 
@@ -19,6 +21,8 @@ def parse_contents(filename):
 
 
 def parse_minerva_contents(filename):
+    if filename is None or filename == "":
+        return None, 0
     minerva_data = uproot.open(filename)
     minerva_num_events = len(minerva_data["minerva"]["offsetX"].array(library="np"))
 
