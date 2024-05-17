@@ -32,7 +32,7 @@ def parse_minerva_contents(filename):
 def create_3d_figure(minerva_data, data, evid):
     fig = go.Figure()
     # Select the hits for the current event
-    trigger = (data['charge/calib_prompt_hits', evid]['ts_pps']/1.2e6).astype(int)[0] # this is the trigger number (should be, but not sure if it is correct)
+    trigger = ((data['charge/calib_prompt_hits', evid]['ts_pps']-2e6)/12).astype(int)[0] # this is the trigger number (should be, but not sure if it is correct)
     print(f"Ts_pps: {data['charge/calib_prompt_hits', evid]['ts_pps']}, Trigger: {trigger}")
 
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
@@ -259,9 +259,9 @@ def draw_tpc(sim_version="minirun5"):
         detector_center = (0, 0, 0)
         anode_ys = anode_ys - 42
     if sim_version == "data":  # module 1
-        detector_center = (0, 0, 0)
+        #detector_center = (0, 0, 0)
         anode_xs = anode_xs[1:2]
-        anode_ys = anode_ys
+        #anode_ys = anode_ys
         anode_zs = anode_zs[0:2] + 33
 
     center = go.Scatter3d(
@@ -446,14 +446,22 @@ def plot_light_traps(data, waveforms_all_detectors, sim_version):
 
     channel_map = np.array(
         [
-            0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120,
-            65, 73, 81, 89, 97, 105, 113, 121, 1, 9, 17, 25, 33, 41, 49, 57,
-            2, 10, 18, 26, 34, 42, 50, 58, 66, 74, 82, 90, 98, 106, 114, 122,
-            67, 75, 83, 91, 99, 107, 115, 123, 3, 11, 19, 27, 35, 43, 51, 59,
-            4, 12, 20, 28, 36, 44, 52, 60, 68, 76, 84, 92, 100, 108, 116, 124,
-            69, 77, 85, 93, 101, 109, 117, 125, 5, 13, 21, 29, 37, 45, 53, 61,
-            6, 14, 22, 30, 38, 46, 54, 62, 70, 78, 86, 94, 102, 110, 118, 126,
-            71, 79, 87, 95, 103, 111, 119, 127, 7, 15, 23, 31, 39, 47, 55, 63,
+            0, 8, 16, 24, 32, 40, 48, 56, # tpc 0, left
+            64, 72, 80, 88, 96, 104, 112, 120, # tpc 0, right
+            65, 73, 81, 89, 97, 105, 113, 121, # tpc 1, left
+            1, 9, 17, 25, 33, 41, 49, 57, # tpc 1, right
+            2, 10, 18, 26, 34, 42, 50, 58, # tpc 2, left
+            66, 74, 82, 90, 98, 106, 114, 122, # tpc 2, right
+            67, 75, 83, 91, 99, 107, 115, 123, # tpc 3, left
+            3, 11, 19, 27, 35, 43, 51, 59, # tpc 3, right
+            4, 12, 20, 28, 36, 44, 52, 60, # tpc 4, left
+            68, 76, 84, 92, 100, 108, 116, 124, # tpc 4, right
+            69, 77, 85, 93, 101, 109, 117, 125, # tpc 5, left
+            5, 13, 21, 29, 37, 45, 53, 61, # tpc 5, right
+            6, 14, 22, 30, 38, 46, 54, 62, # tpc 6, left
+            70, 78, 86, 94, 102, 110, 118, 126, # tpc 6, right
+            71, 79, 87, 95, 103, 111, 119, 127, # tpc 7, left
+            7, 15, 23, 31, 39, 47, 55, 63, # tpc 7, right
         ]
     )  # this maps detector position to detector number
     # we need to invert the mapping because I'm stupid
