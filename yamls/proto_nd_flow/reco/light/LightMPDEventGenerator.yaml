@@ -1,0 +1,24 @@
+classname: LightMPDEventGenerator
+path: proto_nd_flow.reco.light.mpd_event_generator
+dset_name: 'light/events'
+params:
+  # secondary output
+  wvfm_dset_name: 'light/wvfm'
+
+  # configuration parameters
+  n_adcs: 8
+  n_channels: 64
+  sn_table:
+   - '0xcd94138'  # Mod0, Slot 3
+   - '0xcd8d648'  # Mod0, Slot 5
+   - '0x2650b3ff'  # Mod1, Slot 7
+   - '0xcd913fb'  # Mod1, Slot 9
+   - '0xcd94149'  # Mod2, Slot 11
+   - '0x26517dff'  # Mod2, Slot 13
+   - '0x264bd8ff'  # Mod3, Slot 15
+   - '0x25b771ff'  # Mod3, Slot 17
+  sync_channel: 0
+  sync_threshold: 40000
+  batch_size: 12
+  utime_ms_window: 1000
+  tai_ns_window: 1000
