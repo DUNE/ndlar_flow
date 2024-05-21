@@ -224,7 +224,7 @@ class CalibHitBuilder(H5FlowStage):
 
             # create truth-level backtracking dataset
             if has_mc_truth:
-                back_track = np.full(shape=packets_arr.shape,fill_value=0.,dtype=self.hit_frac_dtype)
+                back_track = np.full(shape=packets_arr.shape,fill_value=-99.,dtype=self.hit_frac_dtype)
                 for hit_it, pack in np.ndenumerate(packets_arr):
                     back_track[hit_it]['fraction'] = packet_frac_bt_arr[hit_it] 
                     back_track[hit_it]['segment_id'] = packet_seg_bt_arr[hit_it]['segment_id']
