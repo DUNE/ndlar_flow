@@ -220,7 +220,7 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['io_channel'] = packets_arr['io_channel']
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
             #!!! hardcoding W_ion, R=0.7, and not accounting for finite electron lifetime
-            calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 * 0.7
+            calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 / 0.7
 
             # create truth-level backtracking dataset
             if has_mc_truth:
