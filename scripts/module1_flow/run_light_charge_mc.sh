@@ -33,10 +33,10 @@ if [ -e $OUTPUT_FILE ]; then
     rm $OUTPUT_FILE
 fi
 
-WORKFLOW1='yamls/module1_flow/workflows/light/light_event_building_mc.yaml'
-WORKFLOW2='yamls/module1_flow/workflows/light/light_event_reconstruction.yaml'
+#WORKFLOW1='yamls/module1_flow/workflows/light/light_event_building_mc.yaml'
+#WORKFLOW2='yamls/module1_flow/workflows/light/light_event_reconstruction.yaml'
 
-$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 -i $LIGHT_INPUT_FILE -o $OUTPUT_FILE
+#$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 -i $LIGHT_INPUT_FILE -o $OUTPUT_FILE
 
 WORKFLOW3='yamls/module1_flow/workflows/charge/charge_event_building.yaml'
 WORKFLOW4='yamls/module1_flow/workflows/charge/charge_event_reconstruction.yaml'
@@ -46,9 +46,9 @@ WORKFLOW7='yamls/module1_flow/workflows/charge/final_calibration.yaml'
 
 $H5FLOW_CMD -c $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 $WORKFLOW6 $WORKFLOW7 -i $CHARGE_INPUT_FILE -o $OUTPUT_FILE
 
-WORKFLOW8='yamls/module1_flow/workflows/charge/charge_light_assoc.yaml'
+#WORKFLOW8='yamls/module1_flow/workflows/charge/charge_light_assoc.yaml'
 
-$H5FLOW_CMD -c $WORKFLOW8 -i $OUTPUT_FILE -o $OUTPUT_FILE
+#$H5FLOW_CMD -c $WORKFLOW8 -i $OUTPUT_FILE -o $OUTPUT_FILE
 
 echo "Done!"
 
