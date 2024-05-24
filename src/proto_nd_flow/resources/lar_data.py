@@ -50,6 +50,11 @@ class LArData(H5FlowResource):
     default_electron_mobility_params = np.array([551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053])
     default_electron_lifetime = 2.2e3  # us
     default_electron_lifetime_file = None
+    default_box_alpha = 0.93
+    default_box_beta = 0.207 #0.3 (MeV/cm)^-1 * 1.383 (g/cm^3)* 0.5 (kV/cm), R. Acciarri et al JINST 8 (2013) P08005
+    default_birks_Ab = 0.800
+    default_birks_kb = 0.0486 # g/cm2/MeV Amoruso, et al NIM A 523 (2004) 275
+    default_W_ion = 23.6 # eV/e
 
     electron_lifetime_data_dtype = np.dtype([
         ('unix_s', 'f8'),
@@ -64,6 +69,11 @@ class LArData(H5FlowResource):
         self.electron_mobility_params = np.array(params.get('electron_mobility_params', self.default_electron_mobility_params))
         self._electron_lifetime = params.get('electron_lifetime', self.default_electron_lifetime)
         self.electron_lifetime_file = params.get('electron_lifetime_file', self.default_electron_lifetime_file)
+        self.box_alpha = params.get('box_alpha', self.default_box_alpha)
+        self.box_beta = params.get('box_beta', self.default_box_beta)
+        self.birks_Ab = params.get('birks_Ab', self.default_birks_Ab)
+        self.birks_kb = params.get('birks_kb', self.default_birks_kb)
+        self.W_ion = params.get('W_ion', self.default_W_ion)
 
     def init(self, source_name):
         super(LArData, self).init(source_name)
@@ -171,13 +181,17 @@ class LArData(H5FlowResource):
             self._electron_lifetime_upper_interp(unix_ts)
         )
 
+    def charge_reduction_lifetime(self, t_drift):
+         lifetime_red = np.exp(-t_drift / self._electron_lifetime)
+         return lifetime_red
+
     @property
     def ionization_w(self):
         ''' Ionization W-value in LAr in keV/e-. Fixed value of 0.0236 '''
         if 'ionization_w' in self.data:
             return self.data['ionization_w']
 
-        self.data['ionization_w'] = 23.6 * units.eV / units.e
+        self.data['ionization_w'] = self.W_ion * units.eV / units.e
         return self.ionization_w
 
     @property
@@ -189,7 +203,7 @@ class LArData(H5FlowResource):
         self.data['scintillation_w'] = 19.5 * units.eV
         return self.scintillation_w
         
-    def ionization_recombination(self, dedx):
+    def ionization_recombination(self, mode, dEdx):
         '''
             Calculate charge recombination factor using Birks Model with parameters:
 
@@ -201,12 +215,18 @@ class LArData(H5FlowResource):
                 R_i = dQ * W_i / dE
 
         '''
-        A = 0.8
-        K = (0.0486 * units.kV * units.g / units.MeV / (units.cm)**3)
-        eps = resources['RunData'].e_field * self.density
+        # box
+        if mode == 1:
+            # Baller, 2013 JINST 8 P08005
+            csi = self.box_beta * dEdx / (resources['RunData'].e_field * self.density)
+            recomb = max(0, log(self.box_alpha + csi) / csi)
 
-        rv = A / (1 + (K / eps) * dedx)
-        return rv
+        # birks
+        elif mode == 2:
+            # Amoruso, et al NIM A 523 (2004) 275
+            recomb = self.birks_Ab / (1 + self.birks_kb * dEdx / (resources['RunData'].e_field * self.density))
+
+        return recomb
 
     def scintillation_recombination(self, dedx):
         '''
