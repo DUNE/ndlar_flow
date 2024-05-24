@@ -2,6 +2,7 @@ import numpy as np
 import logging
 import scipy.interpolate as interpolate
 import os
+import math
 
 from h5flow.core import H5FlowResource, resources
 
@@ -219,7 +220,7 @@ class LArData(H5FlowResource):
         if mode == 1:
             # Baller, 2013 JINST 8 P08005
             csi = self.box_beta * dEdx / (resources['RunData'].e_field * self.density)
-            recomb = max(0, log(self.box_alpha + csi) / csi)
+            recomb = max(0, math.log(self.box_alpha + csi) / csi)
 
         # birks
         elif mode == 2:
