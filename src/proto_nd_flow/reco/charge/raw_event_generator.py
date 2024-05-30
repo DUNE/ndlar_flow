@@ -169,7 +169,7 @@ class RawEventGenerator(H5FlowGenerator):
             self.vertex_id_name = 'file_vertex_id'
         else:
             self.vertex_id_name = 'vertex_id'
-            print("Using 'vertex_id'(unique for beam simulation, but not for mpvmpr) instead of 'file_vertex_id'.")
+            warnings.warn("Using 'vertex_id'(unique for beam simulation, but not for mpvmpr) instead of 'file_vertex_id'.")
 
         if 'file_traj_id' in self.input_fh['trajectories'].dtype.names:
             self.traj_id_name = 'file_traj_id'
