@@ -77,6 +77,19 @@ class CalibHitBuilder(H5FlowStage):
         pedestal_mv=580
     ))
 
+    calib_hits_dtype = np.dtype([
+        ('id', 'u4'),
+        ('x', 'f8'),
+        ('y', 'f8'),
+        ('z', 'f8'),
+        ('t_drift', 'f8'),
+        ('ts_pps', 'u8'),
+        ('io_group', 'u8'),
+        ('io_channel', 'u8'),
+        ('Q', 'f8'),
+        ('E', 'f8')
+    ])
+
     def __init__(self, **params):
         super(CalibHitBuilder, self).__init__(**params)
 
@@ -95,19 +108,6 @@ class CalibHitBuilder(H5FlowStage):
         super(CalibHitBuilder, self).init(source_name)
         self.load_pedestals()
         self.load_configurations()
-
-        self.calib_hits_dtype = np.dtype([
-            ('id', 'u4'),
-            ('x', 'f8'),
-            ('y', 'f8'),
-            ('z', 'f8'),
-            ('t_drift', 'f8'),
-            ('ts_pps', 'u8'),
-            ('io_group', 'u8'),
-            ('io_channel', 'u8'),
-            ('Q', 'f8'),
-            ('E', 'f8')
-        ])
 
     def run(self, source_name, source_slice, cache):
         super(CalibHitBuilder, self).run(source_name, source_slice, cache)
