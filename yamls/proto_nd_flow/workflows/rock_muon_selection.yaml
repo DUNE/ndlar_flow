@@ -4,6 +4,9 @@ flow:
   stages: [RockMuon_selection]
   drop: []
 
+resources:
+  - !include yamls/proto_nd_flow/resources/Geometry.yaml
+
 events:
   classname: H5FlowDatasetLoopGenerator
   path: h5flow.modules

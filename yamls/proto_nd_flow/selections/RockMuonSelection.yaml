@@ -18,15 +18,15 @@ params:
     FinalHits_dset_name: 'charge/calib_final_hits'
        
     #Outputs
-    rock_muon_hits_dset_name: 'rock_muon_hits'
-    rock_muon_segments_dset_name: 'rock_muon_segments'
+    rock_muon_hits_dset_name: 'analysis/rock_muon_tracks'
+    rock_muon_segments_dset_name: 'analysis/rock_muon_segments'
 
     #configuration parameters
     x_boundaries: [-63.931, -3.069, 3.069, 63.931] #cm
     y_boundaries: [-268-42-19.8543, -268-42+103.8543] #cm
     z_boundaries: [1300-64.3163,  1300-2.6837, 1300+2.6837, 1300+64.3163] #cm
 
-    length_cut: 55 #cm
+    length_cut: 100 #cm
     MEVR: 0.974 #Minimum explained variance ratio
     
     track_counts: -1    
