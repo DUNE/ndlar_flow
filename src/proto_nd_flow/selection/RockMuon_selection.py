@@ -58,7 +58,7 @@ class RockMuonSelection(H5FlowStage):
         ('x_start', 'f8'),
         ('y_start','f8'),
         ('z_start','f8'),
-        ('dEdX', 'f8'),
+        ('dE', 'f8'),
         ('x_end', 'f8'),
         ('y_end','f8'),
         ('z_end', 'f8'),
@@ -128,7 +128,7 @@ class RockMuonSelection(H5FlowStage):
 
         positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
         
-        hit_cluster = DBSCAN(eps = 8, min_samples = 1).fit(positions)
+        hit_cluster = DBSCAN(eps = 8, min_samples = 3).fit(positions)
          
         unique_labels = np.unique(hit_cluster.labels_)
 
@@ -153,9 +153,18 @@ class RockMuonSelection(H5FlowStage):
         pca.fit(X_train)
 
         explained_var = pca.explained_variance_ratio_[0]
-        vector = pca.components_[0]
         
-        return  explained_var,vector
+        scaled_vector = pca.components_[0]
+        
+        unscaled_vector = scaler.scale_ * scaled_vector
+
+        normalized_direction_vector = unscaled_vector/np.linalg.norm(unscaled_vector)
+        
+        scaled_mean = pca.mean_
+
+        original_mean = scaler.inverse_transform(scaled_mean.reshape(1, -1)).flatten()
+        
+        return  explained_var, normalized_direction_vector, original_mean
     
     #@staticmethod
     def length(self,hits):
@@ -163,7 +172,7 @@ class RockMuonSelection(H5FlowStage):
         hit_positions = np.column_stack((hits['x'], hits['y'], hits['z']))
         
         hdist = cdist(hit_positions, hit_positions)
-        
+         
         max_value_index = np.argmax(hdist)
         # Convert flattened index to row and column indices
         max_value_row = max_value_index // hdist.shape[1]
@@ -214,8 +223,8 @@ class RockMuonSelection(H5FlowStage):
 
             L_cut = self.length_cut #minimum track length requirement
                 
-            explained_var, direction_vector = self.PCAs(hits)
-            
+            explained_var, direction_vector,mean_point = self.PCAs(hits)
+                
             l_track, start_point, end_point = self.length(hits)
                          
             if (explained_var > MEVR) & (l_track > L_cut):
@@ -228,20 +237,7 @@ class RockMuonSelection(H5FlowStage):
             return np.array(muon_hits), l_track, start_point, end_point, explained_var, direction_vector
     
     #@staticmethod
-    def angle(self,hits_of_track):
-        x = hits_of_track['x'].reshape(-1, 1)  # Reshape to make it a column vector
-        y = hits_of_track['y'].reshape(-1, 1)  # Reshape to make it a column vector
-        z = hits_of_track['z'].reshape(-1, 1)  # Reshape to make it a column vector
-
-        # Stack the arrays horizontally
-        positions = np.hstack((x, y, z))
-
-        pca = PCA(1)
-
-        pca.fit(positions)
-        
-        direction_vector = pca.components_[0]
-
+    def angle(self,direction_vector):
         magnitude = np.linalg.norm(direction_vector)
 
         # Calculate the unit vector in the xz-plane
@@ -307,27 +303,58 @@ class RockMuonSelection(H5FlowStage):
         return [hits_tpc1, hits_tpc2, hits_tpc3, hits_tpc4, hits_tpc5, hits_tpc6, hits_tpc7, hits_tpc8]
     
     #@staticmethod
-    def get_segment_step_size(self, direction_vector, step_size = 3):
+    def get_segment_step_size(self, direction_vector, number_of_hits):
         #Steps in beam direction using pca fit(z)
-        step_size = 3.25
+        desired_factor = 200
 
-        step_vector = np.array([direction_vector[0], direction_vector[1], step_size*direction_vector[2]])
+        step_dz = number_of_hits/desired_factor
 
-        dx = np.sqrt(np.dot(step_vector,step_vector))
-
-        if dx >5:
+        scale = abs(step_dz/direction_vector[2])
+        
+        dx = np.linalg.norm(direction_vector) * scale
+        
+        if dx > 5:
             while dx > 5:
-                step_size = step_size - .3
-                step_vector = np.array([direction_vector[0], direction_vector[1], step_size*direction_vector[2]])
-                dx = np.sqrt(np.dot(step_vector, step_vector))
+                desired_factor = desired_factor + 10
+                step_dz = number_of_hits/desired_factor
+                scale = step_dz/direction_vector[2]
+                dx = np.linalg.norm(direction_vector) * scale
 
         elif dx < 1:
             while dx < 1:
-                step_size = step_size + .3
-                step_vector = np.array([direction_vector[0], direction_vector[1], step_size*direction_vector[2]])
-                dx = np.sqrt(np.dot(step_vector, step_vector))
-        
-        return step_size
+                desired_factor = desired_factor - 10
+                step_dz = number_of_hits/desired_factor
+                scale = step_dz/direction_vector[2]
+                dx = np.linalg.norm(direction_vector) * scale
+                
+        return step_dz, scale, dx
+    
+    #@staticmethod
+    def grab_segment_info(self, direction_vector, segment, scale, mean_point, positive_values, negative_values, hit_ref, values,i):
+        for hit in segment:
+            hit_ref.append([self.segment_count,hit['id']])
+
+        if (direction_vector[2] > 0 and values == negative_values) or (direction_vector[2] < 0 and values == positive_values):
+            direction_vector = -direction_vector
+
+        start_of_segment = mean_point + (abs(i)-1)*direction_vector*scale
+        end_of_segment = mean_point + abs(i)*direction_vector*scale
+
+        x_start, y_start, z_start = start_of_segment[0], start_of_segment[1], start_of_segment[2]
+        x_end, y_end, z_end = end_of_segment[0], end_of_segment[1], end_of_segment[2]
+        x_mid, y_mid, z_mid = (x_start+x_end)/2 , (y_start+y_end)/2 , (z_start+z_end)/2
+
+        #dEdx
+
+        Energy_of_segment = sum(segment['E'])
+
+        # dQdx
+        Charge_of_segment = sum(segment['Q'])
+
+        #Drift time of segment
+        drift_time = np.mean(segment['t_drift'])
+    
+        return x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment, x_mid, y_mid, z_mid, drift_time
 
     #@staticmethod
     def segments(self,muon_hits):
@@ -339,87 +366,85 @@ class RockMuonSelection(H5FlowStage):
         
         track = muon_hits[0] #Makes sure hits go back to a (n,) shape instead of (1,n) shape
         
-        ex_var, direction_vector = self.PCAs(track)
+        ex_var, direction_vector, mean_point = self.PCAs(track)
          
         number_of_hits = len(track)
             
-        step_size =self.get_segment_step_size(direction_vector)
+        step_size, scale, dx=self.get_segment_step_size(direction_vector, number_of_hits)
         
         hits_per_tpc = self.TPC_separation(track)
-
+        
+         
         for each_tpc in hits_per_tpc:
             
             if len(each_tpc) != 0:
-                lowest_z = np.min(each_tpc['z'])
+
+                ex_var, direction_vector2, mean_point = self.PCAs(each_tpc)
+                
+                amount_of_steps_up = round(((np.max(each_tpc['z']) - mean_point[2])/step_size) +.5) 
+                amount_of_steps_down = round(((mean_point[2]-np.min(each_tpc['z']))/step_size) +.5)
                  
-                for i in range(1,1000):
-                    mask = ma.masked_where((each_tpc['z'] >= lowest_z + step_size*(i-1)) & (each_tpc['z'] < lowest_z + step_size*(i)),each_tpc)
-
-                    
-                    indices_of_masked_values = np.ma.where(mask.mask)[0]
-                    
-                    min_number_of_hits = 3
-                    
-                    segment = each_tpc[indices_of_masked_values]
-                    
-                    #If segment has more than min_number_of_hits then consider this a good enough segment and append it to the list of segments
-                    if len(segment) >= min_number_of_hits:
-                        self.segment_count += 1
-                        hits_of_segment.append(segment)
+                positive_values = range(1,amount_of_steps_up+1)
+                negative_values = range(-1,-(amount_of_steps_down+1),-1)
                 
-                    #If there is no segments in hits of segment and # of hits of the considered segments in less than min number of hits then still append this segment. This stops code for messing at when first segment of track isn't long enough
-                    elif (len(segment) < min_number_of_hits) & (len(hits_of_segment) == 0):
-                        self.segment_count += 1
-                        hits_of_segment.append(segment)
-
-                    #If # of hits of the considered segments is below min hits and there is already segments then considered this hits as part of the previous segment
-                    elif (len(segment) == min_number_of_hits) & (len(hits_of_segment) != 0):
-                        np.append(hits_of_segment[-1],segment)
+                #Start at the mean point, jump up and make segments (positive values) then jump down and make segments (negative values)
+                for values in [positive_values, negative_values]:
+                    for i in values:
                         
-                    else:
-                        continue
-                         
-                    
-                    for hit in hits_of_segment[-1]:
-                        hit_ref.append([self.segment_count,hit['id']])
+                        if i > 0:
+                            mask = ma.masked_where((each_tpc['z'] >= mean_point[2] + step_size*(i-1)) & (each_tpc['z'] < mean_point[2] + step_size*(i)),each_tpc)
 
-                    each_tpc = np.delete(each_tpc, indices_of_masked_values)         
-                    
-                    Length_of_segment, start_point, end_point = self.length(hits_of_segment[-1])
-                     
-                    #Starting, mid, and end points of segment
-                    x_start, y_start, z_start = start_point[0], start_point[1], start_point[2]
-                    
-                    x_end, y_end, z_end = end_point[0], end_point[1], end_point[2]
-                    
-                    x_mid, y_mid, z_mid = (x_start+x_end)/2 , (y_start+y_end)/2 , (z_start+z_end)/2
-                
-                    #dEdx
-                    Energy_of_segment = sum(hits_of_segment[-1]['E'])
-
-                    # dQdx
-                    Charge_of_segment = sum(hits_of_segment[-1]['Q'])
                         
-                    #Drift time of segment
-                    drift_time = np.mean(hits_of_segment[-1]['t_drift'])
-
-                    hit_segments.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment,Length_of_segment, x_mid, y_mid, z_mid, drift_time])
+                        elif i < 0:
+                            mask = ma.masked_where((each_tpc['z'] <= mean_point[2] - step_size*(abs(i)-1)) & (each_tpc['z'] > mean_point[2] - step_size*(abs(i))),each_tpc)
+                            
+                        indices_of_masked_values = np.ma.where(mask.mask)[0]
                     
-                    #Reference the segment to the track
-                    segment_to_track_ref.append([self.track_count, self.segment_count])
+                        min_number_of_hits = 3
+                    
+                        segment = each_tpc[indices_of_masked_values]
+                        
+                        #If segment has more than min_number_of_hits then consider this a good enough segment and append it to the list of segments
+                        if len(segment) > min_number_of_hits:
+                            self.segment_count += 1
+                            hits_of_segment.append(segment)
+                        #If there is no segments in hits of segment and # of hits of the considered segments in less than min number of hits then still append this segment. This stops code for messing at when first segment of track isn't long enough
+                        elif (len(segment) >= 1) & (len(segment) <= min_number_of_hits) & (len(hits_of_segment) == 0):
+                            self.segment_count += 1
+                            hits_of_segment.append(segment)
+                            
+                        #If # of hits of the considered segments is below min hits and there is already segments then considered this hits as part of the previous segment, this is not making a new segment but adding to previous segment. Must recalculate the segment info for previous segment.
+                        elif (len(segment) >= 1) & (len(segment) <= min_number_of_hits) & (len(hits_of_segment) != 0):
+                            np.append(hits_of_segment[-1],segment)
 
-                    if len(each_tpc) == 0:
-                        break
+                            x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment, x_mid, y_mid, z_mid, drift_time = self.grab_segment_info(direction_vector, hits_of_segment[-1], scale, mean_point, positive_values, negative_values, hit_ref, values,i)
+
+                            hit_segments[-1] = [self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment,dx, x_mid, y_mid, z_mid, drift_time]
+                            
+                            each_tpc = np.delete(each_tpc, indices_of_masked_values)
+
+                            continue
+                        else:
+                            continue
+                        each_tpc = np.delete(each_tpc, indices_of_masked_values)
+
+                        x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment, x_mid, y_mid, z_mid, drift_time = self.grab_segment_info(direction_vector, hits_of_segment[-1], scale, mean_point, positive_values, negative_values, hit_ref, values, i)
+
+                        hit_segments.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment,dx, x_mid, y_mid, z_mid,drift_time])
+
+                        #Reference the segment to the track
+                        segment_to_track_ref.append([self.track_count, self.segment_count])
+               
         return hit_segments, hit_ref, segment_to_track_ref
 
 
     def run(self, source_name, source_slice, cache):
         
         super(RockMuonSelection, self).run(source_name, source_slice, cache)
-        #resources['Geometry'].regions            
+                    
         event_id = np.r_[source_slice]
                 
-        PromptHits_ev = cache[self.PromptHits_dset_name][0]
+        PromptHits_ev = cache[self.FinalHits_dset_name][0]
         
         hit_indices = self.cluster(PromptHits_ev)
         
@@ -428,14 +453,14 @@ class RockMuonSelection(H5FlowStage):
                 hits = PromptHits_ev[indices]
                  
                 muon_track,length_of_track, start_point, end_point, explained_var, direction_vector = self.select_muon_track(hits)
-                
+                 
                 if len(muon_track) != 0:
                     #Loop through tracks and changes the DBSCAN cluster_id to a given track number
                     self.track_count += 1 
                     track_number = self.track_count
-                    
+                     
                     #Get angle of track
-                    theta_xz, theta_yz = self.angle(muon_track)
+                    theta_xz, theta_yz = self.angle(direction_vector)
                      
                     #Fill track info
                     track_info = [track_number,length_of_track, start_point[0],start_point[1],start_point[2], end_point[0],end_point[1],end_point[2], explained_var, theta_xz, theta_yz]
@@ -465,7 +490,7 @@ class RockMuonSelection(H5FlowStage):
                     
                     track_ref = np.array([(track_number,x) for x in muon_track['id'][0]])
                     
-                    
+                    #print(track_ref)            
                     segment_track_ref = np.array([(x) for x in segment_track_ref])
                      
                     segment_hit_ref = np.array([(x) for x in segment_hit_ref])
