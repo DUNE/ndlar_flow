@@ -1,13 +1,13 @@
 classname: WaveformHitFinder # light/hit_finder.py
 path: proto_nd_flow.reco.light.true_hit_finder
 requires:
-  - 'light/wvfm'
+  - 'light/true_wvfm'
     #- 'light/deconv/alignment'
-  - 'light/t_ns'
+    #- 'light/t_ns'
 params:
   # inputs
-  wvfm_dset_name: 'light/wvfm'
-  t_ns_dset_name: 'light/t_ns'
+  wvfm_dset_name: 'light/true_wvfm'
+    #t_ns_dset_name: 'light/t_ns'
 
   # output
   hits_dset_name: 'light/true_hits' # new dataset to produce

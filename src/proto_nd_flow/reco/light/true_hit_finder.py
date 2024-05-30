@@ -54,7 +54,7 @@ class WaveformHitFinder(H5FlowStage):
     '''
     class_version = '2.0.0'
 
-    default_hits_dset_name = 'light/hits'
+    default_hits_dset_name = 'light/true_hits'
     default_near_samples = 3
     default_interpolation = 256
     default_global_threshold = 2000
@@ -108,8 +108,7 @@ class WaveformHitFinder(H5FlowStage):
     def __init__(self, **params):
         super(WaveformHitFinder, self).__init__(**params)
         self.wvfm_dset_name = params.get('wvfm_dset_name')
-        #self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
-        self.t_ns_dset_name = params.get('t_ns_dset_name')
+        print(self.wvfm_dset_name)
         self.hits_dset_name = params.get('hits_dset_name',
                                          self.default_hits_dset_name)
         self.near_samples = params.get('near_samples',
@@ -140,17 +139,17 @@ class WaveformHitFinder(H5FlowStage):
 
     def init(self, source_name):
         super(WaveformHitFinder, self).init(source_name)
-
         wvfm_dset = self.data_manager.get_dset(self.wvfm_dset_name)
-
+        
         # get convert sample rate to ns
         self.sample_rate = (resources['RunData'].lrs_ticks
                             / units.ns)
 
         # get waveform shape information
-        self.ntpc = wvfm_dset.dtype['samples'].shape[0]
+        #self.ntpc = wvfm_dset.dtype['samples'].shape[0]
+        self.ntpc = 8
         self.ndet = wvfm_dset.dtype['samples'].shape[1]
-        self.nsamples = wvfm_dset.dtype['samples'].shape[2]
+        self.nsamples = wvfm_dset.dtype['samples'].shape[-1]
 
         # convert channel thresholds into an array
         threshold_array = np.zeros((self.ntpc, self.ndet, 1))
@@ -159,6 +158,7 @@ class WaveformHitFinder(H5FlowStage):
                 threshold_array[tpc,
                                 det] = self.threshold[tpc][det]
         self.threshold = threshold_array
+        #print("self.threshold", self.threshold)
 
         # create datasets and references
         self.data_manager.create_dset(self.hits_dset_name,
@@ -169,7 +169,7 @@ class WaveformHitFinder(H5FlowStage):
                                     classname=self.classname,
                                     class_version=self.class_version,
                                     wvfm_dset=self.wvfm_dset_name,
-                                    t_ns_dset=self.t_ns_dset_name,
+                                    #t_ns_dset=self.t_ns_dset_name,
                                     near_samples=self.near_samples,
                                     thresholds=self.threshold,
                                     mask=self.mask,
@@ -183,167 +183,22 @@ class WaveformHitFinder(H5FlowStage):
         super(WaveformHitFinder, self).run(source_name, source_slice, cache)
         wvfms = cache[self.wvfm_dset_name].reshape(cache[source_name].shape)[
             'samples']  # 1:1 relationship
-        #wvfm_align = cache[self.wvfm_align_dset_name].reshape(cache[source_name].shape)
-        #t = cache[self.t_ns_dset_name].reshape(cache[source_name].shape)[
-        #    't_ns']  # 1:1 relationship
-        # t = np.tile(np.expand_dims(t,axis=2), (1, 1, 64))
+        print("wvfms", wvfms.shape)
+
+        #print("source_slice", source_slice)
+
         events = cache[source_name]
-        # t = ma.array(t, mask=~events['wvfm_valid'].astype(bool))
         wvfm_sn = events['sn']
         wvfm_det = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
-        # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
+        print("wvfm_d", wvfm_d.shape)
         peaks = ((np.sign(wvfm_d[..., 1:]) * np.sign(wvfm_d[..., :-1]) < 0)
                  & (np.sign(np.diff(wvfm_d, axis=-1)) <= 0)
-                 & ~np.isin(np.arange(self.ndet), self.mask).reshape(1, 1, -1, 1)
-                 & np.all(~wvfms.mask, axis=-1, keepdims=True))
+                 #& ~np.isin(np.arange(self.ndet), self.mask).reshape(1, 1, -1, 1)
+                 #& np.all(~wvfms.mask, axis=-1, keepdims=True)
+                )
+        print("peaks 1", peaks, peaks.shape)
         peaks = np.where(peaks)  # tuple of (ev, tpc, det, index)
         peak_max = wvfms[..., 1:][peaks]  # waveform value at each peak
-
-        # apply threshold
-        threshold_mask = peak_max >= self.threshold[peaks[1:-1]].ravel()
-
-        if np.count_nonzero(threshold_mask):
-            # hits are present in event, extract parameters
-            peaks = tuple(p[threshold_mask].reshape(-1, 1) for p in peaks)
-            peak_max = peak_max[threshold_mask]
-            # get neighboring samples
-            peak_sample_index = np.clip(peaks[-1].reshape(-1, 1)
-                                        + np.arange(-self.near_samples + 1, self.near_samples + 2), 0, self.nsamples - 1)
-            peak_samples = wvfms[peaks[:-1] + (peak_sample_index,)]
-            peak_sum = np.sum(peak_samples.astype(int), axis=-1)
-            # create hit spline
-            peak_spline = scipy.interpolate.CubicSpline(
-                np.arange(-self.near_samples, self.near_samples + 1),
-                peak_samples, axis=-1, extrapolate=True)
-            # calculate integral
-            peak_sum_spline = peak_spline.integrate(-self.near_samples,
-                                                    self.near_samples)
-            # find max
-            subsamples = np.linspace(-self.near_samples, self.near_samples,
-                                     self.interpolation)
-            peak_spline_subsamples = peak_spline(subsamples)
-            peak_max_spline = np.max(peak_spline_subsamples, axis=-1)
-            peak_ns_spline = np.expand_dims(np.take_along_axis(subsamples,
-                                                               np.argmax(peak_spline_subsamples, axis=-1), axis=0), axis=-1) * self.sample_rate
-
-            # project back to 0-crossing
-            peak_spline_d = peak_spline.derivative(1)(subsamples)
-            
-            peak_rising_spline_samples = ma.array(subsamples
-                                                  - peak_spline_subsamples / peak_spline_d,
-                                                  mask=subsamples >= peak_ns_spline)
-            rising_outlier_mask = self.find_outlier_mask(
-                peak_rising_spline_samples)
-            # calculate rising edge
-            
-            peak_rising_spline_samples = ma.array(peak_rising_spline_samples,
-                                                  mask=rising_outlier_mask)
-            peak_rising_spline = ma.mean(peak_rising_spline_samples, axis=-1,
-                                         keepdims=True) * self.sample_rate
-            peak_rising_err_spline = ma.std(peak_rising_spline_samples, axis=-1,
-                                            keepdims=True) * self.sample_rate
-            
-            # calculate FWHM
-            peak_lhm_spline_samples = ma.array(subsamples
-                                               + (np.expand_dims(peak_max_spline, axis=-1) * 0.5 - peak_spline_subsamples) / peak_spline_d,
-                                               mask=subsamples >= peak_ns_spline)
-            peak_uhm_spline_samples = ma.array(subsamples
-                                               + (np.expand_dims(peak_max_spline, axis=-1) * 0.5 - peak_spline_subsamples) / peak_spline_d,
-                                               mask=subsamples <= peak_ns_spline)
-            lhm_outlier_mask = self.find_outlier_mask(peak_lhm_spline_samples)
-            uhm_outlier_mask = self.find_outlier_mask(peak_uhm_spline_samples)
-            
-            # calculate fwhm
-            peak_lhm_spline_samples = ma.array(peak_lhm_spline_samples,
-                                               mask=lhm_outlier_mask)
-            peak_uhm_spline_samples = ma.array(peak_uhm_spline_samples,
-                                               mask=uhm_outlier_mask)
-            peak_fwhm_spline = (peak_uhm_spline_samples.mean(axis=-1)
-                - peak_lhm_spline_samples.mean(axis=-1))
-            
-            hit_data = np.empty((len(peaks[-1])), dtype=self.hits_dtype)
-            if self.hit_level=="sum":
-                hit_data['tpc'] = peaks[1].ravel()
-                hit_data['det'] = wvfm_det[peaks[:3]].ravel()
-                hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[(tpc,det)][0]) for tpc, det in zip(peaks[1].ravel(),wvfm_det[peaks[:3]].ravel())]
-            elif self.hit_level=="sipm":
-                hit_data['adc'] = peaks[1].ravel()
-                hit_data['chan'] = wvfm_det[peaks[:3]].ravel()
-                hit_data['pos'] = [np.array(resources['Geometry'].sipm_abs_pos[(adc,chan)][0]) for adc, chan in zip(peaks[1].ravel(),wvfm_det[peaks[:3]].ravel())]
-            #hit_data['ns'] = wvfm_align['ns'][peaks[0]].ravel()
-            hit_data['sample_idx'] = peaks[-1].ravel() + 1
-
-            # =================================================================
-            # 2022-05-17 kvtsang
-            # -----------------------------------------------------------------
-            # The original version was designed for swvfm/alignment, which 
-            # assumes a shape of (n_batch, n_tpc, n_ch)
-            #
-            # For deconv/alignment, shape = (n_batch, n_tpc)
-            # Here is a simple fix to expand the dim 
-            # =================================================================
-            """
-            align_sample_idx = wvfm_align['sample_idx']
-            if align_sample_idx.ndim == 2:
-                target_shape = wvfms.shape[:-1] #(n_batch, n_tpc, n_ch)
-                n_ch = target_shape[-1]
-                align_sample_idx = np.reshape(
-                    np.repeat(align_sample_idx, n_ch), target_shape
-                )
-
-            hit_data['busy_ns'] = (
-                (peaks[-1] + 1 - align_sample_idx[peaks[:3]]).ravel() 
-                * self.sample_rate
-            )
-            """
-
-            hit_data['samples'] = peak_samples.reshape(-1, 2 * self.near_samples + 1)
-            hit_data['sum'] = peak_sum.ravel()
-            hit_data['max'] = peak_max.ravel()
-            hit_data['sum_spline'] = peak_sum_spline.ravel()
-            hit_data['max_spline'] = peak_max_spline.ravel()
-            hit_data['ns_spline'] = peak_ns_spline.ravel()
-            hit_data['rising_spline'] = peak_rising_spline.ravel()
-            hit_data['rising_err_spline'] = peak_rising_err_spline.ravel()
-            hit_data['fwhm_spline'] = peak_fwhm_spline.ravel()
-        else:
-            hit_data = np.empty((0,), dtype=self.hits_dtype)
-
-        # save data
-        hit_slice = self.data_manager.reserve_data(
-            self.hits_dset_name, len(hit_data))
-        if len(hit_data):
-            hit_data['id'] = np.r_[hit_slice]
-        self.data_manager.write_data(self.hits_dset_name, hit_slice, hit_data)
-
-        # save references
-        if len(hit_data):
-            source_index = np.r_[source_slice].reshape(-1, 1, 1)
-            source_index = np.broadcast_to(source_index, wvfms.shape[:-1])
-            source_index = source_index[peaks[:-1]]
-
-            ref = np.c_[source_index, hit_slice]
-        else:
-            ref = np.empty((0, 2))
-        self.data_manager.write_ref(source_name, self.hits_dset_name, ref)
-        self.data_manager.write_ref(
-            self.wvfm_dset_name, self.hits_dset_name, ref)
-
-    @staticmethod
-    def find_outlier_mask(arr):
-        '''
-            Find outlier mask using median absolute deviation. An outlier is
-            defined as::
-
-                |arr - median(arr, axis=-1)| >
-                    median(|arr - median(arr, axis=-1)|, axis=-1)
-
-            :param arr: 2D masked array of points, ``shape: (N,M)``
-
-            :returns: 2D boolean masked array of outliers, ``shape: (N,M)``, ``True == outlier``
-
-        '''
-        med = ma.median(arr, axis=-1, keepdims=True)
-        mad = ma.median(np.abs(arr - med), axis=-1, keepdims=True)
-        return np.abs(arr - med) > mad
+        print("peaks 2", peaks, len(peaks))
+        print("peak_max", peak_max, len(peak_max))
