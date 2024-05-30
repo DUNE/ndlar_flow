@@ -287,8 +287,12 @@ class Geometry(H5FlowResource):
         anode_drift_coord = self.anode_drift_coordinate[(np.array(tile_id),)]
         drift_direction = self.drift_dir[(np.array(tile_id),)]
 
-        return anode_drift_coord.reshape(drift.shape) + \
-            drift_direction.reshape(drift.shape) * drift
+        if len(drift.shape) == 1:
+            return anode_drift_coord.reshape(drift.shape) + \
+                drift_direction.reshape(drift.shape) * drift
+        else:
+            return anode_drift_coord.reshape((drift.shape[0],1)) + \
+                drift_direction.reshape((drift.shape[0],1)) * drift
 
 
     def in_fid(self, xyz, cathode_fid=0.0, field_cage_fid=0.0, anode_fid=0.0):
@@ -327,7 +331,7 @@ class Geometry(H5FlowResource):
         # resolution. For now, we can tolerate treating these hits as outside the fiducial volume.
         coord_in_positive_drift_fid = ma.concatenate([np.expand_dims(\
                                     (xyz < np.expand_dims(boundary[1] - fid_positive_drift[i][1], 0)) &\
-                                    (xyz > np.expand_dims(boundary[0] + fid_positive_drift[i][0], 0)), axis=-1)\
+                                    (xyz > np.expaed_dims(boundary[0] + fid_positive_drift[i][0], 0)), axis=-1)\
                                     for i,boundary in enumerate(positive_drift_regions)], axis=-1)
         coord_in_negative_drift_fid = ma.concatenate([np.expand_dims(\
                                     (xyz < np.expand_dims(boundary[1] - fid_negative_drift[i][1], 0)) &\

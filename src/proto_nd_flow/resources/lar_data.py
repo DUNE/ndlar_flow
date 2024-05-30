@@ -2,7 +2,6 @@ import numpy as np
 import logging
 import scipy.interpolate as interpolate
 import os
-import math
 
 from h5flow.core import H5FlowResource, resources
 
@@ -207,25 +206,32 @@ class LArData(H5FlowResource):
     def ionization_recombination(self, mode, dEdx):
         '''
             Calculate charge recombination factor using Birks Model with parameters:
+             - dEdx is expected to be MeV/cm
+             - A = 0.8
+             - K = 0.0486 (units = g/(MeV cm^2) kV/cm)
+             - resources['RunData'].e_field (units = kV/mm)
+             - density (units = g/mm^3)
 
-             - ``A = 0.8``
-             - ``K = 0.0486`` (units = g/(MeV cm^2) kV/cm)
+            for operation in ln (np.log), we do not convert in the package units
 
             Defined by::
 
                 R_i = dQ * W_i / dE
 
         '''
+        e_field = resources['RunData'].e_field * (units.kV / units.cm)**(-1)
+        density = self.density * (units.g / (units.cm)**3)**(-1)
+
         # box
         if mode == 1:
             # Baller, 2013 JINST 8 P08005
-            csi = self.box_beta * dEdx / (resources['RunData'].e_field * self.density)
-            recomb = max(0, math.log(self.box_alpha + csi) / csi)
+            csi = self.box_beta * dEdx / (e_field * density)
+            recomb = np.divide(np.log(self.box_alpha + csi), csi, out=np.zeros_like(csi), where=csi!=0)
 
         # birks
         elif mode == 2:
             # Amoruso, et al NIM A 523 (2004) 275
-            recomb = self.birks_Ab / (1 + self.birks_kb * dEdx / (resources['RunData'].e_field * self.density))
+            recomb = self.birks_Ab / (1 + self.birks_kb * dEdx  / (e_field * density))
 
         return recomb
 
