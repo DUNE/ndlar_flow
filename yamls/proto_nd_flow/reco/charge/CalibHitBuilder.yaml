@@ -8,10 +8,10 @@ requires:
   - name: 'charge/packets_index'
     path: ['charge/packets']
     index_only: True
-  - name: 'packet_frac_backtrack'
-    path: ['charge/packets','mc_truth/packet_fraction']
-  - name: 'packet_seg_backtrack'
-    path: ['charge/packets','mc_truth/segments']
+  # - name: 'packet_frac_backtrack'
+  #   path: ['charge/packets','mc_truth/packet_fraction']
+  # - name: 'packet_seg_backtrack'
+  #   path: ['charge/packets','mc_truth/segments']
 
 params:
   # inputs
@@ -24,7 +24,7 @@ params:
 
   # output
   calib_hits_dset_name: 'charge/calib_prompt_hits'
-  mc_hit_frac_dset_name: 'mc_truth/calib_prompt_hit_backtrack'
+  # mc_hit_frac_dset_name: 'mc_truth/calib_prompt_hit_backtrack'
 
   # configuration parameters
 
