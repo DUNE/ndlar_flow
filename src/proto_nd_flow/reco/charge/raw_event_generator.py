@@ -173,6 +173,8 @@ class RawEventGenerator(H5FlowGenerator):
 
         if 'file_traj_id' in self.input_fh['trajectories'].dtype.names:
             self.traj_id_name = 'file_traj_id'
+            if self.is_mc_neutrino and 'file_traj_id' not in self.input_fh['mc_stack'].dtype.names:
+                self.traj_id_name = 'traj_id'
         else:
             self.traj_id_name = 'traj_id'
             warnings.warn("Using 'traj_id' instead of 'file_traj_id'. 'traj_id' is not unique across the file and will cause reference issues.")
