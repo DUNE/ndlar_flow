@@ -173,6 +173,8 @@ class RawEventGenerator(H5FlowGenerator):
 
         if 'file_traj_id' in self.input_fh['trajectories'].dtype.names:
             self.traj_id_name = 'file_traj_id'
+            if self.is_mc_neutrino and 'file_traj_id' not in self.input_fh['mc_stack'].dtype.names:
+                self.traj_id_name = 'traj_id'
         else:
             self.traj_id_name = 'traj_id'
             warnings.warn("Using 'traj_id' instead of 'file_traj_id'. 'traj_id' is not unique across the file and will cause reference issues.")
@@ -206,7 +208,7 @@ class RawEventGenerator(H5FlowGenerator):
                 self.data_manager.set_attrs(self.raw_event_dset_name,
                                             mc_stack_dset_name=self.mc_stack_dset_name)
 
-            self.data_manager.create_dset(self.mc_packet_fraction_dset_name, dtype=self.mc_assn['fraction'].dtype)
+            self.data_manager.create_dset(self.mc_packet_fraction_dset_name, dtype=self.mc_assn.dtype)
             self.data_manager.create_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name)
 
             # copy datasets from source file
@@ -416,7 +418,8 @@ class RawEventGenerator(H5FlowGenerator):
 
         # run event builder
         eb_rv = list(self.event_builder.build_events(packet_buffer, unix_ts, mc_assn))
-        events, event_unix_ts = eb_rv if not self.is_mc else eb_rv[:-1]
+        events, event_unix_ts = eb_rv[:2]
+
         if self.is_mc:
             event_mc_assn = eb_rv[-1]
         else:
@@ -436,6 +439,8 @@ class RawEventGenerator(H5FlowGenerator):
             if self.is_mc:
                 event_mc_assn = list()
         nevents = len(events)
+        if not nevents:
+            return H5FlowGenerator.EMPTY
 
         # write event to file
         raw_event_array = np.zeros((nevents,), dtype=self.raw_event_dtype)
@@ -460,23 +465,23 @@ class RawEventGenerator(H5FlowGenerator):
         self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, ref)
 
         if self.is_mc:
-            # write mc data to file
+            # packet -> mc_packet_assn
+            ref = np.c_[packets_idcs.ravel(), packets_idcs.ravel()]
+            sl = self.data_manager.reserve_data(self.mc_packet_fraction_dset_name, len(ref))
+            self.data_manager.write_data(self.mc_packet_fraction_dset_name, sl, np.concatenate(event_mc_assn))
+            self.data_manager.write_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name, ref)
+
+            # packet -> segment
             mc_assn = (np.concatenate(event_mc_assn, axis=0)
                        if len(event_mc_assn) else np.full((0,), -1, dtype=self.mc_assn.dtype))
             id_field = 'segment_ids' if 'segment_ids' in mc_assn.dtype.fields else 'track_ids'
             mc_assn_mask = (mc_assn[id_field] == -1) | (mc_assn['fraction'] == 0.)
             event_tracks = ma.array(mc_assn[id_field], mask=mc_assn_mask)
-            event_packet_fraction = ma.array(mc_assn['fraction'], mask=mc_assn_mask)
-
-            # set up packet references
             packets_idcs = np.broadcast_to(packets_idcs[:, np.newaxis], event_tracks.shape)
             ref = np.c_[packets_idcs.ravel(), event_tracks.ravel()]
             ref = np.unique(ref[~event_tracks.mask.ravel()], axis=0) \
                 if len(ref) else ref
             self.data_manager.write_ref(self.packets_dset_name, self.mc_tracks_dset_name, ref)
-            sl = self.data_manager.reserve_data(self.mc_packet_fraction_dset_name, len(ref))
-            self.data_manager.write_data(self.mc_packet_fraction_dset_name, sl, event_packet_fraction.compressed())
-            self.data_manager.write_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name, np.c_[ref[:,0], sl])
 
             # find events associated with tracks
             if H5FLOW_MPI:

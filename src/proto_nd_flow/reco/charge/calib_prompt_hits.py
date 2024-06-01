@@ -102,7 +102,7 @@ class CalibHitBuilder(H5FlowStage):
         self.t0_dset_name = params.get('t0_dset_name')
         self.pedestal_file = params.get('pedestal_file', '')
         self.configuration_file = params.get('configuration_file', '')
-        self.max_contrib_segments = params.get('max_contrib_segments','')
+        #self.max_contrib_segments = params.get('max_contrib_segments','')
 
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
@@ -129,21 +129,17 @@ class CalibHitBuilder(H5FlowStage):
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
             packet_frac_bt_arr = packet_frac_bt.data[mask]
+            packet_frac_bt_arr = np.concatenate(packet_frac_bt_arr)
             packet_seg_bt_arr = packet_seg_bt.data[mask]
             index_arr = packets_index.data[mask]
         else:
             n = 0
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
 
-        has_mc_truth = packet_seg_bt is not None
+        has_mc_truth = packet_frac_bt is not None
 
         if has_mc_truth:
             self.calib_hits_dtype = np.dtype(self.calib_hits_dtype.descr + [('x_true_seg_t', f'({packet_seg_bt.shape[-1]},)f8'), ('E_true_recomb_elife', f'({packet_seg_bt.shape[-1]},)f8')])
-
-        self.hit_frac_dtype = np.dtype([
-            ('fraction', f'({packet_seg_bt.shape[-1]},)f8'),
-            ('segment_id', f'({packet_seg_bt.shape[-1]},)u8')
-        ])
 
         # save all config info
         self.data_manager.set_attrs(self.calib_hits_dset_name,
@@ -158,7 +154,7 @@ class CalibHitBuilder(H5FlowStage):
 
         # then set up new datasets
         self.data_manager.create_dset(self.calib_hits_dset_name, dtype=self.calib_hits_dtype)
-        self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype)
+        self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=packet_frac_bt_arr.dtype)
         self.data_manager.create_ref(source_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(self.calib_hits_dset_name, self.packets_dset_name)
         self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
@@ -233,17 +229,14 @@ class CalibHitBuilder(H5FlowStage):
             true_recomb = resources['LArData'].ionization_recombination(mode=1,dEdx=packet_seg_bt_arr['dEdx'])
             calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
 
-            # create truth-level backtracking dataset
-            if has_mc_truth:
-                back_track = np.full(shape=packets_arr.shape,fill_value=0.,dtype=self.hit_frac_dtype)
-                for hit_it, pack in np.ndenumerate(packets_arr):
-                    back_track[hit_it]['fraction'] = packet_frac_bt_arr[hit_it] 
-                    back_track[hit_it]['segment_id'] = packet_seg_bt_arr[hit_it]['segment_id']
-
         # if back tracking information was available, write the merged back tracking
         # dataset to file 
         if has_mc_truth:
-            self.data_manager.write_data(self.mc_hit_frac_dset_name, hit_bt_slice, back_track)
+            # make sure packets and packet backtracking match in numbers
+            if packets_arr.shape[0] == packet_frac_bt_arr.shape[0]:
+                self.data_manager.write_data(self.mc_hit_frac_dset_name, hit_bt_slice, packet_frac_bt_arr)
+            else:
+                raise Exception("The data packet and backtracking info do not match in size.")
 
         # write
         self.data_manager.write_data(self.calib_hits_dset_name, calib_hits_slice, calib_hits_arr)
