@@ -465,6 +465,7 @@ class RawEventGenerator(H5FlowGenerator):
         self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, ref)
 
         if self.is_mc:
+
             # packet -> mc_packet_assn
             ref = np.c_[packets_idcs.ravel(), packets_idcs.ravel()]
             sl = self.data_manager.reserve_data(self.mc_packet_fraction_dset_name, len(ref))
@@ -477,10 +478,17 @@ class RawEventGenerator(H5FlowGenerator):
             id_field = 'segment_ids' if 'segment_ids' in mc_assn.dtype.fields else 'track_ids'
             mc_assn_mask = (mc_assn[id_field] == -1) | (mc_assn['fraction'] == 0.)
             event_tracks = ma.array(mc_assn[id_field], mask=mc_assn_mask)
+
             packets_idcs = np.broadcast_to(packets_idcs[:, np.newaxis], event_tracks.shape)
-            ref = np.c_[packets_idcs.ravel(), event_tracks.ravel()]
-            ref = np.unique(ref[~event_tracks.mask.ravel()], axis=0) \
-                if len(ref) else ref
+            packets_idcs = packets_idcs.ravel()[~event_tracks.mask.ravel()]
+
+            segment_id_idcs = {segment_id:idcs for idcs,segment_id in enumerate(self.mc_tracks['segment_id'])}
+            segment_idcs = [segment_id_idcs[seg_id] for seg_id in event_tracks.ravel()[~event_tracks.mask.ravel()]]
+
+            if len(packets_idcs) != len(segment_idcs):
+                raise Exception("packets_idcs and segment_idcs do not match in size!")
+            ref = np.c_[packets_idcs, segment_idcs]
+            ref = np.unique(ref, axis=0) if len(ref) else ref
             self.data_manager.write_ref(self.packets_dset_name, self.mc_tracks_dset_name, ref)
 
             # find events associated with tracks
