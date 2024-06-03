@@ -14,7 +14,7 @@ params:
   event_builder_class: 'ExtTrigRawEventBuilder' #'SymmetricWindowRawEventBuilder'
   event_builder_config:
     window: 2000 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
-    trig_io_grp: 1
+    trig_io_grp: 5
     rollover_ticks: 10000000 # PPS = 1e7 ticks
     build_off_beam_events : True
     VALIDATE_HACK : False
