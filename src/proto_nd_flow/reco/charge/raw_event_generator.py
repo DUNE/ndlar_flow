@@ -417,13 +417,13 @@ class RawEventGenerator(H5FlowGenerator):
                 mc_assn = mc_assn[sync_noise_mask]
 
         # run event builder
+        events, event_unix_ts, event_mc_assn = [], [], None
         eb_rv = list(self.event_builder.build_events(packet_buffer, unix_ts, mc_assn))
-        events, event_unix_ts = eb_rv[:2]
 
-        if self.is_mc:
-            event_mc_assn = eb_rv[-1]
-        else:
-            event_mc_assn = None
+        if eb_rv:
+            events, event_unix_ts = eb_rv[:2]
+            if self.is_mc:
+                event_mc_assn = eb_rv[2]
 
         # apply nhit cut
         nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
