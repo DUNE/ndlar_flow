@@ -10,7 +10,7 @@ Resources
 
 * ``yamls/module1_flow/resources/Geometry.yaml``
 
-  Copied and modified from ``yamls/proto_nd_flow/resources/Geometry.yaml`` I set ``det_geometry_file`` to ``data/module1_flow/module0.yaml``. I don't know if that's alright, and I don't think module0 accepted that option. ``crs_geometry_file`` is set to what I found in previously flowed file's metadata. I kept ``lrs_geometry_file`` the same as in proto_nd_flow, but I don't know if that works. Also, some module workflows had ``network_agnostic`` True and others False; not sure which is correct. 
+  Copied and modified from ``yamls/proto_nd_flow/resources/Geometry.yaml`` I set ``det_geometry_file`` to ``data/module1_flow/module0.yaml``. I don't know if that's alright, and I don't think module0 accepted that option. ``crs_geometry_file`` is set to what I found in previously flowed file's metadata. For ``lrs_geometry_file``, I copied what was in for the 2x2 and reduced it down to one module. Also, some module workflows had ``network_agnostic`` True and others False; not sure which is correct. 
 
 * ``yamls/module1_flow/resources/LArData.yaml``
 
@@ -114,7 +114,9 @@ Light
 
 * ``yamls/module1_flow/reco/light/WaveformDeconvolution.yaml``
 
-  Copied and modified from ``yamls/proto_nd_flow/reco/light/WaveformDeconvolution.yaml``. ``noise_spectrum_filename``, ``signal_spectrum_filename``, ``signal_impulse_filename`` were set to ``module0`` files. Option ``filter_channels`` differs from other modules.
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/WaveformDeconvolution.yaml``.
+  ``noise_spectrum_filename``, ``signal_spectrum_filename``, ``signal_impulse_filename`` were set generated using ``run_light_extract_response.sh``, with ``0cd913fb_20220211_074023.data`` as the input file.
+  Option ``filter_channels`` differs from other modules.
 
 * ``yamls/module1_flow/reco/light/WaveformAlign.yaml``
 
@@ -122,7 +124,7 @@ Light
 
 * ``yamls/module1_flow/reco/light/WaveformCalib.yaml``
 
-  Copied from ``yamls/proto_nd_flow/reco/light/WaveformCalib.yaml``. Looks like it needs to be updated. Does it assume 8 TPCs? Does everything ``gain_mc`` need to be removed? And does ``gain`` need to be updated. File doesn't exist for other module workflows.
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/WaveformCalib.yaml``. For ``gain``, I created an input file using gain corrections Livio sent me in ``mod1_gain_corrected.csv``. The code to make the gains is found in ``gains_and_thresholds.ipynb``. 
 
 * ``yamls/module1_flow/reco/light/WaveformSum.yaml``
 
@@ -130,8 +132,8 @@ Light
 
 * ``yamls/module1_flow/reco/light/SiPMHitFinder.yaml``
 
-  Copied from ``yamls/proto_nd_flow/reco/light/SiPMHitFinder.yaml``. ``near_sample`` parameter is different. Here, ``threshold`` is a single constant, while other module workflows point to a ``siplm_threshold.yaml`` file. 
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/SiPMHitFinder.yaml``. ``near_sample`` parameter is different. I generated a ``sipm_threshold.yaml`` file using ``gains_and_thresholds.ipynb``. 
 
 * ``yamls/module1_flow/reco/light/SumHitFinder.yaml``
 
-  Copied from ``yamls/proto_nd_flow/reco/light/SumHitFinder.yaml``. Does not exist for other module workflows. Is ``threshold`` assuming 8 TPCSs? 
+  Copied and modified from ``yamls/proto_nd_flow/reco/light/SumHitFinder.yaml``. I generated a ``sum_threshold.yaml`` threshold file using ``gains_and_thresholds.ipynb``. 

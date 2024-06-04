@@ -127,19 +127,22 @@ class CalibHitBuilder(H5FlowStage):
 
         # then set up new datasets
         self.data_manager.create_dset(self.calib_hits_dset_name, dtype=self.calib_hits_dtype)
-        self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype)
+        if resources['RunData'].is_mc: 
+            self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype)
         self.data_manager.create_ref(source_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(self.calib_hits_dset_name, self.packets_dset_name)
         self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
-        self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name)
+        if resources['RunData'].is_mc: 
+            self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name)
 
     def run(self, source_name, source_slice, cache):
         super(CalibHitBuilder, self).run(source_name, source_slice, cache)
         events_data = cache[self.events_dset_name]
         packets_data = cache[self.packets_dset_name]
         packets_index = cache[self.packets_index_name]
-        packet_frac_bt = cache['packet_frac_backtrack']
-        packet_seg_bt = cache['packet_seg_backtrack']
+        if resources['RunData'].is_mc:
+            packet_frac_bt = cache['packet_frac_backtrack']
+            packet_seg_bt = cache['packet_seg_backtrack']
         t0_data = cache[self.t0_dset_name]
         raw_hits = cache[self.raw_hits_dset_name]
 
@@ -152,14 +155,18 @@ class CalibHitBuilder(H5FlowStage):
             mask = (packets_data['packet_type'] == 0) & mask
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
-            packet_frac_bt_arr = packet_frac_bt.data[mask]
-            packet_seg_bt_arr = packet_seg_bt.data[mask]
+            if resources['RunData'].is_mc:
+                packet_frac_bt_arr = packet_frac_bt.data[mask]
+                packet_seg_bt_arr = packet_seg_bt.data[mask]
             index_arr = packets_index.data[mask]
         else:
             n = 0
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
 
-        has_mc_truth = packet_seg_bt is not None
+        if resources['RunData'].is_mc:
+            has_mc_truth = packet_seg_bt is not None
+        else:
+            has_mc_truth = False
 
         # reserve new data
         calib_hits_slice = self.data_manager.reserve_data(self.calib_hits_dset_name, n)
@@ -220,7 +227,7 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['io_channel'] = packets_arr['io_channel']
             calib_hits_arr['Q'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped)
             #!!! hardcoding W_ion, R=0.7, and not accounting for finite electron lifetime
-            calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 * 0.7
+            calib_hits_arr['E'] = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) * 23.6e-3 / 0.7
 
             # create truth-level backtracking dataset
             if has_mc_truth:

@@ -72,10 +72,12 @@ class CalibHitMerger(H5FlowStage):
         ])
 
         self.data_manager.create_dset(self.merged_name, dtype=self.merged_dtype)
-        self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype)
+        if resources['RunData'].is_mc:
+            self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype)
         self.data_manager.create_ref(self.hits_name, self.merged_name)
         self.data_manager.create_ref(source_name, self.merged_name)
-        self.data_manager.create_ref(self.merged_name,self.mc_hit_frac_dset_name)
+        if resources['RunData'].is_mc:
+            self.data_manager.create_ref(self.merged_name,self.mc_hit_frac_dset_name)
         self.data_manager.create_ref(self.events_dset_name, self.merged_name)
 
     #@staticmethod
