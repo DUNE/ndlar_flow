@@ -102,7 +102,6 @@ class CalibHitBuilder(H5FlowStage):
         self.t0_dset_name = params.get('t0_dset_name')
         self.pedestal_file = params.get('pedestal_file', '')
         self.configuration_file = params.get('configuration_file', '')
-        #self.max_contrib_segments = params.get('max_contrib_segments','')
 
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
@@ -114,10 +113,13 @@ class CalibHitBuilder(H5FlowStage):
         events_data = cache[self.events_dset_name]
         packets_data = cache[self.packets_dset_name]
         packets_index = cache[self.packets_index_name]
-        packet_frac_bt = cache['packet_frac_backtrack']
-        packet_seg_bt = cache['packet_seg_backtrack']
+        if resources['RunData'].is_mc:
+            packet_frac_bt = cache['packet_frac_backtrack']
+            packet_seg_bt = cache['packet_seg_backtrack']
         t0_data = cache[self.t0_dset_name]
         raw_hits = cache[self.raw_hits_dset_name]
+
+        has_mc_truth = packet_frac_bt is not None
 
         mask = ~rfn.structured_to_unstructured(packets_data.mask).any(axis=-1)
         rh_mask = ~rfn.structured_to_unstructured(raw_hits.mask).any(axis=-1)
@@ -128,15 +130,14 @@ class CalibHitBuilder(H5FlowStage):
             mask = (packets_data['packet_type'] == 0) & mask
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
-            packet_frac_bt_arr = packet_frac_bt.data[mask]
-            packet_frac_bt_arr = np.concatenate(packet_frac_bt_arr)
-            packet_seg_bt_arr = packet_seg_bt.data[mask]
+            if resources['RunData'].is_mc:
+                packet_frac_bt_arr = packet_frac_bt.data[mask]
+                packet_frac_bt_arr = np.concatenate(packet_frac_bt_arr)
+                packet_seg_bt_arr = packet_seg_bt.data[mask]
             index_arr = packets_index.data[mask]
         else:
             n = 0
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
-
-        has_mc_truth = packet_frac_bt is not None
 
         if has_mc_truth:
             self.calib_hits_dtype = np.dtype(self.calib_hits_dtype.descr + [('x_true_seg_t', f'({packet_seg_bt.shape[-1]},)f8'), ('E_true_recomb_elife', f'({packet_seg_bt.shape[-1]},)f8')])
@@ -154,11 +155,13 @@ class CalibHitBuilder(H5FlowStage):
 
         # then set up new datasets
         self.data_manager.create_dset(self.calib_hits_dset_name, dtype=self.calib_hits_dtype)
-        self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=packet_frac_bt_arr.dtype)
+        if has_mc_truth:
+            self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype)
         self.data_manager.create_ref(source_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(self.calib_hits_dset_name, self.packets_dset_name)
         self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
-        self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name)
+        if has_mc_truth:
+            self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name)
 
         # reserve new data
         calib_hits_slice = self.data_manager.reserve_data(self.calib_hits_dset_name, n)
@@ -195,9 +198,10 @@ class CalibHitBuilder(H5FlowStage):
             x = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
 
             # true drift position pair
-            drift_t_true = packet_seg_bt_arr['t'] #us
-            drift_d_true = drift_t_true * (resources['LArData'].v_drift) / units.cm # convert mm -> cm
-            x_true_seg_t = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d_true)
+            if has_mc_truth:
+                drift_t_true = packet_seg_bt_arr['t'] #us
+                drift_d_true = drift_t_true * (resources['LArData'].v_drift) / units.cm # convert mm -> cm
+                x_true_seg_t = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d_true)
 
             zy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
@@ -215,7 +219,8 @@ class CalibHitBuilder(H5FlowStage):
                             for unique_id in hit_uniqueid_str])
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             calib_hits_arr['x'] = x
-            calib_hits_arr['x_true_seg_t'] = x_true_seg_t
+            if has_mc_truth:
+                calib_hits_arr['x_true_seg_t'] = x_true_seg_t
             calib_hits_arr['y'] = zy[:,1]
             calib_hits_arr['z'] = zy[:,0]
             calib_hits_arr['ts_pps'] = raw_hits_arr['ts_pps']
@@ -226,8 +231,9 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['Q'] = hits_charge # ke-
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
             calib_hits_arr['E'] = hits_charge * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV) # MeV
-            true_recomb = resources['LArData'].ionization_recombination(mode=1,dEdx=packet_seg_bt_arr['dEdx'])
-            calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
+            if has_mc_truth:
+                true_recomb = resources['LArData'].ionization_recombination(mode=1,dEdx=packet_seg_bt_arr['dEdx'])
+                calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
 
         # if back tracking information was available, write the merged back tracking
         # dataset to file 

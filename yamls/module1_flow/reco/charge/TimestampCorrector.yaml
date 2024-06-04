@@ -16,5 +16,5 @@ params:
 
   # configuration parameters
   correction:
-    1: [-9.5, -2.57e-07]
-    2: [-9.5,  4.14e-07]
+    1: [-11.0742, -1.691e-7]
+    2: [-10.9233, 5.493e-7]
