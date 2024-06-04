@@ -68,7 +68,7 @@ class CalibHitMerger(H5FlowStage):
 
         self.hit_frac_dtype = np.dtype([
             ('fraction', f'({self.max_contrib_segments},)f8'),
-            ('segment_id', f'({self.max_contrib_segments},)u8')
+            ('segment_ids', f'({self.max_contrib_segments},)i8')
         ])
 
         self.data_manager.create_dset(self.merged_name, dtype=self.merged_dtype)
@@ -104,7 +104,7 @@ class CalibHitMerger(H5FlowStage):
 
         '''
 
-        has_mc_truth = seg_fracs[0] is not None
+        has_mc_truth = seg_fracs is not None
         iteration_count = 0
         mask = hits.mask['id'].copy()
         new_hits = hits.data.copy()
@@ -112,23 +112,13 @@ class CalibHitMerger(H5FlowStage):
         old_ids = hits.data['id'].copy()[...,np.newaxis]
         old_id_mask = hits.mask['id'].copy()[...,np.newaxis]
         if has_mc_truth:
-            new_seg_bt = np.array(seg_fracs[0])
-            new_frac_bt = np.array(seg_fracs[1])
             hit_contributions = np.full(shape=weights.shape+(3,self.max_contrib_segments),fill_value=0.)
             # initialize hit contribution lists with unmerged data.
             # [there is probably a more pythonic way of doing this...]
-            for it, q in np.ndenumerate(weights):
-                if len(new_frac_bt[it]) > 1:
-                    print('!!!!!!!!!!!!!!!!!')
-                    break
-                counter=0
-                for entry_it, entry in enumerate(new_frac_bt[it][0]):
-                    if abs(entry) < 0.001: continue
-                    hit_contributions[it][0][counter] = q
-                    hit_contributions[it][1][counter] = new_frac_bt[it][0][entry_it]
-                    hit_contributions[it][2][counter] = new_seg_bt[it][0][entry_it]['segment_id']
-                    counter+=1
-
+            prompt_hit_max_seg_contrib = seg_fracs['segment_ids'].shape[-1]
+            hit_contributions[:,:,0,:] = np.pad(np.expand_dims(weights,axis=2),((0,0),(0,0),(0,self.max_contrib_segments-1)),'mean')
+            hit_contributions[:,:,1,:] = np.pad(np.squeeze(seg_fracs['fraction']),((0,0),(0,0),(0, self.max_contrib_segments-prompt_hit_max_seg_contrib)),'constant',constant_values=0)
+            hit_contributions[:,:,2,:] = np.pad(np.squeeze(seg_fracs['segment_ids']),((0,0),(0,0),(0, self.max_contrib_segments-prompt_hit_max_seg_contrib)),'constant',constant_values=-1)
         while new_hits.size > 0 and iteration_count != max_steps:
             iteration_count += 1
             # algorithm is iterative, but typically only needs to loop a few (~2-3) times
@@ -211,9 +201,9 @@ class CalibHitMerger(H5FlowStage):
                             hit_contributions[...,:-1][hit_it][0][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][0][comb_it]
                             hit_contributions[...,:-1][hit_it][2][e+comb_it] = hit_contributions[...,:][hit_it[0],hit_it[1]+1][2][comb_it]
                             # and remove them from the hit that was merged in
-                            hit_contributions[hit_it[0],hit_it[1]+1][1][comb_it] = 0
                             hit_contributions[hit_it[0],hit_it[1]+1][0][comb_it] = 0.
-                            hit_contributions[hit_it[0],hit_it[1]+1][2][comb_it] = 0.
+                            hit_contributions[hit_it[0],hit_it[1]+1][1][comb_it] = 0.
+                            hit_contributions[hit_it[0],hit_it[1]+1][2][comb_it] = -1
 
                 # now we mask off hits that have already been merged
                 mask[...,1:] = mask[...,1:] | to_merge
@@ -247,7 +237,9 @@ class CalibHitMerger(H5FlowStage):
             for hit_it, hit in np.ndenumerate(new_hits):
                 if mask[hit_it]: continue
                 hit_contr = hit_contributions[hit_it]
+
                 # renormalize the fractional contributions given the charge weighted average
+                # YC, 2024-06-03: I think we should check this norm is consistent with the sum of Q from all contributed prompt hits
                 norm = np.sum(np.multiply(hit_contr[0],hit_contr[1]))
                 if norm == 0.: norm = 1.
                 tmp_bt_0 = np.multiply(hit_contr[0],hit_contr[1])/norm # fractional contributions
@@ -265,9 +257,9 @@ class CalibHitMerger(H5FlowStage):
                 bt_unique_segs = np.take_along_axis(bt_unique_segs, isort, axis=-1)
                 bt_unique_frac = np.take_along_axis(bt_unique_frac, isort, axis=-1)
                 back_track[hit_it]['fraction'] = [0.]*self.max_contrib_segments
-                back_track[hit_it]['segment_id'] = [0]*self.max_contrib_segments
+                back_track[hit_it]['segment_ids'] = [-1]*self.max_contrib_segments
                 back_track[hit_it]['fraction'][:bt_unique_frac.shape[0]] = bt_unique_frac
-                back_track[hit_it]['segment_id'][:bt_unique_segs.shape[0]] = bt_unique_segs
+                back_track[hit_it]['segment_ids'][:bt_unique_segs.shape[0]] = bt_unique_segs
         else: back_track = None
 
         new_hit_idx = np.broadcast_to(np.cumsum(~mask.ravel(), axis=0).reshape(mask.shape + (1,)), old_ids.shape)-1
@@ -283,10 +275,9 @@ class CalibHitMerger(H5FlowStage):
 
         event_id = np.r_[source_slice]
         packet_frac_bt = cache['packet_frac_backtrack']
-        packet_seg_bt = cache['packet_seg_backtrack']
         hits = cache[self.hits_name]
 
-        merged, ref, back_track = self.merge_hits(hits, weights=hits['Q'], seg_fracs=[packet_seg_bt,packet_frac_bt],dt_cut=self.merge_cut, sum_fields=self.sum_fields, weighted_mean_fields=self.weighted_mean_fields, max_steps=self.max_merge_steps, mode=self.merge_mode)
+        merged, ref, back_track = self.merge_hits(hits, weights=hits['Q'], seg_fracs=packet_frac_bt,dt_cut=self.merge_cut, sum_fields=self.sum_fields, weighted_mean_fields=self.weighted_mean_fields, max_steps=self.max_merge_steps, mode=self.merge_mode)
 
         merged_mask = merged.mask['id']
 
