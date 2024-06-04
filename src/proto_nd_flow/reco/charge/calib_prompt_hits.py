@@ -156,7 +156,7 @@ class CalibHitBuilder(H5FlowStage):
         # then set up new datasets
         self.data_manager.create_dset(self.calib_hits_dset_name, dtype=self.calib_hits_dtype)
         if has_mc_truth:
-            self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype)
+            self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=packet_frac_bt_arr.dtype)
         self.data_manager.create_ref(source_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(self.calib_hits_dset_name, self.packets_dset_name)
         self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
