@@ -139,7 +139,7 @@ class CalibHitBuilder(H5FlowStage):
             n = 0
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
 
-        if has_mc_truth:
+        if has_mc_truth and ('x_true_seg_t' not in self.calib_hits_dtype.fields):
             self.calib_hits_dtype = np.dtype(self.calib_hits_dtype.descr + [('x_true_seg_t', f'({packet_seg_bt.shape[-1]},)f8'), ('E_true_recomb_elife', f'({packet_seg_bt.shape[-1]},)f8')])
 
         # save all config info
