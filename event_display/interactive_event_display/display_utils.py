@@ -141,8 +141,21 @@ def create_3d_figure(minerva_data, data, evid):
             except:
                 print("Cannot process this file type")
                 prompthits_segs = None
+    # Draw the TPC
+    tpc_center, anodes, cathodes = draw_tpc(sim_version)
+    light_detectors = draw_light_detectors(data, evid, sim_version)
+
+    fig.add_traces(tpc_center)
+    fig.add_traces(anodes)
+    fig.add_traces(cathodes)
+    fig.add_traces(light_detectors)
+
+    fig.update_layout(plot_bgcolor='white', scene=dict(camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.1, z=-1.00))))
 
     # Plot the prompt hits
+    if prompthits_ev['x'].mask[0][0]:
+        print("No hits found for this event")
+        return fig, sim_version
     prompthits_traces = go.Scatter3d(
         x=prompthits_ev.data["x"].flatten(),
         y=(prompthits_ev.data["y"].flatten()),
@@ -215,17 +228,6 @@ def create_3d_figure(minerva_data, data, evid):
             showlegend=True,
         )
         fig.add_traces(segs_traces)
-
-    # Draw the TPC
-    tpc_center, anodes, cathodes = draw_tpc(sim_version)
-    light_detectors = draw_light_detectors(data, evid, sim_version)
-
-    fig.add_traces(tpc_center)
-    fig.add_traces(anodes)
-    fig.add_traces(cathodes)
-    fig.add_traces(light_detectors)
-
-    fig.update_layout(plot_bgcolor='white', scene=dict(camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.25, z=1.25))))
 
     return fig, sim_version
 
