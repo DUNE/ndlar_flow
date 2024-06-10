@@ -90,7 +90,7 @@ def create_3d_figure(minerva_data, data, evid):
                 "opacity": 0.7,
                 "colorscale": "cividis",
                 "colorbar": {
-                    "title": "Mx2 energy [MeV]",
+                    "title": "Mx2 E [MeV]",
                     "titlefont": {"size": 12},
                     "tickfont": {"size": 10},
                     "thickness": 15,
@@ -150,7 +150,23 @@ def create_3d_figure(minerva_data, data, evid):
     fig.add_traces(cathodes)
     fig.add_traces(light_detectors)
 
-    fig.update_layout(plot_bgcolor='white', scene=dict(camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.1, z=-1.00))))
+    fig.update_layout(font=dict(size=14), plot_bgcolor='white', scene=dict(xaxis_title='x [cm]', 
+                        #  xaxis = dict(
+                        #  backgroundcolor="white",
+                        #  gridcolor="white",
+                        #  showbackground=True,
+                        #  zerolinecolor="white",),
+                        #  yaxis = dict(
+                        #  backgroundcolor="white",
+                        #  gridcolor="white",
+                        #  showbackground=True,
+                        #  zerolinecolor="white",),
+                        #  zaxis = dict(
+                        #  backgroundcolor="white",
+                        #  gridcolor="white",
+                        #  showbackground=True,
+                        #  zerolinecolor="white",),
+                         yaxis_title='y [cm]', zaxis_title='z [cm]', camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.0, z=-1.00))))
 
     # Plot the prompt hits
     if prompthits_ev['x'].mask[0][0]:
@@ -168,7 +184,7 @@ def create_3d_figure(minerva_data, data, evid):
             "opacity": 0.7,
             "colorscale": "cividis",
             "colorbar": {
-                "title": "Hit energy [MeV]",
+                "title": "Hit E [MeV]",
                 "titlefont": {"size": 12},
                 "tickfont": {"size": 10},
                 "thickness": 15,
@@ -228,7 +244,8 @@ def create_3d_figure(minerva_data, data, evid):
             showlegend=True,
         )
         fig.add_traces(segs_traces)
-
+    # fig.update_layout(font=dict(size=14), plot_bgcolor='white', scene=dict(xaxis_title='x [cm]',
+    #             yaxis_title='y [cm]', zaxis_title='z [cm]', camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.1, z=-1.00))))
     return fig, sim_version
 
 
