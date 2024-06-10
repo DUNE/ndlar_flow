@@ -32,8 +32,9 @@ def parse_minerva_contents(filename):
 def create_3d_figure(minerva_data, data, evid):
     fig = go.Figure()
     # Select the hits for the current event
-    trigger = ((data['charge/calib_prompt_hits', evid]['ts_pps']-2e6)/12).astype(int)[0] # this is the trigger number (should be, but not sure if it is correct)
-    print(f"Ts_pps: {data['charge/calib_prompt_hits', evid]['ts_pps']}, Trigger: {trigger}")
+    #trigger = ((data['charge/calib_prompt_hits', evid]['ts_pps']/1.2e6)).astype(int)[0] # this is the trigger number (should be, but not sure if it is correct)
+    trigger = evid
+    #print(f"Ts_pps: {data['charge/events','charge/calib_prompt_hits', evid]['ts_pps'][0][0]}, Trigger: {trigger}")
 
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
     finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
@@ -52,9 +53,14 @@ def create_3d_figure(minerva_data, data, evid):
 
         minerva_trk_index = minerva_data["minerva"]["trk_index"].array(library="np")
         minerva_trk_nodes = minerva_data["minerva"]["trk_nodes"].array(library="np")
-        minerva_trk_node_qOverP = minerva_data["minerva"]["trk_node_qOverP"].array(
+        minerva_trk_node_energy = minerva_data["minerva"]["clus_id_energy"].array(
             library="np"
         )
+
+        xs = []
+        ys = []
+        zs = []
+        qs = []
 
         for idx in minerva_trk_index[trigger]:
 
@@ -69,33 +75,38 @@ def create_3d_figure(minerva_data, data, evid):
                 z_nodes = (
                     minerva_hits_z[trigger][idx][:n_nodes] - minerva_hits_z_offset[trigger]
                 )
-                q_nodes = minerva_trk_node_qOverP[trigger][idx][:n_nodes]
-
-            minerva_hit_traces = go.Scatter3d(
-                x=x_nodes / 10,
-                y=y_nodes / 10,
-                z=z_nodes / 10,
-                marker_color=q_nodes,
-                marker={
-                    "size": 1.75,
-                    "opacity": 0.7,
-                    "colorscale": "cividis",
-                    "colorbar": {
-                        "title": "Q over P Minerva",
-                        "titlefont": {"size": 12},
-                        "tickfont": {"size": 10},
-                        "thickness": 15,
-                        "len": 0.5,
-                        "xanchor": "right",
-                        "x": 0,
-                    },
+                q_nodes = minerva_trk_node_energy[trigger][:n_nodes]
+            xs.append((x_nodes/10).tolist())
+            ys.append((y_nodes/10).tolist())
+            zs.append((z_nodes/10).tolist())
+            qs.append((q_nodes).tolist())
+        minerva_hit_traces = go.Scatter3d(
+            x=[item for sublist in xs for item in sublist],
+            y=[item for sublist in ys for item in sublist],
+            z=[item for sublist in zs for item in sublist],
+            marker_color=[item for sublist in qs for item in sublist],
+            marker={
+                "size": 1.75,
+                "opacity": 0.7,
+                "colorscale": "cividis",
+                "colorbar": {
+                    "title": "Mx2 energy [MeV]",
+                    "titlefont": {"size": 12},
+                    "tickfont": {"size": 10},
+                    "thickness": 15,
+                    "len": 0.5,
+                    "xanchor": "right",
+                    "x": 0,
                 },
-                name="minerva hits",
-                mode="markers",
-                showlegend=True,
-                opacity=0.7,
-            )
-            fig.add_traces(minerva_hit_traces)
+            },
+            name="minerva hits",
+            mode="markers",
+            showlegend=True,
+            opacity=0.7,
+            customdata=[item for sublist in qs for item in sublist],
+            hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
+        )
+        fig.add_traces(minerva_hit_traces)
     # select the segments (truth) for the current event
     try:
         prompthits_segs = data[
@@ -214,7 +225,7 @@ def create_3d_figure(minerva_data, data, evid):
     fig.add_traces(cathodes)
     fig.add_traces(light_detectors)
 
-    fig.update_layout(plot_bgcolor='white', scene=dict(camera=dict(up=dict(x=0, y=1, z=0))))
+    fig.update_layout(plot_bgcolor='white', scene=dict(camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.25, z=1.25))))
 
     return fig, sim_version
 
@@ -465,6 +476,28 @@ def plot_light_traps(data, waveforms_all_detectors, sim_version):
         ]
     )  # this maps detector position to detector number
     # we need to invert the mapping because I'm stupid
+    if sim_version == "minirun5":
+        channel_map = np.array( # patch for swapped tpc numbering
+            [
+                1, 9, 17, 25, 33, 41, 49, 57, # tpc 1, right
+                65, 73, 81, 89, 97, 105, 113, 121, # tpc 1, left
+                64, 72, 80, 88, 96, 104, 112, 120, # tpc 0, right
+                0, 8, 16, 24, 32, 40, 48, 56, # tpc 0, left
+                3, 11, 19, 27, 35, 43, 51, 59, # tpc 3, right
+                67, 75, 83, 91, 99, 107, 115, 123, # tpc 3, left
+                66, 74, 82, 90, 98, 106, 114, 122, # tpc 2, right
+                2, 10, 18, 26, 34, 42, 50, 58, # tpc 2, left
+                5, 13, 21, 29, 37, 45, 53, 61, # tpc 5, right
+                69, 77, 85, 93, 101, 109, 117, 125, # tpc 5, left
+                68, 76, 84, 92, 100, 108, 116, 124, # tpc 4, right
+                4, 12, 20, 28, 36, 44, 52, 60, # tpc 4, left
+                7, 15, 23, 31, 39, 47, 55, 63, # tpc 7, right
+                71, 79, 87, 95, 103, 111, 119, 127, # tpc 7, left
+                70, 78, 86, 94, 102, 110, 118, 126, # tpc 6, right
+                6, 14, 22, 30, 38, 46, 54, 62, # tpc 6, left
+            ]
+        )  # this maps detector position to detector number
+        # we need to invert the mapping because I'm stupid
 
     if sim_version == "data":
         channel_map = np.array(

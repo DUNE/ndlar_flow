@@ -98,7 +98,7 @@ app.layout = html.Div(
                 html.Div(
                     dcc.Graph(
                         id="3d-graph",
-                        style={"height": "70vh", "width": "50vw", "float": "left"},
+                        style={"height": "70vh", "width": "70vw", "float": "left"},
                     )
                 ),
                 # Smaller Graphs on the right
@@ -108,14 +108,14 @@ app.layout = html.Div(
                         html.Div(
                             dcc.Graph(
                                 id="light-waveform",
-                                style={"height": "35vh", "width": "50vw"},
+                                style={"height": "35vh", "width": "30vw"},
                             )
                         ),
                         # Charge graph on the bottom
                         html.Div(
                             dcc.Graph(
                                 id="charge-hist",
-                                style={"height": "35vh", "width": "50vw"},
+                                style={"height": "35vh", "width": "30vw"},
                             )
                         ),
                     ],
