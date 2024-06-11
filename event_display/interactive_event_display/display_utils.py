@@ -32,9 +32,8 @@ def parse_minerva_contents(filename):
 def create_3d_figure(minerva_data, data, evid):
     fig = go.Figure()
     # Select the hits for the current event
-    #trigger = ((data['charge/calib_prompt_hits', evid]['ts_pps']/1.2e6)).astype(int)[0] # this is the trigger number (should be, but not sure if it is correct)
-    trigger = evid
-    #print(f"Ts_pps: {data['charge/events','charge/calib_prompt_hits', evid]['ts_pps'][0][0]}, Trigger: {trigger}")
+    event = data["charge/events", evid]
+    trigger = ((event["unix_ts"][:] + event["ts_start"][:]/1e7)/1.2).astype(int)[0]
 
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
     finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
@@ -151,7 +150,7 @@ def create_3d_figure(minerva_data, data, evid):
     fig.add_traces(light_detectors)
 
     fig.update_layout(font=dict(size=14), plot_bgcolor='white', scene=dict(xaxis_title='x [cm]', 
-                        #  xaxis = dict(
+                        #  xaxis = dict( # to make the background whites
                         #  backgroundcolor="white",
                         #  gridcolor="white",
                         #  showbackground=True,
@@ -166,7 +165,7 @@ def create_3d_figure(minerva_data, data, evid):
                         #  gridcolor="white",
                         #  showbackground=True,
                         #  zerolinecolor="white",),
-                         yaxis_title='y [cm]', zaxis_title='z [cm]', camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.0, z=-1.00))))
+                         yaxis_title='y [cm]', zaxis_title='z [cm]', camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.0, z=-1.0))))
 
     # Plot the prompt hits
     if prompthits_ev['x'].mask[0][0]:
