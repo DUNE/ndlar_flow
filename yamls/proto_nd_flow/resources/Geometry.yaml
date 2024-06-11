@@ -14,3 +14,4 @@ params:
   lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-2.0.0.yaml'
   beam_direction: 'z'
   drift_direction: 'x'
+  network_agnostic: true
