@@ -795,7 +795,18 @@ class Geometry(H5FlowResource):
                     y += tile_positions[tile][1]/units.cm # convert mm -> cm
                     z += mod_centers[module_id-1][2] # det geo yaml is already in cm
                     y += mod_centers[module_id-1][1] # det geo yaml is already in cm
-                    self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = z, y
+
+                    if self.network_agnostic:
+                        tile_min_io_channel = (io_channel-1) // 4 * 4 + 1
+                        io_channels = range(tile_min_io_channel, 4 + tile_min_io_channel)
+                    else:
+                        io_channels = [io_channel]
+
+                    for ioc in io_channels:
+                        try:
+                            self._pixel_coordinates_2D[(io_group, ioc, chip, channel)] = z, y
+                        except:
+                            print(io_group, ioc, chip, channel)
 
         # Determine module readout bounds
         self._get_module_RO_bounds()
