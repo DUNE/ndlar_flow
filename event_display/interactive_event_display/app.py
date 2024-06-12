@@ -98,7 +98,7 @@ app.layout = html.Div(
                 html.Div(
                     dcc.Graph(
                         id="3d-graph",
-                        style={"height": "70vh", "width": "70vw", "float": "left"},
+                        style={"height": "70vh", "width": "60vw", "float": "left"},
                     )
                 ),
                 # Smaller Graphs on the right
@@ -108,14 +108,14 @@ app.layout = html.Div(
                         html.Div(
                             dcc.Graph(
                                 id="light-waveform",
-                                style={"height": "35vh", "width": "30vw"},
+                                style={"height": "35vh", "width": "40vw"},
                             )
                         ),
                         # Charge graph on the bottom
                         html.Div(
                             dcc.Graph(
                                 id="charge-hist",
-                                style={"height": "35vh", "width": "30vw"},
+                                style={"height": "35vh", "width": "40vw"},
                             )
                         ),
                     ],
@@ -335,7 +335,7 @@ def update_light_waveform(filename, evid, sim_version, graph, click_data):
 )
 def update_charge_histogram(filename, evid):
     """Update the charge graph when the event ID is changed"""
-    if filename!="":
+    if filename is not None:
         data, _ = parse_contents(filename)
         return plot_charge(data, evid)
     return go.Figure()
