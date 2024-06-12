@@ -149,7 +149,7 @@ def create_3d_figure(minerva_data, data, evid):
     fig.add_traces(cathodes)
     fig.add_traces(light_detectors)
 
-    fig.update_layout(font=dict(size=14), plot_bgcolor='white', scene=dict(xaxis_title='x [cm]', 
+    fig.update_layout(font=dict(size=14), plot_bgcolor='white', legend=dict(orientation="h"), scene=dict(xaxis_title='x [cm]', 
                         #  xaxis = dict( # to make the background whites
                         #  backgroundcolor="white",
                         #  gridcolor="white",
@@ -650,7 +650,7 @@ def plot_waveform(data, evid, opid, sim_version):
     drawn_objects = go.Scatter(
         x=x,
         y=y,
-        name=f"Channel sum for light trap {opid}",
+        name=f"Channel sum",
         visible=True,
         showlegend=True,
     )
@@ -673,7 +673,7 @@ def plot_waveform(data, evid, opid, sim_version):
 
     fig.update_xaxes(title_text="Time [ticks] (16 ns)")
     fig.update_yaxes(title_text="Adc counts")
-    fig.update_layout(title_text=f"Waveform for light trap {opid}")
+    fig.update_layout(title_text=f"Waveforms for light trap {opid}", legend=dict(orientation="h",yref="container",yanchor="bottom",xanchor="center",x=0.5))
     return fig
 
 
@@ -713,7 +713,7 @@ def plot_charge(data, evid):
         fig.update_yaxes(
             title_text="charge [ke-]",
         )
-    fig.update_layout()
+    fig.update_layout(title_text=f"Charge histogram for event {evid}", legend=dict(orientation="h",yref="container",yanchor="bottom",xanchor="center",x=0.5))
     return fig
 
 
