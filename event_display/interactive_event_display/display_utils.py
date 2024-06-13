@@ -243,8 +243,7 @@ def create_3d_figure(minerva_data, data, evid):
             showlegend=True,
         )
         fig.add_traces(segs_traces)
-    # fig.update_layout(font=dict(size=14), plot_bgcolor='white', scene=dict(xaxis_title='x [cm]',
-    #             yaxis_title='y [cm]', zaxis_title='z [cm]', camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.1, z=-1.00))))
+
     return fig, sim_version
 
 
@@ -701,7 +700,7 @@ def plot_charge(data, evid):
                 y=charge_io,
                 nbinsx=20,
                 name=f"IO group {i+1}",
-                visible="legendonly",
+                #visible="legendonly",
                 showlegend=True,
             ),
         )
