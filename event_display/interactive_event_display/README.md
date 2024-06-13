@@ -24,7 +24,7 @@ Before setting up, ensure you have the following prerequisites installed:
   ssh -L 9999:localhost:8080 username@perlmutter.nersc.gov
   ```
 
-2. **Clone Repositories**:
+1. **Clone Repositories**:
 Make sure you have git set up (on NERSC) before you try this
 
   ```bash
@@ -32,7 +32,7 @@ Make sure you have git set up (on NERSC) before you try this
   git clone git@github.com:lbl-neutrino/h5flow.git
   ```
    
-4. **Checkout Branch**:
+2. **Checkout Branch**:
 
   ```bash
   cd ndlar_flow
