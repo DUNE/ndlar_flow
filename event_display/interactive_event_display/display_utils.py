@@ -286,11 +286,11 @@ def draw_tpc(sim_version="minirun5"):
     if sim_version == "minirun5" or sim_version == "data":  # hit coordinates are in cm
         detector_center = (0, 0, 0)
         anode_ys = anode_ys - 42
-    if sim_version == "data":  # module 1
+    #if sim_version == "data":  # module 1
         #detector_center = (0, 0, 0)
-        anode_xs = anode_xs[1:2]
+        #anode_xs = anode_xs[1:2]
         #anode_ys = anode_ys
-        anode_zs = anode_zs[0:2] + 33
+        #anode_zs = anode_zs[0:2] + 33
 
     center = go.Scatter3d(
         x=[detector_center[0]],
