@@ -35,6 +35,7 @@ class RawEventGenerator(H5FlowGenerator):
          - ``packets_dset_name`` : ``str``, required, output dataset path for packet groups
          - ``buffer_size`` : ``int``, optional, number of packets to load at a time
          - ``nhit_cut`` : ``int``, optional, minimum number of packets in an event
+         - ``nhit_limit`` : ``int``, optional, maximum number of packets in an event
          - ``sync_noise_cut_enabled`` : ``bool``, optional, remove hits occuring soon after a SYNC event
          - ``sync_noise_cut`` : ``int``, optional, if ``sync_noise_cut_enabled`` removes all events that have a timestamp less than this value
          - ``event_builder_class`` : ``str``, optional, event builder algorithm to use (see ``raw_event_builder.py``)
@@ -58,6 +59,7 @@ class RawEventGenerator(H5FlowGenerator):
                     packets_dset_name: 'charge/packets'
                     buffer_size: 38400
                     nhit_cut: 100
+                    nhit_limit: 1e9
                     sync_noise_cut: [100000, 10000000]
                     sync_noise_cut_enabled: True
                     event_builder_class: 'SymmetricWindowRawEventBuilder'
@@ -76,6 +78,7 @@ class RawEventGenerator(H5FlowGenerator):
 
     default_buffer_size = 38400
     default_nhit_cut = 100
+    default_nhit_limit= 1e9
     default_sync_noise_cut = [100000, 10000000]
     default_sync_noise_cut_enabled = True
     default_event_builder_class = 'SymmetricWindowRawEventBuilder'
@@ -102,6 +105,7 @@ class RawEventGenerator(H5FlowGenerator):
         # set up parameters
         self.buffer_size = params.get('buffer_size', self.default_buffer_size)
         self.nhit_cut = params.get('nhit_cut', self.default_nhit_cut)
+        self.nhit_limit = params.get('nhit_limit', self.default_nhit_limit)
         self.sync_noise_cut = params.get('sync_noise_cut', self.default_sync_noise_cut)
         self.sync_noise_cut_enabled = params.get('sync_noise_cut_enabled', self.default_sync_noise_cut_enabled)
         self.event_builder_class = params.get('event_builder_class', self.default_event_builder_class)
@@ -164,20 +168,20 @@ class RawEventGenerator(H5FlowGenerator):
                 print("Hope you are not processing neutrino simulation! There is no information for neutrino interactions.")
                 pass
 
-        # set up attribute name for vertex_id and traj_id
-        if 'file_vertex_id' in self.input_fh['vertices'].dtype.names:
-            self.vertex_id_name = 'file_vertex_id'
-        else:
-            self.vertex_id_name = 'vertex_id'
-            warnings.warn("Using 'vertex_id'(unique for beam simulation, but not for mpvmpr) instead of 'file_vertex_id'.")
+            # set up attribute name for vertex_id and traj_id
+            if 'file_vertex_id' in self.input_fh['vertices'].dtype.names:
+                self.vertex_id_name = 'file_vertex_id'
+            else:
+                self.vertex_id_name = 'vertex_id'
+                warnings.warn("Using 'vertex_id'(unique for beam simulation, but not for mpvmpr) instead of 'file_vertex_id'.")
 
-        if 'file_traj_id' in self.input_fh['trajectories'].dtype.names:
-            self.traj_id_name = 'file_traj_id'
-            if self.is_mc_neutrino and 'file_traj_id' not in self.input_fh['mc_stack'].dtype.names:
+            if 'file_traj_id' in self.input_fh['trajectories'].dtype.names:
+                self.traj_id_name = 'file_traj_id'
+                if self.is_mc_neutrino and 'file_traj_id' not in self.input_fh['mc_stack'].dtype.names:
+                    self.traj_id_name = 'traj_id'
+            else:
                 self.traj_id_name = 'traj_id'
-        else:
-            self.traj_id_name = 'traj_id'
-            warnings.warn("Using 'traj_id' instead of 'file_traj_id'. 'traj_id' is not unique across the file and will cause reference issues.")
+                warnings.warn("Using 'traj_id' instead of 'file_traj_id'. 'traj_id' is not unique across the file and will cause reference issues.")
 
         # initialize data objects
         self.data_manager.create_dset(self.raw_event_dset_name, dtype=self.raw_event_dtype)
@@ -426,9 +430,9 @@ class RawEventGenerator(H5FlowGenerator):
             event_mc_assn = None
 
         # apply nhit cut
-        nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
+        nhit_filtered = list(filter(lambda x: (len(x[0]) >= self.nhit_cut) and (len(x[0]) <= self.nhit_limit), zip(events, event_unix_ts)))
         if self.is_mc:
-            mc_assn_filtered = list(filter(lambda x: len(x) >= self.nhit_cut, event_mc_assn))
+            mc_assn_filtered = list(filter(lambda x: (len(x) >= self.nhit_cut) and (len(x) <= self.nhit_limit), event_mc_assn))
 
         if len(nhit_filtered):
             events, event_unix_ts = zip(*nhit_filtered)
