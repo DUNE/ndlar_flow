@@ -405,6 +405,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     An external trigger based event builder. Events are sliced such that they always follow an external trigger and the readout window is configurable. The default is set to 182 x 1.1 units (10% grace period). Note the event builder may contain more than one trigger if they are within a readout window time.
     '''
     default_window = 1820 * 1.1
+    default_lower_window = 0
     default_rollover_ticks = 1E7
     default_trig_io_grp = 1
     
@@ -415,6 +416,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     def __init__(self, **params):
         super(ExtTrigRawEventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
+        self.lower_window = params.get('lower_window', self.default_lower_window)
         self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
         self.trig_io_grp = params.get('trig_io_grp', self.default_trig_io_grp)
         self.build_off_beam_events = params.get('build_off_beam_events', self.default_build_off_beam_events)
@@ -431,6 +433,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     def get_config(self):
         return dict(
             window=self.window,
+            lower_window=self.lower_window,
             trig_io_grp=self.trig_io_grp,
             rollover_ticks=self.rollover_ticks,
         )    
@@ -482,7 +485,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             start_times.append(this_trig_time)
             # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
             hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & (packets['io_group'] == self.trig_io_grp) & (packets['packet_type'] == 7))
-            mask = ((ts - this_trig_time) >= 0) & ((ts - this_trig_time) <= self.window) & hotfix_mask
+            mask = ((ts - this_trig_time) >= -1*abs(self.lower_window)) & ((ts - this_trig_time) <= self.window) & hotfix_mask
             events.append(packets[mask])
             event_unix_ts.append(unix_ts[mask])
             if mc_assn is not None:
