@@ -1,0 +1,31 @@
+# Copied and modified from yamls/proto_nd_flow/reco/charge/RawEventGenerator.yaml 
+
+classname: RawEventGenerator
+path: proto_nd_flow.reco.charge.raw_event_generator
+dset_name: 'charge/raw_events'
+params:
+  # secondary output
+  packets_dset_name: 'charge/packets'
+
+  # configuration parameters
+  buffer_size: 640000
+  nhit_cut: 1
+  nhit_limit: 25
+  skip_mc_truth: True
+  sync_noise_cut: [1000000, 11000000] # 1e6 cut based on Brooke's study
+  sync_noise_cut_enabled: True
+  timestamp_bit_error_fix_enabled: True
+  timestamp_bit_error_window: 256
+  timestamp_bit_error_spec:
+    0x3800000:
+      1:
+        23: [80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110]
+  event_builder_class: 'ExtTrigRawEventBuilder' #'SymmetricWindowRawEventBuilder'
+  event_builder_config:
+    window: 2000 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
+    lower_window: 1000
+    trig_io_grp: 1
+    rollover_ticks: 10000000 # PPS = 1e7 ticks
+    build_off_beam_events : False
+    VALIDATE_HACK : False
+
