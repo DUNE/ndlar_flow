@@ -54,6 +54,8 @@ class RawHitBuilder(H5FlowStage):
             z_pix          f8, pixel z location [cm]
             ts_pps         u8, PPS packet timestamp [ticks]
             ADC            u1, hit charge [ADC]
+            iogroup        u1, io group id
+            iochannel      u1, io channel id
 
     '''
     class_version = '1.0.0'
@@ -86,7 +88,9 @@ class RawHitBuilder(H5FlowStage):
         ('y_pix', 'f8'),
         ('z_pix', 'f8'),
         ('ts_pps', 'u8'),
-        ('ADC', 'u1')
+        ('ADC', 'u1'),
+        ('iogroup', 'u1'),
+        ('iochannel', 'u1')
     ])
 
     def __init__(self, **params):
@@ -157,6 +161,8 @@ class RawHitBuilder(H5FlowStage):
             raw_hits_arr['z_pix'] = zy[:,0]
             raw_hits_arr['ts_pps'] = ts_arr['ts']
             raw_hits_arr['ADC'] = packets_arr['dataword']
+            raw_hits_arr['iogroup'] = packets_arr['io_group']
+            raw_hits_arr['iochannel'] = packets_arr['io_channel']
 
         # write
         self.data_manager.write_data(self.hits_dset_name, raw_hits_slice, raw_hits_arr)
