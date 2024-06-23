@@ -71,7 +71,7 @@ class DriftReconstruction(H5FlowStage):
         t0 = cache[self.t0_dset_name]
         hits = cache[self.hits_dset_name]
 
-        drift_t = hits['ts'] - t0['ts']
+        drift_t = hits['ts_pps'] - t0['ts']
         drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks) / units.cm # convert mm -> cm
         drift_coordinate = resources['Geometry'].get_drift_coordinate(hits['iogroup'], hits['iochannel'], drift_d)
 
