@@ -81,7 +81,7 @@ class RawHitBuilder(H5FlowStage):
     #    ('iogroup', 'u1'), ('iochannel', 'u1'), ('chipid', 'u1'), ('channelid', 'u1'),
     #    ('geom', 'i8')
     #])
-
+    
     hits_dtype = np.dtype([
         ('id', 'u4'),
         ('x_pix', 'f8'),
@@ -90,7 +90,9 @@ class RawHitBuilder(H5FlowStage):
         ('ts_pps', 'u8'),
         ('ADC', 'u1'),
         ('iogroup', 'u1'),
-        ('iochannel', 'u1')
+        ('iochannel', 'u1'),
+        ('chipid', 'u1'),
+        ('channelid', 'u1')
     ])
 
     def __init__(self, **params):
@@ -102,7 +104,7 @@ class RawHitBuilder(H5FlowStage):
         self.ts_dset_name = params.get('ts_dset_name')
         self.pedestal_file = params.get('pedestal_file', '')
         self.configuration_file = params.get('configuration_file', '')
-
+        
     def init(self, source_name):
         super(RawHitBuilder, self).init(source_name)
         self.load_pedestals()
@@ -152,7 +154,7 @@ class RawHitBuilder(H5FlowStage):
             zy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
-            print(min(tile_id), max(tile_id))
+            #print(min(tile_id), max(tile_id))
             x = resources['Geometry'].anode_drift_coordinate[(tile_id,)]
 
             raw_hits_arr['id'] = raw_hits_slice.start + np.arange(n, dtype=int)
@@ -163,6 +165,8 @@ class RawHitBuilder(H5FlowStage):
             raw_hits_arr['ADC'] = packets_arr['dataword']
             raw_hits_arr['iogroup'] = packets_arr['io_group']
             raw_hits_arr['iochannel'] = packets_arr['io_channel']
+            raw_hits_arr['chipid'] = packets_arr['chip_id']
+            raw_hits_arr['channelid'] = packets_arr['channel_id']
 
         # write
         self.data_manager.write_data(self.hits_dset_name, raw_hits_slice, raw_hits_arr)
