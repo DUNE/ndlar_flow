@@ -1,5 +1,5 @@
 classname: LArData
-path: module0_flow.resources.lar_data
+path: proto_nd_flow.resources.lar_data
 params:
   path: 'lar_info'
   #electron_lifetime_file: 'data/module0_flow/ElecLifetimeFit_Module0.npz'

@@ -1,10 +1,14 @@
 classname: Geometry # resources/geometry.py
-path: module0_flow.resources.geometry
+path: proto_nd_flow.resources.geometry
 params:
   path: 'geometry_info'
-  network_agnostic: False
-  crs_geometry_file: '/global/cfs/projectdirs/dune/www/data/Module3/flow_data/multi_tile_layout-module3.yaml'
-  lrs_geometry_file: '/global/cfs/projectdirs/dune/www/data/Module3/flow_data/light_module_desc-0.1.0.yaml'
+  network_agnostic: True
+  det_geometry_file: 'data/module3_flow/module3.yaml'
+  crs_geometry_files: ['/global/cfs/projectdirs/dune/www/data/Module3/flow_data/multi_tile_layout-module3.yaml']
+  lrs_geometry_file: 'data/module0_flow/light_module_desc-0.2.0.yaml'
+  crs_geometry_to_module: [0]
   # download link: https://portal.nersc.gov/project/dune/global/cfs/projectdirs/dune/www/data/Module3/flow_data
+  beam_direction: 'z'
+  drift_direction: 'x'
 
 

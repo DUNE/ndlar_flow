@@ -7,6 +7,6 @@ params:
   det_geometry_file: 'data/module1_flow/module1.yaml'
   crs_geometry_files: ['/global/cfs/cdirs/dune/www/data/Module1/TPC12/module1_layout-2.3.16.yaml']
   crs_geometry_to_module: [0]
-  lrs_geometry_file: 'data/module1_flow/light_module_desc-0.2.0.yaml'
+  lrs_geometry_file: 'data/module1_flow/light_module_desc-0.1.0.yaml'
   beam_direction: 'z'
   drift_direction: 'x'

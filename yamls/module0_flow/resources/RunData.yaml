@@ -1,5 +1,5 @@
 classname: RunData
-path: module0_flow.resources.run_data
+path: proto_nd_flow.resources.run_data
 params:
   path: 'run_info'
   runlist_file: 'data/module0_flow/runlist-mod0-run1.txt'
