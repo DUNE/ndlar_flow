@@ -1,3 +1,5 @@
+# Copied from yamls/proto_nd_flow/reco/charge/ExternalTriggerFinder.yaml
+
 classname: ExternalTriggerFinder
 path: proto_nd_flow.reco.charge.external_trigger_finder
 requires:
