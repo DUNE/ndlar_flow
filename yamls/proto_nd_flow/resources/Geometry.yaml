@@ -6,10 +6,10 @@ params:
   # crs_geometry_files: ['data/proto_nd_flow/multi_tile_layout-2.4.16.yaml',
   #                      'data/proto_nd_flow/multi_tile_layout-2.5.16.yaml']
   # crs_geometry_to_module: [0,0,1,0]
-  crs_geometry_files: ['/global/common/software/dune/mkramer/devel/flow4pedestal/layouts_v2/multi_tile_layout-2.3.16_mod0_swap_T3T4T7.yaml',
-                       '/global/common/software/dune/mkramer/devel/flow4pedestal/layouts_v2/multi_tile_layout-2.3.16_mod1_swap_T12T14.yaml',
-                       '/global/common/software/dune/mkramer/devel/flow4pedestal/layouts_v2/multi_tile_layout-2.1.5.16_mod2_swap_T7T8.yaml',
-                       '/global/common/software/dune/mkramer/devel/flow4pedestal/layouts_v2/multi_tile_layout-2.3.16_mod3_swap_T6T8_T1T2_T9T10.yaml']
+  crs_geometry_files: ['data/proto_nd_flow/layouts_v4/multi_tile_layout-2.3.16_mod0_swap_T8T4T7.yaml',
+                       'data/proto_nd_flow/layouts_v4/multi_tile_layout-2.3.16_mod1_noswap.yaml',
+                       'data/proto_nd_flow/layouts_v4/multi_tile_layout-2.5.16_mod2_swap_T7T8.yaml',
+                       'data/proto_nd_flow/layouts_v4/multi_tile_layout-2.3.16_mod3_swap_T5T8.yaml']
   crs_geometry_to_module: [0,1,2,3]
   lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-2.0.0.yaml'
   beam_direction: 'z'
