@@ -1,0 +1,20 @@
+# Copied and modified from yamls/proto_nd_flow/reco/charge/RawHitBuilder.yaml
+
+classname: RawHitBuilder # reco/charge/raw_hit_builder.py
+path: proto_nd_flow.reco.charge.raw_hit_builder
+requires:
+  - 'charge/packets'
+  - name: 'charge/packets_corr_ts'
+    path: ['charge/packets', 'charge/packets_corr_ts']
+params:
+  # inputs
+  packets_dset_name: 'charge/packets'
+  ts_dset_name: 'charge/packets_corr_ts'
+
+  # output
+  hits_dset_name: 'charge/raw_hits'
+
+  # configuration parameters
+
+  configuration_file: 'data/module0_flow/module0_evd_config_21-03-31_12-36-13.json'
+  pedestal_file: 'data/module0_flow/module0_datalog_2021_04_02_19_00_46_CESTevd_ped.json'

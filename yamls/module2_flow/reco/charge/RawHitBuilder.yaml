@@ -1,0 +1,19 @@
+# Copied and modified from yamls/proto_nd_flow/reco/charge/RawHitBuilder.yaml
+
+classname: RawHitBuilder # reco/charge/raw_hit_builder.py
+path: proto_nd_flow.reco.charge.raw_hit_builder
+requires:
+  - 'charge/packets'
+  - name: 'charge/packets_corr_ts'
+    path: ['charge/packets', 'charge/packets_corr_ts']
+params:
+  # inputs
+  packets_dset_name: 'charge/packets'
+  ts_dset_name: 'charge/packets_corr_ts'
+
+  # output
+  hits_dset_name: 'charge/raw_hits'
+  network_agnostic: True
+  # configuration parameters
+  configuration_file: '/global/cfs/projectdirs/dune/www/data/Module2/flow_configs/config-evd-2022_11_18_04_35_CET.json'
+  pedestal_file: '/global/cfs/projectdirs/dune/www/data/Module2/flow_configs/ped-evd-2022_11_18_04_35_CET.json'
