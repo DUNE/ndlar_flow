@@ -3,7 +3,7 @@
 
 flow:
   source: raw_events
-  stages: [chip_id_bit_flip_fix, timestamp_corrector, ext_trig_finder, hit_builder, hit_merger, time_dependent_gain, event_builder]
+  stages: [timestamp_corrector, ext_trig_finder, hit_builder, event_builder]
   drop: []
 
 
@@ -20,8 +20,8 @@ raw_events:
     chunk_size: 32
 
 
-chip_id_bit_flip_fix:
-  !include yamls/module0_flow/reco/charge/BitFlipFix.yaml
+#chip_id_bit_flip_fix:
+#  !include yamls/module0_flow/reco/charge/BitFlipFix.yaml
 
 
 timestamp_corrector:
@@ -33,15 +33,15 @@ ext_trig_finder:
 
 
 hit_builder:
-  !include yamls/module0_flow/reco/charge/HitBuilder.yaml
+  !include yamls/module0_flow/reco/charge/RawHitBuilder.yaml
 
 
-hit_merger:
-  !include yamls/module0_flow/reco/charge/HitMerger.yaml
+#hit_merger:
+#  !include yamls/module0_flow/reco/charge/HitMerger.yaml
 
 
-time_dependent_gain:
-  !include yamls/module0_flow/reco/charge/TimeDependentGain.yaml
+#time_dependent_gain:
+#  !include yamls/module0_flow/reco/charge/TimeDependentGain.yaml
 
 
 event_builder:

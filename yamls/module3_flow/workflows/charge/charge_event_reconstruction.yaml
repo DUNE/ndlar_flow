@@ -29,7 +29,7 @@ ext_trig_finder:
 
 
 hit_builder:
-  !include yamls/module3_flow/reco/charge/HitBuilder.yaml
+  !include yamls/module3_flow/reco/charge/RawHitBuilder.yaml
 
 
 event_builder:
