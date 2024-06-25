@@ -10,13 +10,13 @@ params:
   # configuration parameters
   buffer_size: 384000
   nhit_cut: 1
-  nhit_limit: 25
+  nhit_limit: 20
   skip_mc_truth: True
   sync_noise_cut: [1000000, 11000000] # 1e6 cut based on Brooke's study
   sync_noise_cut_enabled: True
   event_builder_class: 'ExtTrigRawEventBuilder' #'SymmetricWindowRawEventBuilder'
   event_builder_config:
-    window: 2000 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
+    window: 3000 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
     lower_window: 1000
     trig_io_grp: 1
     rollover_ticks: 10000000 # PPS = 1e7 ticks
