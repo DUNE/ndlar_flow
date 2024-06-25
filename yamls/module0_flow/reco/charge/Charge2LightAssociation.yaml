@@ -1,5 +1,5 @@
 classname: Charge2LightAssociation # reco/charge/charge2light.py
-path: module0_flow.reco.charge.charge2light
+path: proto_nd_flow.reco.charge.charge2light
 requires:
   - 'charge/ext_trigs'
   - name: 'charge/ext_trigs_idcs'
@@ -11,5 +11,5 @@ params:
   ext_trigs_dset_name: 'charge/ext_trigs'
 
   # configuration parameters
-  unix_ts_window: 3
-  ts_window: 10
+  unix_ts_window: 1
+  ts_window: 20
