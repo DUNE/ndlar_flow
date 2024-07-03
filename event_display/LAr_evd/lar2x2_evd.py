@@ -3,6 +3,7 @@ import warnings
 import numpy as np
 from datetime import datetime
 from proto_nd_flow.util.lut import LUT
+from h5flow.core import resources
 import itertools
 import os
 import math
@@ -50,7 +51,7 @@ class LArEventDisplay:
         evd.run()
     '''
 
-    def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, show_light=True):
+    def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True):
         
         f = h5py.File(filedir+filename, 'r')
         self.filename = filename
@@ -69,13 +70,13 @@ class LArEventDisplay:
         # Load events dataset
         events = f['charge/events/data']
         self.events = events[events['nhit'] > nhits]
+        self.events = self.events[self.events['n_ext_trigs'] >= ntrigs]
 
         # Load charge hits dataset
         self.hits_dset = 'calib_prompt_hits'
         self.hits_full = f['charge/'+self.hits_dset+'/data']
         self.hits_ref = f['charge/events/ref/charge/'+self.hits_dset+'/ref']
         self.hits_region = f['charge/events/ref/charge/'+self.hits_dset+'/ref_region']
-        
         if self.show_light:
             # Load light event and waveform datasets
             self.light_events = f['light/events/data']
@@ -87,6 +88,8 @@ class LArEventDisplay:
 
         # Load geometry and other info
         self.geometry = f['geometry_info']
+        #print("Run info:", list(f['run_info'].dtype.names))
+        #self.is_mc = f['run_info/is_mc/data']
         self.info = {
             'vdrift': f['lar_info'].attrs['v_drift'],
             'clock_period': 0.1,
@@ -105,20 +108,12 @@ class LArEventDisplay:
         self.axes_mosaic = [["ax_bd", "ax_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],]
         self.axes_dict = self.fig.subplot_mosaic(self.axes_mosaic, \
                                                  per_subplot_kw={"ax_bdv": {"projection": "3d"}})
-        #gs_zyxy = self.fig.add_gridspec(nrows=1, ncols=3, top=0.93, width_ratios=[1, 1, 0.05],
-        #                                left=0.15, right=0.5, bottom=0.58,
-        #                                hspace=0, wspace=0)
-        #ax_bdv  = self.fig.add_subplot(222, projection='3d')
-        #ax_bd = self.fig.add_subplot(221)
-        #ax_bv = self.fig.add_subplot(223)
-        #ax_dv = self.fig.add_subplot(224)
+
         cbar_ax = self.fig.add_axes([0.95, 0.12, 0.015, 0.75])
         light_cbar_ax = self.fig.add_axes([0.15, 0.005, 0.75, 0.03])
         self.fig.subplots_adjust(right=0.92)
         self.fig.subplots_adjust(bottom=0.1)
         self.fig.subplots_adjust(wspace=0.02, hspace=0.02)
-        #ax_xy = self.fig.add_subplot(gs_zyxy[0])
-        #ax_zy = self.fig.add_subplot(gs_zyxy[1], sharey=ax_xy)
 
         self.ax_bdv = self.axes_dict["ax_bdv"]
         self.ax_bd = self.axes_dict["ax_bd"]
@@ -199,20 +194,20 @@ class LArEventDisplay:
             light_wvfms = self.light_wvfms[light_wvfm_ref]["samples"]
 
         # Prepare color map for charge
-        print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
+        #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
         if min(hits['Q']) <=0:
             min_charge = 1
         else:
             min_charge = min(hits['Q'])
-        charge_norm = mpl.colors.LogNorm(vmin=1.,vmax=max(max(hits['Q']), 1.))
-        cmap = cmr.get_sub_cmap('cmr.horizon_r', 0.1,1)
-        cmap_zero = cmr.get_sub_cmap('cmr.horizon_r', 0.05, 1) #cosmic okay, toxic_r okay, sapphire_r okay (ember_r light?) emerald_r
+        charge_norm = mpl.colors.LogNorm(vmin=min_charge,vmax=max(max(hits['Q']), 1.))
+        cmap = cmr.get_sub_cmap('cmr.torch', 0.35,0.95)
+        cmap_zero = cmr.get_sub_cmap('cmr.torch', 0.05, 0.95) #cosmic okay, toxic_r okay, sapphire_r okay (ember_r light?) emerald_r
         mcharge = plt.cm.ScalarMappable(norm=charge_norm, cmap=cmap)
 
         if self.show_light:
-            #Prepare color map for light
-            light_cmap=cmr.get_sub_cmap('cmr.ember_r', 0.05,0.95)
-            light_cmap_zero=cmr.get_sub_cmap('cmr.ember_r', 0,0.95)
+            # Prepare color map for light
+            light_cmap=cmr.get_sub_cmap('cmr.freeze', 0.3,0.9)
+            light_cmap_zero=cmr.get_sub_cmap('cmr.freeze', 0.05,0.9)
             light_norm = colors.LogNorm(1,light_wvfms[0].sum(axis=-1).max()*20)
             light_norm_single = colors.LogNorm(1,light_wvfms[0].sum(axis=-1).max())
             c = light_norm(light_wvfms[0].sum(axis=-1))
@@ -242,6 +237,7 @@ class LArEventDisplay:
         self.fig.figimage(self.dune_logo, xo=1650, \
                           yo=1215, origin='upper')
         print("Number of available events:", len(self.events))
+
         # Set axes for 3D canvas (Beam, Drift, Vertical)
         self.ax_bdv.set_xlabel('\nBeam Direction [cm]', fontsize=22, weight='bold', linespacing=2) #z
         self.ax_bdv.set_ylabel('\nDrift Direction [cm]', fontsize=22, weight='bold', linespacing=2) #x
@@ -396,8 +392,25 @@ class LArEventDisplay:
         else:
             hits, mcharge, cmap, charge_norm, cmap_zero = self.get_event(ev_id)
 
+        # Adjust drift velocity
+        # USED DURING RAMP, MOSTLY UNNECESSARY NOW
+        #drift_dir = np.full_like(hits['x'], 1)
+        #io_group_mask = hits['io_group'] % 2 == 0
+        #drift_dir[io_group_mask] = -1
+#
+        #orig_drift_v=0.16 #mm/clock cycles 
+        #new_drift_v=0.158#mm/clock cycles, for example. not sure what it is now
+        #orig_drift = hits['x'] # cm
+        #drift_time = hits['t_drift']*0.1 # ticks (0.1 us)
+        ##print("Drift time:", drift_time[:10])
+        ##print("Original drift:", orig_drift[:10])
+        #corrected_drift = ( orig_drift - (drift_dir)*drift_time * np.full_like(drift_time, orig_drift_v)) \
+        #    + (drift_dir)*drift_time* np.full_like(drift_time, new_drift_v)
+        ##print("Corrected drift:", corrected_drift[:10])
+        #corrected_drift = hits['x']
+
         # Plot hits in 3D view first so that cathodes/anodes go over the hits
-        self.ax_bdv.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
+        self.ax_bdv.scatter(hits['z'], corrected_drift, hits['y'], lw=0, ec='C0', \
                             c=cmap(charge_norm(hits['Q'])), s=5, alpha=1)
         if self.show_light:
             self.set_axes(cmap, mcharge, cmap_zero, mlight)
@@ -408,17 +421,18 @@ class LArEventDisplay:
             self.plot_light(light_wvfms, light_cmap, light_norm, light_cmap_zero)
 
         # Plot 2D charge hits
-        self.ax_bd.scatter(hits['z'], hits['x'], lw=0, ec='C0', c=cmap(
+        self.ax_bd.scatter(hits['z'], corrected_drift, lw=0, ec='C0', c=cmap(
                 charge_norm(hits['Q'])), s=5, alpha=1)
-        #self.ax_bd.scatter(hits[hits['io_group'] == 8]['z'], hits[hits['io_group'] == 8]['x'], lw=0, ec='C0', c=cmap(
-        #        charge_norm(hits[hits['io_group'] == 8]['Q'])), s=5, alpha=1)
         self.ax_bv.scatter(hits['z'], hits['y'], lw=0, ec='C0', c=cmap(
                 charge_norm(hits['Q'])), s=5, alpha=1)
-        self.ax_dv.scatter(hits['x'], hits['y'], lw=0, ec='C0', c=cmap(
+        self.ax_dv.scatter(corrected_drift, hits['y'], lw=0, ec='C0', c=cmap(
                 charge_norm(hits['Q'])), s=5, alpha=1)
+        # Lines below are for geometry debugging purposes
+        #self.ax_bd.scatter(hits[hits['io_group'] == 8]['z'], hits[hits['io_group'] == 8]['x'], lw=0, ec='C0', c=cmap(
+        #        charge_norm(hits[hits['io_group'] == 8]['Q'])), s=5, alpha=1)
         
 
-    # temporary fix for bug in light geometry LUTs
+    # Temporary fix for bug in light geometry LUTs
     def convert_light_x(self, light_lut_idx1, light_lut_idx2, light_x):
         
             rel_pos = self.sipm_rel_pos[(light_lut_idx1, light_lut_idx2)][0]
