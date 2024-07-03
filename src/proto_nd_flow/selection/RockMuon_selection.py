@@ -187,6 +187,7 @@ class RockMuonSelection(H5FlowStage):
     '''
     Checks to see if start/end point of track are close to two different faces of detector. If they are this will return True. Note: >= -1 just in case if a hit is reconstructed outside of detector.
     '''
+    '''
     #@staticmethod
     def close_to_two_faces(self,boundaries, start_point, end_point):
         end_point_distance_to_min_bounds = abs(boundaries - end_point)
@@ -203,19 +204,53 @@ class RockMuonSelection(H5FlowStage):
             penetrated = False
         
         return penetrated
-    
+    '''
+    def close_to_two_faces(self, boundaries, start_point, end_point):
+        # Boundaries are in the order [xmin, ymin, zmin, xmax, ymax, zmax]
+        min_bounds = boundaries[:3]  # [xmin, ymin, zmin]
+        max_bounds = boundaries[3:]  # [xmax, ymax, zmax]
+
+        # Calculate the distances from points to min and max bounds
+        end_distances_to_min_bounds = abs(min_bounds - end_point)
+        end_distances_to_max_bounds = abs(max_bounds - end_point)
+        start_distances_to_min_bounds = abs(min_bounds - start_point)
+        start_distances_to_max_bounds = abs(max_bounds - start_point)
+
+        # Check if any distance is within 2 cm for both min and max boundaries
+        end_mask_within_2cm_min = (end_distances_to_min_bounds <= 2) 
+        end_mask_within_2cm_max = (end_distances_to_max_bounds <= 2)
+        start_mask_within_2cm_min = (start_distances_to_min_bounds <= 2)
+        start_mask_within_2cm_max = (start_distances_to_max_bounds <= 2)
+        
+        end_mask_within_2cm = np.concatenate((end_mask_within_2cm_min,end_mask_within_2cm_max))
+        start_mask_within_2cm = np.concatenate((start_mask_within_2cm_min,start_mask_within_2cm_max))
+        
+
+        # Identify which boundaries are within 2 cm
+        end_indices_within_2cm = np.where(end_mask_within_2cm)[0]
+        start_indices_within_2cm = np.where(start_mask_within_2cm)[0]
+
+        # Determine if the track penetrates through different boundaries
+        if len(end_indices_within_2cm) > 0 and len(start_indices_within_2cm) > 0:
+            # Check if there are any different indices (meaning close to different boundaries)
+            penetrated = np.any(start_indices_within_2cm != end_indices_within_2cm)
+        else:
+            penetrated = False
+
+        return penetrated
     #@staticmethod
-    def select_muon_track(self,hits):
+    def select_muon_track(self,hits,Min_max_detector_bounds):
             muon_hits = []
+            '''
             tpc_bounds = np.array(resources['Geometry'].regions)/10 #Numbers are off by factor of 10
 
             bounds = np.concatenate(resources['Geometry'].regions)/10
 
             mask_upper = (bounds[:,0] == np.max(bounds[:,0])) & (bounds[:,1] == np.max(bounds[:,1])) & (bounds[:,2] == np.max(bounds[:,2]))
             mask_lower = (bounds[:,0] == np.min(bounds[:,0])) & (bounds[:,1] == np.min(bounds[:,1])) & (bounds[:,2] == np.min(bounds[:,2]))
-            
-            min_boundaries = np.flip(bounds[mask_lower]) #bounds are z,y,x and hits x,y,z, so bounds must be flipped
-            max_boundaries = np.flip(bounds[mask_upper])
+            '''
+            min_boundaries = Min_max_detector_bounds[0] #bounds are z,y,x and hits x,y,z, so bounds must be flipped
+            max_boundaries = Min_max_detector_bounds[1]
             
             faces_of_detector = np.concatenate((min_boundaries,max_boundaries))
             
@@ -270,10 +305,10 @@ class RockMuonSelection(H5FlowStage):
         string_x_boundaries = self.x_boundaries
         string_y_boundaries = self.y_boundaries
         string_z_boundaries = self.z_boundaries
-
+        
         x_boundaries = [float(string) for string in string_x_boundaries]
         y_boundaries= [eval(string) for string in string_y_boundaries]
-        z_boundaries = [eval(string) for string in string_z_boundaries]
+        z_boundaries = [float(string) for string in string_z_boundaries]
 
         mask_tpc1 = ((hits['x'] > x_boundaries[2]) & (hits['x'] < (x_boundaries[2] + x_boundaries[3]) * 0.5)) & (hits['z'] > z_boundaries[2])
         mask_tpc2 = (hits['x'] > (x_boundaries[2] + x_boundaries[3]) * 0.5) & (hits['z'] > z_boundaries[2])
@@ -340,7 +375,7 @@ class RockMuonSelection(H5FlowStage):
         return x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Charge_of_segment, x_mid, y_mid, z_mid, drift_time, dx
 
     #@staticmethod
-    def segments(self,muon_hits):
+    def segments(self,muon_hits, est_length_of_track):
         segment_info = []
         
         segment_to_track_ref = []
@@ -351,8 +386,10 @@ class RockMuonSelection(H5FlowStage):
         ex_var, direction, mean_point = self.PCAs(track)
         #print(sum(track['Q'])/l_track)
         number_of_hits = len(track)
-            
-        scale = 1
+        hit_density = number_of_hits/est_length_of_track
+
+
+        scale = 8/hit_density
         
         tpc_hits = self.TPC_separation(track)
         
@@ -408,7 +445,7 @@ class RockMuonSelection(H5FlowStage):
                 
                         Energy_of_segment = sum(hits_of_segment['E'])
                         Q_of_segment = sum(hits_of_segment['Q'])
-                        drift_time = np.mean(hits_of_segment['t_drift'])
+                        drift_time = (np.max(hits_of_segment['t_drift']) + np.min(hits_of_segment['t_drift']))/2
                 
                         self.segment_count += 1
 
@@ -430,31 +467,32 @@ class RockMuonSelection(H5FlowStage):
         super(RockMuonSelection, self).run(source_name, source_slice, cache)
                     
         event_id = np.r_[source_slice]
-                
-        PromptHits_ev = cache[self.FinalHits_dset_name][0]
+        Min_max_detector_bounds = resources['Geometry'].lar_detector_bounds
+         
+        PromptHits_ev = cache[self.PromptHits_dset_name][0]
         
         hit_indices = self.cluster(PromptHits_ev)
-         
+        
         for indices in hit_indices:
             if len(indices) > 10:
                 hits = PromptHits_ev[indices]
                  
-                muon_track,length_of_track, start_point, end_point, explained_var, direction_vector = self.select_muon_track(hits)
+                muon_track,length_of_track, start_point, end_point, explained_var, direction_vector = self.select_muon_track(hits,Min_max_detector_bounds)
                  
                 if len(muon_track) != 0:
                     #Loop through tracks and changes the DBSCAN cluster_id to a given track number
                     self.track_count += 1 
                     track_number = self.track_count
-                     
+                    
                     #Get angle of track
                     theta_xz, theta_yz = self.angle(direction_vector)
-                     
+                    
                     #Fill track info
                     track_info = [track_number,length_of_track, start_point[0],start_point[1],start_point[2], end_point[0],end_point[1],end_point[2], explained_var, theta_xz, theta_yz]
                     
                     track_info = np.array([tuple(track_info)], dtype = self.rock_muon_track_dtype)
                     #Get segments
-                    segments_list, segment_hit_ref, segment_track_ref = self.segments(muon_track)
+                    segments_list, segment_hit_ref, segment_track_ref = self.segments(muon_track, length_of_track)
                     
                     #  1. reserve a new data region within the output dataset
                     rock_muon_slice = self.data_manager.reserve_data(self.rock_muon_hits_dset_name, 1)
