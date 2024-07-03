@@ -176,6 +176,10 @@ class LArEventDisplay:
         event = self.events[ev_id]
         event_datetime = datetime.utcfromtimestamp(
                 event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
+        # DEBUGGING TIMESTAMPS
+        #print("Unix TS:", event['unix_ts'])
+        #print("TS Start:", event['ts_start'])
+        #print("TS End:", event['ts_end'])
         ev_id = event['id']
         hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
         hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
@@ -410,7 +414,7 @@ class LArEventDisplay:
         #corrected_drift = hits['x']
 
         # Plot hits in 3D view first so that cathodes/anodes go over the hits
-        self.ax_bdv.scatter(hits['z'], corrected_drift, hits['y'], lw=0, ec='C0', \
+        self.ax_bdv.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
                             c=cmap(charge_norm(hits['Q'])), s=5, alpha=1)
         if self.show_light:
             self.set_axes(cmap, mcharge, cmap_zero, mlight)
@@ -421,11 +425,11 @@ class LArEventDisplay:
             self.plot_light(light_wvfms, light_cmap, light_norm, light_cmap_zero)
 
         # Plot 2D charge hits
-        self.ax_bd.scatter(hits['z'], corrected_drift, lw=0, ec='C0', c=cmap(
+        self.ax_bd.scatter(hits['z'], hits['x'], lw=0, ec='C0', c=cmap(
                 charge_norm(hits['Q'])), s=5, alpha=1)
         self.ax_bv.scatter(hits['z'], hits['y'], lw=0, ec='C0', c=cmap(
                 charge_norm(hits['Q'])), s=5, alpha=1)
-        self.ax_dv.scatter(corrected_drift, hits['y'], lw=0, ec='C0', c=cmap(
+        self.ax_dv.scatter(hits['x'], hits['y'], lw=0, ec='C0', c=cmap(
                 charge_norm(hits['Q'])), s=5, alpha=1)
         # Lines below are for geometry debugging purposes
         #self.ax_bd.scatter(hits[hits['io_group'] == 8]['z'], hits[hits['io_group'] == 8]['x'], lw=0, ec='C0', c=cmap(
