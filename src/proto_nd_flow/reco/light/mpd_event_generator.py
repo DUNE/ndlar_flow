@@ -183,19 +183,19 @@ class LightMPDEventGenerator(H5FlowGenerator):
                 if not events:
                     continue
                 event = events['event']
-                data = np.array(events['data'])
+                data = [np.array(arr) for arr in events['data']]
                 device = np.array(events['device'])
                 time = np.array(events['time'])
                 event_arr[ievent]['event'] = event['event']
                 for iadc, sn in enumerate(self.sn_table):
                     data_index = np.where(device["serial"] == sn)[0]
                     if len(data_index):
-                        channels = data[data_index]['channel']
-                        event_arr[ievent]['sn'][iadc] = device[data_index]['serial']
+                        channels = data[data_index.item()]['channel']
+                        event_arr[ievent]['sn'][iadc] = device[data_index.item()]['serial']
                         event_arr[ievent]['utime_ms'][iadc] = event['unix_ms']
-                        event_arr[ievent]['tai_ns'][iadc] = time[data_index]['tai_s']*1e9 + time[data_index]['tai_ns']
+                        event_arr[ievent]['tai_ns'][iadc] = time[data_index.item()]['tai_s']*1e9 + time[data_index.item()]['tai_ns']
                         event_arr[ievent]['wvfm_valid'][iadc, channels] = True
-                        wvfm_arr[ievent]['samples'][iadc, channels] = data[data_index]['voltage']
+                        wvfm_arr[ievent]['samples'][iadc, channels] = data[data_index.item()]['voltage']
                     else:
                         print("ADC", hex(sn)," not found")
 
