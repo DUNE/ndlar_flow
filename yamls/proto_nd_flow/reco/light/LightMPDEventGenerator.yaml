@@ -22,3 +22,5 @@ params:
   batch_size: 12
   utime_ms_window: 1000
   tai_ns_window: 1000
+  rwm_channel: [0,18]
+  rwm_threshold: 10000

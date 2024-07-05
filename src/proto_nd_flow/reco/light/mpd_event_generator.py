@@ -26,6 +26,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
          - ``batch_size`` : ``int``, optional, number of events to buffer before initiating next loop iteration (default = 128)
          - ``sn_table`` : ``list`` of ``int``, optional, serial number of each ADC (determines order of the ADCs in the output data type,
             if not give order like in data file)
+         - ``rwm_channel`` : ``[int,int]``, optional, RWM channel
 
 
         Generates a lightweight "event" dataset along with a dataset containing
@@ -62,6 +63,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
             utime_ms    u8(n_adcs,n_channels),  unix time since epoch [ms]
             tai_ns      u8(n_adcs,n_channels),  time since PPS [ns]
             wvfm_valid  u1(n_adcs,n_channels),  boolean indicator if channel is present in event
+            trig_type   u1                      trigger type 0:threshold 1: beam
 
         ``wvfm`` datatype::
 
@@ -77,6 +79,8 @@ class LightMPDEventGenerator(H5FlowGenerator):
         clock_timestamp_factor = 1.0,
         utime_ms_window = 1000,
         tai_ns_window = 1000,
+        rwm_channel = [0,18],
+        rwm_threshold = 10000
         )
 
     def event_dtype(self): return np.dtype([
@@ -86,7 +90,8 @@ class LightMPDEventGenerator(H5FlowGenerator):
         #('ch', 'u1', (self.n_adcs, self.n_channels)),  # channel number
         ('utime_ms', 'u8', (self.n_adcs,)),  # unix time [ms since epoch]
         ('tai_ns', 'u8', (self.n_adcs,)),  # time since PPS [ns]
-        ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels))  # boolean, 1 if channel present in event    
+        ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels)),  # boolean, 1 if channel present in event    
+        ('trig_type', 'u1') #trigger type 0:threshold 1: beam
         ])
 
     def wvfm_dtype(self): return np.dtype([
@@ -216,6 +221,10 @@ class LightMPDEventGenerator(H5FlowGenerator):
         else:
             event_arr = np.empty((0,), dtype=self.event_dtype)
             wvfm_arr = np.empty((0,), dtype=self.wvfm_dtype)
+        
+        # tag beam events using RWM
+        event_arr['trig_type'] = np.any(wvfm_arr["samples"][:,*self.rwm_channel,:] > self.rwm_threshold, axis = -1).astype(int)
+        
         # write event to file
         event_slice = self.data_manager.reserve_data(self.event_dset_name, len(event_arr))
         event_arr['id'] = np.arange(event_slice.start, event_slice.stop)
