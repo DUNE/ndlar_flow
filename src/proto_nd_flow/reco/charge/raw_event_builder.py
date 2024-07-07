@@ -5,7 +5,6 @@ from h5flow import H5FLOW_MPI
 if H5FLOW_MPI:
     from mpi4py import MPI
 
-
 class RawEventBuilder(object):
     '''
         Base class for raw event builder algorithms. Defines the following API
@@ -408,7 +407,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     default_lower_window = 0
     default_rollover_ticks = 1E7
     default_trig_io_grp = 1
-    
+
     default_build_off_beam_events=False
     default_off_beam_window = 1820 // 2
     default_off_beam_threshold = 10
@@ -468,9 +467,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             print('Total off-beam:', n_orig-len(beam_trigger_idxs))
             print('\n*****************\n')
 
-        if len(beam_trigger_idxs) == 0:
-            return ([], []) if mc_assn is None else ([], [], [])
-
         events = []
         event_unix_ts = []
         event_mc_assn = [] if mc_assn is not None else None
@@ -507,19 +503,14 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         off_beam_builder = SymmetricWindowRawEventBuilder( **off_beam_config )
         
         off_beam_events, off_beam_event_unix_ts, off_beam_event_mc_assn = [], [], []
-        if not mc_assn is None:
-            (off_beam_events_list, off_beam_ts) = off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], mc_assn[~used_mask], ts=ts[~used_mask], return_ts=True)
-        
-            off_beam_events_list=list(off_beam_events_list)
+        this_mc_assn = mc_assn[~used_mask] if mc_assn else None
+        (off_beam_events_list, off_beam_ts) = off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], this_mc_assn, ts[~used_mask], return_ts=True)
+        off_beam_events_list=list(off_beam_events_list)
+        if off_beam_events_list:
             off_beam_events = list(off_beam_events_list[0])
-            off_beam_event_unix_ts = list(off_beam_events_list[1]) 
-            off_beam_event_mc_assn = list(off_beam_events_list[2])
-        else:
-            (off_beam_events_list, off_beam_ts) = off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], mc_assn, ts[~used_mask], return_ts=True) 
-            off_beam_events_list=list(off_beam_events_list)
-            off_beam_events = list(off_beam_events_list[0]) 
-            off_beam_event_unix_ts = list(off_beam_events_list[1]) 
-
+            off_beam_event_unix_ts = list(off_beam_events_list[1])
+            if mc_assn:
+                off_beam_event_mc_assn = list(off_beam_events_list[2])
         if self.VALIDATE_HACK:
             print('N Beam events found:', len(events))
             print('N Off beam events:', len(off_beam_events))

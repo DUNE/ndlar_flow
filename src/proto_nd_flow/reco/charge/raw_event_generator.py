@@ -81,6 +81,7 @@ class RawEventGenerator(H5FlowGenerator):
     default_nhit_limit= 1e9
     default_sync_noise_cut = [100000, 10000000]
     default_sync_noise_cut_enabled = True
+    
     default_event_builder_class = 'SymmetricWindowRawEventBuilder'
     default_event_builder_config = dict()
     default_packets_dset_name = 'charge/packets'
@@ -110,7 +111,7 @@ class RawEventGenerator(H5FlowGenerator):
         self.sync_noise_cut_enabled = params.get('sync_noise_cut_enabled', self.default_sync_noise_cut_enabled)
         self.event_builder_class = params.get('event_builder_class', self.default_event_builder_class)
         self.event_builder_config = params.get('event_builder_config', self.default_event_builder_config)
-
+        
         # set up new dataset paths
         self.packets_dset_name = params.get('packets_dset_name', self.default_packets_dset_name)
         self.raw_event_dset_name = self.dset_name
@@ -421,13 +422,12 @@ class RawEventGenerator(H5FlowGenerator):
                 mc_assn = mc_assn[sync_noise_mask]
 
         # run event builder
+        events, event_unix_ts, event_mc_assn = [], [], None
         eb_rv = list(self.event_builder.build_events(packet_buffer, unix_ts, mc_assn))
-        events, event_unix_ts = eb_rv[:2]
-
-        if self.is_mc:
-            event_mc_assn = eb_rv[-1]
-        else:
-            event_mc_assn = None
+        if eb_rv:
+            events, event_unix_ts = eb_rv[:2]
+            if self.is_mc:
+                event_mc_assn = eb_rv[2]
 
         # apply nhit cut
         nhit_filtered = list(filter(lambda x: (len(x[0]) >= self.nhit_cut) and (len(x[0]) <= self.nhit_limit), zip(events, event_unix_ts)))

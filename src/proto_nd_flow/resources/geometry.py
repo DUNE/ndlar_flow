@@ -768,7 +768,6 @@ class Geometry(H5FlowResource):
                         # can just loop over every N io channels and add them to the LUT
                         start_io_channel = ((io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
                         for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
-                            #self._tile_id[([io_group], [io_channel])] = tile
                             self._tile_id[([io_group], [io_channel])] = tile+(module_id-1)*len(tile_chip_to_io)
 
                 for chip_channel in chip_channel_to_position:

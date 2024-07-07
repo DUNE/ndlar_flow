@@ -62,8 +62,8 @@ class RawHitBuilder(H5FlowStage):
 
     #: ASIC ADC configuration lookup table
     configuration = defaultdict(lambda: dict(
-        vref_mv=1300,
-        vcm_mv=288
+        vref_mv=1568.0,
+        vcm_mv=478.1
     ))
 
     #: pixel pedestal value
