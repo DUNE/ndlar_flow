@@ -190,7 +190,14 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
                 event_mc_assn[i] = mc_assn0
                 event_mc_assn.insert(i + 1, mc_assn1)
             i += 1
-
+        
+        
+        
+        '''
+        # only return packets from events
+        return zip(*[v for i, v in enumerate(zip(events, event_unix_ts)) if is_event[i]]) if mc_assn is None \
+            else zip(*[v for i, v in enumerate(zip(events, event_unix_ts, event_mc_assn)) if is_event[i]])
+        '''
         return events, event_unix_ts if mc_assn is None \
             else events, event_unix_ts, event_mc_assn
 
@@ -215,6 +222,7 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
         rv = [(arg, np.array([], dtype=arg.dtype)) for arg in args]
         return tuple(v for vs in rv for v in vs)
 
+    
 
 class SymmetricWindowRawEventBuilder(RawEventBuilder):
     '''
@@ -235,7 +243,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
 
     default_window = 1820 // 2
     default_threshold = 10
-    default_rollover_ticks = 10000000
+    default_rollover_ticks = 1E7
 
     def __init__(self, **params):
         super(SymmetricWindowRawEventBuilder, self).__init__(**params)
@@ -371,7 +379,77 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         event_unix_ts = np.split(unix_ts, event_idcs)
         if mc_assn is not None:
             event_mc_assn = np.split(mc_assn, event_idcs)
-
+        
         # only return packets from events
         return zip(*[v for i, v in enumerate(zip(events, event_unix_ts)) if is_event[i]]) if mc_assn is None \
             else zip(*[v for i, v in enumerate(zip(events, event_unix_ts, event_mc_assn)) if is_event[i]])
+      
+
+class ExtTrigRawEventBuilder(RawEventBuilder):
+    '''
+    An external trigger based event builder. Events are sliced such that they always follow an external trigger and the readout window is configurable. The default is set to 182 x 1.1 units (10% grace period). Note the event builder may contain more than one trigger if they are within a readout window time.
+    '''
+    default_window = 1820 * 1.1
+    default_rollover_ticks = 1E7
+    default_trig_io_grp = 1
+    
+    def __init__(self, **params):
+        super(ExtTrigRawEventBuilder, self).__init__(**params)
+        self.window = params.get('window', self.default_window)
+        self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
+        self.trig_io_grp = params.get('trig_io_grp', self.default_trig_io_grp)
+        self.event_buffer = np.empty((0,))  
+        self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
+        self.event_buffer_mc_assn = np.empty((0,))
+        self.prepend_count = 0  
+        self.last_beam_trigger_idx = None
+
+    def get_config(self):
+        return dict(
+            window=self.window,
+            trig_io_grp=self.trig_io_grp,
+            rollover_ticks=self.rollover_ticks,
+        )    
+    
+    def build_events(self, packets, unix_ts, mc_assn=None):
+        rollover = np.zeros((len(packets),), dtype='i8')
+        for io_group in np.unique(packets['io_group']):
+            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type'] == 83)
+            rollover[mask] = self.rollover_ticks
+            mask = (packets['io_group'] == io_group)
+            rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
+            if mc_assn is None:
+                mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
+                    & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
+                rollover[mask] -= self.rollover_ticks
+
+        ts = packets['timestamp'].astype('i8') + rollover
+        sorted_idcs = np.argsort(ts)
+        ts = ts[sorted_idcs]
+        
+        packets = packets[sorted_idcs]
+        unix_ts = unix_ts[sorted_idcs]
+        if mc_assn is not None:
+            mc_assn = mc_assn[sorted_idcs]
+        
+        beam_trigger_idxs = np.where((packets['io_group'] == self.trig_io_grp) & (packets['packet_type'] == 7))[0]
+        if len(beam_trigger_idxs) == 0:
+            return ([], []) if mc_assn is None else ([], [], [])
+
+        events = []
+        event_unix_ts = []
+        event_mc_assn = [] if mc_assn is not None else None
+        
+        for i, start_idx in enumerate(beam_trigger_idxs):
+            this_trig_time = ts[start_idx]
+            # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
+            hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & (packets['io_group'] == self.trig_io_grp) & (packets['packet_type'] == 7))
+            mask = ((ts - this_trig_time) >= 0) & ((ts - this_trig_time) <= self.window) & hotfix_mask
+            events.append(packets[mask])
+            event_unix_ts.append(unix_ts[mask])
+            if mc_assn is not None:
+                event_mc_assn.append(mc_assn[mask])
+
+        return zip(*[v for v in zip(events, event_unix_ts)]) if mc_assn is None \
+            else zip(*[v for v in zip(events, event_unix_ts, event_mc_assn)])
+

@@ -36,7 +36,11 @@ def create_3d_figure(minerva_data, data, evid):
     trigger = ((event["unix_ts"][:] + event["ts_start"][:]/1e7)/1.2).astype(int)[0]
 
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
-    finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
+    try:
+        finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
+    except:
+        finalhits_ev = prompthits_ev
+        print("No final hits found, plotting prompt hits")
 
     if minerva_data is not None and evid<len(minerva_data["minerva"]["offsetX"].array(library="np")):
         minerva = draw_minerva()

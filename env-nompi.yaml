@@ -10,5 +10,6 @@ dependencies:
   - pip
   - pip:
     - h5flow>=0.1.0
-    - adc64format>=0.0.2
+    - adc64format>=0.1.1
     - pylandau
+    - dbscan1d

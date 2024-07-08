@@ -78,7 +78,7 @@ class ProtoNDFlowEventDisplay:
             self.y_vals = 'y_pix'
             self.z_vals = 'z_pix' 
             self.convert_to_mm = 10 # xyz starts in cm
-            self.y_offset = 218.236 # mm
+            self.y_offset = 0. # mm
             self.packets = f['charge/packets/data']
             self.packets_hits_ref = f['charge/'+self.hits_dset+'/ref/charge/packets/ref']
             self.packets_hits_region = f['charge/'+self.hits_dset+'/ref/charge/packets/ref_region']
@@ -93,7 +93,7 @@ class ProtoNDFlowEventDisplay:
             self.y_vals = 'y'
             self.z_vals = 'z'
             self.convert_to_mm = 10 # xyz starts in cm
-            self.y_offset = 218.236 # mm
+            self.y_offset = 0. # mm
 
         # Set up figure and subplots
         self.fig = plt.figure(constrained_layout=False, figsize=(8.5, 6.))
@@ -189,8 +189,6 @@ class ProtoNDFlowEventDisplay:
         self.ax_time_1 = ax_time_1
         self.ax_time_2 = ax_time_2
         self.ax_xy = ax_xy
-
-        self.run()
 
     def run(self):
         
@@ -422,6 +420,21 @@ class ProtoNDFlowEventDisplay:
         event_start_time = self.get_event_start_time(event)
 
         hits = self.hits[hit_ref]
+
+        if self.hits_dset == 'raw_hits':
+            packets_hits_ref_mask = np.isin(self.packets_hits_ref[:,0], hit_ref)
+            packets_hits_ref_masked = self.packets_hits_ref[packets_hits_ref_mask]
+
+            io_groups = np.zeros(hit_ref.shape)
+            for i, hit_element in enumerate(hit_ref):
+                argwhere = np.argwhere(packets_hits_ref_masked[:,0] == hit_element)[0,0]
+                packet_index = packets_hits_ref_masked[argwhere][1]
+                io_groups[i] = self.packets[packet_index]['io_group']
+                
+            packets = self.packets[hit_ref]
+        else:
+            io_groups = hits['io_group']
+
         cmap = plt.cm.get_cmap('plasma')
 
         # Need to convert charge if using charge/raw_hits dataset
@@ -434,9 +447,11 @@ class ProtoNDFlowEventDisplay:
                 vmin=min(self.hits[hit_ref][self.charge]),
                 vmax=max(self.hits[hit_ref][self.charge]))           
         mcharge = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-        hits_anode1 = hits[hits[self.x_vals]*self.convert_to_mm <= 0]
-        hits_anode2 = hits[hits[self.x_vals]*self.convert_to_mm > 0]
+        hits_anode1 = hits[io_groups == 1]
+        hits_anode2 = hits[io_groups == 2]
 
+        #hits_anode1 = hits[packets['io_group']*self.convert_to_mm <= 0]
+        #hits_anode2 = hits[hits[self.x_vals]*self.convert_to_mm > 0]
         if self.hits_dset == 'raw_hits':
             q_anode1 = self.charge_from_ADC(hits_anode1[self.charge], self.vref_mv, self.vcm_mv, self.ped_mv) 
             q_anode2 = self.charge_from_ADC(hits_anode2[self.charge], self.vref_mv, self.vcm_mv, self.ped_mv)
@@ -444,8 +459,13 @@ class ProtoNDFlowEventDisplay:
             q_anode1 = hits_anode1[self.charge] 
             q_anode2 = hits_anode2[self.charge]
             
-        t_anode1 = hits_anode1['ts_pps']-event_start_time
-        t_anode2 = hits_anode2['ts_pps']-event_start_time
+        if self.hits_dset == 'raw_hits':
+            t_anode1 = hits_anode1['ts_pps']-event_start_time
+            t_anode2 = hits_anode2['ts_pps']-event_start_time
+        else:
+            t_anode1 = hits_anode1['t_drift']
+            t_anode2 = hits_anode2['t_drift']
+        
         self.ax_time_1.hist(t_anode1, weights=q_anode1,
                             bins=200,  # np.linspace(0,self.drift_time,200),
                             histtype='step', label='binned')
