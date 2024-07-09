@@ -54,6 +54,8 @@ class LArEventDisplay:
     def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True):
         
         f = h5py.File(filedir+filename, 'r')
+        # ARTIFICIALLY ADDING LIGHT INFO:
+        lf = h5py.File('/global/cfs/cdirs/dune/users/calivers/elise_files/mpd_run_hvramp_rctl_091_p39.FLOW.hdf5', 'r')
         self.filename = filename
         self.show_light = show_light
         self.dune_logo = mpimg.imread(dune_logo)
@@ -85,6 +87,12 @@ class LArEventDisplay:
             self.light_wvfms = f['light/wvfm/data']
             self.light_event_wvfm_ref = f['light/events/ref']['light/wvfm']['ref']
             self.light_event_wvfm_region = f['light/events/ref']['light/wvfm']['ref_region']
+            # ARTIFICIALLY ADDING LIGHT INFO:
+            #self.light_events = lf['light/events/data']
+            #self.light_wvfms = lf['light/wvfm/data']
+            #self.light_event_wvfm_ref = lf['light/events/ref']['light/wvfm']['ref']
+            #self.light_event_wvfm_region = lf['light/events/ref']['light/wvfm']['ref_region']
+
 
         # Load geometry and other info
         self.geometry = f['geometry_info']
@@ -95,10 +103,19 @@ class LArEventDisplay:
             'clock_period': 0.1,
         }
         if self.show_light:
-            self.sipm_abs_pos = LUT.from_array(f["geometry_info/sipm_abs_pos"].attrs["meta"],f["geometry_info/sipm_abs_pos/data"])
-            self.sipm_rel_pos = LUT.from_array(f["geometry_info/sipm_rel_pos"].attrs["meta"],f["geometry_info/sipm_rel_pos/data"])
-
-            self.all_sipm_pos = f["geometry_info/sipm_abs_pos/data"]["data"][1:]
+          
+            #self.sipm_abs_pos = LUT.from_array(f["geometry_info/sipm_abs_pos"].attrs["meta"],f["geometry_info/sipm_abs_pos/data"])
+            #self.sipm_rel_pos = LUT.from_array(f["geometry_info/sipm_rel_pos"].attrs["meta"],f["geometry_info/sipm_rel_pos/data"])
+#
+            #self.all_sipm_pos = f["geometry_info/sipm_abs_pos/data"]["data"][1:]
+            #self.sipm_unique_x = np.unique([pos[0] for pos in self.all_sipm_pos])
+            #self.sipm_unique_z = np.unique([pos[2] for pos in self.all_sipm_pos])
+            #self.sipm_unique_y = np.unique([pos[1] for pos in self.all_sipm_pos])
+            # ARTIFICIALLY ADDING LIGHT INFO:
+            self.sipm_abs_pos = LUT.from_array(lf["geometry_info/sipm_abs_pos"].attrs["meta"],lf["geometry_info/sipm_abs_pos/data"])
+            self.sipm_rel_pos = LUT.from_array(lf["geometry_info/sipm_rel_pos"].attrs["meta"],lf["geometry_info/sipm_rel_pos/data"])
+        
+            self.all_sipm_pos = lf["geometry_info/sipm_abs_pos/data"]["data"][1:]
             self.sipm_unique_x = np.unique([pos[0] for pos in self.all_sipm_pos])
             self.sipm_unique_z = np.unique([pos[2] for pos in self.all_sipm_pos])
             self.sipm_unique_y = np.unique([pos[1] for pos in self.all_sipm_pos])
@@ -177,9 +194,9 @@ class LArEventDisplay:
         event_datetime = datetime.utcfromtimestamp(
                 event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
         # DEBUGGING TIMESTAMPS
-        #print("Unix TS:", event['unix_ts'])
-        #print("TS Start:", event['ts_start'])
-        #print("TS End:", event['ts_end'])
+        print("Charge Unix TS:", event['unix_ts'])
+        print("Charge TS Start:", event['ts_start'])
+        print("Charge TS End:", event['ts_end'])
         ev_id = event['id']
         hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
         hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
@@ -190,29 +207,37 @@ class LArEventDisplay:
             light_matches = self.charge_light_ref[self.charge_light_region[ev_id,'start']:self.charge_light_region[ev_id,'stop']]
             light_matches = np.sort(light_matches[light_matches[:,0] == ev_id, 1])
 
+            # ARTIFICIALLY ADDING LIGHT INFO:
+            #light_matches = self.light_events['id'] == 694
             light = self.light_events[light_matches]
+            print("Light matches:", light_matches)
+            print("Light unix timestamp:", light['utime_ms'])
+            print("Light time since PPS:", light['tai_ns'])
             light_idx = light[0][0]
 
             light_wvfm_ref = self.light_event_wvfm_ref[self.light_event_wvfm_region[light_idx,'start']:self.light_event_wvfm_region[light_idx,'stop']]
             light_wvfm_ref = np.sort(light_wvfm_ref[light_wvfm_ref[:,0] == light_idx, 1])
-            light_wvfms = self.light_wvfms[light_wvfm_ref]["samples"]
-
+            # Subtract pedestals for data:
+            light_wvfm_get_peds = np.mean(self.light_wvfms[light_wvfm_ref]["samples"][:, :, :, 0:50], axis=-1)
+            light_wvfm_peds_exp = np.expand_dims(light_wvfm_get_peds, axis=-1)
+            light_wvfm_peds = light_wvfm_peds_exp * np.ones((1, 1, 1, 1000))
+            light_wvfms = self.light_wvfms[light_wvfm_ref]["samples"] - light_wvfm_peds
         # Prepare color map for charge
         #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
         if min(hits['Q']) <=0:
-            min_charge = 1
+            min_charge = min(hits['Q']) #1
         else:
             min_charge = min(hits['Q'])
-        charge_norm = mpl.colors.LogNorm(vmin=min_charge,vmax=max(max(hits['Q']), 1.))
-        cmap = cmr.get_sub_cmap('cmr.torch', 0.35,0.95)
-        cmap_zero = cmr.get_sub_cmap('cmr.torch', 0.05, 0.95) #cosmic okay, toxic_r okay, sapphire_r okay (ember_r light?) emerald_r
+        charge_norm = mpl.colors.Normalize(vmin=min_charge,vmax=max(max(hits['Q']), 1.))
+        cmap = cmr.get_sub_cmap('cmr.torch_r', 0.13,0.95) # 0.03, 0.13 for torch_r
+        cmap_zero = cmr.get_sub_cmap('cmr.torch_r', 0.03, 0.95) #cosmic okay, toxic_r okay, sapphire_r okay (ember_r light?) emerald_r
         mcharge = plt.cm.ScalarMappable(norm=charge_norm, cmap=cmap)
 
         if self.show_light:
             # Prepare color map for light
-            light_cmap=cmr.get_sub_cmap('cmr.freeze', 0.3,0.9)
-            light_cmap_zero=cmr.get_sub_cmap('cmr.freeze', 0.05,0.9)
-            light_norm = colors.LogNorm(1,light_wvfms[0].sum(axis=-1).max()*20)
+            light_cmap=cmr.get_sub_cmap('cmr.ember', 0.35,0.95) #.9 for torch .35 for ember .1 ember_r
+            light_cmap_zero=cmr.get_sub_cmap('cmr.ember', 0.05, 0.95)# .9 for torch .05 for ember 0.0 ember_r
+            light_norm = colors.Normalize(light_wvfms[0].sum(axis=-1).min(),light_wvfms[0].sum(axis=-1).max()*2)
             light_norm_single = colors.LogNorm(1,light_wvfms[0].sum(axis=-1).max())
             c = light_norm(light_wvfms[0].sum(axis=-1))
             mlight = plt.cm.ScalarMappable(norm=light_norm, cmap=light_cmap)
@@ -253,6 +278,12 @@ class LArEventDisplay:
         self.ax_bdv.set_zlim(self.geometry.attrs['lar_detector_bounds'][0][1], \
             self.geometry.attrs['lar_detector_bounds'][1][1])
         self.ax_bdv.grid(True)
+        self.ax_bdv.xaxis.pane.fill = True
+        self.ax_bdv.yaxis.pane.fill = True
+        self.ax_bdv.zaxis.pane.fill = True
+        self.ax_bdv.xaxis.pane.set_facecolor(cmap_zero(0))
+        self.ax_bdv.yaxis.pane.set_facecolor(cmap_zero(0))
+        self.ax_bdv.zaxis.pane.set_facecolor(cmap_zero(0))
         self.ax_bdv.tick_params(axis='both', which='major', labelsize=20)
 
         # Set axes for Beam vs Drift (ZX) canvas
@@ -297,15 +328,15 @@ class LArEventDisplay:
                     # Plot outlines of modules for XYZ (beam, drift, vertical) 3D view:
                     self.ax_bdv.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
                             [self.geometry.attrs['module_RO_bounds'][i][0][0], self.geometry.attrs['module_RO_bounds'][i][1][0]], \
-                            [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color=cmap_zero(0), alpha=0.35)
+                            [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.35)
 
                     self.ax_bdv.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
                             [self.geometry.attrs['module_RO_bounds'][i][k][0], self.geometry.attrs['module_RO_bounds'][i][k][0]], \
-                            [self.geometry.attrs['module_RO_bounds'][i][0][1], self.geometry.attrs['module_RO_bounds'][i][1][1]], color=cmap_zero(0), alpha=0.35)
+                            [self.geometry.attrs['module_RO_bounds'][i][0][1], self.geometry.attrs['module_RO_bounds'][i][1][1]], color='black', alpha=0.35)
 
                     self.ax_bdv.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
                             [self.geometry.attrs['module_RO_bounds'][i][j][0], self.geometry.attrs['module_RO_bounds'][i][j][0]], \
-                            [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color=cmap_zero(0), alpha=0.35)
+                            [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.35)
 
                 # Plot outlines of modules for ZX (beam, drift) projections:
                 self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
@@ -441,9 +472,9 @@ class LArEventDisplay:
         
             rel_pos = self.sipm_rel_pos[(light_lut_idx1, light_lut_idx2)][0]
             if rel_pos[0]%2 == 0:
-                light_x_true = light_x - (4*15.215)
+                light_x_true = light_x #- (4*15.215) # ARTIFICIALLY ADDING LIGHT INFO:
             elif rel_pos[0]%2 == 1:
-                light_x_true = light_x + (4*15.215)
+                light_x_true = light_x #+ (4*15.215) # ARTIFICIALLY ADDING LIGHT INFO:
 
             return light_x_true
 
@@ -566,7 +597,7 @@ class LArEventDisplay:
                     found_x = 1
                 if found_x ==1:
                     light_x, light_y, light_z = make_z_plane(x1,x2, pos[1]-2, pos[1]+2,z_pos)
-                    self.ax_bdv.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.15, shade=False)
+                    self.ax_bdv.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.1, shade=False)
                     #print("Light sum at:", pos, "is", this_xyz_sum)
                     break
                 else: continue
