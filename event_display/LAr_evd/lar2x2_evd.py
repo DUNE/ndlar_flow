@@ -82,6 +82,8 @@ class LArEventDisplay:
         self.hits_full = f['charge/'+self.hits_dset+'/data']
         self.hits_ref = f['charge/events/ref/charge/'+self.hits_dset+'/ref']
         self.hits_region = f['charge/events/ref/charge/'+self.hits_dset+'/ref_region']
+        self.charge_threshold = 8.#10.
+        self.light_threshold = 3e5
         if self.show_light:
             # Load light event and waveform datasets
             self.light_events = f['light/events/data']
@@ -109,6 +111,7 @@ class LArEventDisplay:
           
             self.sipm_abs_pos = LUT.from_array(f["geometry_info/sipm_abs_pos"].attrs["meta"],f["geometry_info/sipm_abs_pos/data"])
             self.sipm_rel_pos = LUT.from_array(f["geometry_info/sipm_rel_pos"].attrs["meta"],f["geometry_info/sipm_rel_pos/data"])
+            self.light_det_id = LUT.from_array(f["geometry_info/det_id"].attrs["meta"],f["geometry_info/det_id/data"])
 
             self.all_sipm_pos = f["geometry_info/sipm_abs_pos/data"]["data"][1:]
             self.sipm_unique_x = np.unique([pos[0] for pos in self.all_sipm_pos])
@@ -130,8 +133,9 @@ class LArEventDisplay:
                                                  per_subplot_kw={"ax_bdv": {"projection": "3d"}})
 
         cbar_ax = self.fig.add_axes([0.95, 0.12, 0.015, 0.75])
-        light_cbar_ax = self.fig.add_axes([0.15, 0.005, 0.75, 0.03])
         self.fig.subplots_adjust(right=0.92)
+        if self.show_light:
+            light_cbar_ax = self.fig.add_axes([0.15, 0.005, 0.75, 0.03])
         self.fig.subplots_adjust(bottom=0.1)
         self.fig.subplots_adjust(wspace=0.02, hspace=0.02)
 
@@ -188,7 +192,8 @@ class LArEventDisplay:
         self.ax_bv.cla()
         self.ax_dv.cla()
         self.cbar_ax.cla()
-        self.light_cbar_ax.cla()
+        if self.show_light:
+            self.light_cbar_ax.cla()
 
 
     def get_event(self, ev_id):
@@ -234,8 +239,8 @@ class LArEventDisplay:
                 light_wvfms = self.light_wvfms[light_wvfm_ref]["samples"] - light_wvfm_peds
         # Prepare color map for charge
         #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
-        if min(hits['Q']) <=0:
-            min_charge = min(hits['Q']) #1
+        if self.public:
+            min_charge = self.charge_threshold
         else:
             min_charge = min(hits['Q'])
         charge_norm = mpl.colors.Normalize(vmin=min_charge,vmax=max(max(hits['Q']), 1.))
@@ -245,9 +250,13 @@ class LArEventDisplay:
 
         if self.show_event_light:
             # Prepare color map for light
-            light_cmap=cmr.get_sub_cmap('cmr.ember', 0.35,0.95) #.9 for torch .35 for ember .1 ember_r
-            light_cmap_zero=cmr.get_sub_cmap('cmr.ember', 0.05, 0.95)# .9 for torch .05 for ember 0.0 ember_r
-            light_norm = colors.Normalize(light_wvfms[0].sum(axis=-1).min(),light_wvfms[0].sum(axis=-1).max()*2)
+            light_cmap=cmr.get_sub_cmap(cmr.sunburst_r, 0.0, 0.55) #'cmr.ember', 0.35,0.95) #.9 for torch .35 for ember .1 ember_r
+            light_cmap_zero=cmr.get_sub_cmap(cmr.sunburst_r, 0.0, 0.55)#'cmr.ember', 0.05, 0.95)# .9 for torch .05 for ember 0.0 ember_r
+            if self.public:
+                min_light = self.light_threshold
+            else:
+                min_light = light_wvfms[0].sum(axis=-1).min()
+            light_norm = colors.LogNorm(min_light,light_wvfms[0].sum(axis=-1).max()*2)
             light_norm_single = colors.LogNorm(1,light_wvfms[0].sum(axis=-1).max())
             c = light_norm(light_wvfms[0].sum(axis=-1))
             mlight = plt.cm.ScalarMappable(norm=light_norm, cmap=light_cmap)
@@ -273,8 +282,12 @@ class LArEventDisplay:
         # Show 2x2 and DUNE logos
         self.ax_logo.axis('off')
         self.ax_logo.imshow(self.subexp_logo)
-        self.fig.figimage(self.dune_logo, xo=1650, \
-                          yo=1215, origin='upper')
+        if self.show_light:
+            self.fig.figimage(self.dune_logo, xo=1632, \
+                                yo=1215, origin='upper')
+        else:
+            self.fig.figimage(self.dune_logo, xo=1632, \
+                                yo=1085, origin='upper')
         print("Number of available events:", len(self.events))
 
         # Set axes for 3D canvas (Beam, Drift, Vertical)
@@ -287,7 +300,7 @@ class LArEventDisplay:
             self.geometry.attrs['lar_detector_bounds'][1][0])
         self.ax_bdv.set_zlim(self.geometry.attrs['lar_detector_bounds'][0][1], \
             self.geometry.attrs['lar_detector_bounds'][1][1])
-        self.ax_bdv.grid(True)
+        self.ax_bdv.grid(False)
         self.ax_bdv.xaxis.pane.fill = True
         self.ax_bdv.yaxis.pane.fill = True
         self.ax_bdv.zaxis.pane.fill = True
@@ -455,6 +468,8 @@ class LArEventDisplay:
         ##print("Corrected drift:", corrected_drift[:10])
         #corrected_drift = hits['x']
 
+        if self.public:
+            hits = hits[hits['Q'] > self.charge_threshold]
         # Plot hits in 3D view first so that cathodes/anodes go over the hits
         self.ax_bdv.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
                             c=cmap(charge_norm(hits['Q'])), s=5, alpha=1)
@@ -492,6 +507,8 @@ class LArEventDisplay:
 
     def plot_light(self, light_wvfms, light_cmap, light_norm, light_cmap_zero):
         
+        acl_det_ids = [0,4,8,12]
+
         # Plot light in XZ (drift, beam) projection
         for x,z in itertools.product(self.sipm_unique_x,self.sipm_unique_z):
             if x==-1: continue
@@ -499,6 +516,10 @@ class LArEventDisplay:
             this_xz_sum = 0
             for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
                 #if i!=0: continue
+                det_id = self.light_det_id[(i,j)][0]
+                wvfm_factor = 1.
+                if det_id in acl_det_ids:
+                    wvfm_factor = 2.
                 pos=self.sipm_abs_pos[(i,j)][0]
                 rel_pos = self.sipm_rel_pos[(i,j)][0]
                 if pos[0]==-1:
@@ -506,7 +527,7 @@ class LArEventDisplay:
                 true_x = self.convert_light_x(i,j,pos[0])
                 #print("True x:", true_x, "Pos[0]:", pos[0])
                 if (abs(true_x-x) < 0.5) and (pos[2]==z):
-                    this_xz_sum += light_wvfms[0][i,j].sum()
+                    this_xz_sum += wvfm_factor*light_wvfms[0][i,j].sum()
                     #print("SIPM:",i,j,"Abs pos:",pos,"Rel pos:",rel_pos,"Light sum:",light_wvfms[0][i,j].sum())
             for i in range(len(self.geometry.attrs['module_RO_bounds'])):
                 for j in range(2):
@@ -515,16 +536,16 @@ class LArEventDisplay:
                     if (abs(z-self.geometry.attrs['module_RO_bounds'][i][j][2]) < 1):
                         if this_xz_sum==0:
                             cmap_value = light_cmap_zero(0)
-                        else:
+                        elif this_xz_sum > self.light_threshold:
                             cmap_value = light_cmap(light_norm(this_xz_sum))
-                        if (abs(x-self.geometry.attrs['module_RO_bounds'][i][0][0]) < 1):
-                            self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset, self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset], \
-                                     [self.geometry.attrs['module_RO_bounds'][i][0][0], self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']],\
-                                      color=cmap_value, alpha=1, linewidth=5, solid_capstyle='butt')
-                        elif (abs(x-self.geometry.attrs['module_RO_bounds'][i][1][0]) < 1):
-                            self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset, self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset], \
-                                     [self.geometry.attrs['module_RO_bounds'][i][1][0]-self.geometry.attrs['max_drift_distance'], self.geometry.attrs['module_RO_bounds'][i][1][0]] ,\
-                                      color=cmap_value, alpha=1, linewidth=5, solid_capstyle='butt')
+                            if (abs(x-self.geometry.attrs['module_RO_bounds'][i][0][0]) < 1):
+                                self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset, self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset], \
+                                         [self.geometry.attrs['module_RO_bounds'][i][0][0], self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']],\
+                                          color=cmap_value, alpha=1, linewidth=5, solid_capstyle='butt')
+                            elif (abs(x-self.geometry.attrs['module_RO_bounds'][i][1][0]) < 1):
+                                self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset, self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset], \
+                                         [self.geometry.attrs['module_RO_bounds'][i][1][0]-self.geometry.attrs['max_drift_distance'], self.geometry.attrs['module_RO_bounds'][i][1][0]] ,\
+                                          color=cmap_value, alpha=1, linewidth=5, solid_capstyle='butt')
 
         # Plot cathodes for ZX (beam, drift) projections (done for charge only case in set_axes method):
         for i in range(len(self.geometry.attrs['module_RO_bounds'])):
@@ -541,20 +562,24 @@ class LArEventDisplay:
             this_zy_sum = 0
             for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
                 pos=self.sipm_abs_pos[(i,j)][0]
+                det_id = self.light_det_id[(i,j)][0]
+                wvfm_factor = 1.
+                if det_id in acl_det_ids:
+                    wvfm_factor = 2.
                 if pos[0]==-1:
                     continue
                 if (pos[2]==z) and (pos[1]==y):
-                    this_zy_sum += light_wvfms[0][i,j].sum()
+                    this_zy_sum += wvfm_factor*light_wvfms[0][i,j].sum()
             for i in range(len(self.geometry.attrs['module_RO_bounds'])):
                 for j in range(2):
                     z_offset = ((-1)**(j+1))*1.25
                     if this_zy_sum==0:
                         cmap_value = light_cmap_zero(0)
-                    else:
+                    elif this_zy_sum > self.light_threshold:
                         cmap_value = light_cmap(light_norm(this_zy_sum))
-                    if (abs(z-self.geometry.attrs['module_RO_bounds'][i][j][2]) < 1):
-                        self.ax_bv.plot([self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset, self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset], \
-                                 [y-2, y+2],color=cmap_value, alpha=1, linewidth=5, solid_capstyle='butt')
+                        if (abs(z-self.geometry.attrs['module_RO_bounds'][i][j][2]) < 1):
+                            self.ax_bv.plot([self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset, self.geometry.attrs['module_RO_bounds'][i][j][2]+z_offset], \
+                                     [y-2, y+2],color=cmap_value, alpha=1, linewidth=5, solid_capstyle='butt')
 
         # Plot light in XY projection               
         for x,y in itertools.product(self.sipm_unique_x,self.sipm_unique_y):
@@ -563,28 +588,37 @@ class LArEventDisplay:
             this_xy_sum = 0
             for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
                 pos=self.sipm_abs_pos[(i,j)][0]
+                det_id = self.light_det_id[(i,j)][0]
+                wvfm_factor = 1.
+                if det_id in acl_det_ids:
+                    wvfm_factor = 2.
                 if pos[0]==-1:
                     continue
                 true_x = self.convert_light_x(i,j,pos[0])
                 if (abs(true_x-x) < 0.5) and (pos[1]==y):
-                    this_xy_sum += light_wvfms[0][i,j].sum()
+                    this_xy_sum += wvfm_factor*light_wvfms[0][i,j].sum()
             for i in range(len(self.geometry.attrs['module_RO_bounds'])):
                 for j in range(2):
                     x_offset = ((-1)**(j+1))*1.25
                     if this_xy_sum==0:
                         cmap_value = light_cmap_zero(0)
-                    else:
+                    elif this_xy_sum > self.light_threshold:
                         cmap_value = light_cmap(light_norm(this_xy_sum))
-                    if (abs(x-self.geometry.attrs['module_RO_bounds'][i][j][0]) < 1):
-                        self.ax_dv.plot([self.geometry.attrs['module_RO_bounds'][i][j][0]+x_offset, self.geometry.attrs['module_RO_bounds'][i][j][0]+x_offset], \
-                                 [y-2, y+2],color=cmap_value, alpha=1, linewidth=5, solid_capstyle='butt')
+                        if (abs(x-self.geometry.attrs['module_RO_bounds'][i][j][0]) < 1):
+                            self.ax_dv.plot([self.geometry.attrs['module_RO_bounds'][i][j][0]+x_offset, self.geometry.attrs['module_RO_bounds'][i][j][0]+x_offset], \
+                                    [y-2, y+2],color=cmap_value, alpha=1, linewidth=5, solid_capstyle='butt')
 
         # Plot light for XYZ (beam, drift, vertical) 3D view: 
         #for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
         #    pos=self.sipm_abs_pos[(i,j)][0]
+        #    det_id = self.light_det_id[(i,j)][0]
+        #    wvfm_factor = 1.
+        #    if det_id in acl_det_ids:
+        #        wvfm_factor = 2.
         #    if pos[0]==-1:
         #        continue
-        #    this_xyz_sum = light_wvfms[0][i,j].sum()
+        #    this_xyz_sum = wvfm_factor*light_wvfms[0][i,j].sum()
+        #    if this_xyz_sum < self.light_threshold: continue
         #    if this_xyz_sum==0:
         #        cmap_value = light_cmap_zero(0)
         #        #print("Zero light sum at:", pos)
