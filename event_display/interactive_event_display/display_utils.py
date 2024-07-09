@@ -417,7 +417,8 @@ def draw_minerva():
 
 def draw_light_detectors(data, evid, sim_version):
     try:
-        data["charge/events", "light/events", "light/wvfm", evid]
+        data["light/events", "light/wvfm", evid]
+        #data["charge/events", "light/events", "light/wvfm", evid]
     except:
         print("No light information found, not plotting light detectors")
         return []
@@ -443,13 +444,30 @@ def match_light_to_charge_event(data, evid):
     Use unix time for this, since it should refer to the same time in both readout systems.
     For now we just take all the light within 1s from the charge event time.
     """
-
-    match_light = data["charge/events", "light/events", "light/wvfm", evid]
-    if np.ma.all(match_light.mask)==True:
+    try:
+        match_light = data["charge/events", "light/events", "light/wvfm", evid]
+        if np.ma.all(match_light.mask)==True:
+            try:
+                match_light = match_light[match_light.mask == False]
+            except:
+                print("No matching light information found, plotting zeros")  
+    except Exception as e:
         try:
-            match_light = match_light[match_light.mask == False]
-        except:
-            print("No matching light information found, plotting zeros")        
+            charge = data["charge/events", evid][["id", "unix_ts"]]
+            num_light = data["light/events/data"].shape[0]
+            light = data["light/events", slice(0, num_light)][
+                ["id", "utime_ms"]
+            ]  # we have to try them all, events may not be time ordered
+            match_light = np.array(
+                [
+                    light["id"][np.abs(light["utime_ms"] - 1000*charge["unix_ts"][i]) < 10]
+                    for i in range(len(charge))
+                ] # this doesn't work
+            )
+        except Exception as e:
+            match_light = data["light/events", "light/wvfm", evid]
+            print("Warning: bad matching used")
+      
     return match_light
 
 
@@ -458,9 +476,13 @@ def get_waveforms_all_detectors(match_light, sim_version):
     Get the light waveforms for the matched light events.
     """
     n_matches = match_light["samples"].shape[1]
-    if sim_version != "data":
+    if sim_version != "single_mod":
         waveforms_all_detectors = match_light["samples"].reshape(n_matches, 8, 64, 1000)
-    if sim_version == "data":
+        # compute the mean of the first 50 samples along the last axis
+        baseline_mean = np.mean(waveforms_all_detectors[:, :, :, :50], axis=-1)
+        # subtract the baseline mean from each waveform
+        waveforms_all_detectors -= (baseline_mean[:, :, :, np.newaxis]).astype(int)
+    if sim_version == "single_mod":
         waveforms_all_detectors = match_light["samples"].reshape(n_matches, 2, 64, 1000).astype(np.float64)
         # for each waveform subtract the mean of the first 50 samples
         # compute the mean of the first 50 samples along the last axis
@@ -497,7 +519,7 @@ def plot_light_traps(data, waveforms_all_detectors, sim_version):
         ]
     )  # this maps detector position to detector number
     # we need to invert the mapping because I'm stupid
-    if sim_version == "minirun5":
+    if sim_version == "minirun5" or sim_version=="data":
         channel_map = np.array( # patch for swapped tpc numbering
             [
                 1, 9, 17, 25, 33, 41, 49, 57, # tpc 1, right
@@ -520,7 +542,7 @@ def plot_light_traps(data, waveforms_all_detectors, sim_version):
         )  # this maps detector position to detector number
         # we need to invert the mapping because I'm stupid
 
-    if sim_version == "data":
+    if sim_version == "single_mod":
         channel_map = np.array(
             [
                 1, 3, 5, 7, 9, 11, 13, 15,
