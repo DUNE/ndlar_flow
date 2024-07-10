@@ -272,6 +272,9 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             if mc_assn is not None:
                 self.event_buffer_mc_assn = np.empty((0,), dtype=mc_assn.dtype)
             self.cross_rank_set_attrs('event_buffer', 'event_buffer_unix_ts', 'event_buffer_mc_assn')
+            if return_ts:
+                return (([], []), []) if mc_assn is None \
+                else (([], [], []), [])
             return ([], []) if mc_assn is None \
                 else ([], [], [])
 

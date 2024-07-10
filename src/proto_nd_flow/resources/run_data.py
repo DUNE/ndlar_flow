@@ -182,6 +182,9 @@ class RunData(H5FlowResource):
         else:
             self.data['is_mc'] = False
 
+        if self.defaults['is_mc'] != self.data['is_mc']:
+            logging.warning(f"Configuration 'is_mc' in the yaml is set up inconsistently with 'mc_packets_assn'.")
+
     def _update_data(self):
         # check input file for MC info to set mc flag
         self._lookup_mc_info()

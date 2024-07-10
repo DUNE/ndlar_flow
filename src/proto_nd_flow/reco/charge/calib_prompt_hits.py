@@ -232,7 +232,7 @@ class CalibHitBuilder(H5FlowStage):
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
             calib_hits_arr['E'] = hits_charge * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV) # MeV
             if has_mc_truth:
-                true_recomb = resources['LArData'].ionization_recombination(mode=1,dEdx=packet_seg_bt_arr['dEdx'])
+                true_recomb = resources['LArData'].ionization_recombination(mode=2,dEdx=packet_seg_bt_arr['dEdx'])
                 calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
 
         # if back tracking information was available, write the merged back tracking
