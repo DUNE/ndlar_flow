@@ -68,8 +68,8 @@ class CalibHitBuilder(H5FlowStage):
 
     #: ASIC ADC configuration lookup table
     configuration = defaultdict(lambda: dict(
-        vref_mv=1300,
-        vcm_mv=288
+        vref_mv=1568.0,
+        vcm_mv=478.1
     ))
 
     #: pixel pedestal value
@@ -119,7 +119,7 @@ class CalibHitBuilder(H5FlowStage):
         t0_data = cache[self.t0_dset_name]
         raw_hits = cache[self.raw_hits_dset_name]
 
-        has_mc_truth = packet_frac_bt is not None
+        has_mc_truth = resources['RunData'].is_mc and (packet_frac_bt is not None)
 
         mask = ~rfn.structured_to_unstructured(packets_data.mask).any(axis=-1)
         rh_mask = ~rfn.structured_to_unstructured(raw_hits.mask).any(axis=-1)

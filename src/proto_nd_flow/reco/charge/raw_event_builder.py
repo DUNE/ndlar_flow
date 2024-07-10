@@ -457,16 +457,13 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             mc_assn = mc_assn[sorted_idcs]
         
         beam_trigger_idxs = np.where((packets['io_group'] == self.trig_io_grp) & (packets['packet_type'] == 7))[0]
-        if self.VALIDATE_HACK: 
+        if self.VALIDATE_HACK:
             n_orig = len(beam_trigger_idxs)
             beam_trigger_idxs = beam_trigger_idxs[::3]
             print('\n*****************\nValidation HACK! Ommiting beam some triggers:')
             print('Total beam triggers:', len(beam_trigger_idxs))
             print('Total off-beam:', n_orig-len(beam_trigger_idxs))
             print('\n*****************\n')
-
-        if len(beam_trigger_idxs) == 0:
-            return ([], []) if mc_assn is None else ([], [], [])
 
         events = []
         event_unix_ts = []
@@ -504,18 +501,14 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         off_beam_builder = SymmetricWindowRawEventBuilder( **off_beam_config )
         
         off_beam_events, off_beam_event_unix_ts, off_beam_event_mc_assn = [], [], []
-        if not mc_assn is None:
-            (off_beam_events_list, off_beam_ts) = off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], mc_assn[~used_mask], ts=ts[~used_mask], return_ts=True)
-        
-            off_beam_events_list=list(off_beam_events_list)
+        this_mc_assn = mc_assn[~used_mask] if mc_assn else None
+        (off_beam_events_list, off_beam_ts) = off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], this_mc_assn, ts[~used_mask], return_ts=True)
+        off_beam_events_list=list(off_beam_events_list)
+        if off_beam_events_list:
             off_beam_events = list(off_beam_events_list[0])
-            off_beam_event_unix_ts = list(off_beam_events_list[1]) 
-            off_beam_event_mc_assn = list(off_beam_events_list[2])
-        else:
-            (off_beam_events_list, off_beam_ts) = off_beam_builder.build_events(packets[~used_mask], unix_ts[~used_mask], mc_assn, ts[~used_mask], return_ts=True) 
-            off_beam_events_list=list(off_beam_events_list)
-            off_beam_events = list(off_beam_events_list[0]) 
-            off_beam_event_unix_ts = list(off_beam_events_list[1]) 
+            off_beam_event_unix_ts = list(off_beam_events_list[1])
+            if mc_assn:
+                off_beam_event_mc_assn = list(off_beam_events_list[2])
 
         if self.VALIDATE_HACK:
             print('N Beam events found:', len(events))

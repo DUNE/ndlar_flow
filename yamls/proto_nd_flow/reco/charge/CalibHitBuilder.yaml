@@ -8,10 +8,10 @@ requires:
   - name: 'charge/packets_index'
     path: ['charge/packets']
     index_only: True
-  - name: 'packet_frac_backtrack'
-    path: ['charge/packets','mc_truth/packet_fraction']
-  - name: 'packet_seg_backtrack'
-    path: ['charge/packets','mc_truth/segments']
+  # - name: 'packet_frac_backtrack'
+  #   path: ['charge/packets','mc_truth/packet_fraction']
+  # - name: 'packet_seg_backtrack'
+  #   path: ['charge/packets','mc_truth/segments']
 
 params:
   # inputs
@@ -24,10 +24,11 @@ params:
 
   # output
   calib_hits_dset_name: 'charge/calib_prompt_hits'
-  mc_hit_frac_dset_name: 'mc_truth/calib_prompt_hit_backtrack'
+  # mc_hit_frac_dset_name: 'mc_truth/calib_prompt_hit_backtrack'
 
   # configuration parameters
 
+  pedestal_file: '/global/common/software/dune/mkramer/devel/flow4pedestal/reference-cold-pedestal-2024_06_05_08_28_19_CDTevd_ped.rescaled.json'
   #pedestal_file: 'data/module0_flow/datalog_2021_04_02_19_00_46_CESTevd_ped.json'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/datalog_2021_04_02_19_00_46_CESTevd_ped.json
   #configuration_file: 'data/module0_flow/evd_config_21-03-31_12-36-13.json'
