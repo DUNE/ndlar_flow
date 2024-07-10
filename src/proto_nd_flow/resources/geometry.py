@@ -575,10 +575,7 @@ class Geometry(H5FlowResource):
 
         # Get Z pos
         z_pos = self.det_geometry_yaml["tpc_offsets"][tpc//2][2] + self.lrs_geometry_yaml["tpc_center_offset"][tpc][2]
-        if tpc % 2 == 0:
-            z_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][2]
-        else:
-            z_pos -= self.lrs_geometry_yaml["sipm_center"][tpc_channel][2]
+        z_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][2]
 
         return x_pos, y_pos, z_pos
 
@@ -587,6 +584,10 @@ class Geometry(H5FlowResource):
     def load_geometry(self):
         self._load_charge_geometry()
         self._load_light_geometry()
+
+
+    def rotate_y(det_bounds):
+        return det_bounds*np.array([-1,1,-1])
 
 
     def _load_light_geometry(self):
