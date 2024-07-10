@@ -33,7 +33,7 @@ def create_3d_figure(minerva_data, data, evid):
     fig = go.Figure()
     # Select the hits for the current event
     event = data["charge/events", evid]
-    trigger = ((event["unix_ts"][:] + event["ts_start"][:]/1e7)/1.2).astype(int)[0]
+    trigger = evid#((event["unix_ts"][:] + event["ts_start"][:]/1e7)/1.2).astype(int)[0]
 
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
     try:
@@ -76,9 +76,12 @@ def create_3d_figure(minerva_data, data, evid):
                     minerva_hits_y[trigger][idx][:n_nodes] - minerva_hits_y_offset[trigger]
                 )
                 z_nodes = (
-                    minerva_hits_z[trigger][idx][:n_nodes] - minerva_hits_z_offset[trigger]
+                    minerva_hits_z[trigger][idx][:n_nodes] #- minerva_hits_z_offset[trigger]
                 )
                 q_nodes = minerva_trk_node_energy[trigger][:n_nodes]
+            print(minerva_hits_z[trigger][idx][:n_nodes])
+            print(minerva_hits_z_offset[trigger])
+            print(z_nodes)
             xs.append((x_nodes/10).tolist())
             ys.append((y_nodes/10).tolist())
             zs.append((z_nodes/10).tolist())
@@ -116,34 +119,21 @@ def create_3d_figure(minerva_data, data, evid):
             "charge/events",
             "charge/calib_prompt_hits",
             "charge/packets",
-            "mc_truth/segments",  # called segments in minirun4
+            "mc_truth/segments",
             evid,
         ]
         sim_version = "minirun5"
         print("Found truth info in minirun5 format")
     except:
-        print("No truth info in minirun4 format found")
         try:
             prompthits_segs = data[
-                "charge/events",
-                "charge/calib_prompt_hits",
-                "charge/packets",
-                "mc_truth/tracks",  # called tracks in minirun3
-                evid,
+                "charge/events", "charge/calib_prompt_hits", "charge/packets", evid
             ]
-            sim_version = "minirun3"
-            print("Found truth info in minirun3 format")
+            sim_version = "data"
+            print("Found data")
         except:
-            print("No truth info in minirun3 format found")
-            try:
-                prompthits_segs = data[
-                    "charge/events", "charge/calib_prompt_hits", "charge/packets", evid
-                ]
-                sim_version = "data"
-                print("Found data")
-            except:
-                print("Cannot process this file type")
-                prompthits_segs = None
+            print("Cannot process this file type")
+            prompthits_segs = None
     # Draw the TPC
     tpc_center, anodes, cathodes = draw_tpc(sim_version)
     light_detectors = draw_light_detectors(data, evid, sim_version)
@@ -154,6 +144,22 @@ def create_3d_figure(minerva_data, data, evid):
     fig.add_traces(light_detectors)
 
     fig.update_layout(font=dict(size=14), plot_bgcolor='white', legend=dict(orientation="h"), scene=dict(xaxis_title='x [cm]', 
+                      annotations=[
+                            dict(
+                                showarrow=True,
+                                x=10,
+                                y=20,
+                                z=-65,
+                                text="Beam",
+                                xanchor="left",
+                                ax=-50,
+                                ay=-20,
+                                arrowcolor="black",
+                                arrowsize=1,
+                                arrowwidth=2,
+                                arrowhead=1,
+                            )
+                        ],
                         #  xaxis = dict( # to make the background whites
                         #  backgroundcolor="white",
                         #  gridcolor="white",
@@ -257,14 +263,6 @@ def plot_segs(segs, sim_version="minirun5", **kwargs):
             nice_array = np.column_stack(
                 [segs[f"{axis}_start"], segs[f"{axis}_end"], np.full(len(segs), None)]
             ).flatten()
-        if sim_version == "minirun3":
-            nice_array = np.column_stack(
-                [
-                    segs[f"{axis}_start"] * 10,
-                    segs[f"{axis}_end"] * 10,
-                    np.full(len(segs), None),
-                ]
-            ).flatten()
         return nice_array
 
     x, y, z = (to_list(axis) for axis in "xyz")
@@ -282,19 +280,14 @@ def draw_tpc(sim_version="minirun5"):
         detector_center = (0, -268, 1300)
         anode_ys = anode_ys - (268 + 42)
         anode_zs = anode_zs + 1300
-    if sim_version == "minirun3":  # hit coordinates are in mm
-        detector_center = (0, 42 * 10, 0)
-        anode_xs = anode_xs * 10
-        anode_ys = anode_ys * 10
-        anode_zs = anode_zs * 10
     if sim_version == "minirun5" or sim_version == "data":  # hit coordinates are in cm
         detector_center = (0, 0, 0)
         anode_ys = anode_ys - 42
-    #if sim_version == "data":  # module 1
-        #detector_center = (0, 0, 0)
-        #anode_xs = anode_xs[1:2]
-        #anode_ys = anode_ys
-        #anode_zs = anode_zs[0:2] + 33
+    if sim_version == "single_mod":  # module 1
+        detector_center = (0, 0, 0)
+        anode_xs = anode_xs[1:2]
+        anode_ys = anode_ys
+        anode_zs = anode_zs[0:2] + 33
 
     center = go.Scatter3d(
         x=[detector_center[0]],
@@ -316,6 +309,7 @@ def draw_tpc(sim_version="minirun5"):
 
 
 def draw_cathode_planes(x_boundaries, y_boundaries, z_boundaries, **kwargs):
+    index_to_number = {(1, 1): 0, (1, 0): 1, (0, 1): 2, (0, 0): 3}
     traces = []
     for i_z in range(int(len(z_boundaries) / 2)):
         for i_x in range(int(len(x_boundaries) / 2)):
@@ -328,12 +322,16 @@ def draw_cathode_planes(x_boundaries, y_boundaries, z_boundaries, **kwargs):
                 * 0.5
                 * np.ones(z.shape)
             )
-            traces.append(go.Surface(x=x, y=y, z=z, **kwargs))
+            # Get the module number for this plane
+            number = index_to_number[(i_x, i_z)]
+            trace = go.Surface(x=x, y=y, z=z, hovertemplate=f"Module {number}", **kwargs)
+            traces.append(trace)
 
     return traces
 
 
 def draw_anode_planes(x_boundaries, y_boundaries, z_boundaries, **kwargs):
+    index_to_number = {(3, 1): 0, (2, 1): 1, (1, 1): 5, (0, 1): 4, (3, 0): 2, (2, 0): 3, (1, 0): 6, (0, 0): 7}
     traces = []
     for i_z in range(int(len(z_boundaries) / 2)):
         for i_x in range(int(len(x_boundaries))):
@@ -342,8 +340,10 @@ def draw_anode_planes(x_boundaries, y_boundaries, z_boundaries, **kwargs):
                 np.linspace(y_boundaries.min(), y_boundaries.max(), 2),
             )
             x = x_boundaries[i_x] * np.ones(z.shape)
-
-            traces.append(go.Surface(x=x, y=y, z=z, **kwargs))
+            # Get the TPC number for this plane
+            number = index_to_number[(i_x, i_z)]
+            trace = go.Surface(x=x, y=y, z=z, hovertemplate=f"TPC {number}", **kwargs)
+            traces.append(trace)
 
     return traces
 
@@ -415,7 +415,7 @@ def draw_minerva():
     return traces
 
 
-def draw_light_detectors(data, evid, sim_version):
+def draw_light_detectors(data, evid, sim_version): # here need to use geometry
     try:
         data["light/events", "light/wvfm", evid]
         #data["charge/events", "light/events", "light/wvfm", evid]
@@ -662,10 +662,7 @@ def plot_waveform(data, evid, opid, sim_version):
 
     sum_wvfm = np.array([0.0] * 1000)
     for adc, channel in sipms:
-        # try:
         wvfm = waveforms_all_detectors[:, adc, channel, :]
-        # except:
-            # wvfm = np.zeros(waveforms_all_detectors[:, 0, 0, :].shape, dtype=int)
         event_sum_wvfm = np.sum(wvfm, axis=0)  # sum over the events
         sum_wvfm += event_sum_wvfm  # sum over the sipms
 
@@ -681,10 +678,7 @@ def plot_waveform(data, evid, opid, sim_version):
     )
     fig.add_traces(drawn_objects)
     for adc, channel in sipms:
-        # try:
         wvfm = waveforms_all_detectors[:, adc, channel, :]
-        # except:
-            # wvfm = np.zeros(waveforms_all_detectors[:, 0, 0, :].shape, dtype=int)
         sum_wvfm = np.sum(wvfm, axis=0)
         fig.add_traces(
             go.Scatter(
