@@ -10,6 +10,7 @@ import shutil
 
 from dash import dcc
 from dash import html
+from datetime import datetime
 
 # from dash import no_update
 from dash.exceptions import PreventUpdate
@@ -47,30 +48,19 @@ app.layout = html.Div(
         dcc.Store(id="event-time", data=0),
         dcc.Store(id="sim-version", data=0),
         # Header
-        html.H2(children="2x2 event display", style={"textAlign": "center"}),
-        html.Div(children="", id="filename-div", style={"textAlign": "center"}),
-        html.Div(children="", id="minerva-filename-div", style={"textAlign": "center"}),
-        # Upload button
-        html.Div(
-            du.Upload(
-                id="upload-data-div",
-                text="Upload Flow HDF5 File",
-                max_file_size=10000,
-                chunk_size=5,
-                default_style={
-                    "width": "15em",
-                    "padding": "0",
-                    "margin": "0",
-                },
-                pause_button=True,
-                filetypes=["hdf5", "h5"],
-            ),
-        ),
+        html.H2(children="2x2 event display", style={"textAlign": "left"}),
+        html.Div(children="", id="filename-div", style={"textAlign": "left"}),
+        html.Div(children="", id="minerva-filename-div", style={"textAlign": "left"}),
         # File input
-        dcc.Input(id="file-path", type="text", placeholder="Enter a file path", debounce=True),
+        dcc.Input(
+            id="file-path", type="text", placeholder="Enter a file path", debounce=True
+        ),
         html.Button("Load File", id="load-button", n_clicks=0),
         dcc.Input(
-            id="minerva-file-path", type="text", placeholder="Enter a minerva file path", debounce=True
+            id="minerva-file-path",
+            type="text",
+            placeholder="Enter a minerva file path",
+            debounce=True,
         ),
         html.Button("Load Minerva File", id="load-minerva-button", n_clicks=0),
         # Event ID input box
@@ -129,46 +119,6 @@ app.layout = html.Div(
 
 
 # Callbacks
-
-
-# Callback to handle the upload
-# =============================
-@app.callback(
-    [
-        Output("filename", "data"),
-        Output("filename-div", "children"),
-        Output("event-id", "data", allow_duplicate=True),
-        Output("data-length", "data"),
-    ],
-    [
-        Input("upload-data-div", "isCompleted"),
-    ],
-    [
-        State("filename", "data"),
-        State("upload-data-div", "fileNames"),
-        State("upload-data-div", "upload_id"),
-    ],
-    prevent_initial_call=True,
-)
-def upload_file(is_completed, current_filename, filenames, upload_id):
-    """
-    Upload HDF5 file to cache. If the upload is completed,
-    update the filename. Initialise the event ID to 0.
-    """
-    if not is_completed:
-        raise PreventUpdate
-
-    if filenames is not None:
-        if upload_id:
-            root_folder = Path(UPLOAD_FOLDER_ROOT) / upload_id
-            print(Path(UPLOAD_FOLDER_ROOT))
-        else:
-            root_folder = Path(UPLOAD_FOLDER_ROOT)
-        _, num_events = parse_contents(str(root_folder / filenames[0]))
-        new_filename = str(root_folder / filenames[0])
-        return new_filename, basename(filenames[0]), 0, num_events
-
-    return "", "no file uploaded", 0, 0
 
 
 # Callback to handle file selection from path
@@ -275,7 +225,7 @@ def update_div(evid, max_value):
 )
 def update_time(_, time):
     """Update the time display"""
-    return f"Charge unix_ts: {time}"
+    return f"{time}"
 
 
 # Callback to display the event
@@ -296,11 +246,13 @@ def update_graph(filename, minerva_filename, evid):
     if filename is not None:
         data, _ = parse_contents(filename)
         graph, sim_version = create_3d_figure(minerva_data, data, evid)
-
+    event_datetime = datetime.utcfromtimestamp(
+        data["charge/events", evid]["unix_ts"][0]
+    ).strftime("%Y-%m-%d %H:%M:%S")
     return (
         graph,
         sim_version,
-        data["charge/events", evid]["unix_ts"],
+        event_datetime,
     )  # TODO: move to utils
 
 
@@ -318,11 +270,16 @@ def update_light_waveform(filename, evid, sim_version, graph, click_data):
     if click_data:
         curvenum = int(click_data["points"][0]["curveNumber"])
         try:
-            opid = int(graph["data"][curvenum]["ids"][0][0].split("_")[1])
+            det_id = int(
+                graph["data"][curvenum]["ids"][0][0].split("_")[2]
+            )  # det_id_{det_id}_tpc_{tpc}
+            tpc_id = int(graph["data"][curvenum]["ids"][0][0].split("_")[4])
+            opid = (det_id, tpc_id)
             if filename is not None:
                 data, _ = parse_contents(filename)
                 return plot_waveform(data, evid, opid, sim_version)
-        except:
+        except Exception as e:
+            print(e)
             print("That is not a light trap, no waveform to plot")
     return go.Figure()
 
@@ -354,4 +311,4 @@ def clean_cache():
 
 # Run the app
 if __name__ == "__main__":
-    app.run(debug=True, host='127.0.0.1', port=8080)
+    app.run(debug=True, host="127.0.0.1", port=8080)
