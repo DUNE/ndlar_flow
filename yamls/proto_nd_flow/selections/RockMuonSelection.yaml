@@ -23,8 +23,8 @@ params:
 
     #configuration parameters
     x_boundaries: [-63.931, -3.069, 3.069, 63.931] #cm
-    y_boundaries: [-268-42-19.8543, -268-42+103.8543] #cm
-    z_boundaries: [1300-64.3163,  1300-2.6837, 1300+2.6837, 1300+64.3163] #cm
+    y_boundaries: [-42-19.8543, -42+103.8543] #cm
+    z_boundaries: [-64.3163,  -2.6837, 2.6837, 64.3163] #cm
 
     length_cut: 100 #cm
     MEVR: 0.974 #Minimum explained variance ratio
