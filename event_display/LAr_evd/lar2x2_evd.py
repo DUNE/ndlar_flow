@@ -229,7 +229,6 @@ class LArEventDisplay:
         print("Charge Unix TS:", event['unix_ts'])
         print("Charge TS Start:", event['ts_start'])
         print("Charge TS End:", event['ts_end'])
-        print("Module RO Bounds:", self.geometry.attrs['module_RO_bounds'])
         ev_id = event['id']
         hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
         hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
