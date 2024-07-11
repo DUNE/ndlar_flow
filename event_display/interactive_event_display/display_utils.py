@@ -15,6 +15,7 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from src.proto_nd_flow.util.lut import LUT
+from plotly.subplots import make_subplots
 
 
 def parse_contents(filename):
@@ -34,15 +35,32 @@ def parse_minerva_contents(filename):
 
     return minerva_data, minerva_num_events
 
+def is_beam_event(evid, filename):
+    data, _ = parse_contents(filename)
+    try:
+        io_group = data[
+            "charge/ext_trigs", evid
+        ]["iogroup"][0]
+        if io_group == 5:
+            return True
+        else:
+            return False
+    except:
+        return False
+    
+def get_all_beam_triggers(filename):
+    data, _ = parse_contents(filename)
+    all_beam_triggers = []
+    for evid, iogroup in enumerate(data["charge/ext_trigs/data"]["iogroup"]):
+        if iogroup == 5:
+            all_beam_triggers.append(evid)
+    return all_beam_triggers
 
-def create_3d_figure(minerva_data, data, evid):
+
+def create_3d_figure(minerva_data, data, filename, evid):
     fig = go.Figure()
     # Select the hits for the current event
-    event = data["charge/events", evid]
-    trigger = (
-        evid  # ((event["unix_ts"][:] + event["ts_start"][:]/1e7)/1.2).astype(int)[0]
-    )
-
+    beam_triggers = get_all_beam_triggers(filename) 
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
     try:
         finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
@@ -50,9 +68,36 @@ def create_3d_figure(minerva_data, data, evid):
         finalhits_ev = prompthits_ev
         print("No final hits found, plotting prompt hits")
 
+    # select the segments (truth) for the current event
+    try:
+        prompthits_segs = data[
+            "charge/events",
+            "charge/calib_prompt_hits",
+            "charge/packets",
+            "mc_truth/segments",
+            evid,
+        ]
+        sim_version = "minirun5"
+        print("Found truth info in minirun5 format")
+    except:
+        try:
+            prompthits_segs = data[
+                "charge/events", "charge/calib_prompt_hits", "charge/packets", evid
+            ]
+            sim_version = "data"
+            print("Found data")
+        except:
+            print("Cannot process this file type")
+            prompthits_segs = None
+
+    if evid in beam_triggers and sim_version=="data":
+        trigger = beam_triggers.index(evid)
+    if evid in beam_triggers and sim_version=="minirun5":
+        event = data["charge/events", evid]
+        trigger = ((event["unix_ts"][:] + event["ts_start"][:]/1e7)/1.2).astype(int)[0]
     if minerva_data is not None and evid < len(
         minerva_data["minerva"]["offsetX"].array(library="np")
-    ):
+    ) and is_beam_event(evid, filename):
         minerva = draw_minerva()
         fig.add_traces(minerva)
 
@@ -81,22 +126,19 @@ def create_3d_figure(minerva_data, data, evid):
             if n_nodes > 0:
                 x_nodes = (
                     minerva_hits_x[trigger][idx][:n_nodes]
-                    - minerva_hits_x_offset[trigger]
+                    #- minerva_hits_x_offset[trigger]
                 )
                 y_nodes = (
                     minerva_hits_y[trigger][idx][:n_nodes]
-                    - minerva_hits_y_offset[trigger]
+                    #- minerva_hits_y_offset[trigger]
                 )
                 z_nodes = minerva_hits_z[trigger][idx][
                     :n_nodes
                 ]  # - minerva_hits_z_offset[trigger]
                 q_nodes = minerva_trk_node_energy[trigger][:n_nodes]
-            print(minerva_hits_z[trigger][idx][:n_nodes])
-            print(minerva_hits_z_offset[trigger])
-            print(z_nodes)
             xs.append((x_nodes / 10).tolist())
-            ys.append((y_nodes / 10).tolist())
-            zs.append((z_nodes / 10 - 690).tolist())
+            ys.append((y_nodes / 10 - 21.8338).tolist())
+            zs.append((z_nodes / 10 - 691.3).tolist())
             qs.append((q_nodes).tolist())
         minerva_hit_traces = go.Scatter3d(
             x=[item for sublist in xs for item in sublist],
@@ -125,27 +167,7 @@ def create_3d_figure(minerva_data, data, evid):
             hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
         )
         fig.add_traces(minerva_hit_traces)
-    # select the segments (truth) for the current event
-    try:
-        prompthits_segs = data[
-            "charge/events",
-            "charge/calib_prompt_hits",
-            "charge/packets",
-            "mc_truth/segments",
-            evid,
-        ]
-        sim_version = "minirun5"
-        print("Found truth info in minirun5 format")
-    except:
-        try:
-            prompthits_segs = data[
-                "charge/events", "charge/calib_prompt_hits", "charge/packets", evid
-            ]
-            sim_version = "data"
-            print("Found data")
-        except:
-            print("Cannot process this file type")
-            prompthits_segs = None
+
 
     # Draw the TPC
     tpc_center, anodes, cathodes = draw_tpc(sim_version)
@@ -161,7 +183,7 @@ def create_3d_figure(minerva_data, data, evid):
         go.Cone(
             x=[10],
             y=[20],
-            z=[-65],
+            z=[-75],
             u=[0],
             v=[0],
             w=[1],
@@ -476,7 +498,7 @@ def draw_light_detectors(data, evid, sim_version):
     waveforms_all_detectors = get_waveforms_all_detectors(match_light, sim_version)
 
     drawn_objects = []
-    drawn_objects.extend(plot_light_traps(data, waveforms_all_detectors, sim_version))
+    drawn_objects.extend(plot_light_traps(data, waveforms_all_detectors))
 
     return drawn_objects
 
@@ -793,6 +815,104 @@ def plot_charge(data, evid):
             orientation="h", yref="container", yanchor="bottom", xanchor="center", x=0.5
         ),
     )
+    return fig
+
+
+def plot_2d_charge(data, evid):
+    # Create a subplot with 1 row and 3 columns
+    fig = make_subplots(rows=1, cols=3, subplot_titles=("XY", "XZ", "YZ"), horizontal_spacing=0.15)
+
+    # Select the hits for the current event
+    prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
+
+    # Define a colorscale and colorbar for the plots
+    colorscale = "cividis"
+    colorbar = dict(
+        title="Hit E [MeV]",
+        ticks="outside",
+        ticklen=3,
+        tickwidth=1,
+        showticklabels=True,
+    )
+
+    # Add 2D projections of the prompt hits
+    prompthits_traces_xy = go.Scatter(
+        x=prompthits_ev.data["x"].flatten(),
+        y=prompthits_ev.data["y"].flatten(),
+        mode="markers",
+        marker=dict(
+            size=5,
+            opacity=0.7,
+            color=prompthits_ev.data["E"].flatten(),
+            colorscale=colorscale,
+            colorbar=colorbar,
+            showscale=False,
+        ),
+    )
+
+    prompthits_traces_xz = go.Scatter(
+        x=prompthits_ev.data["x"].flatten(),
+        y=prompthits_ev.data["z"].flatten(),
+        mode="markers",
+        marker=dict(
+            size=5,
+            opacity=0.7,
+            color=prompthits_ev.data["E"].flatten(),
+            colorscale=colorscale,
+            colorbar=colorbar,
+            showscale=False,
+        ),
+    )
+
+    prompthits_traces_yz = go.Scatter(
+        x=prompthits_ev.data["y"].flatten(),
+        y=prompthits_ev.data["z"].flatten(),
+        mode="markers",
+        marker=dict(
+            size=5,
+            opacity=0.7,
+            color=prompthits_ev.data["E"].flatten(),
+            colorscale=colorscale,
+            colorbar=colorbar,
+            showscale=False,
+        ),
+    )
+
+    # Add a dummy trace with the desired colorbar
+    dummy_trace = go.Scatter(
+        x=[None],
+        y=[None],
+        mode="markers",
+        marker=dict(
+            size=5,
+            opacity=0.7,
+            colorscale=colorscale,
+            colorbar=colorbar,
+            showscale=True,
+        ),
+        showlegend=False,
+    )
+
+    # Add traces to the subplots
+    fig.add_trace(prompthits_traces_xy, row=1, col=1)
+    fig.add_trace(prompthits_traces_xz, row=1, col=2)
+    fig.add_trace(prompthits_traces_yz, row=1, col=3)
+    fig.add_trace(dummy_trace, row=1, col=3)  # Add the dummy trace to one of the subplots
+
+    # Add x and y axis labels to the subplots
+    fig.update_xaxes(title_text="x [cm]", row=1, col=1, showgrid=False, range=[-60, 60])
+    fig.update_yaxes(title_text="y [cm]", row=1, col=1, showgrid=False, range=[-60, 60])
+
+    fig.update_xaxes(title_text="x [cm]", row=1, col=2, showgrid=False, range=[-60, 60])
+    fig.update_yaxes(title_text="z [cm]", row=1, col=2, showgrid=False, range=[-60, 60])
+
+    fig.update_xaxes(title_text="y [cm]", row=1, col=3, showgrid=False, range=[-60, 60])
+    fig.update_yaxes(title_text="z [cm]", row=1, col=3, showgrid=False, range=[-60, 60])
+
+    fig.update_layout(
+        showlegend=False
+    )
+
     return fig
 
 

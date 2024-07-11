@@ -19,9 +19,11 @@ from dash_extensions.enrich import Output, DashProxy, Input, State
 from display_utils import (
     parse_contents,
     parse_minerva_contents,
+    is_beam_event,
     create_3d_figure,
     plot_waveform,
     plot_charge,
+    plot_2d_charge,
 )
 
 from os.path import basename
@@ -79,6 +81,7 @@ app.layout = html.Div(
         # Event ID buttons
         html.Button("Previous Event", id="prev-button", n_clicks=0),
         html.Button("Next Event", id="next-button", n_clicks=0),
+        html.Button("Next Beam Event", "beam-button", n_clicks=0),
         html.Div(id="evid-div", style={"textAlign": "center"}),
         html.Div(children="", id="event-time-div"),
         # Graphs
@@ -114,6 +117,11 @@ app.layout = html.Div(
             ],
             style={"display": "flex"},
         ),
+        html.Div(
+            [
+                html.Div([dcc.Graph(id='2d-plots')], style={"float": "left", "width": "40vw"}),
+            ],
+        )
     ]
 )
 
@@ -207,7 +215,28 @@ def set_evid(value, max_value):
         else:
             return value
 
-
+@app.callback(
+    Output("event-id", "data", allow_duplicate=True),
+    Input("beam-button", "n_clicks"),
+    Input("filename", "data"),
+    State("event-id", "data"),
+    State("data-length", "data"),
+    prevent_initial_call=True,
+)
+def next_beam_event(n,filename, evid, max_value):
+    """Increment the event ID with the button"""
+    if n > 0:
+        new_evid = evid + 1
+        # check if beam event
+        # otherwise increment until beam event
+        while new_evid < max_value:
+            if is_beam_event(new_evid, filename):
+                return new_evid
+            new_evid += 1
+        return new_evid
+    else:
+        return 0
+    
 @app.callback(
     Output("evid-div", "children"),
     Input("event-id", "data"),
@@ -245,7 +274,7 @@ def update_graph(filename, minerva_filename, evid):
         minerva_data, _ = parse_minerva_contents(minerva_filename)
     if filename is not None:
         data, _ = parse_contents(filename)
-        graph, sim_version = create_3d_figure(minerva_data, data, evid)
+        graph, sim_version = create_3d_figure(minerva_data, data, filename, evid)
     event_datetime = datetime.utcfromtimestamp(
         data["charge/events", evid]["unix_ts"][0]
     ).strftime("%Y-%m-%d %H:%M:%S")
@@ -255,6 +284,16 @@ def update_graph(filename, minerva_filename, evid):
         event_datetime,
     )  # TODO: move to utils
 
+@app.callback(
+    Output("2d-plots", "figure"),
+    Input("filename", "data"),
+    Input("event-id", "data"),
+    prevent_initial_call=True,
+)
+def update_2d_plots(filename, evid):
+    if filename is not None:
+        data, _ = parse_contents(filename)
+        return plot_2d_charge(data, evid)
 
 @app.callback(
     Input("filename", "data"),
@@ -279,7 +318,6 @@ def update_light_waveform(filename, evid, sim_version, graph, click_data):
                 data, _ = parse_contents(filename)
                 return plot_waveform(data, evid, opid, sim_version)
         except Exception as e:
-            print(e)
             print("That is not a light trap, no waveform to plot")
     return go.Figure()
 
