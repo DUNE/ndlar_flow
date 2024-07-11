@@ -51,9 +51,9 @@ def is_beam_event(evid, filename):
 def get_all_beam_triggers(filename):
     data, _ = parse_contents(filename)
     all_beam_triggers = []
-    for evid, iogroup in enumerate(data["charge/ext_trigs/data"]["iogroup"]):
+    for ev_id, iogroup in enumerate(data["charge/ext_trigs/data"]["iogroup"]):
         if iogroup == 5:
-            all_beam_triggers.append(evid)
+            all_beam_triggers.append(ev_id)
     return all_beam_triggers
 
 
@@ -89,18 +89,23 @@ def create_3d_figure(minerva_data, data, filename, evid):
         except:
             print("Cannot process this file type")
             prompthits_segs = None
-
+    event = data["charge/events", evid]
     if evid in beam_triggers and sim_version=="data":
-        trigger = beam_triggers.index(evid)
+        #trigger = beam_triggers.index(evid)
+        minerva_times = minerva_data["minerva"]["ev_gps_time_sec"].array(library="np")+minerva_data["minerva"]["ev_gps_time_usec"].array(library="np")/1e6
+        charge_time = (event["unix_ts"][:]+ event["ts_start"][:]/1e7)[0]
+        # find the index of the minerva_times that matches the charge_time
+        trigger = np.argmin(np.abs(minerva_times - charge_time))
     if evid in beam_triggers and sim_version=="minirun5":
-        event = data["charge/events", evid]
         trigger = ((event["unix_ts"][:] + event["ts_start"][:]/1e7)/1.2).astype(int)[0]
     if minerva_data is not None and evid < len(
         minerva_data["minerva"]["offsetX"].array(library="np")
-    ) and is_beam_event(evid, filename):
+    ) and is_beam_event(evid, filename) and np.abs(minerva_times[trigger] - charge_time) < 1:
         minerva = draw_minerva()
         fig.add_traces(minerva)
-
+        print(trigger)
+        print(minerva_times[trigger])
+        print(charge_time)
         minerva_hits_x_offset = minerva_data["minerva"]["offsetX"].array(library="np")
         minerva_hits_y_offset = minerva_data["minerva"]["offsetY"].array(library="np")
         minerva_hits_z_offset = minerva_data["minerva"]["offsetZ"].array(library="np")
@@ -205,11 +210,11 @@ def create_3d_figure(minerva_data, data, filename, evid):
                     showarrow=False,
                     x=10,
                     y=20,
-                    z=-70,
+                    z=-75,
                     text="Beam",
                     xanchor="right",
                     xshift=10,
-                    opacity=0.7,
+                    opacity=0.8,
                 )
             ],
             #  xaxis = dict( # to make the background white
