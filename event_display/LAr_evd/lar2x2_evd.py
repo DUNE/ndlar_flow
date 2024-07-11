@@ -22,7 +22,7 @@ from matplotlib import cm, colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.image as mpimg
 from PIL import Image
-
+from math import fabs
 
 
 
@@ -82,7 +82,7 @@ class LArEventDisplay:
         self.hits_full = f['charge/'+self.hits_dset+'/data']
         self.hits_ref = f['charge/events/ref/charge/'+self.hits_dset+'/ref']
         self.hits_region = f['charge/events/ref/charge/'+self.hits_dset+'/ref_region']
-        self.charge_threshold = 8.#10.
+        self.charge_threshold = 10.
         self.light_threshold = 3e5
         if self.show_light:
             # Load light event and waveform datasets
@@ -148,6 +148,17 @@ class LArEventDisplay:
         if self.show_light:
             self.light_cbar_ax = light_cbar_ax
 
+        # Setup 3D view angles for GIFs
+        self.base_angle = list(range(-180,180,2))
+        self.azimuths = [ba for ba in self.base_angle]
+        self.zeniths = [fabs(ba*0.25) for ba in self.base_angle]
+        # Shift angles relative to improve perspectives
+        self.offset = int(len(self.base_angle)/6)
+        self.azimuths = self.azimuths[self.offset:] + self.azimuths[:self.offset]
+        self.zeniths = self.zeniths[self.offset:] + self.zeniths[:self.offset]
+        # Set view zoom
+        self.zooms = [10,]*len(self.azimuths)
+
 
     def run(self):
   
@@ -173,6 +184,18 @@ class LArEventDisplay:
                 sys.exit()
             elif user_input[0].lower() == 's':
                 plt.savefig(self.filename+'_Event_'+str(ev_id)+'.pdf')
+            elif user_input[0].lower() == 'g':
+                print("Creating GIF of Event Display")
+                # Loop over 3D views
+                gif_dir = '/global/cfs/cdirs/dune/users/ehinkle/nd_prototypes_ana/2x2_sim/run-ndlar-flow/ndlar_flow/event_display/LAr_evd/'
+                frame_num = 0
+                for (azi,zen,zoom) in zip(self.azimuths,self.zeniths,self.zooms):
+                    self.ax_bdv.view_init(zen, azi)   # see mpl_toolkits.mplot3d.axes3d.Axes3D.view_init
+                    self.ax_bdv.dist = zoom
+                    figname = gif_dir+'frame_%04d_%04d.png' % (ev_id, frame_num)
+                    self.fig.savefig(figname)
+                    frame_num += 1
+                os.system("convert -delay 10 "+gif_dir+"frame*.png animated_"+str(ev_id)+".gif")
             else:
                 try:
                     clear_output(wait=True)
@@ -206,6 +229,7 @@ class LArEventDisplay:
         print("Charge Unix TS:", event['unix_ts'])
         print("Charge TS Start:", event['ts_start'])
         print("Charge TS End:", event['ts_end'])
+        print("Module RO Bounds:", self.geometry.attrs['module_RO_bounds'])
         ev_id = event['id']
         hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
         hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
@@ -609,43 +633,43 @@ class LArEventDisplay:
                                     [y-2, y+2],color=cmap_value, alpha=1, linewidth=5, solid_capstyle='butt')
 
         # Plot light for XYZ (beam, drift, vertical) 3D view: 
-        #for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
-        #    pos=self.sipm_abs_pos[(i,j)][0]
-        #    det_id = self.light_det_id[(i,j)][0]
-        #    wvfm_factor = 1.
-        #    if det_id in acl_det_ids:
-        #        wvfm_factor = 2.
-        #    if pos[0]==-1:
-        #        continue
-        #    this_xyz_sum = wvfm_factor*light_wvfms[0][i,j].sum()
-        #    if this_xyz_sum < self.light_threshold: continue
-        #    if this_xyz_sum==0:
-        #        cmap_value = light_cmap_zero(0)
-        #        #print("Zero light sum at:", pos)
-        #    else:
-        #        cmap_value = light_cmap(light_norm(this_xyz_sum))
-        #    z_diffs = [abs(pos[2]-self.geometry.attrs['module_RO_bounds'][k][l][2]) for k,l in itertools.product(range(len(self.geometry.attrs['module_RO_bounds'])),range(2))]
-        #    z_diffs = np.reshape(z_diffs, np.shape(self.geometry.attrs['module_RO_bounds'][:,:,2]))
-        #    min_z_diff = np.where(abs(z_diffs)<1)
-        #    z_pos = self.geometry.attrs['module_RO_bounds'][:,:,2][min_z_diff][0]
-        #    #print("Z pos:", z_pos)
-        #    true_x = self.convert_light_x(i,j,pos[0])
-        #    found_x = 0
-        #    for k in range(len(self.geometry.attrs['module_RO_bounds'])):
-        #        if (abs(true_x-self.geometry.attrs['module_RO_bounds'][k][0][0]) < 1):
-        #            x1 = self.geometry.attrs['module_RO_bounds'][k][0][0]
-        #            x2 = self.geometry.attrs['module_RO_bounds'][k][0][0]+self.geometry.attrs['max_drift_distance']
-        #            found_x = 1
-        #        elif (abs(true_x-self.geometry.attrs['module_RO_bounds'][k][1][0]) < 1):
-        #            x1 = self.geometry.attrs['module_RO_bounds'][k][1][0]-self.geometry.attrs['max_drift_distance']
-        #            x2 = self.geometry.attrs['module_RO_bounds'][k][1][0]
-        #            found_x = 1
-        #        if found_x ==1:
-        #            light_x, light_y, light_z = make_z_plane(x1,x2, pos[1]-2, pos[1]+2,z_pos)
-        #            self.ax_bdv.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.1, shade=False)
-        #            #print("Light sum at:", pos, "is", this_xyz_sum)
-        #            break
-        #        else: continue
+        for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
+            pos=self.sipm_abs_pos[(i,j)][0]
+            det_id = self.light_det_id[(i,j)][0]
+            wvfm_factor = 1.
+            if det_id in acl_det_ids:
+                wvfm_factor = 2.
+            if pos[0]==-1:
+                continue
+            this_xyz_sum = wvfm_factor*light_wvfms[0][i,j].sum()
+            if this_xyz_sum < self.light_threshold: continue
+            if this_xyz_sum==0:
+                cmap_value = light_cmap_zero(0)
+                #print("Zero light sum at:", pos)
+            else:
+                cmap_value = light_cmap(light_norm(this_xyz_sum))
+            z_diffs = [abs(pos[2]-self.geometry.attrs['module_RO_bounds'][k][l][2]) for k,l in itertools.product(range(len(self.geometry.attrs['module_RO_bounds'])),range(2))]
+            z_diffs = np.reshape(z_diffs, np.shape(self.geometry.attrs['module_RO_bounds'][:,:,2]))
+            min_z_diff = np.where(abs(z_diffs)<1)
+            z_pos = self.geometry.attrs['module_RO_bounds'][:,:,2][min_z_diff][0]
+            #print("Z pos:", z_pos)
+            true_x = self.convert_light_x(i,j,pos[0])
+            found_x = 0
+            for k in range(len(self.geometry.attrs['module_RO_bounds'])):
+                if (abs(true_x-self.geometry.attrs['module_RO_bounds'][k][0][0]) < 1):
+                    x1 = self.geometry.attrs['module_RO_bounds'][k][0][0]
+                    x2 = self.geometry.attrs['module_RO_bounds'][k][0][0]+self.geometry.attrs['max_drift_distance']
+                    found_x = 1
+                elif (abs(true_x-self.geometry.attrs['module_RO_bounds'][k][1][0]) < 1):
+                    x1 = self.geometry.attrs['module_RO_bounds'][k][1][0]-self.geometry.attrs['max_drift_distance']
+                    x2 = self.geometry.attrs['module_RO_bounds'][k][1][0]
+                    found_x = 1
+                if found_x ==1:
+                    light_x, light_y, light_z = make_z_plane(x1,x2, pos[1]-2, pos[1]+2,z_pos)
+                    self.ax_bdv.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.1, shade=False)
+                    #print("Light sum at:", pos, "is", this_xyz_sum)
+                    break
+                else: continue
 #
 
 # Helper functions outside of main class
