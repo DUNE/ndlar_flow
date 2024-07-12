@@ -24,6 +24,7 @@ from display_utils import (
     plot_waveform,
     plot_charge,
     plot_2d_charge,
+    plot_charge_energy,
 )
 
 from os.path import basename
@@ -50,81 +51,153 @@ app.layout = html.Div(
         dcc.Store(id="event-time", data=0),
         dcc.Store(id="sim-version", data=0),
         # Header
-        html.H2(children="2x2 event display", style={"textAlign": "left"}),
-        html.Div(children="", id="filename-div", style={"textAlign": "left"}),
-        html.Div(children="", id="minerva-filename-div", style={"textAlign": "left"}),
-        # File input
-        dcc.Input(
-            id="file-path", type="text", placeholder="Enter a file path", debounce=True
-        ),
-        html.Button("Load File", id="load-button", n_clicks=0),
-        dcc.Input(
-            id="minerva-file-path",
-            type="text",
-            placeholder="Enter a minerva file path",
-            debounce=True,
-        ),
-        html.Button("Load Minerva File", id="load-minerva-button", n_clicks=0),
-        # Event ID input box
-        dcc.Input(
-            id="input-evid",
-            type="number",
-            placeholder="0",
-            debounce=True,
+        html.Div(
+            [
+                # Text and buttons on the left
+                html.Div(
+                    [
+                        # Header
+                        html.H2(
+                            children="2x2 event display", style={"textAlign": "left"}
+                        ),
+                        html.Div(
+                            children="", id="filename-div", style={"textAlign": "left"}
+                        ),
+                        html.Div(
+                            children="",
+                            id="minerva-filename-div",
+                            style={"textAlign": "left"},
+                        ),
+                        # File input
+                        dcc.Input(
+                            id="file-path",
+                            type="text",
+                            placeholder="Enter a file path",
+                            debounce=True,
+                        ),
+                        html.Button("Load File", id="load-button", n_clicks=0),
+                        dcc.Input(
+                            id="minerva-file-path",
+                            type="text",
+                            placeholder="Enter a minerva file path",
+                            debounce=True,
+                        ),
+                        html.Button(
+                            "Load Minerva File", id="load-minerva-button", n_clicks=0
+                        ),
+                        # Event ID input box
+                        dcc.Input(
+                            id="input-evid",
+                            type="number",
+                            placeholder="0",
+                            debounce=True,
+                            style={
+                                "width": "6em",
+                                "display": "inline-block",
+                                "margin-right": "0.5em",
+                                "margin-left": "0.5em",
+                            },
+                        ),
+                        # Event ID buttons
+                        html.Button("Previous Event", id="prev-button", n_clicks=0),
+                        html.Button("Next Event", id="next-button", n_clicks=0),
+                        html.Button("Next Beam Event", "beam-button", n_clicks=0),
+                        html.Div(
+                            [
+                                html.Div(id="evid-div", style={"textAlign": "center", "display": "inline-block", "margin-right": "10px"}),
+                                html.Div(children="", id="event-time-div", style={"display": "inline-block"}),
+                            ]
+                        ),
+                    ],
+                    style={"display": "inline-block"},
+                ),
+                # Logo on the right
+                html.Div(
+                    [
+                        html.Img(src="assets/2x2logo.png", style={"height": "5vh"}),
+                        html.Img(src="assets/DUNElogo.png", style={"height": "5vh"}),
+                    ],
+                    style={"display": "inline-block"},
+                ),
+            ],
             style={
-                "width": "6em",
-                "display": "inline-block",
-                "margin-right": "0.5em",
-                "margin-left": "0.5em",
+                "display": "flex",
+                "justify-content": "space-between",
+                "align-items": "flex-start",
             },
         ),
-        # Event ID buttons
-        html.Button("Previous Event", id="prev-button", n_clicks=0),
-        html.Button("Next Event", id="next-button", n_clicks=0),
-        html.Button("Next Beam Event", "beam-button", n_clicks=0),
-        html.Div(id="evid-div", style={"textAlign": "center"}),
-        html.Div(children="", id="event-time-div"),
         # Graphs
         html.Div(
             [
-                # Large 3D graph on the left
-                html.Div(
-                    dcc.Graph(
-                        id="3d-graph",
-                        style={"height": "70vh", "width": "60vw", "float": "left"},
-                    )
-                ),
-                # Smaller Graphs on the right
+                # First row
                 html.Div(
                     [
-                        # Light waveform graph on the top
+                        # Large 3D graph on the left
+                        html.Div(
+                            dcc.Graph(
+                                id="3d-graph",
+                                style={
+                                    "height": "65vh",
+                                    "width": "68vw",
+                                    "float": "left",
+                                },
+                            ),
+                        ),
+                        # 2D plots on the right
+                        html.Div(
+                            dcc.Graph(id="2d-plots"),
+                            style={"height": "65vh", "width": "28vw", "float": "right"},
+                        ),
+                    ],
+                    style={"display": "flex"},
+                ),
+                # Second row
+                html.Div(
+                    [
+                        # Light waveform graph on the left
                         html.Div(
                             dcc.Graph(
                                 id="light-waveform",
-                                style={"height": "35vh", "width": "40vw"},
-                            )
+                                style={
+                                    "height": "25vh",
+                                    "width": "29vw",
+                                    "float": "left",
+                                },
+                            ),
                         ),
-                        # Charge graph on the bottom
+                        # Charge graph in the middle
                         html.Div(
                             dcc.Graph(
                                 id="charge-hist",
-                                style={"height": "35vh", "width": "40vw"},
-                            )
+                                style={
+                                    "height": "25vh",
+                                    "width": "29vw",
+                                    "float": "left",
+                                },
+                            ),
+                        ),
+                        # Placeholder for the charge-energy graph on the right
+                        html.Div(
+                            dcc.Graph(
+                                id="charge-energy-hist",
+                                style={
+                                    "height": "20vh",
+                                    "width": "29vw",
+                                    "float": "right",
+                                },
+                            ),
                         ),
                     ],
-                    style={"float": "right"},
+                    style={
+                        "display": "flex",
+                        "justify-content": "space-between",
+                        "align-items": "flex-start",
+                    },
                 ),
             ],
-            style={"display": "flex"},
         ),
-        html.Div(
-            [
-                html.Div([dcc.Graph(id='2d-plots')], style={"float": "left", "width": "40vw"}),
-            ],
-        )
-    ]
+    ],
 )
-
 
 # Callbacks
 
@@ -215,6 +288,7 @@ def set_evid(value, max_value):
         else:
             return value
 
+
 @app.callback(
     Output("event-id", "data", allow_duplicate=True),
     Input("beam-button", "n_clicks"),
@@ -223,7 +297,7 @@ def set_evid(value, max_value):
     State("data-length", "data"),
     prevent_initial_call=True,
 )
-def next_beam_event(n,filename, evid, max_value):
+def next_beam_event(n, filename, evid, max_value):
     """Increment the event ID with the button"""
     if n > 0:
         new_evid = evid + 1
@@ -236,7 +310,8 @@ def next_beam_event(n,filename, evid, max_value):
         return new_evid
     else:
         return 0
-    
+
+
 @app.callback(
     Output("evid-div", "children"),
     Input("event-id", "data"),
@@ -254,7 +329,7 @@ def update_div(evid, max_value):
 )
 def update_time(_, time):
     """Update the time display"""
-    return f"{time}"
+    return f"Event time: {time}"
 
 
 # Callback to display the event
@@ -284,6 +359,7 @@ def update_graph(filename, minerva_filename, evid):
         event_datetime,
     )  # TODO: move to utils
 
+
 @app.callback(
     Output("2d-plots", "figure"),
     Input("filename", "data"),
@@ -294,6 +370,7 @@ def update_2d_plots(filename, evid):
     if filename is not None:
         data, _ = parse_contents(filename)
         return plot_2d_charge(data, evid)
+
 
 @app.callback(
     Input("filename", "data"),
@@ -319,6 +396,13 @@ def update_light_waveform(filename, evid, sim_version, graph, click_data):
                 return plot_waveform(data, evid, opid, sim_version)
         except Exception as e:
             print("That is not a light trap, no waveform to plot")
+    else:
+        det_id = 0
+        tpc_id = 0
+        opid = (det_id, tpc_id)
+        if filename is not None:
+            data, _ = parse_contents(filename)
+            return plot_waveform(data, evid, opid, sim_version)
     return go.Figure()
 
 
@@ -333,6 +417,19 @@ def update_charge_histogram(filename, evid):
     if filename is not None:
         data, _ = parse_contents(filename)
         return plot_charge(data, evid)
+    return go.Figure()
+
+@app.callback(
+    Output("charge-energy-hist", "figure"),
+    Input("filename", "data"),
+    Input("event-id", "data"),
+    prevent_initial_call=True,
+)
+def update_charge_energy_histogram(filename, evid):
+    """Update the charge-energy graph when the event ID is changed"""
+    if filename is not None:
+        data, _ = parse_contents(filename)
+        return plot_charge_energy(data, evid)
     return go.Figure()
 
 

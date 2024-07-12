@@ -35,19 +35,19 @@ def parse_minerva_contents(filename):
 
     return minerva_data, minerva_num_events
 
+
 def is_beam_event(evid, filename):
     data, _ = parse_contents(filename)
     try:
-        io_group = data[
-            "charge/ext_trigs", evid
-        ]["iogroup"][0]
+        io_group = data["charge/ext_trigs", evid]["iogroup"][0]
         if io_group == 5:
             return True
         else:
             return False
     except:
         return False
-    
+
+
 def get_all_beam_triggers(filename):
     data, _ = parse_contents(filename)
     all_beam_triggers = []
@@ -59,8 +59,20 @@ def get_all_beam_triggers(filename):
 
 def create_3d_figure(minerva_data, data, filename, evid):
     fig = go.Figure()
+    # Add watermark
+    fig.add_annotation(
+        text="DUNE 2x2",
+        xref="paper",
+        yref="paper",
+        x=0.95,
+        y=0.05,
+        showarrow=False,
+        font=dict(size=30, color="#ffebc9", family="Arial Black"),
+        textangle=-30,
+        opacity=0.5,
+    )
     # Select the hits for the current event
-    beam_triggers = get_all_beam_triggers(filename) 
+    beam_triggers = get_all_beam_triggers(filename)
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
     try:
         finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
@@ -90,22 +102,28 @@ def create_3d_figure(minerva_data, data, filename, evid):
             print("Cannot process this file type")
             prompthits_segs = None
     event = data["charge/events", evid]
-    if evid in beam_triggers and sim_version=="data":
-        #trigger = beam_triggers.index(evid)
-        minerva_times = minerva_data["minerva"]["ev_gps_time_sec"].array(library="np")+minerva_data["minerva"]["ev_gps_time_usec"].array(library="np")/1e6
-        charge_time = (event["unix_ts"][:]+ event["ts_start"][:]/1e7)[0]
+    if evid in beam_triggers and sim_version == "data":
+        # trigger = beam_triggers.index(evid)
+        minerva_times = (
+            minerva_data["minerva"]["ev_gps_time_sec"].array(library="np")
+            + minerva_data["minerva"]["ev_gps_time_usec"].array(library="np") / 1e6
+        )
+        charge_time = (event["unix_ts"][:] + event["ts_start"][:] / 1e7)[0]
         # find the index of the minerva_times that matches the charge_time
         trigger = np.argmin(np.abs(minerva_times - charge_time))
-    if evid in beam_triggers and sim_version=="minirun5":
-        trigger = ((event["unix_ts"][:] + event["ts_start"][:]/1e7)/1.2).astype(int)[0]
-    if minerva_data is not None and evid < len(
-        minerva_data["minerva"]["offsetX"].array(library="np")
-    ) and is_beam_event(evid, filename) and np.abs(minerva_times[trigger] - charge_time) < 1:
+    if evid in beam_triggers and sim_version == "minirun5":
+        trigger = ((event["unix_ts"][:] + event["ts_start"][:] / 1e7) / 1.2).astype(
+            int
+        )[0]
+    if (
+        minerva_data is not None
+        # and evid < len(minerva_data["minerva"]["offsetX"].array(library="np"))
+        and is_beam_event(evid, filename)
+        and np.abs(minerva_times[trigger] - charge_time) < 1
+    ):
         minerva = draw_minerva()
         fig.add_traces(minerva)
-        print(trigger)
-        print(minerva_times[trigger])
-        print(charge_time)
+
         minerva_hits_x_offset = minerva_data["minerva"]["offsetX"].array(library="np")
         minerva_hits_y_offset = minerva_data["minerva"]["offsetY"].array(library="np")
         minerva_hits_z_offset = minerva_data["minerva"]["offsetZ"].array(library="np")
@@ -131,11 +149,11 @@ def create_3d_figure(minerva_data, data, filename, evid):
             if n_nodes > 0:
                 x_nodes = (
                     minerva_hits_x[trigger][idx][:n_nodes]
-                    #- minerva_hits_x_offset[trigger]
+                    # - minerva_hits_x_offset[trigger]
                 )
                 y_nodes = (
                     minerva_hits_y[trigger][idx][:n_nodes]
-                    #- minerva_hits_y_offset[trigger]
+                    # - minerva_hits_y_offset[trigger]
                 )
                 z_nodes = minerva_hits_z[trigger][idx][
                     :n_nodes
@@ -153,7 +171,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
             marker={
                 "size": 1.75,
                 "opacity": 0.7,
-                "colorscale": "cividis",
+                "colorscale": "viridis",
                 "colorbar": {
                     "title": "Mx2 E [MeV]",
                     "titlefont": {"size": 12},
@@ -172,7 +190,6 @@ def create_3d_figure(minerva_data, data, filename, evid):
             hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
         )
         fig.add_traces(minerva_hit_traces)
-
 
     # Draw the TPC
     tpc_center, anodes, cathodes = draw_tpc(sim_version)
@@ -203,6 +220,13 @@ def create_3d_figure(minerva_data, data, filename, evid):
         font=dict(size=14),
         plot_bgcolor="white",
         legend=dict(orientation="h"),
+        margin=dict(
+                l=50,  # left margin
+                r=50,  # right margin
+                b=20,  # bottom margin
+                t=20,  # top margin
+                pad=10,  # padding
+            ),
         scene=dict(
             xaxis_title="x [cm]",
             annotations=[
@@ -217,21 +241,24 @@ def create_3d_figure(minerva_data, data, filename, evid):
                     opacity=0.8,
                 )
             ],
-            #  xaxis = dict( # to make the background white
-            #  backgroundcolor="white",
-            #  gridcolor="white",
-            #  showbackground=True,
-            #  zerolinecolor="white",),
-            #  yaxis = dict(
-            #  backgroundcolor="white",
-            #  gridcolor="white",
-            #  showbackground=True,
-            #  zerolinecolor="white",),
-            #  zaxis = dict(
-            #  backgroundcolor="white",
-            #  gridcolor="white",
-            #  showbackground=True,
-            #  zerolinecolor="white",),
+            xaxis=dict(  # to make the background white
+                backgroundcolor="#FFFCF2",
+                gridcolor="white",
+                showbackground=True,
+                zerolinecolor="white",
+            ),
+            yaxis=dict(
+                backgroundcolor="#FFFCF2",
+                gridcolor="white",
+                showbackground=True,
+                zerolinecolor="white",
+            ),
+            zaxis=dict(
+                backgroundcolor="#FFFCF2",
+                gridcolor="white",
+                showbackground=True,
+                zerolinecolor="white",
+            ),
             yaxis_title="y [cm]",
             zaxis_title="z [cm]",
             camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.0, z=-1.0)),
@@ -251,8 +278,8 @@ def create_3d_figure(minerva_data, data, filename, evid):
         ].flatten(),  # convert to MeV from GeV for minirun4
         marker={
             "size": 1.75,
-            "opacity": 0.7,
-            "colorscale": "cividis",
+            "opacity": 0.9,
+            "colorscale": "viridis",
             "colorbar": {
                 "title": "Hit E [MeV]",
                 "titlefont": {"size": 12},
@@ -266,7 +293,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
         name="prompt hits",
         mode="markers",
         showlegend=True,
-        opacity=0.7,
+        opacity=0.9,
         customdata=prompthits_ev.data["E"].flatten(),
         hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
     )
@@ -280,8 +307,8 @@ def create_3d_figure(minerva_data, data, filename, evid):
         marker_color=finalhits_ev.data["E"].flatten(),
         marker={
             "size": 1.75,
-            "opacity": 0.7,
-            "colorscale": "Plasma",
+            "opacity": 0.9,
+            "colorscale": "ylorrd",
             "colorbar": {
                 "title": "Hit energy [MeV]",
                 "titlefont": {"size": 12},
@@ -296,7 +323,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
         mode="markers",
         visible="legendonly",
         showlegend=True,
-        opacity=0.7,
+        opacity=0.9,
         customdata=finalhits_ev.data["E"].flatten(),
         hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
     )
@@ -645,7 +672,7 @@ def plot_light_traps(data, waveforms_all_detectors):
             ],
         ]
         det_label = f"det_id_{det_id}_tpc_{tpc}"
-
+        light_color_value = light_color[0][1]
         light_plane = go.Surface(
             x=xs,
             y=ys,
@@ -666,6 +693,18 @@ def plot_light_traps(data, waveforms_all_detectors):
 def plot_waveform(data, evid, opid, sim_version):
     match_light = match_light_to_charge_event(data, evid)
     fig = go.Figure()
+    # Add watermark
+    fig.add_annotation(
+        text="DUNE 2x2",
+        xref="paper",
+        yref="paper",
+        x=0.95,
+        y=0.05,
+        showarrow=False,
+        font=dict(size=30, color="#ffebc9", family="Arial Black"),
+        textangle=-30,
+        opacity=0.5,
+    )
     det_id_click, tpc_click = opid
     print(f"Plotting waveform for light trap {det_id_click} in TPC {tpc_click}")
     if match_light is None or np.ma.all(match_light.mask) == True:
@@ -768,12 +807,20 @@ def plot_waveform(data, evid, opid, sim_version):
             )
         )
 
-    fig.update_xaxes(title_text="Time [ticks] (16 ns)")
-    fig.update_yaxes(title_text="Adc counts")
+    fig.update_xaxes(title_text="Time [ticks] (16 ns)", showgrid=False)
+    fig.update_yaxes(title_text="Adc counts", showgrid=False)
     fig.update_layout(
         title_text=f"Waveforms for light trap {det_id_click} in TPC {tpc_click}",
         legend=dict(
             orientation="h", yref="container", yanchor="bottom", xanchor="center", x=0.5
+        ),
+        plot_bgcolor="#FFFCF2",
+        margin=dict(
+            l=20,  # left margin
+            r=20,  # right margin
+            b=20,  # bottom margin
+            t=30,  # top margin
+            pad=10,  # padding
         ),
     )
     return fig
@@ -791,6 +838,18 @@ def plot_charge(data, evid):
     ][0, :, 0]
 
     fig = go.Figure()
+    # Add watermark
+    fig.add_annotation(
+        text="DUNE 2x2",
+        xref="paper",
+        yref="paper",
+        x=0.95,
+        y=0.05,
+        showarrow=False,
+        font=dict(size=30, color="#ffebc9", family="Arial Black"),
+        textangle=-30,
+        opacity=0.5,
+    )
 
     for i in range(0, 8):
         time_io = time[io_group == i + 1]
@@ -810,14 +869,72 @@ def plot_charge(data, evid):
         # Add labels and title
         fig.update_xaxes(
             title_text="packets timestamp",
+            showgrid=False,
         )
         fig.update_yaxes(
             title_text="charge [ke-]",
+            showgrid=False,
         )
     fig.update_layout(
         title_text=f"Charge histogram for event {evid}",
         legend=dict(
             orientation="h", yref="container", yanchor="bottom", xanchor="center", x=0.5
+        ),
+        plot_bgcolor="#FFFCF2",
+        margin=dict(
+            l=20,  # left margin
+            r=20,  # right margin
+            b=20,  # bottom margin
+            t=30,  # top margin
+            pad=10,  # padding
+        ),
+    )
+    return fig
+
+
+def plot_charge_energy(data, evid):
+    prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
+    energy = prompthits_ev.data["E"].flatten()
+    fig = go.Figure()
+    # Add watermark
+    fig.add_annotation(
+        text="DUNE 2x2",
+        xref="paper",
+        yref="paper",
+        x=0.95,
+        y=0.05,
+        showarrow=False,
+        font=dict(size=30, color="#ffebc9", family="Arial Black"),
+        textangle=-30,
+        opacity=0.5,
+    )
+
+    fig.add_trace(
+        go.Histogram(
+            x=energy,
+            nbinsx=20,
+            name="Energy",
+            showlegend=False,
+        ),
+    )
+
+    fig.update_xaxes(
+        title_text="Energy [MeV]",
+        showgrid=False,
+    )
+    fig.update_yaxes(
+        title_text="Hit count",
+        showgrid=False,
+    )
+    fig.update_layout(
+        title_text=f"Energy histogram for event {evid}",
+        plot_bgcolor="#FFFCF2",
+        margin=dict(
+            l=20,  # left margin
+            r=20,  # right margin
+            b=20,  # bottom margin
+            t=30,  # top margin
+            pad=10,  # padding
         ),
     )
     return fig
@@ -825,13 +942,25 @@ def plot_charge(data, evid):
 
 def plot_2d_charge(data, evid):
     # Create a subplot with 1 row and 3 columns
-    fig = make_subplots(rows=1, cols=3, subplot_titles=("XY", "XZ", "YZ"), horizontal_spacing=0.15)
+    fig = make_subplots(rows=2, cols=2, vertical_spacing=0.1, horizontal_spacing=0.15)
+    # Add watermark
+    fig.add_annotation(
+        text="DUNE 2x2",
+        xref="paper",
+        yref="paper",
+        x=0.95,
+        y=0.05,
+        showarrow=False,
+        font=dict(size=30, color="#ffebc9", family="Arial Black"),
+        textangle=-30,
+        opacity=0.5,
+    )
 
     # Select the hits for the current event
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
 
     # Define a colorscale and colorbar for the plots
-    colorscale = "cividis"
+    colorscale = "viridis"
     colorbar = dict(
         title="Hit E [MeV]",
         ticks="outside",
@@ -846,8 +975,8 @@ def plot_2d_charge(data, evid):
         y=prompthits_ev.data["y"].flatten(),
         mode="markers",
         marker=dict(
-            size=5,
-            opacity=0.7,
+            size=2,
+            opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
             colorscale=colorscale,
             colorbar=colorbar,
@@ -856,12 +985,12 @@ def plot_2d_charge(data, evid):
     )
 
     prompthits_traces_xz = go.Scatter(
-        x=prompthits_ev.data["x"].flatten(),
-        y=prompthits_ev.data["z"].flatten(),
+        x=prompthits_ev.data["z"].flatten(),
+        y=prompthits_ev.data["x"].flatten(),
         mode="markers",
         marker=dict(
-            size=5,
-            opacity=0.7,
+            size=2,
+            opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
             colorscale=colorscale,
             colorbar=colorbar,
@@ -870,12 +999,12 @@ def plot_2d_charge(data, evid):
     )
 
     prompthits_traces_yz = go.Scatter(
-        x=prompthits_ev.data["y"].flatten(),
-        y=prompthits_ev.data["z"].flatten(),
+        x=prompthits_ev.data["z"].flatten(),
+        y=prompthits_ev.data["y"].flatten(),
         mode="markers",
         marker=dict(
-            size=5,
-            opacity=0.7,
+            size=2,
+            opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
             colorscale=colorscale,
             colorbar=colorbar,
@@ -889,7 +1018,7 @@ def plot_2d_charge(data, evid):
         y=[None],
         mode="markers",
         marker=dict(
-            size=5,
+            size=2,
             opacity=0.7,
             colorscale=colorscale,
             colorbar=colorbar,
@@ -899,23 +1028,87 @@ def plot_2d_charge(data, evid):
     )
 
     # Add traces to the subplots
-    fig.add_trace(prompthits_traces_xy, row=1, col=1)
-    fig.add_trace(prompthits_traces_xz, row=1, col=2)
-    fig.add_trace(prompthits_traces_yz, row=1, col=3)
-    fig.add_trace(dummy_trace, row=1, col=3)  # Add the dummy trace to one of the subplots
+    fig.add_trace(prompthits_traces_xy, row=2, col=2)
+    fig.add_trace(prompthits_traces_xz, row=1, col=1)
+    fig.add_trace(prompthits_traces_yz, row=2, col=1)
+    fig.add_trace(
+        dummy_trace, row=2, col=2
+    )  # Add the dummy trace to one of the subplots
 
     # Add x and y axis labels to the subplots
-    fig.update_xaxes(title_text="x [cm]", row=1, col=1, showgrid=False, range=[-60, 60])
-    fig.update_yaxes(title_text="y [cm]", row=1, col=1, showgrid=False, range=[-60, 60])
+    fig.update_xaxes(
+        title_text="z [cm]",
+        row=1,
+        col=1,
+        showgrid=False,
+        range=[-60, 60],
+        zeroline=True,
+        constrain="domain",
+    )
+    fig.update_yaxes(
+        title_text="x [cm]",
+        row=1,
+        col=1,
+        showgrid=False,
+        range=[-60, 60],
+        zeroline=False,
+        scaleanchor="x1",
+        scaleratio=1,
+    )
 
-    fig.update_xaxes(title_text="x [cm]", row=1, col=2, showgrid=False, range=[-60, 60])
-    fig.update_yaxes(title_text="z [cm]", row=1, col=2, showgrid=False, range=[-60, 60])
+    fig.update_xaxes(
+        title_text="z [cm]",
+        row=2,
+        col=1,
+        showgrid=False,
+        range=[-60, 60],
+        zeroline=True,
+        constrain="domain",
+    )
+    fig.update_yaxes(
+        title_text="y [cm]",
+        row=2,
+        col=1,
+        showgrid=False,
+        range=[-60, 60],
+        zeroline=True,
+        scaleanchor="x2",
+        scaleratio=1,
+    )
 
-    fig.update_xaxes(title_text="y [cm]", row=1, col=3, showgrid=False, range=[-60, 60])
-    fig.update_yaxes(title_text="z [cm]", row=1, col=3, showgrid=False, range=[-60, 60])
+    fig.update_xaxes(
+        title_text="x [cm]",
+        row=2,
+        col=2,
+        showgrid=False,
+        range=[-60, 60],
+        zeroline=True,
+        constrain="domain",
+    )
+    fig.update_yaxes(
+        title_text="y [cm]",
+        row=2,
+        col=2,
+        showgrid=False,
+        range=[-60, 60],
+        zeroline=False,
+        scaleanchor="x3",
+        scaleratio=1,
+    )
 
     fig.update_layout(
-        showlegend=False
+        showlegend=False,
+        plot_bgcolor="#FFFCF2",
+        autosize=False,
+        width=800,
+        height=700,
+        margin=dict(
+            l=20,  # left margin
+            r=20,  # right margin
+            b=20,  # bottom margin
+            t=20,  # top margin
+            pad=10,  # padding
+        ),
     )
 
     return fig
