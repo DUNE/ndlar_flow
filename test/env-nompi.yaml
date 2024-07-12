@@ -13,4 +13,4 @@ dependencies:
   - pip
   - pip:
     - adc64format>=0.0.2
-    - pylandau
+    - git+https://github.com/cuddandr/pylandau.git
