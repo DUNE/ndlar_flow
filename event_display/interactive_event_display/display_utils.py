@@ -3,6 +3,7 @@ Utility functions for displaying data in the app
 """
 
 # TODO: remove dependency on h5flow
+import cmasher as cmr
 import h5flow
 import numpy as np
 import pandas as pd
@@ -17,6 +18,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from src.proto_nd_flow.util.lut import LUT
 from plotly.subplots import make_subplots
 
+cmap_charge = cmr.get_sub_cmap('cmr.torch_r', 0.13, 0.95)
+cmap_light = cmr.get_sub_cmap('cmr.sunburst_r', 0.0, 0.55)
+cmap_bg = cmr.get_sub_cmap(cmr.torch_r, 0.01, 0.95)
+
+colorscale_charge = [[i/255.0, 'rgb'+str(cmap_charge(i)[:3])] for i in range(256)]
+colorscale_light = [[i/255.0, 'rgb'+str(cmap_light(i)[:3])] for i in range(256)]
+bg_color = 'rgb'+str(cmap_bg(0.01)[:3])
 
 def parse_contents(filename):
     if filename is None:
@@ -171,7 +179,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
             marker={
                 "size": 1.75,
                 "opacity": 0.7,
-                "colorscale": "viridis",
+                "colorscale": colorscale_charge,
                 "colorbar": {
                     "title": "Mx2 E [MeV]",
                     "titlefont": {"size": 12},
@@ -218,7 +226,6 @@ def create_3d_figure(minerva_data, data, filename, evid):
 
     fig.update_layout(
         font=dict(size=14),
-        plot_bgcolor="white",
         legend=dict(orientation="h"),
         margin=dict(
                 l=50,  # left margin
@@ -242,19 +249,19 @@ def create_3d_figure(minerva_data, data, filename, evid):
                 )
             ],
             xaxis=dict(  # to make the background white
-                backgroundcolor="#FFFCF2",
+                backgroundcolor=bg_color,
                 gridcolor="white",
                 showbackground=True,
                 zerolinecolor="white",
             ),
             yaxis=dict(
-                backgroundcolor="#FFFCF2",
+                backgroundcolor=bg_color,
                 gridcolor="white",
                 showbackground=True,
                 zerolinecolor="white",
             ),
             zaxis=dict(
-                backgroundcolor="#FFFCF2",
+                backgroundcolor=bg_color,
                 gridcolor="white",
                 showbackground=True,
                 zerolinecolor="white",
@@ -279,7 +286,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
         marker={
             "size": 1.75,
             "opacity": 0.9,
-            "colorscale": "viridis",
+            "colorscale": colorscale_charge,
             "colorbar": {
                 "title": "Hit E [MeV]",
                 "titlefont": {"size": 12},
@@ -308,7 +315,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
         marker={
             "size": 1.75,
             "opacity": 0.9,
-            "colorscale": "ylorrd",
+            "colorscale": colorscale_charge,
             "colorbar": {
                 "title": "Hit energy [MeV]",
                 "titlefont": {"size": 12},
@@ -463,6 +470,28 @@ def draw_minerva():
     z_base["us"] = [-240.0, -190.0]
 
     traces = []
+    # Define the vertices of the hexagon in the x-y plane
+    hexagon_vertices = np.array([
+        [x_base[0], y_base[0]],
+        [x_base[1], y_base[1]],
+        [x_base[2], y_base[2]],
+        [x_base[3], y_base[3]],
+        [x_base[4], y_base[4]],
+        [x_base[5], y_base[5]]
+    ])
+
+    for z in [-240, -190, 164, 310]:
+        # Create a Mesh3d object for each hexagonal plane
+        hexagon = go.Mesh3d(
+            x=hexagon_vertices[:, 0],
+            y=hexagon_vertices[:, 1],
+            z=z * np.ones(len(hexagon_vertices)),
+            opacity=0.2,
+            color='blue',
+        )
+
+        traces.append(hexagon)
+
     # Plot the cylindrical hexagon
     for j in ["ds", "us"]:
         for i in range(len(x_base)):
@@ -509,6 +538,7 @@ def draw_minerva():
                     line=dict(color="grey"),
                 )
             )  # Plot vertical edges
+    print(traces)
 
     return traces
 
@@ -626,9 +656,9 @@ def plot_light_traps(data, waveforms_all_detectors):
         data.append(row)
     lut_based_channel_map = pd.DataFrame(data)
 
-    COLORSCALE = plotly.colors.make_colorscale(
-        plotly.colors.convert_colors_to_same_type(plotly.colors.sequential.YlOrRd)[0]
-    )
+    COLORSCALE = colorscale_light #plotly.colors.make_colorscale(
+        #plotly.colors.convert_colors_to_same_type(plotly.colors.sequential.YlOrRd)[0]
+    #)
 
     drawn_objects = []
     max_photons = 0
@@ -672,7 +702,7 @@ def plot_light_traps(data, waveforms_all_detectors):
             ],
         ]
         det_label = f"det_id_{det_id}_tpc_{tpc}"
-        light_color_value = light_color[0][1]
+
         light_plane = go.Surface(
             x=xs,
             y=ys,
@@ -814,7 +844,7 @@ def plot_waveform(data, evid, opid, sim_version):
         legend=dict(
             orientation="h", yref="container", yanchor="bottom", xanchor="center", x=0.5
         ),
-        plot_bgcolor="#FFFCF2",
+        plot_bgcolor=bg_color,
         margin=dict(
             l=20,  # left margin
             r=20,  # right margin
@@ -880,7 +910,7 @@ def plot_charge(data, evid):
         legend=dict(
             orientation="h", yref="container", yanchor="bottom", xanchor="center", x=0.5
         ),
-        plot_bgcolor="#FFFCF2",
+        plot_bgcolor=bg_color,
         margin=dict(
             l=20,  # left margin
             r=20,  # right margin
@@ -928,7 +958,7 @@ def plot_charge_energy(data, evid):
     )
     fig.update_layout(
         title_text=f"Energy histogram for event {evid}",
-        plot_bgcolor="#FFFCF2",
+        plot_bgcolor=bg_color,
         margin=dict(
             l=20,  # left margin
             r=20,  # right margin
@@ -960,7 +990,6 @@ def plot_2d_charge(data, evid):
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
 
     # Define a colorscale and colorbar for the plots
-    colorscale = "viridis"
     colorbar = dict(
         title="Hit E [MeV]",
         ticks="outside",
@@ -978,7 +1007,7 @@ def plot_2d_charge(data, evid):
             size=2,
             opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
-            colorscale=colorscale,
+            colorscale=colorscale_charge,
             colorbar=colorbar,
             showscale=False,
         ),
@@ -992,7 +1021,7 @@ def plot_2d_charge(data, evid):
             size=2,
             opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
-            colorscale=colorscale,
+            colorscale=colorscale_charge,
             colorbar=colorbar,
             showscale=False,
         ),
@@ -1006,7 +1035,7 @@ def plot_2d_charge(data, evid):
             size=2,
             opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
-            colorscale=colorscale,
+            colorscale=colorscale_charge,
             colorbar=colorbar,
             showscale=False,
         ),
@@ -1020,7 +1049,7 @@ def plot_2d_charge(data, evid):
         marker=dict(
             size=2,
             opacity=0.7,
-            colorscale=colorscale,
+            colorscale=colorscale_charge,
             colorbar=colorbar,
             showscale=True,
         ),
@@ -1098,7 +1127,7 @@ def plot_2d_charge(data, evid):
 
     fig.update_layout(
         showlegend=False,
-        plot_bgcolor="#FFFCF2",
+        plot_bgcolor=bg_color,
         autosize=False,
         width=800,
         height=700,
