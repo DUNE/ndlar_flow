@@ -2,7 +2,10 @@ import sys
 import warnings
 import numpy as np
 from datetime import datetime
-from proto_nd_flow.util.lut import LUT
+import os
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+from src.proto_nd_flow.util.lut import LUT
 from h5flow.core import resources
 import itertools
 import os
@@ -22,6 +25,7 @@ from matplotlib import cm, colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.image as mpimg
 from PIL import Image
+import uproot
 
 
 
@@ -51,11 +55,15 @@ class LArEventDisplay:
         evd.run()
     '''
 
-    def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True):
+    def __init__(self, filedir,filename, dune_logo, subexp_logo, filename_mx2=None, nhits=1, ntrigs=0, show_light=True):
         
         f = h5py.File(filedir+filename, 'r')
+        if not filename_mx2==None:
+            f_mx2 = uproot.open(filedir + filename_mx2)
         self.filename = filename
+        self.filename_mx2 = filename_mx2
         self.show_light = show_light
+        self.show_mx2 = False
         self.dune_logo = mpimg.imread(dune_logo)
         self.subexp_logo = mpimg.imread(subexp_logo)
 
@@ -72,6 +80,7 @@ class LArEventDisplay:
         self.events = events[events['nhit'] > nhits]
         self.events = self.events[self.events['n_ext_trigs'] >= ntrigs]
 
+
         # Load charge hits dataset
         self.hits_dset = 'calib_prompt_hits'
         self.hits_full = f['charge/'+self.hits_dset+'/data']
@@ -85,6 +94,33 @@ class LArEventDisplay:
             self.light_wvfms = f['light/wvfm/data']
             self.light_event_wvfm_ref = f['light/events/ref']['light/wvfm']['ref']
             self.light_event_wvfm_region = f['light/events/ref']['light/wvfm']['ref_region']
+
+        if not filename_mx2==None:
+            self.minerva_hits_x_offset = f_mx2["minerva"]["offsetX"].array(library="np")
+            self.minerva_hits_y_offset = f_mx2["minerva"]["offsetY"].array(library="np")
+            self.minerva_hits_z_offset = f_mx2["minerva"]["offsetZ"].array(library="np")
+
+            self.minerva_hits_x = f_mx2["minerva"]["trk_node_X"].array(library="np")
+            self.minerva_hits_y = f_mx2["minerva"]["trk_node_Y"].array(library="np")
+            self.minerva_hits_z = f_mx2["minerva"]["trk_node_Z"].array(library="np")
+
+            self.minerva_trk_index = f_mx2["minerva"]["trk_index"].array(library="np")
+            self.minerva_trk_nodes = f_mx2["minerva"]["trk_nodes"].array(library="np")
+            self.minerva_trk_node_energy = f_mx2["minerva"]["clus_id_energy"].array(
+                library="np"
+            )
+
+            self.minerva_times = (
+                        f_mx2["minerva"]["ev_gps_time_sec"].array(library="np")
+                        + f_mx2["minerva"]["ev_gps_time_usec"].array(library="np") / 1e6
+                    )
+
+        
+        all_beam_triggers = []
+        for ev_id, iogroup in enumerate(f["charge/ext_trigs/data"]["iogroup"]):
+            if iogroup == 5:
+                all_beam_triggers.append(ev_id)
+        self.beam_triggers = all_beam_triggers
 
         # Load geometry and other info
         self.geometry = f['geometry_info']
@@ -123,12 +159,11 @@ class LArEventDisplay:
         self.cbar_ax = cbar_ax
         self.light_cbar_ax = light_cbar_ax
 
-
     def run(self):
   
         print("Number of available events:", len(self.events))
         ev_id = 0
-
+        self.show_mx2 = (not self.filename_mx2==None) and (ev_id in self.beam_triggers)
         # Displays event until user input determines next action
         # User can quit display (q), save current display to PDF (s), skip to next event (enter),
         # or skip to a specific event number out of the total number of events to display (type number)
@@ -171,7 +206,11 @@ class LArEventDisplay:
 
 
     def get_event(self, ev_id):
-
+        if (not self.filename_mx2==None) and (ev_id in self.beam_triggers):
+            self.show_mx2 = True
+        else:
+            self.show_mx2 = False
+        print(self.show_mx2)
         # Get event charge information
         event = self.events[ev_id]
         event_datetime = datetime.utcfromtimestamp(
@@ -197,6 +236,37 @@ class LArEventDisplay:
             light_wvfm_ref = np.sort(light_wvfm_ref[light_wvfm_ref[:,0] == light_idx, 1])
             light_wvfms = self.light_wvfms[light_wvfm_ref]["samples"]
 
+        if self.show_mx2:
+            charge_time = event["unix_ts"] + event["ts_start"]/ 1e7
+            # find the index of the minerva_times that matches the charge_time
+            trigger = np.argmin(np.abs(self.minerva_times - charge_time))
+            xs = []
+            ys = []
+            zs = []
+            qs = []
+
+            for idx in self.minerva_trk_index[trigger]:
+
+                n_nodes = self.minerva_trk_nodes[trigger][idx]
+                if n_nodes > 0:
+                    x_nodes = (
+                        self.minerva_hits_x[trigger][idx][:n_nodes]
+                        # - minerva_hits_x_offset[trigger]
+                    )
+                    y_nodes = (
+                        self.minerva_hits_y[trigger][idx][:n_nodes]
+                        # - minerva_hits_y_offset[trigger]
+                    )
+                    z_nodes = self.minerva_hits_z[trigger][idx][
+                        :n_nodes
+                    ]  # - minerva_hits_z_offset[trigger]
+                    q_nodes = self.minerva_trk_node_energy[trigger][:n_nodes]
+                xs.extend((x_nodes / 10).tolist())
+                ys.extend((y_nodes / 10 - 21.8338).tolist())
+                zs.extend((z_nodes / 10 - 691.3).tolist())
+                qs.extend((q_nodes).tolist())
+            mx2 = {'mx': xs, 'my':ys, 'mz':zs, 'mq':qs}
+
         # Prepare color map for charge
         #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
         if min(hits['Q']) <=0:
@@ -220,8 +290,11 @@ class LArEventDisplay:
         # Set figure title
         self.fig.suptitle("\nEvent %i, ID %i - %s UTC" %
                           (ev_id, event['id'], event_datetime), x=0.38, size=48, weight='bold', linespacing=0.3)
-
-        if self.show_light:
+        if self.show_mx2 and self.show_light:
+            return hits, mx2, light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero
+        elif self.show_mx2 and not self.show_light:
+            return hits, mx2, mcharge, cmap, charge_norm, cmap_zero
+        elif self.show_light and not self.show_mx2:
             return hits, light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero
         else:
             return hits, mcharge, cmap, charge_norm, cmap_zero
@@ -246,12 +319,16 @@ class LArEventDisplay:
         self.ax_bdv.set_xlabel('\nBeam Direction [cm]', fontsize=22, weight='bold', linespacing=2) #z
         self.ax_bdv.set_ylabel('\nDrift Direction [cm]', fontsize=22, weight='bold', linespacing=2) #x
         self.ax_bdv.set_zlabel('\nVertical Direction [cm]', fontsize=22, weight='bold', linespacing=2) #y
-        self.ax_bdv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2], \
-            self.geometry.attrs['lar_detector_bounds'][1][2])
-        self.ax_bdv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][0], \
-            self.geometry.attrs['lar_detector_bounds'][1][0])
-        self.ax_bdv.set_zlim(self.geometry.attrs['lar_detector_bounds'][0][1], \
-            self.geometry.attrs['lar_detector_bounds'][1][1])
+        self.ax_bdv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 100, \
+            self.geometry.attrs['lar_detector_bounds'][1][2] + 250) # beam
+        self.ax_bdv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2] - 100, \
+            self.geometry.attrs['lar_detector_bounds'][1][2] + 250) # beam
+        self.ax_bdv.set_zlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 100, \
+            self.geometry.attrs['lar_detector_bounds'][1][2] + 250) # beam
+        # self.ax_bdv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][0], \
+        #     self.geometry.attrs['lar_detector_bounds'][1][0]) # drift
+        # self.ax_bdv.set_zlim(self.geometry.attrs['lar_detector_bounds'][0][1], \
+        #     self.geometry.attrs['lar_detector_bounds'][1][1]) # vertical
         self.ax_bdv.grid(True)
         self.ax_bdv.tick_params(axis='both', which='major', labelsize=20)
 
@@ -284,6 +361,38 @@ class LArEventDisplay:
         self.ax_dv.tick_params(axis='x', which='major', labelsize=18)
         self.ax_dv.set_yticks([])
 
+        if not self.filename_mx2==None:
+            x_base = [0, 108.0, 108.0, 0, -108.0, -108.0]
+            shift = 245.0
+            y_base = [
+                -390.0 + shift,
+                -330.0 + shift,
+                -204.0 + shift,
+                -145.0 + shift,
+                -206.0 + shift,
+                -330.0 + shift,
+            ]
+
+            z_base = {}
+            z_base["ds"] = [164.0, 310.0]
+            z_base["us"] = [-240.0, -190.0]
+            for j in ["ds", "us"]:
+                for i in range(len(x_base)):
+                    self.ax_bdv.plot([z_base[j][0], z_base[j][0]], 
+                                    [x_base[i], x_base[(i + 1) % len(x_base)]], 
+                                    [y_base[i], y_base[(i + 1) % len(x_base)]], color="grey")
+
+                    self.ax_bdv.plot([z_base[j][1], z_base[j][1]], 
+                                    [x_base[i], x_base[(i + 1) % len(x_base)]], 
+                                    [y_base[i], y_base[(i + 1) % len(x_base)]], color="grey")
+
+                    self.ax_bdv.plot([z_base[j][0], z_base[j][1]], 
+                                    [x_base[i], x_base[i]], 
+                                    [y_base[i], y_base[i]], color="blue")
+
+                    self.ax_bdv.plot([z_base[j][0], z_base[j][1]], 
+                                    [x_base[i], x_base[i]], 
+                                    [y_base[i], y_base[i]], color="grey")
         for i in range(len(self.geometry.attrs['module_RO_bounds'])):
 
             # Plot cathodes for XYZ (beam, drift, vertical) 3D view:
@@ -391,7 +500,11 @@ class LArEventDisplay:
     def display_event(self, ev_id):
 
         self.clear_axes()
-        if self.show_light:
+        if self.show_mx2 and self.show_light:
+            hits, mx2, light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero = self.get_event(ev_id)
+        elif self.show_mx2 and not self.show_light:
+            hits, mx2, mcharge, cmap, charge_norm, cmap_zero = self.get_event(ev_id)
+        elif self.show_light and not self.show_mx2:
             hits, light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero = self.get_event(ev_id)
         else:
             hits, mcharge, cmap, charge_norm, cmap_zero = self.get_event(ev_id)
@@ -416,6 +529,9 @@ class LArEventDisplay:
         # Plot hits in 3D view first so that cathodes/anodes go over the hits
         self.ax_bdv.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
                             c=cmap(charge_norm(hits['Q'])), s=5, alpha=1)
+        if self.show_mx2:
+            self.ax_bdv.scatter(mx2['mz'], mx2['mx'], mx2['my'], lw=0, ec='C0', \
+                            c=cmap(charge_norm(mx2['mq'])), s=5, alpha=1)
         if self.show_light:
             self.set_axes(cmap, mcharge, cmap_zero, mlight)
         else:
