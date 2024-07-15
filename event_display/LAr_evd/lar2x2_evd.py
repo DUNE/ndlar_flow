@@ -2,10 +2,11 @@ import sys
 import warnings
 import numpy as np
 from datetime import datetime
-from proto_nd_flow.util.lut import LUT
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+from src.proto_nd_flow.util.lut import LUT
 from h5flow.core import resources
 import itertools
-import os
 import math
 import h5py
 import cmasher as cmr
@@ -23,6 +24,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.image as mpimg
 from PIL import Image
 from math import fabs
+import uproot
+
 
 
 
@@ -52,21 +55,24 @@ class LArEventDisplay:
         evd.run()
     '''
 
-    def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True, filename_Mx2=None, public=False):
+    def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True, filename_mx2=None, public=False):
         
         f = h5py.File(filedir+filename, 'r')
         # ARTIFICIALLY ADDING LIGHT INFO:
         lf = h5py.File('/global/cfs/cdirs/dune/users/calivers/elise_files/mpd_run_hvramp_rctl_091_p39.FLOW.hdf5', 'r')
+        if not filename_mx2==None:
+            f_mx2 = uproot.open(filedir + filename_mx2)
+            self.show_mx2 = True
+        else:
+            self.show_mx2 = False
+        self.show_event_mx2 = self.show_mx2
         self.filename = filename
+        self.filename_Mx2 = filename_mx2
         self.show_light = show_light
         self.show_event_light = show_light
         self.public = public
         self.dune_logo = mpimg.imread(dune_logo)
         self.subexp_logo = mpimg.imread(subexp_logo)
-        if filename_Mx2 is not None:
-            self.show_Mx2 = True
-        else:
-            self.show_Mx2 = False
 
         # Resize DUNE logo image to fit in display
         self.original_dune_logo_shape = self.dune_logo.shape
@@ -80,6 +86,7 @@ class LArEventDisplay:
         events = f['charge/events/data']
         self.events = events[events['nhit'] > nhits]
         self.events = self.events[self.events['n_ext_trigs'] >= ntrigs]
+
 
         # Load charge hits dataset
         self.hits_dset = 'calib_prompt_hits'
@@ -101,7 +108,34 @@ class LArEventDisplay:
             #self.light_wvfms = lf['light/wvfm/data']
             #self.light_event_wvfm_ref = lf['light/events/ref']['light/wvfm']['ref']
             #self.light_event_wvfm_region = lf['light/events/ref']['light/wvfm']['ref_region']
+        
+        # Load Mx2 data if using
+        if self.show_Mx2:
+            self.minerva_hits_x_offset = f_mx2["minerva"]["offsetX"].array(library="np")
+            self.minerva_hits_y_offset = f_mx2["minerva"]["offsetY"].array(library="np")
+            self.minerva_hits_z_offset = f_mx2["minerva"]["offsetZ"].array(library="np")
 
+            self.minerva_hits_x = f_mx2["minerva"]["trk_node_X"].array(library="np")
+            self.minerva_hits_y = f_mx2["minerva"]["trk_node_Y"].array(library="np")
+            self.minerva_hits_z = f_mx2["minerva"]["trk_node_Z"].array(library="np")
+
+            self.minerva_trk_index = f_mx2["minerva"]["trk_index"].array(library="np")
+            self.minerva_trk_nodes = f_mx2["minerva"]["trk_nodes"].array(library="np")
+            self.minerva_trk_node_energy = f_mx2["minerva"]["clus_id_energy"].array(
+                library="np"
+            )
+
+            self.minerva_times = (
+                        f_mx2["minerva"]["ev_gps_time_sec"].array(library="np")
+                        + f_mx2["minerva"]["ev_gps_time_usec"].array(library="np") / 1e6
+                    )
+
+        
+        all_beam_triggers = []
+        for ev_id, iogroup in enumerate(f["charge/ext_trigs/data"]["iogroup"]):
+            if iogroup == 5:
+                all_beam_triggers.append(ev_id)
+        self.beam_triggers = all_beam_triggers
 
         # Load geometry and other info
         self.geometry = f['geometry_info']
@@ -132,7 +166,7 @@ class LArEventDisplay:
 
         # Set up figure and subplots
         # NOTE: This is very different if Mx2 is shown
-        if self.show_Mx2:
+        if self.show_mx2:
             self.fig = plt.figure(constrained_layout=False, figsize=(27, 25))
             self.axes_mosaic = [["ax_bd", "ax_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],\
                                 ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"], ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"]]
@@ -185,12 +219,11 @@ class LArEventDisplay:
         # Set view zoom
         self.zooms = [10,]*len(self.azimuths)
 
-
     def run(self):
   
         print("Number of available events:", len(self.events))
         ev_id = 0
-
+        
         # Displays event until user input determines next action
         # User can quit display (q), save current display to PDF (s), skip to next event (enter),
         # or skip to a specific event number out of the total number of events to display (type number)
@@ -246,7 +279,9 @@ class LArEventDisplay:
 
 
     def get_event(self, ev_id):
-
+        self.show_event_mx2 = self.show_mx2
+        if not (ev_id in self.beam_triggers):
+            self.show_event_mx2 = False
         # Get event charge information
         event = self.events[ev_id]
         event_datetime = datetime.utcfromtimestamp(
@@ -286,6 +321,38 @@ class LArEventDisplay:
                 light_wvfm_peds_exp = np.expand_dims(light_wvfm_get_peds, axis=-1)
                 light_wvfm_peds = light_wvfm_peds_exp * np.ones((1, 1, 1, 1000))
                 light_wvfms = self.light_wvfms[light_wvfm_ref]["samples"] - light_wvfm_peds
+
+        if self.show_event_mx2:
+            charge_time = event["unix_ts"] + event["ts_start"]/ 1e7
+            # find the index of the minerva_times that matches the charge_time
+            trigger = np.argmin(np.abs(self.minerva_times - charge_time))
+            xs = []
+            ys = []
+            zs = []
+            qs = []
+
+            for idx in self.minerva_trk_index[trigger]:
+
+                n_nodes = self.minerva_trk_nodes[trigger][idx]
+                if n_nodes > 0:
+                    x_nodes = (
+                        self.minerva_hits_x[trigger][idx][:n_nodes]
+                        # - minerva_hits_x_offset[trigger]
+                    )
+                    y_nodes = (
+                        self.minerva_hits_y[trigger][idx][:n_nodes]
+                        # - minerva_hits_y_offset[trigger]
+                    )
+                    z_nodes = self.minerva_hits_z[trigger][idx][
+                        :n_nodes
+                    ]  # - minerva_hits_z_offset[trigger]
+                    q_nodes = self.minerva_trk_node_energy[trigger][:n_nodes]
+                xs.extend((x_nodes / 10).tolist())
+                ys.extend((y_nodes / 10 - 21.8338).tolist())
+                zs.extend((z_nodes / 10 - 691.3).tolist())
+                qs.extend((q_nodes).tolist())
+            mx2 = {'mx': xs, 'my':ys, 'mz':zs, 'mq':qs}
+
         # Prepare color map for charge
         #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
         if self.public:
@@ -314,7 +381,11 @@ class LArEventDisplay:
         self.fig.suptitle("\nEvent %i - %s UTC" %
                           (ev_id, event_datetime), x=0.38, size=48, weight='bold', linespacing=0.3)
 
-        if self.show_event_light:
+        if self.show_event_mx2 and self.show_event_light:
+            return hits, mx2, light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero
+        elif self.show_event_mx2 and not self.show_event_light:
+            return hits, mx2, mcharge, cmap, charge_norm, cmap_zero
+        elif self.show_event_light and not self.show_event_mx2:
             return hits, light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero
         else:
             return hits, mcharge, cmap, charge_norm, cmap_zero
@@ -331,13 +402,13 @@ class LArEventDisplay:
         # Show 2x2 and DUNE logos
         self.ax_logo.axis('off')
         self.ax_logo.imshow(self.subexp_logo)
-        if self.show_light and self.show_Mx2:
+        if self.show_light and self.show_mx2:
             self.fig.figimage(self.dune_logo, xo=1710, \
                                 yo=2164, origin='upper')
-        elif not self.show_light and self.show_Mx2:
+        elif not self.show_light and self.show_mx2:
             self.fig.figimage(self.dune_logo, xo=1652, \
                                 yo=2127, origin='upper')
-        elif self.show_light and not self.show_Mx2:
+        elif self.show_light and not self.show_mx2:
             self.fig.figimage(self.dune_logo, xo=1632, \
                                 yo=1215, origin='upper')
         else:
@@ -393,6 +464,58 @@ class LArEventDisplay:
         self.ax_dv.tick_params(axis='x', which='major', labelsize=18)
         self.ax_dv.set_yticks([])
 
+        # Set Mx2 axis if using
+        if self.show_event_mx2:
+            self.ax_mx2.set_xlabel('\nBeam Axis [cm]', fontsize=22, weight='bold', linespacing=2) #z
+            self.ax_mx2.set_ylabel('\nDrift Axis [cm]', fontsize=22, weight='bold', linespacing=2) #x
+            self.ax_mx2.set_zlabel('\nVertical Axis [cm]', fontsize=22, weight='bold', linespacing=2) #y
+            self.ax_mx2.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 100, \
+                self.geometry.attrs['lar_detector_bounds'][1][2] + 250) # beam
+            self.ax_mx2.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2] - 100, \
+                self.geometry.attrs['lar_detector_bounds'][1][2] + 250) # drift
+            self.ax_mx2.set_zlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 100, \
+                self.geometry.attrs['lar_detector_bounds'][1][2] + 250) # vertical
+            self.ax_mx2.grid(False)
+            self.ax_mx2.xaxis.pane.fill = True
+            self.ax_mx2.yaxis.pane.fill = True
+            self.ax_mx2.zaxis.pane.fill = True
+            self.ax_mx2.xaxis.pane.set_facecolor(cmap_zero(0))
+            self.ax_mx2.yaxis.pane.set_facecolor(cmap_zero(0))
+            self.ax_mx2.zaxis.pane.set_facecolor(cmap_zero(0))
+            self.ax_mx2.tick_params(axis='both', which='major', labelsize=20)
+    
+            # Plot Mx2
+            x_base = [0, 108.0, 108.0, 0, -108.0, -108.0]
+            shift = 245.0
+            y_base = [
+                -390.0 + shift,
+                -330.0 + shift,
+                -204.0 + shift,
+                -145.0 + shift,
+                -206.0 + shift,
+                -330.0 + shift,
+            ]
+
+            z_base = {}
+            z_base["ds"] = [164.0, 310.0]
+            z_base["us"] = [-240.0, -190.0]
+            for j in ["ds", "us"]:
+                for i in range(len(x_base)):
+                    self.ax_mx2.plot([z_base[j][0], z_base[j][0]], 
+                                    [x_base[i], x_base[(i + 1) % len(x_base)]], 
+                                    [y_base[i], y_base[(i + 1) % len(x_base)]], color="grey")
+
+                    self.ax_mx2.plot([z_base[j][1], z_base[j][1]], 
+                                    [x_base[i], x_base[(i + 1) % len(x_base)]], 
+                                    [y_base[i], y_base[(i + 1) % len(x_base)]], color="grey")
+
+                    self.ax_mx2.plot([z_base[j][0], z_base[j][1]], 
+                                    [x_base[i], x_base[i]], 
+                                    [y_base[i], y_base[i]], color="blue")
+
+                    self.ax_mx2.plot([z_base[j][0], z_base[j][1]], 
+                                    [x_base[i], x_base[i]], 
+                                    [y_base[i], y_base[i]], color="grey")
         for i in range(len(self.geometry.attrs['module_RO_bounds'])):
 
             # Plot cathodes for XYZ (beam, drift, vertical) 3D view:
@@ -400,7 +523,9 @@ class LArEventDisplay:
                                                            self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2], 
                                                            self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2)
             self.ax_bdv.plot_surface(Z_cathode,X_cathode,Y_cathode, color='gainsboro', alpha=0.1)
-
+            if self.show_event_mx2:
+                self.ax_mx2.plot_surface(Z_cathode,X_cathode,Y_cathode, color='gainsboro', alpha=0.1)
+            
             for j in range(2):
                 for k in range(2):
                     # Plot outlines of modules for XYZ (beam, drift, vertical) 3D view:
@@ -415,6 +540,19 @@ class LArEventDisplay:
                     self.ax_bdv.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
                             [self.geometry.attrs['module_RO_bounds'][i][j][0], self.geometry.attrs['module_RO_bounds'][i][j][0]], \
                             [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.35)
+                    if self.show_event_mx2:
+                        # Plot outlines of modules for XYZ (beam, drift, vertical) 3D view WITH Mx2:
+                        self.ax_mx2.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
+                                [self.geometry.attrs['module_RO_bounds'][i][0][0], self.geometry.attrs['module_RO_bounds'][i][1][0]], \
+                                [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.35)
+
+                        self.ax_mx2.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
+                                [self.geometry.attrs['module_RO_bounds'][i][k][0], self.geometry.attrs['module_RO_bounds'][i][k][0]], \
+                                [self.geometry.attrs['module_RO_bounds'][i][0][1], self.geometry.attrs['module_RO_bounds'][i][1][1]], color='black', alpha=0.35)
+
+                        self.ax_mx2.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
+                                [self.geometry.attrs['module_RO_bounds'][i][j][0], self.geometry.attrs['module_RO_bounds'][i][j][0]], \
+                                [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.35)
 
                 # Plot outlines of modules for ZX (beam, drift) projections:
                 self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
@@ -501,7 +639,11 @@ class LArEventDisplay:
 
         self.clear_axes()
         hits, *event_info = self.get_event(ev_id)
-        if self.show_event_light:
+        if self.show_event_mx2 and self.show_event_light:
+            mx2, light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero = event_info
+        elif self.show_event_mx2 and not self.show_event_light:
+            mx2, mcharge, cmap, charge_norm, cmap_zero = event_info
+        elif self.show_event_light and not self.show_event_mx2:
             light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero = event_info
         else:
             mcharge, cmap, charge_norm, cmap_zero = event_info
@@ -528,6 +670,11 @@ class LArEventDisplay:
         # Plot hits in 3D view first so that cathodes/anodes go over the hits
         self.ax_bdv.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
                             c=cmap(charge_norm(hits['Q'])), s=5, alpha=1)
+        if self.show_event_mx2:
+            self.ax_mx2.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
+                    c=cmap(charge_norm(hits['Q'])), s=5, alpha=1)
+            self.ax_mx2.scatter(mx2['mz'], mx2['mx'], mx2['my'], lw=0, ec='C0', \
+                            c=cmap(charge_norm(mx2['mq'])), s=5, alpha=1)
         if self.show_event_light:
             self.set_axes(cmap, mcharge, cmap_zero, mlight)
         else:
@@ -698,6 +845,8 @@ class LArEventDisplay:
                 if found_x ==1:
                     light_x, light_y, light_z = make_z_plane(x1,x2, pos[1]-2, pos[1]+2,z_pos)
                     self.ax_bdv.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.1, shade=False)
+                    if self.show_event_mx2:
+                        self.ax_mx2.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.1, shade=False)
                     #print("Light sum at:", pos, "is", this_xyz_sum)
                     break
                 else: continue
