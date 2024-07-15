@@ -52,7 +52,7 @@ class LArEventDisplay:
         evd.run()
     '''
 
-    def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True, public=False):
+    def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True, filename_Mx2=None, public=False):
         
         f = h5py.File(filedir+filename, 'r')
         # ARTIFICIALLY ADDING LIGHT INFO:
@@ -63,6 +63,10 @@ class LArEventDisplay:
         self.public = public
         self.dune_logo = mpimg.imread(dune_logo)
         self.subexp_logo = mpimg.imread(subexp_logo)
+        if filename_Mx2 is not None:
+            self.show_Mx2 = True
+        else:
+            self.show_Mx2 = False
 
         # Resize DUNE logo image to fit in display
         self.original_dune_logo_shape = self.dune_logo.shape
@@ -127,17 +131,39 @@ class LArEventDisplay:
             #self.sipm_unique_y = np.unique([pos[1] for pos in self.all_sipm_pos])
 
         # Set up figure and subplots
-        self.fig = plt.figure(constrained_layout=False, figsize=(26, 13))
-        self.axes_mosaic = [["ax_bd", "ax_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],]
-        self.axes_dict = self.fig.subplot_mosaic(self.axes_mosaic, \
-                                                 per_subplot_kw={"ax_bdv": {"projection": "3d"}})
+        # NOTE: This is very different if Mx2 is shown
+        if self.show_Mx2:
+            self.fig = plt.figure(constrained_layout=False, figsize=(27, 25))
+            self.axes_mosaic = [["ax_bd", "ax_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],\
+                                ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"], ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"]]
+            self.axes_dict = self.fig.subplot_mosaic(self.axes_mosaic, \
+                                                    per_subplot_kw={"ax_bdv": {"projection": "3d"}, 
+                                                                    "ax_mx2": {"projection": "3d"}})
+            self.ax_mx2 = self.axes_dict["ax_mx2"]
+            cbar_ax = self.fig.add_axes([0.95, 0.45, 0.015, 0.46])
+            self.fig.subplots_adjust(right=0.92)
+            if self.show_light:
+                light_cbar_ax = self.fig.add_axes([0.15, 0.425, 0.75, 0.015])
+            self.fig.subplots_adjust(top=0.93,bottom=0.01)
+            self.fig.subplots_adjust(wspace=0.02, hspace=0.02)
+            current_mx2_pos = self.ax_mx2.get_position()
+            padding = 0.05
+            new_mx2_pos = [current_mx2_pos.x0+padding, current_mx2_pos.y0+padding, \
+                           current_mx2_pos.width-2*padding, current_mx2_pos.height-2*padding]
+            self.ax_mx2.set_position(new_mx2_pos)
 
-        cbar_ax = self.fig.add_axes([0.95, 0.12, 0.015, 0.75])
-        self.fig.subplots_adjust(right=0.92)
-        if self.show_light:
-            light_cbar_ax = self.fig.add_axes([0.15, 0.005, 0.75, 0.03])
-        self.fig.subplots_adjust(bottom=0.1)
-        self.fig.subplots_adjust(wspace=0.02, hspace=0.02)
+        else:
+            self.fig = plt.figure(constrained_layout=False, figsize=(26, 13))
+            self.axes_mosaic = [["ax_bd", "ax_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],]
+            self.axes_dict = self.fig.subplot_mosaic(self.axes_mosaic, \
+                                                    per_subplot_kw={"ax_bdv": {"projection": "3d"}})
+
+            cbar_ax = self.fig.add_axes([0.95, 0.12, 0.015, 0.75])
+            self.fig.subplots_adjust(right=0.92)
+            if self.show_light:
+                light_cbar_ax = self.fig.add_axes([0.15, 0.005, 0.75, 0.03])
+            self.fig.subplots_adjust(bottom=0.1)
+            self.fig.subplots_adjust(wspace=0.02, hspace=0.02)
 
         self.ax_bdv = self.axes_dict["ax_bdv"]
         self.ax_bd = self.axes_dict["ax_bd"]
@@ -305,7 +331,13 @@ class LArEventDisplay:
         # Show 2x2 and DUNE logos
         self.ax_logo.axis('off')
         self.ax_logo.imshow(self.subexp_logo)
-        if self.show_light:
+        if self.show_light and self.show_Mx2:
+            self.fig.figimage(self.dune_logo, xo=1710, \
+                                yo=2164, origin='upper')
+        elif not self.show_light and self.show_Mx2:
+            self.fig.figimage(self.dune_logo, xo=1652, \
+                                yo=2127, origin='upper')
+        elif self.show_light and not self.show_Mx2:
             self.fig.figimage(self.dune_logo, xo=1632, \
                                 yo=1215, origin='upper')
         else:
@@ -314,9 +346,9 @@ class LArEventDisplay:
         print("Number of available events:", len(self.events))
 
         # Set axes for 3D canvas (Beam, Drift, Vertical)
-        self.ax_bdv.set_xlabel('\nBeam Direction [cm]', fontsize=22, weight='bold', linespacing=2) #z
-        self.ax_bdv.set_ylabel('\nDrift Direction [cm]', fontsize=22, weight='bold', linespacing=2) #x
-        self.ax_bdv.set_zlabel('\nVertical Direction [cm]', fontsize=22, weight='bold', linespacing=2) #y
+        self.ax_bdv.set_xlabel('\nBeam Axis [cm]', fontsize=22, weight='bold', linespacing=2) #z
+        self.ax_bdv.set_ylabel('\nDrift Axis [cm]', fontsize=22, weight='bold', linespacing=2) #x
+        self.ax_bdv.set_zlabel('\nVertical Axis [cm]', fontsize=22, weight='bold', linespacing=2) #y
         self.ax_bdv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2], \
             self.geometry.attrs['lar_detector_bounds'][1][2])
         self.ax_bdv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][0], \
@@ -333,8 +365,8 @@ class LArEventDisplay:
         self.ax_bdv.tick_params(axis='both', which='major', labelsize=20)
 
         # Set axes for Beam vs Drift (ZX) canvas
-        #self.ax_bd.set_xlabel('Beam Direction [cm]', fontsize=20)
-        self.ax_bd.set_ylabel('Drift Direction [cm]', fontsize=20, weight='bold')
+        #self.ax_bd.set_xlabel('Beam Axis [cm]', fontsize=20)
+        self.ax_bd.set_ylabel('Drift Axis [cm]', fontsize=20, weight='bold')
         self.ax_bd.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][0]-0.5, \
             self.geometry.attrs['lar_detector_bounds'][1][0]+0.5)
         self.ax_bd.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2]-3.15,\
@@ -343,8 +375,8 @@ class LArEventDisplay:
         self.ax_bd.set_xticks([])
 
         # Set axes for Beam vs Vertical (ZY) canvas
-        self.ax_bv.set_xlabel('Beam Direction [cm]', fontsize=20, weight='bold')
-        self.ax_bv.set_ylabel('Vertical Direction [cm]', fontsize=20, weight='bold')
+        self.ax_bv.set_xlabel('Beam Axis [cm]', fontsize=20, weight='bold')
+        self.ax_bv.set_ylabel('Vertical Axis [cm]', fontsize=20, weight='bold')
         self.ax_bv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2]-3.05,\
             self.geometry.attrs['lar_detector_bounds'][1][2]+2.9)
         self.ax_bv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][1]-0.5, \
@@ -352,8 +384,8 @@ class LArEventDisplay:
         self.ax_bv.tick_params(axis='both', which='major', labelsize=18)
 
         # Set axes for Drift vs Vertical (XY) canvas
-        self.ax_dv.set_xlabel('Drift Direction [cm]', fontsize=20, weight='bold')
-        #self.ax_dv.set_ylabel('Vertical Direction [cm]', fontsize=20)
+        self.ax_dv.set_xlabel('Drift Axis [cm]', fontsize=20, weight='bold')
+        #self.ax_dv.set_ylabel('Vertical Axis [cm]', fontsize=20)
         self.ax_dv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][0]-2.95,\
             self.geometry.attrs['lar_detector_bounds'][1][0]+2.8)
         self.ax_dv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][1]-0.4, \
