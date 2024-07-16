@@ -178,7 +178,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
             marker_color=[item for sublist in qs for item in sublist],
             marker={
                 "size": 1.75,
-                "opacity": 0.7,
+                "opacity": 0.9,
                 "colorscale": colorscale_charge,
                 "colorbar": {
                     "title": "Mx2 E [MeV]",
@@ -193,7 +193,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
             name="minerva hits",
             mode="markers",
             showlegend=True,
-            opacity=0.7,
+            opacity=0.9,
             customdata=[item for sublist in qs for item in sublist],
             hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
         )
@@ -486,7 +486,7 @@ def draw_minerva():
             x=hexagon_vertices[:, 0],
             y=hexagon_vertices[:, 1],
             z=z * np.ones(len(hexagon_vertices)),
-            opacity=0.2,
+            opacity=0.1,
             color='blue',
         )
 
@@ -538,7 +538,6 @@ def draw_minerva():
                     line=dict(color="grey"),
                 )
             )  # Plot vertical edges
-    print(traces)
 
     return traces
 
