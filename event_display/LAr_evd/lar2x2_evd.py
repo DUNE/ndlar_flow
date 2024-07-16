@@ -166,32 +166,46 @@ class LArEventDisplay:
 
         # Set up figure and subplots
         # NOTE: This is very different if Mx2 is shown
-        if self.show_mx2:
-            self.fig = plt.figure(constrained_layout=False, figsize=(27, 25))
-            self.axes_mosaic = [["ax_bd", "ax_bd", "ax_logo", "ax_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
-                                ["ax_bd", "ax_bd", "ax_logo", "ax_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
+        if self.show_mx2: #TODO: go back to 8x8 array vs. 4x4 (whoops)
+            
+            if not self.public:
+                self.fig = plt.figure(constrained_layout=False, figsize=(27, 27))
+            else:
+                self.fig = plt.figure(constrained_layout=False, figsize=(37, 27))
+            self.axes_mosaic = [["ax_bd", "ax_bd",  "ax_logo", "ax_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
+                                ["ax_bd", "ax_bd",  "ax_logo", "ax_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
                                 ["ax_bv", "ax_bv", "ax_dv", "ax_dv", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
                                 ["ax_bv", "ax_bv", "ax_dv", "ax_dv", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
                                 ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"],\
                                 ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"],\
                                 ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"],\
-                                ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"], 
+                                ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"],\
                                 ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"]]
             self.axes_dict = self.fig.subplot_mosaic(self.axes_mosaic, \
                                                     per_subplot_kw={"ax_bdv": {"projection": "3d"}, 
                                                                     "ax_mx2": {"projection": "3d"}})
             self.ax_mx2 = self.axes_dict["ax_mx2"]
-            cbar_ax = self.fig.add_axes([0.95, 0.45, 0.015, 0.46])
-            self.fig.subplots_adjust(right=0.92)
-            if self.show_light:
-                light_cbar_ax = self.fig.add_axes([0.15, 0.425, 0.75, 0.015])
-            self.fig.subplots_adjust(top=0.93,bottom=0.01)
+            if not self.public:
+                cbar_ax = self.fig.add_axes([0.95, 0.025, 0.015, 0.88])
+                self.fig.subplots_adjust(right=0.92)
+                if self.show_light:
+                    light_cbar_ax = self.fig.add_axes([0.125, 0.47, 0.8, 0.015])
+            else:
+                self.fig.subplots_adjust(right=0.7)
+                self.fig.subplots_adjust(top=0.8,bottom=0.4)
+            self.fig.subplots_adjust(top=0.93,bottom=0.001)
             self.fig.subplots_adjust(wspace=0.02, hspace=0.02)
             current_mx2_pos = self.ax_mx2.get_position()
-            print("Current Mx2 position:", current_mx2_pos)
-            padding = 0.02
-            new_mx2_pos = [current_mx2_pos.x0-0.8, current_mx2_pos.y0, \
-                           current_mx2_pos.width*4, current_mx2_pos.height*1]
+            #print("Current Mx2 position:", current_mx2_pos)
+            #padding = 0.02
+            if self.public:
+                x0_shift = 0.065
+                y0_shift = 0.025
+            else: 
+                x0_shift = 0.055
+                y0_shift = 0.01
+            new_mx2_pos = [current_mx2_pos.x0-x0_shift, current_mx2_pos.y0-y0_shift, \
+                           current_mx2_pos.width*1.2, current_mx2_pos.height*1]
             self.ax_mx2.set_position(new_mx2_pos)
 
         else:
@@ -199,11 +213,11 @@ class LArEventDisplay:
             self.axes_mosaic = [["ax_bd", "ax_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],]
             self.axes_dict = self.fig.subplot_mosaic(self.axes_mosaic, \
                                                     per_subplot_kw={"ax_bdv": {"projection": "3d"}})
-
-            cbar_ax = self.fig.add_axes([0.95, 0.12, 0.015, 0.75])
-            self.fig.subplots_adjust(right=0.92)
-            if self.show_light:
-                light_cbar_ax = self.fig.add_axes([0.15, 0.005, 0.75, 0.03])
+            if not self.public:
+                cbar_ax = self.fig.add_axes([0.95, 0.12, 0.015, 0.75])
+                self.fig.subplots_adjust(right=0.92)
+                if self.show_light:
+                    light_cbar_ax = self.fig.add_axes([0.15, 0.005, 0.75, 0.03])
             self.fig.subplots_adjust(bottom=0.1)
             self.fig.subplots_adjust(wspace=0.02, hspace=0.02)
 
@@ -212,9 +226,10 @@ class LArEventDisplay:
         self.ax_bv = self.axes_dict["ax_bv"]
         self.ax_dv = self.axes_dict["ax_dv"]
         self.ax_logo = self.axes_dict["ax_logo"]
-        self.cbar_ax = cbar_ax
-        if self.show_light:
-            self.light_cbar_ax = light_cbar_ax
+        if not self.public:
+            self.cbar_ax = cbar_ax
+            if self.show_light:
+                self.light_cbar_ax = light_cbar_ax
 
         # Setup 3D view angles for GIFs
         self.base_angle = list(range(-180,180,2))
@@ -281,17 +296,18 @@ class LArEventDisplay:
         self.ax_bd.cla()
         self.ax_bv.cla()
         self.ax_dv.cla()
-        self.cbar_ax.cla()
-        if self.show_light:
-            self.light_cbar_ax.cla()
+        if not self.public:
+            self.cbar_ax.cla()
+            if self.show_light:
+                self.light_cbar_ax.cla()
         if self.show_mx2:
             self.ax_mx2.cla()
 
 
     def get_event(self, ev_id):
         self.show_event_mx2 = self.show_mx2
-        if not (ev_id in self.beam_triggers):
-            self.show_event_mx2 = False
+        #if not (ev_id in self.beam_triggers):
+        #    self.show_event_mx2 = False
         # Get event charge information
         event = self.events[ev_id]
         event_datetime = datetime.utcfromtimestamp(
@@ -333,36 +349,51 @@ class LArEventDisplay:
                 light_wvfms = self.light_wvfms[light_wvfm_ref]["samples"] - light_wvfm_peds
 
         if self.show_event_mx2:
-            print("Mx2 original position:", self.ax_mx2.get_position())
-            charge_time = event["unix_ts"] + event["ts_start"]/ 1e7
+            
+            charge_time = (event["unix_ts"] + event["ts_start"]/ 1e7)
+            print("charge_time:", charge_time)
+            print("Minerva time 1:", self.minerva_times[0])
+            #print("Minerva times:", len(self.minerva_times))
             # find the index of the minerva_times that matches the charge_time
-            trigger = np.argmin(np.abs(self.minerva_times - charge_time))
+            mx2_charge_time_diffs = np.abs(self.minerva_times - np.full_like(self.minerva_times, charge_time))
+            trigger = np.argwhere(mx2_charge_time_diffs < 0.5).reshape(1,-1)[0]
+            print("Time diffs:", mx2_charge_time_diffs[trigger])
+            print("Trigger:", trigger)
             xs = []
             ys = []
             zs = []
             qs = []
-
-            for idx in self.minerva_trk_index[trigger]:
-
-                n_nodes = self.minerva_trk_nodes[trigger][idx]
-                if n_nodes > 0:
-                    x_nodes = (
-                        self.minerva_hits_x[trigger][idx][:n_nodes]
-                        # - minerva_hits_x_offset[trigger]
-                    )
-                    y_nodes = (
-                        self.minerva_hits_y[trigger][idx][:n_nodes]
-                        # - minerva_hits_y_offset[trigger]
-                    )
-                    z_nodes = self.minerva_hits_z[trigger][idx][
-                        :n_nodes
-                    ]  # - minerva_hits_z_offset[trigger]
-                    q_nodes = self.minerva_trk_node_energy[trigger][:n_nodes]
-                xs.extend((x_nodes / 10).tolist())
-                ys.extend((y_nodes / 10 - 21.8338).tolist())
-                zs.extend((z_nodes / 10 - 691.3).tolist())
-                qs.extend((q_nodes).tolist())
+            #print("All Minerva tracks:", self.minerva_trk_index[trigger][0])
+            for trig in trigger:
+                for idx in self.minerva_trk_index[trig]:
+                    print("Minerva time:", self.minerva_times[trig])
+                    n_nodes = self.minerva_trk_nodes[trig][idx]
+                    if n_nodes > 0:
+                        x_nodes = (
+                            self.minerva_hits_x[trig][idx][:n_nodes]
+                            # - minerva_hits_x_offset[trig]
+                        )
+                        y_nodes = (
+                            self.minerva_hits_y[trig][idx][:n_nodes]
+                            # - minerva_hits_y_offset[trig]
+                        )
+                        z_nodes = self.minerva_hits_z[trig][idx][
+                            :n_nodes
+                        ]  # - minerva_hits_z_offset[trig]
+                        q_nodes = self.minerva_trk_node_energy[trig][:n_nodes]
+                    xs.extend((x_nodes / 10).tolist())
+                    ys.extend((y_nodes / 10 - 21.8338).tolist())
+                    zs.extend((z_nodes / 10 - 691.3).tolist())
+                    qs.extend((q_nodes).tolist())
             mx2 = {'mx': xs, 'my':ys, 'mz':zs, 'mq':qs}
+            if len(mx2['mq']) == 0:
+                print("No matched Mx2 events for 2x2 Event ", ev_id)
+                self.show_event_mx2 = False
+            else:
+                mx2_norm = mpl.colors.LogNorm(vmin=min(mx2['mq']),vmax=max(mx2['mq']))
+                mx2_cmap = cmr.get_sub_cmap('cmr.torch_r', 0.13,0.95) # 0.03, 0.13 for torch_r
+                #cmap_zero = cmr.get_sub_cmap('cmr.torch_r', 0.03, 0.95) #cosmic okay, toxic_r okay, sapphire_r okay (ember_r light?) emerald_r
+                mmx2 = plt.cm.ScalarMappable(norm=mx2_norm, cmap=mx2_cmap)
 
         # Prepare color map for charge
         #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
@@ -370,10 +401,11 @@ class LArEventDisplay:
             min_charge = self.charge_threshold
         else:
             min_charge = min(hits['Q'])
-        charge_norm = mpl.colors.Normalize(vmin=min_charge,vmax=max(max(hits['Q']), 1.))
+        charge_norm = mpl.colors.LogNorm(vmin=min_charge,vmax=max(max(hits['Q']), 1.))
         cmap = cmr.get_sub_cmap('cmr.torch_r', 0.13,0.95) # 0.03, 0.13 for torch_r
         cmap_zero = cmr.get_sub_cmap('cmr.torch_r', 0.03, 0.95) #cosmic okay, toxic_r okay, sapphire_r okay (ember_r light?) emerald_r
         mcharge = plt.cm.ScalarMappable(norm=charge_norm, cmap=cmap)
+
 
         if self.show_event_light:
             # Prepare color map for light
@@ -384,18 +416,20 @@ class LArEventDisplay:
             else:
                 min_light = light_wvfms[0].sum(axis=-1).min()
             light_norm = colors.LogNorm(min_light,light_wvfms[0].sum(axis=-1).max()*2)
-            light_norm_single = colors.LogNorm(1,light_wvfms[0].sum(axis=-1).max())
-            c = light_norm(light_wvfms[0].sum(axis=-1))
             mlight = plt.cm.ScalarMappable(norm=light_norm, cmap=light_cmap)
 
         # Set figure title
-        self.fig.suptitle("\nEvent %i - %s UTC" %
+        if self.public:
+            self.fig.suptitle("\nEvent %i - %s UTC" %
+                          (ev_id, event_datetime), x=0.28, size=48, weight='bold', linespacing=0.3)
+        else:
+            self.fig.suptitle("\nEvent %i - %s UTC" %
                           (ev_id, event_datetime), x=0.38, size=48, weight='bold', linespacing=0.3)
 
         if self.show_event_mx2 and self.show_event_light:
-            return hits, mx2, light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero
+            return hits, mx2, light_wvfms, mcharge, mmx2, mlight, cmap, mx2_cmap, light_cmap, charge_norm, mx2_norm, light_norm, cmap_zero, light_cmap_zero
         elif self.show_event_mx2 and not self.show_event_light:
-            return hits, mx2, mcharge, cmap, charge_norm, cmap_zero
+            return hits, mx2, mcharge, mmx2, cmap, mx2_cmap, charge_norm, mx2_norm, cmap_zero
         elif self.show_event_light and not self.show_event_mx2:
             return hits, light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero
         else:
@@ -413,18 +447,24 @@ class LArEventDisplay:
         # Show 2x2 and DUNE logos
         self.ax_logo.axis('off')
         self.ax_logo.imshow(self.subexp_logo)
-        if self.show_light and self.show_mx2:
-            self.fig.figimage(self.dune_logo, xo=1710, \
-                                yo=2164, origin='upper')
-        elif not self.show_light and self.show_mx2:
-            self.fig.figimage(self.dune_logo, xo=1652, \
-                                yo=2127, origin='upper')
-        elif self.show_light and not self.show_mx2:
-            self.fig.figimage(self.dune_logo, xo=1632, \
-                                yo=1215, origin='upper')
+        if self.public:
+            xo_shift = -219
+            yo_shift = 44
         else:
-            self.fig.figimage(self.dune_logo, xo=1632, \
-                                yo=1085, origin='upper')
+            xo_shift = 0
+            yo_shift = 0
+        if self.show_light and self.show_mx2:
+            self.fig.figimage(self.dune_logo, xo=1712+xo_shift, \
+                                yo=2590+yo_shift, origin='upper')
+        elif not self.show_light and self.show_mx2:
+            self.fig.figimage(self.dune_logo, xo=1712+xo_shift, \
+                                yo=2540+yo_shift, origin='upper')
+        elif self.show_light and not self.show_mx2:
+            self.fig.figimage(self.dune_logo, xo=1632+xo_shift, \
+                                yo=1215+yo_shift, origin='upper')
+        else:
+            self.fig.figimage(self.dune_logo, xo=1632+xo_shift, \
+                                yo=1085+yo_shift, origin='upper')
         print("Number of available events:", len(self.events))
 
         # Set axes for 3D canvas (Beam, Drift, Vertical)
@@ -445,6 +485,8 @@ class LArEventDisplay:
         self.ax_bdv.yaxis.pane.set_facecolor(cmap_zero(0))
         self.ax_bdv.zaxis.pane.set_facecolor(cmap_zero(0))
         self.ax_bdv.tick_params(axis='both', which='major', labelsize=20)
+        if self.public:
+            self.ax_bdv.set_box_aspect([1,1,1], zoom=0.985)
 
         # Set axes for Beam vs Drift (ZX) canvas
         #self.ax_bd.set_xlabel('Beam Axis [cm]', fontsize=20)
@@ -480,10 +522,10 @@ class LArEventDisplay:
             self.ax_mx2.set_xlabel('\nBeam Axis [cm]', fontsize=22, weight='bold', linespacing=2) #z
             self.ax_mx2.set_ylabel('\nDrift Axis [cm]', fontsize=22, weight='bold', linespacing=2) #x
             self.ax_mx2.set_zlabel('\nVertical Axis [cm]', fontsize=22, weight='bold', linespacing=2) #y
-            self.ax_mx2.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 190, \
-                self.geometry.attrs['lar_detector_bounds'][1][2] + 250) # beam
-            self.ax_mx2.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2] - 50, \
-                self.geometry.attrs['lar_detector_bounds'][1][2] + 50) # drift
+            self.ax_mx2.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 230, \
+                self.geometry.attrs['lar_detector_bounds'][1][2] + 310) # beam
+            self.ax_mx2.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2] - 110, \
+                self.geometry.attrs['lar_detector_bounds'][1][2] + 120) # drift
             self.ax_mx2.set_zlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 80, \
                 self.geometry.attrs['lar_detector_bounds'][1][2] + 50) # vertical
             self.ax_mx2.grid(False)
@@ -494,9 +536,14 @@ class LArEventDisplay:
             self.ax_mx2.yaxis.pane.set_facecolor(cmap_zero(0))
             self.ax_mx2.zaxis.pane.set_facecolor(cmap_zero(0))
             self.ax_mx2.tick_params(axis='both', which='major', labelsize=20)
-            self.ax_mx2.set_box_aspect([2,1,1])
-            self.ax_mx2.view_init(azim=-70, elev=15)
-            self.ax_mx2.set_aspect('auto')
+            if self.public:
+                mx2_zoom = 1.405
+            else:
+                mx2_zoom = 1.38
+            self.ax_mx2.set_box_aspect([2,1,1], zoom=mx2_zoom)
+            self.ax_mx2.view_init(azim=-75, elev=17)
+            #self.ax_mx2.set_aspect('auto')
+
     
             # Plot Mx2
             x_base = [0, 108.0, 108.0, 0, -108.0, -108.0]
@@ -636,17 +683,17 @@ class LArEventDisplay:
                              [self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2, \
                               self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2],\
                               color='gainsboro', alpha=0.9, linewidth=2,solid_capstyle='butt')
+        if not self.public:
+            # Set charge colorbar
+            cbar = self.fig.colorbar(mcharge, cax=self.cbar_ax, label=r'Charge [$10^3$ e]')
+            cbar.set_label(r'Charge [$\mathbf{10^3}$ e]', size=20, weight='bold')
+            self.cbar_ax.tick_params(labelsize=18)
 
-        # Set charge colorbar
-        cbar = self.fig.colorbar(mcharge, cax=self.cbar_ax, label=r'Charge [$10^3$ e]')
-        cbar.set_label(r'Charge [$\mathbf{10^3}$ e]', size=20, weight='bold')
-        self.cbar_ax.tick_params(labelsize=18)
-
-        if self.show_event_light:
-            # Set light colorbar
-            light_cbar = self.fig.colorbar(mlight, cax=self.light_cbar_ax, label=r'Light [ADC Counts]', orientation = 'horizontal')
-            light_cbar.set_label(r'Light [ADC Counts]', size=20, weight='bold')
-            self.light_cbar_ax.tick_params(labelsize=18)
+            if self.show_event_light:
+                # Set light colorbar
+                light_cbar = self.fig.colorbar(mlight, cax=self.light_cbar_ax, label=r'Light [ADC Counts]', orientation = 'horizontal')
+                light_cbar.set_label(r'Light [ADC Counts]', size=20, weight='bold')
+                self.light_cbar_ax.tick_params(labelsize=18)
 
 
     def display_event(self, ev_id):
@@ -654,9 +701,9 @@ class LArEventDisplay:
         self.clear_axes()
         hits, *event_info = self.get_event(ev_id)
         if self.show_event_mx2 and self.show_event_light:
-            mx2, light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero = event_info
+            mx2, light_wvfms, mcharge, mmx2, mlight, cmap, mx2_cmap, light_cmap, charge_norm, mx2_norm, light_norm, cmap_zero, light_cmap_zero = event_info
         elif self.show_event_mx2 and not self.show_event_light:
-            mx2, mcharge, cmap, charge_norm, cmap_zero = event_info
+            mx2, mcharge, mmx2, cmap, mx2_cmap, charge_norm, mx2_norm, cmap_zero = event_info
         elif self.show_event_light and not self.show_event_mx2:
             light_wvfms, mcharge, mlight, cmap, light_cmap, charge_norm, light_norm, cmap_zero, light_cmap_zero = event_info
         else:
@@ -687,8 +734,10 @@ class LArEventDisplay:
         if self.show_event_mx2:
             self.ax_mx2.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
                     c=cmap(charge_norm(hits['Q'])), s=5, alpha=1)
+            #self.ax_mx2.scatter(mx2['mz'], mx2['mx'], mx2['my'], lw=0, ec='C0', \
+            #                c=mx2_cmap(mx2_norm(mx2['mq'])), s=15, alpha=1)
             self.ax_mx2.scatter(mx2['mz'], mx2['mx'], mx2['my'], lw=0, ec='C0', \
-                            c=cmap(charge_norm(mx2['mq'])), s=5, alpha=1)
+                            c='darkblue', s=12, alpha=1)            
         if self.show_event_light:
             self.set_axes(cmap, mcharge, cmap_zero, mlight)
         else:
