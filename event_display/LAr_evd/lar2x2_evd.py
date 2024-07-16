@@ -55,19 +55,19 @@ class LArEventDisplay:
         evd.run()
     '''
 
-    def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True, filename_mx2=None, public=False):
+    def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, public=False):
         
         f = h5py.File(filedir+filename, 'r')
         # ARTIFICIALLY ADDING LIGHT INFO:
         lf = h5py.File('/global/cfs/cdirs/dune/users/calivers/elise_files/mpd_run_hvramp_rctl_091_p39.FLOW.hdf5', 'r')
-        if not filename_mx2==None:
-            f_mx2 = uproot.open(filedir + filename_mx2)
+        if not filepath_mx2==None:
+            f_mx2 = uproot.open(filepath_mx2)
             self.show_mx2 = True
         else:
             self.show_mx2 = False
         self.show_event_mx2 = self.show_mx2
         self.filename = filename
-        self.filename_Mx2 = filename_mx2
+        self.filepath_mx2 = filepath_mx2
         self.show_light = show_light
         self.show_event_light = show_light
         self.public = public
@@ -110,7 +110,7 @@ class LArEventDisplay:
             #self.light_event_wvfm_region = lf['light/events/ref']['light/wvfm']['ref_region']
         
         # Load Mx2 data if using
-        if self.show_Mx2:
+        if self.show_mx2:
             self.minerva_hits_x_offset = f_mx2["minerva"]["offsetX"].array(library="np")
             self.minerva_hits_y_offset = f_mx2["minerva"]["offsetY"].array(library="np")
             self.minerva_hits_z_offset = f_mx2["minerva"]["offsetZ"].array(library="np")
@@ -168,8 +168,15 @@ class LArEventDisplay:
         # NOTE: This is very different if Mx2 is shown
         if self.show_mx2:
             self.fig = plt.figure(constrained_layout=False, figsize=(27, 25))
-            self.axes_mosaic = [["ax_bd", "ax_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],\
-                                ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"], ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"]]
+            self.axes_mosaic = [["ax_bd", "ax_bd", "ax_logo", "ax_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
+                                ["ax_bd", "ax_bd", "ax_logo", "ax_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
+                                ["ax_bv", "ax_bv", "ax_dv", "ax_dv", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
+                                ["ax_bv", "ax_bv", "ax_dv", "ax_dv", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
+                                ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"],\
+                                ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"],\
+                                ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"],\
+                                ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"], 
+                                ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"]]
             self.axes_dict = self.fig.subplot_mosaic(self.axes_mosaic, \
                                                     per_subplot_kw={"ax_bdv": {"projection": "3d"}, 
                                                                     "ax_mx2": {"projection": "3d"}})
@@ -181,9 +188,10 @@ class LArEventDisplay:
             self.fig.subplots_adjust(top=0.93,bottom=0.01)
             self.fig.subplots_adjust(wspace=0.02, hspace=0.02)
             current_mx2_pos = self.ax_mx2.get_position()
-            padding = 0.05
-            new_mx2_pos = [current_mx2_pos.x0+padding, current_mx2_pos.y0+padding, \
-                           current_mx2_pos.width-2*padding, current_mx2_pos.height-2*padding]
+            print("Current Mx2 position:", current_mx2_pos)
+            padding = 0.02
+            new_mx2_pos = [current_mx2_pos.x0-0.8, current_mx2_pos.y0, \
+                           current_mx2_pos.width*4, current_mx2_pos.height*1]
             self.ax_mx2.set_position(new_mx2_pos)
 
         else:
@@ -276,6 +284,8 @@ class LArEventDisplay:
         self.cbar_ax.cla()
         if self.show_light:
             self.light_cbar_ax.cla()
+        if self.show_mx2:
+            self.ax_mx2.cla()
 
 
     def get_event(self, ev_id):
@@ -323,6 +333,7 @@ class LArEventDisplay:
                 light_wvfms = self.light_wvfms[light_wvfm_ref]["samples"] - light_wvfm_peds
 
         if self.show_event_mx2:
+            print("Mx2 original position:", self.ax_mx2.get_position())
             charge_time = event["unix_ts"] + event["ts_start"]/ 1e7
             # find the index of the minerva_times that matches the charge_time
             trigger = np.argmin(np.abs(self.minerva_times - charge_time))
@@ -465,16 +476,16 @@ class LArEventDisplay:
         self.ax_dv.set_yticks([])
 
         # Set Mx2 axis if using
-        if self.show_event_mx2:
+        if self.show_mx2:
             self.ax_mx2.set_xlabel('\nBeam Axis [cm]', fontsize=22, weight='bold', linespacing=2) #z
             self.ax_mx2.set_ylabel('\nDrift Axis [cm]', fontsize=22, weight='bold', linespacing=2) #x
             self.ax_mx2.set_zlabel('\nVertical Axis [cm]', fontsize=22, weight='bold', linespacing=2) #y
-            self.ax_mx2.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 100, \
+            self.ax_mx2.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 190, \
                 self.geometry.attrs['lar_detector_bounds'][1][2] + 250) # beam
-            self.ax_mx2.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2] - 100, \
-                self.geometry.attrs['lar_detector_bounds'][1][2] + 250) # drift
-            self.ax_mx2.set_zlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 100, \
-                self.geometry.attrs['lar_detector_bounds'][1][2] + 250) # vertical
+            self.ax_mx2.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2] - 50, \
+                self.geometry.attrs['lar_detector_bounds'][1][2] + 50) # drift
+            self.ax_mx2.set_zlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 80, \
+                self.geometry.attrs['lar_detector_bounds'][1][2] + 50) # vertical
             self.ax_mx2.grid(False)
             self.ax_mx2.xaxis.pane.fill = True
             self.ax_mx2.yaxis.pane.fill = True
@@ -483,6 +494,9 @@ class LArEventDisplay:
             self.ax_mx2.yaxis.pane.set_facecolor(cmap_zero(0))
             self.ax_mx2.zaxis.pane.set_facecolor(cmap_zero(0))
             self.ax_mx2.tick_params(axis='both', which='major', labelsize=20)
+            self.ax_mx2.set_box_aspect([2,1,1])
+            self.ax_mx2.view_init(azim=-70, elev=15)
+            self.ax_mx2.set_aspect('auto')
     
             # Plot Mx2
             x_base = [0, 108.0, 108.0, 0, -108.0, -108.0]
@@ -516,6 +530,7 @@ class LArEventDisplay:
                     self.ax_mx2.plot([z_base[j][0], z_base[j][1]], 
                                     [x_base[i], x_base[i]], 
                                     [y_base[i], y_base[i]], color="grey")
+                    
         for i in range(len(self.geometry.attrs['module_RO_bounds'])):
 
             # Plot cathodes for XYZ (beam, drift, vertical) 3D view:
@@ -523,7 +538,7 @@ class LArEventDisplay:
                                                            self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2], 
                                                            self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2)
             self.ax_bdv.plot_surface(Z_cathode,X_cathode,Y_cathode, color='gainsboro', alpha=0.1)
-            if self.show_event_mx2:
+            if self.show_mx2:
                 self.ax_mx2.plot_surface(Z_cathode,X_cathode,Y_cathode, color='gainsboro', alpha=0.1)
             
             for j in range(2):
@@ -540,7 +555,7 @@ class LArEventDisplay:
                     self.ax_bdv.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
                             [self.geometry.attrs['module_RO_bounds'][i][j][0], self.geometry.attrs['module_RO_bounds'][i][j][0]], \
                             [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.35)
-                    if self.show_event_mx2:
+                    if self.show_mx2:
                         # Plot outlines of modules for XYZ (beam, drift, vertical) 3D view WITH Mx2:
                         self.ax_mx2.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
                                 [self.geometry.attrs['module_RO_bounds'][i][0][0], self.geometry.attrs['module_RO_bounds'][i][1][0]], \
@@ -613,15 +628,14 @@ class LArEventDisplay:
                      [self.geometry.attrs['module_RO_bounds'][i+1][0][1], self.geometry.attrs['module_RO_bounds'][i+1][1][1]], \
                       color='gainsboro', alpha=0.9)
 
-            if not self.show_light:
+            if not self.show_event_light:
 
                 # Plot cathodes for ZX (beam, drift) projections:
                 for i in range(len(self.geometry.attrs['module_RO_bounds'])):
-                    for j in range(2):
-                        self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
-                                 [self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2, \
-                                  self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2],\
-                                  color='gainsboro', alpha=0.9, linewidth=2,solid_capstyle='butt')
+                    self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
+                             [self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2, \
+                              self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2],\
+                              color='gainsboro', alpha=0.9, linewidth=2,solid_capstyle='butt')
 
         # Set charge colorbar
         cbar = self.fig.colorbar(mcharge, cax=self.cbar_ax, label=r'Charge [$10^3$ e]')
@@ -751,11 +765,10 @@ class LArEventDisplay:
 
         # Plot cathodes for ZX (beam, drift) projections (done for charge only case in set_axes method):
         for i in range(len(self.geometry.attrs['module_RO_bounds'])):
-            for j in range(2):
-                self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
-                         [self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2, \
-                          self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2],\
-                          color='gainsboro', alpha=0.9, linewidth=2,solid_capstyle='butt')
+            self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
+                     [self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2, \
+                      self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2],\
+                      color='gainsboro', alpha=0.9, linewidth=2,solid_capstyle='butt')
 
         # Plot light in ZY (beam, vertical) projection
         for z,y in itertools.product(self.sipm_unique_z,self.sipm_unique_y):
