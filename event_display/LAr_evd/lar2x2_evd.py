@@ -319,6 +319,7 @@ class LArEventDisplay:
         ev_id = event['id']
         hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
         hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
+        print("Hit ref:", hit_ref)
         hits = self.hits_full[hit_ref]
 
         if self.show_light:
@@ -396,6 +397,8 @@ class LArEventDisplay:
                 mmx2 = plt.cm.ScalarMappable(norm=mx2_norm, cmap=mx2_cmap)
 
         # Prepare color map for charge
+        print("Charge:", hits['Q'])
+        print("Charge:", hits['x'])
         #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
         if self.public:
             min_charge = self.charge_threshold
@@ -448,8 +451,8 @@ class LArEventDisplay:
         self.ax_logo.axis('off')
         self.ax_logo.imshow(self.subexp_logo)
         if self.public:
-            xo_shift = -219
-            yo_shift = 44
+            xo_shift = 65#-219
+            yo_shift = -25#44
         else:
             xo_shift = 0
             yo_shift = 0
@@ -481,12 +484,13 @@ class LArEventDisplay:
         self.ax_bdv.xaxis.pane.fill = True
         self.ax_bdv.yaxis.pane.fill = True
         self.ax_bdv.zaxis.pane.fill = True
-        self.ax_bdv.xaxis.pane.set_facecolor(cmap_zero(0))
-        self.ax_bdv.yaxis.pane.set_facecolor(cmap_zero(0))
-        self.ax_bdv.zaxis.pane.set_facecolor(cmap_zero(0))
+        self.ax_bdv.xaxis.pane.set_facecolor('white')#(cmap_zero(0))
+        self.ax_bdv.yaxis.pane.set_facecolor('white')#(cmap_zero(0))
+        self.ax_bdv.zaxis.pane.set_facecolor('white')#(cmap_zero(0))
         self.ax_bdv.tick_params(axis='both', which='major', labelsize=20)
         if self.public:
             self.ax_bdv.set_box_aspect([1,1,1], zoom=0.985)
+            self.ax_bdv.view_init(azim=-75, elev=17)
 
         # Set axes for Beam vs Drift (ZX) canvas
         #self.ax_bd.set_xlabel('Beam Axis [cm]', fontsize=20)
@@ -522,6 +526,7 @@ class LArEventDisplay:
             self.ax_mx2.set_xlabel('\nBeam Axis [cm]', fontsize=22, weight='bold', linespacing=2) #z
             self.ax_mx2.set_ylabel('\nDrift Axis [cm]', fontsize=22, weight='bold', linespacing=2) #x
             self.ax_mx2.set_zlabel('\nVertical Axis [cm]', fontsize=22, weight='bold', linespacing=2) #y
+            self.ax_mx2.tick_params(axis='both', which='major', labelsize=20)
             self.ax_mx2.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2] - 230, \
                 self.geometry.attrs['lar_detector_bounds'][1][2] + 310) # beam
             self.ax_mx2.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2] - 110, \
@@ -532,15 +537,14 @@ class LArEventDisplay:
             self.ax_mx2.xaxis.pane.fill = True
             self.ax_mx2.yaxis.pane.fill = True
             self.ax_mx2.zaxis.pane.fill = True
-            self.ax_mx2.xaxis.pane.set_facecolor(cmap_zero(0))
-            self.ax_mx2.yaxis.pane.set_facecolor(cmap_zero(0))
-            self.ax_mx2.zaxis.pane.set_facecolor(cmap_zero(0))
-            self.ax_mx2.tick_params(axis='both', which='major', labelsize=20)
+            self.ax_mx2.xaxis.pane.set_facecolor('white')#cmap_zero(0))
+            self.ax_mx2.yaxis.pane.set_facecolor('white')#cmap_zero(0))
+            self.ax_mx2.zaxis.pane.set_facecolor('white')#cmap_zero(0))
             if self.public:
-                mx2_zoom = 1.405
+                mx2_zoom = 1.35
             else:
                 mx2_zoom = 1.38
-            self.ax_mx2.set_box_aspect([2,1,1], zoom=mx2_zoom)
+            self.ax_mx2.set_box_aspect([7.75,3.5,3], zoom=mx2_zoom)
             self.ax_mx2.view_init(azim=-75, elev=17)
             #self.ax_mx2.set_aspect('auto')
 
@@ -737,7 +741,7 @@ class LArEventDisplay:
             #self.ax_mx2.scatter(mx2['mz'], mx2['mx'], mx2['my'], lw=0, ec='C0', \
             #                c=mx2_cmap(mx2_norm(mx2['mq'])), s=15, alpha=1)
             self.ax_mx2.scatter(mx2['mz'], mx2['mx'], mx2['my'], lw=0, ec='C0', \
-                            c='darkblue', s=12, alpha=1)            
+                            c='red', s=12, alpha=1)            
         if self.show_event_light:
             self.set_axes(cmap, mcharge, cmap_zero, mlight)
         else:
