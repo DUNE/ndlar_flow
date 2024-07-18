@@ -545,7 +545,7 @@ class LArEventDisplay:
             else:
                 mx2_zoom = 1.38
             self.ax_mx2.set_box_aspect([7.75,3.5,3], zoom=mx2_zoom)
-            self.ax_mx2.view_init(azim=-75, elev=17)
+            self.ax_mx2.view_init(azim=-75, elev=17) # default -75, 17
             #self.ax_mx2.set_aspect('auto')
 
     
