@@ -856,8 +856,8 @@ class LArEventDisplay:
             this_xy_sum = 0
             for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
                 pos=self.sipm_abs_pos[(i,j)][0]
-                if i == 4 and j == 4:
-                    print("Position of SiPM where ADC == 4 and Channel == 4:",pos)
+                #if i == 4 and j == 4:
+                    #print("Position of SiPM where ADC == 4 and Channel == 4:",pos)
                 det_id = self.light_det_id[(i,j)][0]
                 wvfm_factor = 1.
                 if det_id in acl_det_ids:
