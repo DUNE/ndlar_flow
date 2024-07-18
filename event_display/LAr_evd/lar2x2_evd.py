@@ -94,7 +94,7 @@ class LArEventDisplay:
         self.hits_ref = f['charge/events/ref/charge/'+self.hits_dset+'/ref']
         self.hits_region = f['charge/events/ref/charge/'+self.hits_dset+'/ref_region']
         self.charge_threshold = 10.
-        self.light_threshold = 3e5
+        self.light_threshold = 150000#3e5
         if self.show_light:
             # Load light event and waveform datasets
             self.light_events = f['light/events/data']
@@ -277,7 +277,7 @@ class LArEventDisplay:
                     figname = gif_dir+'frame_%04d_%04d.png' % (ev_id, frame_num)
                     self.fig.savefig(figname)
                     frame_num += 1
-                os.system("convert -delay 10 "+gif_dir+"frame*.png animated_"+str(ev_id)+".gif")
+                os.system("convert -delay 10 "+gif_dir+"frame*.png "+gif_dir+"animated_"+str(ev_id)+".gif")
             else:
                 try:
                     clear_output(wait=True)
@@ -856,6 +856,8 @@ class LArEventDisplay:
             this_xy_sum = 0
             for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
                 pos=self.sipm_abs_pos[(i,j)][0]
+                if i == 4 and j == 4:
+                    print("Position of SiPM where ADC == 4 and Channel == 4:",pos)
                 det_id = self.light_det_id[(i,j)][0]
                 wvfm_factor = 1.
                 if det_id in acl_det_ids:
@@ -910,7 +912,7 @@ class LArEventDisplay:
                     found_x = 1
                 if found_x ==1:
                     light_x, light_y, light_z = make_z_plane(x1,x2, pos[1]-2, pos[1]+2,z_pos)
-                    self.ax_bdv.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.1, shade=False)
+                    self.ax_bdv.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.2, shade=False)
                     if self.show_event_mx2:
                         self.ax_mx2.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.1, shade=False)
                     #print("Light sum at:", pos, "is", this_xyz_sum)
