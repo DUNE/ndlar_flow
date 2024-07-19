@@ -274,10 +274,11 @@ class LArEventDisplay:
                 for (azi,zen,zoom) in zip(self.azimuths,self.zeniths,self.zooms):
                     self.ax_bdv.view_init(zen, azi)   # see mpl_toolkits.mplot3d.axes3d.Axes3D.view_init
                     self.ax_bdv.dist = zoom
+                    self.ax_bdv.set_box_aspect([1,1,1])
                     figname = gif_dir+'frame_%04d_%04d.png' % (ev_id, frame_num)
                     self.fig.savefig(figname)
                     frame_num += 1
-                os.system("convert -delay 10 "+gif_dir+"frame*.png "+gif_dir+"animated_"+str(ev_id)+".gif")
+                os.system("convert -delay 10 "+gif_dir+"frame*.png "+gif_dir+"animated_"+str(ev_id)+"no_axes.gif")
             else:
                 try:
                     clear_output(wait=True)
@@ -428,7 +429,7 @@ class LArEventDisplay:
         else:
             self.fig.suptitle("\nEvent %i - %s UTC" %
                           (ev_id, event_datetime), x=0.38, size=48, weight='bold', linespacing=0.3)
-
+        
         if self.show_event_mx2 and self.show_event_light:
             return hits, mx2, light_wvfms, mcharge, mmx2, mlight, cmap, mx2_cmap, light_cmap, charge_norm, mx2_norm, light_norm, cmap_zero, light_cmap_zero
         elif self.show_event_mx2 and not self.show_event_light:
@@ -448,6 +449,7 @@ class LArEventDisplay:
         '''
 
         # Show 2x2 and DUNE logos
+
         self.ax_logo.axis('off')
         self.ax_logo.imshow(self.subexp_logo)
         if self.public:
@@ -471,6 +473,7 @@ class LArEventDisplay:
         print("Number of available events:", len(self.events))
 
         # Set axes for 3D canvas (Beam, Drift, Vertical)
+
         self.ax_bdv.set_xlabel('\nBeam Axis [cm]', fontsize=22, weight='bold', linespacing=2) #z
         self.ax_bdv.set_ylabel('\nDrift Axis [cm]', fontsize=22, weight='bold', linespacing=2) #x
         self.ax_bdv.set_zlabel('\nVertical Axis [cm]', fontsize=22, weight='bold', linespacing=2) #y
