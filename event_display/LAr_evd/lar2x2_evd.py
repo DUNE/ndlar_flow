@@ -166,9 +166,9 @@ class LArEventDisplay:
 
         
         all_beam_triggers = []
-        for ev_id, iogroup in enumerate(f["charge/ext_trigs/data"]["iogroup"]):
+        for ev_idx, iogroup in enumerate(f["charge/ext_trigs/data"]["iogroup"]):
             if iogroup == 5:
-                all_beam_triggers.append(ev_id)
+                all_beam_triggers.append(ev_idx)
         self.beam_triggers = all_beam_triggers
 
         # Load geometry and other info
@@ -278,23 +278,25 @@ class LArEventDisplay:
 
     def run(self):
   
-        print("Number of available events:", len(self.events))
-        ev_id = 0
-        
+        event_ids = [ev['id'] for ev in self.events]
+        ev_idx = 0
+        ev_id = event_ids[ev_idx]
+
+        self.display_event(ev_id)
         # Displays event until user input determines next action
         # User can quit display (q), save current display to PDF (s), skip to next event (enter),
-        # or skip to a specific event number out of the total number of events to display (type number)
+        # mkae a GIF of an event (g), or skip to a specific event number (type number)
         while True:
 
-            clear_output(wait=True)
-            self.display_event(ev_id)
+            #clear_output(wait=True)
+            #self.display_event(ev_id)
             display(plt.gcf())
             user_input = input(
-                'Next event (q to exit/s to save to pdf/enter for next/number to skip to position)?\n')
+                'Next event (q to exit/s to save to pdf/g to create gif/enter for next/number to skip to event)?\n')
             if not user_input:
                 clear_output(wait=True)
-                ev_id += 1
-                print(ev_id)
+                ev_idx += 1
+                ev_id = event_ids[ev_idx]
                 self.display_event(ev_id)
             elif user_input[0].lower() == 'q':
                 sys.exit()
@@ -317,11 +319,16 @@ class LArEventDisplay:
                 try:
                     clear_output(wait=True)
                     ev_id = int(user_input)
-                    print(ev_id)
+                    ev_idx = event_ids.index(ev_id)
                     self.display_event(ev_id)
-                except ValueError:
+                except:
+                    clear_output(wait=True)
                     print("Event number %s not valid" % user_input)
-            if ev_id >= len(self.events):
+                    print("Proceeded to next available event instead")
+                    ev_idx += 1
+                    ev_id = event_ids[ev_idx]
+                    self.display_event(ev_id)                    
+            if ev_id >= event_ids[-1]:
                 print("End of file")
                 sys.exit()
     
@@ -341,18 +348,21 @@ class LArEventDisplay:
 
     def get_event(self, ev_id):
         self.show_event_mx2 = self.show_mx2
-        #if not (ev_id in self.beam_triggers):
-        #    self.show_event_mx2 = False
         # Get event charge information
-        event = self.events[ev_id]
+        ev_idx = np.where(self.events['id'] == ev_id)[0][0]
+        print("Number of available events:", len(self.events))
+        print("For fast-forwarding purposes, here is every 10th event number in your sample:", [ev for ev in self.events['id'][9::10]])
+
+        #if not (ev_idx in self.beam_triggers):
+        #    self.show_event_mx2 = False
+        event = self.events[ev_idx]
         event_datetime = datetime.utcfromtimestamp(
                 event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
         # DEBUGGING TIMESTAMPS
         #print("Charge Unix TS:", event['unix_ts'])
         #print("Charge TS Start:", event['ts_start'])
         #print("Charge TS End:", event['ts_end'])
-        print("Number of external triggers:", event['n_ext_trigs'])
-        ev_id = event['id']
+        print("Number of external triggers in this event:", event['n_ext_trigs'])
         hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
         hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
         hits = self.hits_full[hit_ref]
@@ -510,7 +520,7 @@ class LArEventDisplay:
         else:
             self.fig.figimage(self.dune_logo, xo=1632+xo_shift, \
                                 yo=1085+yo_shift, origin='upper')
-        print("Number of available events:", len(self.events))
+        #print("Number of available events:", len(self.events))
 
         # Set axes for 3D canvas (Beam, Drift, Vertical)
 
@@ -756,11 +766,13 @@ class LArEventDisplay:
         else:
             mcharge, cmap, charge_norm, cmap_zero = event_info
 
+        ev_idx = np.argwhere(self.events['id'] == ev_id)[0][0]
+
         # DEBUGGING:
-        if ev_id in self.beam_triggers:
-            print("Beam trigger event:", ev_id)
+        if ev_idx in self.beam_triggers:
+            print("Event " + str(ev_id) + " is a beam trigger event")
         else:
-            print("NOT a beam trigger event:", ev_id)
+            print("Event " + str(ev_id) + " is NOT a beam trigger event")
         # Adjust drift velocity
         # USED DURING RAMP, MOSTLY UNNECESSARY NOW
         #drift_dir = np.full_like(hits['x'], 1)
