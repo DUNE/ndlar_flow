@@ -60,8 +60,6 @@ class LUT(object):
         self.min_max_keys = np.array(min_max_keys, dtype='i8')
         self.lengths = np.array([max_ - min_ + 1 for min_, max_ in self.min_max_keys])
         self.max_hash = int(self._hash(*[max_ for min_, max_ in min_max_keys]))
-        print("Max hash is: "+str(self.max_hash))
-        #self.max_hash = 30000000
         shape = (self.max_hash + 1,) + shape if shape else (self.max_hash + 1,)
         self._data = np.zeros(shape, dtype=self.dtype)
         self._filled = np.zeros(shape[0], dtype=bool)
@@ -197,9 +195,6 @@ class LUT(object):
             :returns: array of hash index, ``shape: (N,)``
         '''
         val = self._hash(*keys)
-        print("VAL")
-        print(val)
-        print("END VAL")
         val[val < 0] = 0
         val[val > self.max_hash] = 0
         return val
