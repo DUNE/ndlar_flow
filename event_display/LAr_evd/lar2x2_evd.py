@@ -1,4 +1,31 @@
+# Import packages to check for and install missing packages
 import sys
+import subprocess
+
+# Function to install missing packages
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+# Ensure setuptools is installed to use pkg_resources
+try:
+    import pkg_resources
+except ImportError:
+    install('setuptools')
+    import pkg_resources
+
+# Ensure all non-standard packages are installed
+required_packages = [
+    'numpy', 'h5py', 'cmasher', 'IPython', 'matplotlib', 'pillow', 'uproot', 'h5flow'
+]
+
+installed_packages = {pkg.key for pkg in pkg_resources.working_set}
+missing_packages = [pkg for pkg in required_packages if pkg not in installed_packages]
+
+if missing_packages:
+    for package in missing_packages:
+        install(package)
+
+# Import modules
 import warnings
 import numpy as np
 from datetime import datetime
@@ -27,8 +54,6 @@ from math import fabs
 import uproot
 
 
-
-
 class LArEventDisplay:
 
     ''' 
@@ -37,12 +62,14 @@ class LArEventDisplay:
         Inputs are as follows:
 
             - filedir         (str): path to input file
-            - flow_file       (str): path to input file
+            - filename        (str): name of flow file
             - dune_logo       (str): path to DUNE logo image
             - subexp_logo     (str): path to subexperiment logo image
-            - nhits           (int): hit threshold for events to be made available in interactive display
+            - nhits           (int): number of hits (threshold) for events to be made available (default: 1)
+            - ntrigs          (int): number of external triggers (threshold)  threshold for events to be made available (default: 0)
             - show_light      (bool): whether to show light information in display (default: True)
             - public          (bool): whether to display for public i.e. include extra charge/light thresholds (default: False)
+            - filepath_mx2    (str): path to Mx2 file if using Mx2 data (default: None)
             
         In order to run the display, set up a Jupyter Notebook, import everything in this file,
         and execute the run() method, e.g.:
@@ -50,9 +77,16 @@ class LArEventDisplay:
         from lar_only_evd import *
         plt.ion()
 
-        f = '/path/to/file'
-        evd = ProtoNDFlowEventDisplay(flow_file=f, nhits=1, show_light=True)
+        d = '/path/to/file/'
+        f = 'filename'
+        dune = '/path/to/dune_logo.png'
+        twobytwo = '/path/to/2x2_logo.png'
+        evd = LArEventDisplay(filedir=d, filename=f, dune_logo=dune, subexp_logo=twobytwo, nhits=1, show_light=False, public=False)
         evd.run()
+
+        Alternatively, you can a display for a specific event by calling the display_event() method with the event number as an argument, e.g.:
+        evd.display_event(0). This can also be done within another python script. 
+
     '''
 
     def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, public=False):
@@ -269,7 +303,7 @@ class LArEventDisplay:
             elif user_input[0].lower() == 'g':
                 print("Creating GIF of Event Display")
                 # Loop over 3D views
-                gif_dir = '/global/cfs/cdirs/dune/users/ehinkle/nd_prototypes_ana/2x2_sim/run-ndlar-flow/ndlar_flow/event_display/LAr_evd/'
+                gif_dir = os.path.dirname(__file__)
                 frame_num = 0
                 for (azi,zen,zoom) in zip(self.azimuths,self.zeniths,self.zooms):
                     self.ax_bdv.view_init(zen, azi)   # see mpl_toolkits.mplot3d.axes3d.Axes3D.view_init
