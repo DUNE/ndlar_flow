@@ -11,3 +11,4 @@ params:
   charge_only: True
   beam_direction: 'z'
   drift_direction: 'x'
+  network_agnostic: False
