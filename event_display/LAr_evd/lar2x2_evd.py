@@ -317,10 +317,10 @@ class LArEventDisplay:
         print("Charge Unix TS:", event['unix_ts'])
         print("Charge TS Start:", event['ts_start'])
         print("Charge TS End:", event['ts_end'])
+        print("Number of external triggers:", event['n_ext_trigs'])
         ev_id = event['id']
         hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
         hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
-        print("Hit ref:", hit_ref)
         hits = self.hits_full[hit_ref]
 
         if self.show_light:
@@ -398,14 +398,12 @@ class LArEventDisplay:
                 mmx2 = plt.cm.ScalarMappable(norm=mx2_norm, cmap=mx2_cmap)
 
         # Prepare color map for charge
-        print("Charge:", hits['Q'])
-        print("Charge:", hits['x'])
         #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
         if self.public:
             min_charge = self.charge_threshold
         else:
             min_charge = min(hits['Q'])
-        charge_norm = mpl.colors.LogNorm(vmin=min_charge,vmax=max(max(hits['Q']), 1.))
+        charge_norm = mpl.colors.Normalize(vmin=min_charge,vmax=max(max(hits['Q']), 1.))
         cmap = cmr.get_sub_cmap('cmr.torch_r', 0.13,0.95) # 0.03, 0.13 for torch_r
         cmap_zero = cmr.get_sub_cmap('cmr.torch_r', 0.03, 0.95) #cosmic okay, toxic_r okay, sapphire_r okay (ember_r light?) emerald_r
         mcharge = plt.cm.ScalarMappable(norm=charge_norm, cmap=cmap)
@@ -716,6 +714,11 @@ class LArEventDisplay:
         else:
             mcharge, cmap, charge_norm, cmap_zero = event_info
 
+        # DEBUGGING:
+        if ev_id in self.beam_triggers:
+            print("Beam trigger event:", ev_id)
+        else:
+            print("NOT a beam trigger event:", ev_id)
         # Adjust drift velocity
         # USED DURING RAMP, MOSTLY UNNECESSARY NOW
         #drift_dir = np.full_like(hits['x'], 1)
@@ -738,6 +741,26 @@ class LArEventDisplay:
         # Plot hits in 3D view first so that cathodes/anodes go over the hits
         self.ax_bdv.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
                             c=cmap(charge_norm(hits['Q'])), s=5, alpha=1)
+
+        #self.ax_bdv.scatter(hits[hits['io_group'] == 1]['z'], hits[hits['io_group'] == 1]['x'], hits[hits['io_group'] == 1]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bdv.scatter(hits[hits['io_group'] == 2]['z'], hits[hits['io_group'] == 2]['x'], hits[hits['io_group'] == 2]['y'],\
+        #            lw=0, s=5, alpha=0.9)
+        #self.ax_bdv.scatter(hits[hits['io_group'] == 3]['z'], hits[hits['io_group'] == 3]['x'], hits[hits['io_group'] == 3]['y'],\
+        #            lw=0, s=5, alpha=0.9)
+        #self.ax_bdv.scatter(hits[hits['io_group'] == 4]['z'], hits[hits['io_group'] == 4]['x'], hits[hits['io_group'] == 4]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bdv.scatter(hits[hits['io_group'] == 5]['z'], hits[hits['io_group'] == 5]['x'], hits[hits['io_group'] == 5]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bdv.scatter(hits[hits['io_group'] == 6]['z'], hits[hits['io_group'] == 6]['x'], hits[hits['io_group'] == 6]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bdv.scatter(hits[hits['io_group'] == 7]['z'], hits[hits['io_group'] == 7]['x'], hits[hits['io_group'] == 7]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bdv.scatter(hits[hits['io_group'] == 8]['z'], hits[hits['io_group'] == 8]['x'], hits[hits['io_group'] == 8]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+
+
+
         if self.show_event_mx2:
             self.ax_mx2.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
                     c=cmap(charge_norm(hits['Q'])), s=5, alpha=1)
@@ -765,16 +788,56 @@ class LArEventDisplay:
         #        charge_norm(hits[hits['io_group'] == 8]['Q'])), s=5, alpha=1)
         
 
-    # Temporary fix for bug in light geometry LUTs
-    def convert_light_x(self, light_lut_idx1, light_lut_idx2, light_x):
-        
-            rel_pos = self.sipm_rel_pos[(light_lut_idx1, light_lut_idx2)][0]
-            if rel_pos[0]%2 == 0:
-                light_x_true = light_x #- (4*15.215) # ARTIFICIALLY ADDING LIGHT INFO:
-            elif rel_pos[0]%2 == 1:
-                light_x_true = light_x #+ (4*15.215) # ARTIFICIALLY ADDING LIGHT INFO:
-
-            return light_x_true
+        #self.ax_bd.scatter(hits[hits['io_group'] == 1]['z'], hits[hits['io_group'] == 1]['x'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bd.scatter(hits[hits['io_group'] == 2]['z'], hits[hits['io_group'] == 2]['x'],\
+        #            lw=0, s=5, alpha=0.9)
+        #self.ax_bd.scatter(hits[hits['io_group'] == 3]['z'], hits[hits['io_group'] == 3]['x'],\
+        #            lw=0, s=5, alpha=0.9)
+        #self.ax_bd.scatter(hits[hits['io_group'] == 4]['z'], hits[hits['io_group'] == 4]['x'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bd.scatter(hits[hits['io_group'] == 5]['z'], hits[hits['io_group'] == 5]['x'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bd.scatter(hits[hits['io_group'] == 6]['z'], hits[hits['io_group'] == 6]['x'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bd.scatter(hits[hits['io_group'] == 7]['z'], hits[hits['io_group'] == 7]['x'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bd.scatter(hits[hits['io_group'] == 8]['z'], hits[hits['io_group'] == 8]['x'],\
+        #                    lw=0, s=5, alpha=0.9)
+#
+        #self.ax_bv.scatter(hits[hits['io_group'] == 1]['z'], hits[hits['io_group'] == 1]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bv.scatter(hits[hits['io_group'] == 2]['z'], hits[hits['io_group'] == 2]['y'],\
+        #            lw=0, s=5, alpha=0.9)
+        #self.ax_bv.scatter(hits[hits['io_group'] == 3]['z'], hits[hits['io_group'] == 3]['y'],\
+        #            lw=0, s=5, alpha=0.9)
+        #self.ax_bv.scatter(hits[hits['io_group'] == 4]['z'], hits[hits['io_group'] == 4]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bv.scatter(hits[hits['io_group'] == 5]['z'], hits[hits['io_group'] == 5]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bv.scatter(hits[hits['io_group'] == 6]['z'], hits[hits['io_group'] == 6]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bv.scatter(hits[hits['io_group'] == 7]['z'], hits[hits['io_group'] == 7]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_bv.scatter(hits[hits['io_group'] == 8]['z'], hits[hits['io_group'] == 8]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #
+        #self.ax_dv.scatter(hits[hits['io_group'] == 1]['x'], hits[hits['io_group'] == 1]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_dv.scatter(hits[hits['io_group'] == 2]['x'], hits[hits['io_group'] == 2]['y'],\
+        #            lw=0, s=5, alpha=0.9)
+        #self.ax_dv.scatter(hits[hits['io_group'] == 3]['x'], hits[hits['io_group'] == 3]['y'],\
+        #            lw=0, s=5, alpha=0.9)
+        #self.ax_dv.scatter(hits[hits['io_group'] == 4]['x'], hits[hits['io_group'] == 4]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_dv.scatter(hits[hits['io_group'] == 5]['x'], hits[hits['io_group'] == 5]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_dv.scatter(hits[hits['io_group'] == 6]['x'], hits[hits['io_group'] == 6]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_dv.scatter(hits[hits['io_group'] == 7]['x'], hits[hits['io_group'] == 7]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
+        #self.ax_dv.scatter(hits[hits['io_group'] == 8]['x'], hits[hits['io_group'] == 8]['y'],\
+        #                    lw=0, s=5, alpha=0.9)
 
 
     def plot_light(self, light_wvfms, light_cmap, light_norm, light_cmap_zero):
@@ -796,9 +859,7 @@ class LArEventDisplay:
                 rel_pos = self.sipm_rel_pos[(i,j)][0]
                 if pos[0]==-1:
                     continue
-                true_x = self.convert_light_x(i,j,pos[0])
-                #print("True x:", true_x, "Pos[0]:", pos[0])
-                if (abs(true_x-x) < 0.5) and (pos[2]==z):
+                if (abs(pos[0]-x) < 0.5) and (pos[2]==z):
                     this_xz_sum += wvfm_factor*light_wvfms[0][i,j].sum()
                     #print("SIPM:",i,j,"Abs pos:",pos,"Rel pos:",rel_pos,"Light sum:",light_wvfms[0][i,j].sum())
             for i in range(len(self.geometry.attrs['module_RO_bounds'])):
@@ -867,8 +928,7 @@ class LArEventDisplay:
                     wvfm_factor = 2.
                 if pos[0]==-1:
                     continue
-                true_x = self.convert_light_x(i,j,pos[0])
-                if (abs(true_x-x) < 0.5) and (pos[1]==y):
+                if (abs(pos[0]-x) < 0.5) and (pos[1]==y):
                     this_xy_sum += wvfm_factor*light_wvfms[0][i,j].sum()
             for i in range(len(self.geometry.attrs['module_RO_bounds'])):
                 for j in range(2):
@@ -902,14 +962,13 @@ class LArEventDisplay:
             min_z_diff = np.where(abs(z_diffs)<1)
             z_pos = self.geometry.attrs['module_RO_bounds'][:,:,2][min_z_diff][0]
             #print("Z pos:", z_pos)
-            true_x = self.convert_light_x(i,j,pos[0])
             found_x = 0
             for k in range(len(self.geometry.attrs['module_RO_bounds'])):
-                if (abs(true_x-self.geometry.attrs['module_RO_bounds'][k][0][0]) < 1):
+                if (abs(pos[0]-self.geometry.attrs['module_RO_bounds'][k][0][0]) < 1):
                     x1 = self.geometry.attrs['module_RO_bounds'][k][0][0]
                     x2 = self.geometry.attrs['module_RO_bounds'][k][0][0]+self.geometry.attrs['max_drift_distance']
                     found_x = 1
-                elif (abs(true_x-self.geometry.attrs['module_RO_bounds'][k][1][0]) < 1):
+                elif (abs(pos[0]-self.geometry.attrs['module_RO_bounds'][k][1][0]) < 1):
                     x1 = self.geometry.attrs['module_RO_bounds'][k][1][0]-self.geometry.attrs['max_drift_distance']
                     x2 = self.geometry.attrs['module_RO_bounds'][k][1][0]
                     found_x = 1
