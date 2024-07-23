@@ -258,4 +258,3 @@ light_simulated: 0
 #light_nbit: 10
 #light_trig_mode: 0
 #lut_vox_div: [14, 26, 8]
-max_light_truth_ids: 0 # set to zero to disable light truth backtracking
