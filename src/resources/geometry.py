@@ -1,6 +1,5 @@
 import numpy as np
 import numpy.ma as ma
-import os
 import logging
 import warnings
 import yaml
@@ -98,7 +97,7 @@ class Geometry(H5FlowResource):
 
         self.path = params.get('path', self.default_path)
         self.network_agnostic = params.get('network_agnostic', self.default_network_agnostic)
-        self.charge_only = params.get('charge_only', self.default_charge_only) # Boolean switch that is set to true when no lrs_geometry_file is provided.
+        self.charge_only = params.get('charge_only', self.default_charge_only) 
         self.n_io_channels_per_tile = params.get('n_io_channels_per_tile', self.default_n_io_channels_per_tile)
         self.crs_geometry_files = params.get('crs_geometry_files', self.default_crs_geometry_file)
         self.crs_geometry_to_module = params.get('crs_geometry_to_module', self.default_crs_geometry_to_module)
@@ -154,11 +153,12 @@ class Geometry(H5FlowResource):
             write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
             write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
 
-            #write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
-            #write_lut(self.data_manager, self.path, self.sipm_rel_pos, 'sipm_rel_pos')
-            #write_lut(self.data_manager, self.path, self.det_id, 'det_id')
-            #write_lut(self.data_manager, self.path, self.det_bounds, 'det_bounds')
-            #write_lut(self.data_manager, self.path, self.sipm_abs_pos, 'sipm_abs_pos')
+            if not charge_only:
+                write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
+                write_lut(self.data_manager, self.path, self.sipm_rel_pos, 'sipm_rel_pos')
+                write_lut(self.data_manager, self.path, self.det_id, 'det_id')
+                write_lut(self.data_manager, self.path, self.det_bounds, 'det_bounds')
+                write_lut(self.data_manager, self.path, self.sipm_abs_pos, 'sipm_abs_pos')
         else:
             assert_compat_version(self.class_version, self.data['class_version'])
 
@@ -173,18 +173,23 @@ class Geometry(H5FlowResource):
             self._drift_dir = read_lut(self.data_manager, self.path, 'drift_dir')
             self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
-            #self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
-            #self._sipm_rel_pos = read_lut(self.data_manager, self.path, 'sipm_rel_pos')
 
-            #self._det_id = read_lut(self.data_manager, self.path, 'det_id')
-            #self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
-            #self._sipm_abs_pos = read_lut(self.data_manager, self.path, 'sipm_abs_pos')
+            if not charge_only:
+                self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
+                self._sipm_rel_pos = read_lut(self.data_manager, self.path, 'sipm_rel_pos')
+                self._det_id = read_lut(self.data_manager, self.path, 'det_id')
+                self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
+                self._sipm_abs_pos = read_lut(self.data_manager, self.path, 'sipm_abs_pos')
 
-        lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
-                    + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes)
-                    #+ self.det_rel_pos.nbytes + self.det_rel_pos.nbytes 
-                    #+ self.det_id.nbytes + self.det_bounds.nbytes
-                    #+ self.sipm_abs_pos.nbytes)
+        if not charge_only:
+            lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
+                        + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
+                        + self.det_rel_pos.nbytes + self.det_rel_pos.nbytes 
+                        + self.det_id.nbytes + self.det_bounds.nbytes
+                        + self.sipm_abs_pos.nbytes)
+        else:
+            lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
+                        + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes)
 
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
@@ -747,8 +752,7 @@ class Geometry(H5FlowResource):
         self._module_RO_bounds = []
         self._pixel_pitch = [0.]*n_modules
 
-        # Loop through modules 
-        count = 0
+        # Loop through modules
         for module_id in module_to_io_groups:
             geometry_yaml = geometry_yamls[self.crs_geometry_to_module[module_id-1]]
             pixel_pitch = geometry_yaml['pixel_pitch'] / units.cm # convert mm -> cm
@@ -781,7 +785,6 @@ class Geometry(H5FlowResource):
                 for chip_channel in chip_channel_to_position:
                     chip = chip_channel // 1000
                     channel = chip_channel % 1000
-                    #print("Chip channel loop: " +str(chip) + " " + str(channel))
 
                     try:
                         io_group_io_channel = tile_chip_to_io[tile][chip]
@@ -807,10 +810,6 @@ class Geometry(H5FlowResource):
                     y += tile_positions[tile][1]/units.cm # convert mm -> cm
                     z += mod_centers[module_id-1][2] # det geo yaml is already in cm
                     y += mod_centers[module_id-1][1] # det geo yaml is already in cm
-                    #print("FINAL")
-                    #print(str(io_group)+" "+str(io_channel)+" "+str(chip)+" "+str(chip_channel)+" "+str(channel)+" "+str(z)+" "+str(y)+" "+str(module_id)+" "+str(tile))
-                    #print("FINAL END")
-
                     self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = z, y
 
         # Determine module readout bounds
