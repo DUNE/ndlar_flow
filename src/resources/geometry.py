@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.ma as ma
 import logging
+import os
 import warnings
 import yaml
 
@@ -153,7 +154,7 @@ class Geometry(H5FlowResource):
             write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
             write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
 
-            if not charge_only:
+            if not self.charge_only:
                 write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
                 write_lut(self.data_manager, self.path, self.sipm_rel_pos, 'sipm_rel_pos')
                 write_lut(self.data_manager, self.path, self.det_id, 'det_id')
@@ -174,14 +175,14 @@ class Geometry(H5FlowResource):
             self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
 
-            if not charge_only:
+            if not self.charge_only:
                 self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
                 self._sipm_rel_pos = read_lut(self.data_manager, self.path, 'sipm_rel_pos')
                 self._det_id = read_lut(self.data_manager, self.path, 'det_id')
                 self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
                 self._sipm_abs_pos = read_lut(self.data_manager, self.path, 'sipm_abs_pos')
 
-        if not charge_only:
+        if not self.charge_only:
             lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
                         + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
                         + self.det_rel_pos.nbytes + self.det_rel_pos.nbytes 
