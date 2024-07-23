@@ -348,9 +348,9 @@ class LArEventDisplay:
         event_datetime = datetime.utcfromtimestamp(
                 event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
         # DEBUGGING TIMESTAMPS
-        print("Charge Unix TS:", event['unix_ts'])
-        print("Charge TS Start:", event['ts_start'])
-        print("Charge TS End:", event['ts_end'])
+        #print("Charge Unix TS:", event['unix_ts'])
+        #print("Charge TS Start:", event['ts_start'])
+        #print("Charge TS End:", event['ts_end'])
         print("Number of external triggers:", event['n_ext_trigs'])
         ev_id = event['id']
         hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
@@ -387,14 +387,14 @@ class LArEventDisplay:
         if self.show_event_mx2:
             
             charge_time = (event["unix_ts"] + event["ts_start"]/ 1e7)
-            print("charge_time:", charge_time)
-            print("Minerva time 1:", self.minerva_times[0])
+            #print("Charge Time:", charge_time)
+            #print("Minerva time 1:", self.minerva_times[0])
             #print("Minerva times:", len(self.minerva_times))
             # find the index of the minerva_times that matches the charge_time
             mx2_charge_time_diffs = np.abs(self.minerva_times - np.full_like(self.minerva_times, charge_time))
             trigger = np.argwhere(mx2_charge_time_diffs < 0.5).reshape(1,-1)[0]
-            print("Time diffs:", mx2_charge_time_diffs[trigger])
-            print("Trigger:", trigger)
+            #print("Time Differences:", mx2_charge_time_diffs[trigger])
+            #print("Trigger:", trigger)
             xs = []
             ys = []
             zs = []
@@ -402,7 +402,7 @@ class LArEventDisplay:
             #print("All Minerva tracks:", self.minerva_trk_index[trigger][0])
             for trig in trigger:
                 for idx in self.minerva_trk_index[trig]:
-                    print("Minerva time:", self.minerva_times[trig])
+                    #print("Minerva time:", self.minerva_times[trig])
                     n_nodes = self.minerva_trk_nodes[trig][idx]
                     if n_nodes > 0:
                         x_nodes = (
@@ -437,7 +437,11 @@ class LArEventDisplay:
             min_charge = self.charge_threshold
         else:
             min_charge = min(hits['Q'])
-        charge_norm = mpl.colors.Normalize(vmin=min_charge,vmax=max(max(hits['Q']), 1.))
+        if max(hits['Q']) > min_charge:
+            max_charge = max(hits['Q'])
+        else: 
+            max_charge = min_charge + 1
+        charge_norm = mpl.colors.Normalize(vmin=min_charge,vmax=max_charge)
         cmap = cmr.get_sub_cmap('cmr.torch_r', 0.13,0.95) # 0.03, 0.13 for torch_r
         cmap_zero = cmr.get_sub_cmap('cmr.torch_r', 0.03, 0.95) #cosmic okay, toxic_r okay, sapphire_r okay (ember_r light?) emerald_r
         mcharge = plt.cm.ScalarMappable(norm=charge_norm, cmap=cmap)
@@ -451,7 +455,11 @@ class LArEventDisplay:
                 min_light = self.light_threshold
             else:
                 min_light = light_wvfms[0].sum(axis=-1).min()
-            light_norm = colors.LogNorm(min_light,light_wvfms[0].sum(axis=-1).max()*2)
+            if light_wvfms[0].sum(axis=-1).max() > min_light:
+                max_light = light_wvfms[0].sum(axis=-1).max()*2
+            else:
+                max_light = min_light*10
+            light_norm = colors.LogNorm(min_light,max_light)
             mlight = plt.cm.ScalarMappable(norm=light_norm, cmap=light_cmap)
 
         # Set figure title
