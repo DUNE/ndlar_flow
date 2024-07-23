@@ -186,7 +186,10 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         # copy and remap the truth information
         if type(self.light_dat) is h5py.Group: # We have four 96-column matrices
-            light_dat = self._bloat_light_dat(self.light_dat) # Now have 384 col
+            if 'light_dat_allmodules' in self.light_dat:
+                light_dat = self.light_dat['light_dat_allmodules']
+            else:
+                light_dat = self._bloat_light_dat(self.light_dat) # Now have 384 col
         else:                   # We have the old 384-column matrix
             light_dat = self.light_dat
 
@@ -250,7 +253,8 @@ class LightEventGeneratorMC(H5FlowGenerator):
         # remapped_wvfms[:, np.r_[range(self.n_adcs)], self.busy_channel, self.busy_delay:] = self.busy_ampl
 
         # zero out disabled channels
-        remapped_wvfms[:, self.disabled_channels[...,0], self.disabled_channels[...,1]] = 0.
+        if self.disabled_channels:
+            remapped_wvfms[:, self.disabled_channels[...,0], self.disabled_channels[...,1]] = 0.
 
         # clip to ensure within datatype bounds
         remapped_wvfms = remapped_wvfms.clip(np.iinfo(self.wvfm_dtype['samples'].base).min, np.iinfo(self.wvfm_dtype['samples'].base).max)

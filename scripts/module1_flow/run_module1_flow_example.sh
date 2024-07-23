@@ -2,6 +2,9 @@
 # Runs module1_flow on an example file.
 #
 
+module load python
+source ~/reflow/flow.venv/bin/activate
+
 INPUT_FILE=$1
 
 OUTPUT_DIR=`pwd` #!!! change me
