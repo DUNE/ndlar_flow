@@ -15,7 +15,7 @@ except ImportError:
 
 # Ensure all non-standard packages are installed
 required_packages = [
-    'numpy', 'h5py', 'cmasher', 'IPython', 'matplotlib', 'pillow', 'uproot', 'h5flow'
+    'numpy', 'h5py', 'cmasher', 'IPython', 'matplotlib', 'pillow', 'uproot', 'h5flow', 'ipywidgets'
 ]
 
 installed_packages = {pkg.key for pkg in pkg_resources.working_set}
@@ -29,6 +29,7 @@ if missing_packages:
 import warnings
 import numpy as np
 from datetime import datetime
+import ipywidgets as widgets
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from src.proto_nd_flow.util.lut import LUT
@@ -276,7 +277,20 @@ class LArEventDisplay:
         # Set view zoom
         self.zooms = [10,]*len(self.azimuths)
 
+        # Create sliders for elevation and azimuthal angles # TO DO: FIX SLIDER WIDGET
+        #self.elev_slider = widgets.FloatSlider(value=30, min=0, max=90, step=1, description='Elevation:')
+        #self.azim_slider = widgets.FloatSlider(value=45, min=0, max=360, step=1, description='Azimuth:')
+        
+
+    ## Create the interactive widget # TO DO: FIX SLIDER WIDGET
+    #def update_plot(self, elev, azim):
+    #    self.ax_bdv.view_init(elev=elev, azim=azim)
+    #    display(plt.gcf(), self.elev_slider, self.azim_slider)
+        
     def run(self):
+
+        ## Link sliders to the update function
+        #widgets.interactive(self.update_plot, elev=self.elev_slider, azim=self.azim_slider) # TO DO: FIX SLIDER WIDGET
   
         event_ids = [ev['id'] for ev in self.events]
         ev_idx = 0
@@ -290,7 +304,8 @@ class LArEventDisplay:
 
             #clear_output(wait=True)
             #self.display_event(ev_id)
-            display(plt.gcf())
+            display(plt.gcf()) #, self.elev_slider, self.azim_slider) # TO DO: FIX SLIDER WIDGET
+            # Display sliders and plot
             user_input = input(
                 'Next event (q to exit/s to save to pdf/g to create gif/enter for next/number to skip to event)?\n')
             if not user_input:
@@ -327,7 +342,7 @@ class LArEventDisplay:
                     print("Proceeded to next available event instead")
                     ev_idx += 1
                     ev_id = event_ids[ev_idx]
-                    self.display_event(ev_id)                    
+                    self.display_event(ev_id)                 
             if ev_id >= event_ids[-1]:
                 print("End of file")
                 sys.exit()
