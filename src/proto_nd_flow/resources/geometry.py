@@ -33,7 +33,7 @@ class Geometry(H5FlowResource):
 
         Provides (for charge geometry):
          - ``beam_direction``    [param->attr]: Cartesian coordinate of beam direction
-         - ``crs_geometry_file`` [param->attr]: path to yaml file describing charge 
+         - ``crs_geometry_files`` [param->attr]: path to yaml files describing charge 
                                                 readout system geometry
          - ``drift_direction``   [param->attr]: Cartesian coordinate of drift direction
 
@@ -53,6 +53,7 @@ class Geometry(H5FlowResource):
                                                 is in the LAr fiducial volume
 
         Provides (for light geometry):
+         - ``lrs_geometry_file`` [param->attr]: path to yaml file describing light readout system geometry
          - ``det_rel_pos``: lookup table for relative position (TPC,side,vertical position from bottom) of light detectors (Full ArCLight or LCM)
          - ``sipm_rel_pos``: lookup table for lookup table for relative position (TPC,side,vertical position from bottom) of SiPMs (Single SiPM)
          - ``det_id``: lookup table for detector number from adc, channel id
@@ -130,6 +131,7 @@ class Geometry(H5FlowResource):
                                         classname=self.classname,
                                         class_version=self.class_version,
                                         beam_direction=self.beam_direction,
+                                        lrs_geometry_file=self.lrs_geometry_file,
                                         crs_geometry_files=self.crs_geometry_files, 
                                         crs_geometry_to_module=self.crs_geometry_to_module, 
                                         drift_direction=self.drift_direction,
