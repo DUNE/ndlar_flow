@@ -15,7 +15,7 @@ except ImportError:
 
 # Ensure all non-standard packages are installed
 required_packages = [
-    'numpy', 'h5py', 'cmasher', 'IPython', 'matplotlib', 'pillow', 'uproot', 'h5flow', 'ipywidgets'
+    'numpy', 'h5py', 'cmasher', 'IPython', 'PyMuPDF', 'matplotlib', 'pillow', 'uproot', 'h5flow', 'ipywidgets'
 ]
 
 installed_packages = {pkg.key for pkg in pkg_resources.working_set}
@@ -27,9 +27,11 @@ if missing_packages:
 
 # Import modules
 import warnings
+import fitz
 import numpy as np
 from datetime import datetime
 import ipywidgets as widgets
+from io import BytesIO
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from src.proto_nd_flow.util.lut import LUT
@@ -106,17 +108,18 @@ class LArEventDisplay:
         self.show_light = show_light
         self.show_event_light = show_light
         self.public = public
-        self.dune_logo = mpimg.imread(dune_logo)
+        self.dune_logo_pdf = fitz.open(dune_logo)#mpimg.imread(dune_logo)
         self.subexp_logo = mpimg.imread(subexp_logo)
 
         # Resize DUNE logo image to fit in display
-        self.original_dune_logo_shape = self.dune_logo.shape
-        self.dune_logo = Image.fromarray((self.dune_logo * 255).astype(np.uint8))
-        shrink_factor=(1/3)
-        new_size = (int(self.dune_logo.size[0] * shrink_factor), int(self.dune_logo.size[1] * shrink_factor))
-        self.dune_logo = self.dune_logo.resize(new_size, Image.LANCZOS)
-        self.dune_logo = np.array(self.dune_logo) / 255
-        print("Resized DUNE logo shape:", self.dune_logo.shape)
+        dune_logo_page = self.dune_logo_pdf.load_page(0)
+        dune_logo_pixmap = dune_logo_page.get_pixmap(matrix=fitz.Matrix(5, 5), dpi=600)
+        dune_logo_image = Image.frombytes("RGB", [dune_logo_pixmap.width, dune_logo_pixmap.height], dune_logo_pixmap.samples)
+        dune_logo_buf = BytesIO()
+        dune_logo_image.save(dune_logo_buf, format='png')
+        dune_logo_buf.seek(0)
+        self.dune_logo_png = mpimg.imread(dune_logo_buf, format='png')
+
         # Load events dataset
         events = f['charge/events/data']
         self.events = events[events['nhit'] > nhits]
@@ -207,8 +210,8 @@ class LArEventDisplay:
                 self.fig = plt.figure(constrained_layout=False, figsize=(27, 27))
             else:
                 self.fig = plt.figure(constrained_layout=False, figsize=(37, 27))
-            self.axes_mosaic = [["ax_bd", "ax_bd",  "ax_logo", "ax_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
-                                ["ax_bd", "ax_bd",  "ax_logo", "ax_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
+            self.axes_mosaic = [["ax_bd", "ax_bd",  "ax_subexp_logo", "ax_subexp_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
+                                ["ax_bd", "ax_bd",  "ax_subexp_logo", "ax_subexp_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
                                 ["ax_bv", "ax_bv", "ax_dv", "ax_dv", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
                                 ["ax_bv", "ax_bv", "ax_dv", "ax_dv", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
                                 ["ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2", "ax_mx2"],\
@@ -244,8 +247,8 @@ class LArEventDisplay:
             self.ax_mx2.set_position(new_mx2_pos)
 
         else:
-            self.fig = plt.figure(constrained_layout=False, figsize=(26, 13))
-            self.axes_mosaic = [["ax_bd", "ax_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],]
+            self.fig = plt.figure(constrained_layout=False, figsize=(15, 8))
+            self.axes_mosaic = [["ax_bd", "ax_subexp_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],]
             self.axes_dict = self.fig.subplot_mosaic(self.axes_mosaic, \
                                                     per_subplot_kw={"ax_bdv": {"projection": "3d"}})
             if not self.public:
@@ -256,11 +259,13 @@ class LArEventDisplay:
             self.fig.subplots_adjust(bottom=0.1)
             self.fig.subplots_adjust(wspace=0.02, hspace=0.02)
 
+        ax_dune_logo = self.fig.add_axes([0.59, 0.90, 0.4, 0.09])
+        self.ax_dune_logo = ax_dune_logo
         self.ax_bdv = self.axes_dict["ax_bdv"]
         self.ax_bd = self.axes_dict["ax_bd"]
         self.ax_bv = self.axes_dict["ax_bv"]
         self.ax_dv = self.axes_dict["ax_dv"]
-        self.ax_logo = self.axes_dict["ax_logo"]
+        self.ax_subexp_logo = self.axes_dict["ax_subexp_logo"]
         if not self.public:
             self.cbar_ax = cbar_ax
             if self.show_light:
@@ -286,6 +291,22 @@ class LArEventDisplay:
     #def update_plot(self, elev, azim):
     #    self.ax_bdv.view_init(elev=elev, azim=azim)
     #    display(plt.gcf(), self.elev_slider, self.azim_slider)
+    def save_to_pdf(self):
+        save_dir = os.path.dirname(__file__)
+        filename = self.filename.split('.')[0]+'_Event_'+str(ev_id)+'.pdf'
+        savepath = os.path.join(save_dir, filename)
+        print("Saving to", savepath.split('.')[0]+'_final.pdf')
+        self.ax_dune_logo.clear()
+        self.ax_dune_logo.axis('off')
+        self.fig.savefig(savepath, bbox_inches='tight')
+        saved_pdf = fitz.open(savepath)
+        saved_pdf_page = saved_pdf[0]
+        rect_max_x = saved_pdf_page.rect[2]
+        rect_max_y = saved_pdf_page.rect[3]
+        include_dune_logo_rect = fitz.Rect(rect_max_x-300, 2, rect_max_x-5, 65)
+        saved_pdf_page.show_pdf_page(include_dune_logo_rect, self.dune_logo_pdf, 0)
+        saved_pdf.save(savepath.split('.')[0]+'_final.pdf')
+        os.remove(savepath)
         
     def run(self):
 
@@ -316,7 +337,7 @@ class LArEventDisplay:
             elif user_input[0].lower() == 'q':
                 sys.exit()
             elif user_input[0].lower() == 's':
-                plt.savefig(self.filename+'_Event_'+str(ev_id)+'.pdf')
+                self.save_to_pdf()
             elif user_input[0].lower() == 'g':
                 print("Creating GIF of Event Display")
                 # Loop over 3D views
@@ -488,12 +509,8 @@ class LArEventDisplay:
             mlight = plt.cm.ScalarMappable(norm=light_norm, cmap=light_cmap)
 
         # Set figure title
-        if self.public:
-            self.fig.suptitle("\nEvent %i - %s UTC" %
-                          (ev_id, event_datetime), x=0.28, size=48, weight='bold', linespacing=0.3)
-        else:
-            self.fig.suptitle("\nEvent %i - %s UTC" %
-                          (ev_id, event_datetime), x=0.38, size=48, weight='bold', linespacing=0.3)
+        self.fig.suptitle("\n Event %i - %s UTC" %
+                          (ev_id, event_datetime), x=0.05, size=30, ha='left', weight='bold', linespacing=0.15)
         
         if self.show_event_mx2 and self.show_event_light:
             return hits, mx2, light_wvfms, mcharge, mmx2, mlight, cmap, mx2_cmap, light_cmap, charge_norm, mx2_norm, light_norm, cmap_zero, light_cmap_zero
@@ -515,27 +532,10 @@ class LArEventDisplay:
 
         # Show 2x2 and DUNE logos
 
-        self.ax_logo.axis('off')
-        self.ax_logo.imshow(self.subexp_logo)
-        if self.public:
-            xo_shift = 65#-219
-            yo_shift = -25#44
-        else:
-            xo_shift = 0
-            yo_shift = 0
-        if self.show_light and self.show_mx2:
-            self.fig.figimage(self.dune_logo, xo=1712+xo_shift, \
-                                yo=2590+yo_shift, origin='upper')
-        elif not self.show_light and self.show_mx2:
-            self.fig.figimage(self.dune_logo, xo=1712+xo_shift, \
-                                yo=2540+yo_shift, origin='upper')
-        elif self.show_light and not self.show_mx2:
-            self.fig.figimage(self.dune_logo, xo=1632+xo_shift, \
-                                yo=1215+yo_shift, origin='upper')
-        else:
-            self.fig.figimage(self.dune_logo, xo=1632+xo_shift, \
-                                yo=1085+yo_shift, origin='upper')
-        #print("Number of available events:", len(self.events))
+        self.ax_subexp_logo.axis('off')
+        self.ax_subexp_logo.imshow(self.subexp_logo)
+        self.ax_dune_logo.axis('off')
+        self.ax_dune_logo.imshow(self.dune_logo_png)
 
         # Set axes for 3D canvas (Beam, Drift, Vertical)
 
@@ -788,22 +788,6 @@ class LArEventDisplay:
             print("Event " + str(ev_id) + " is a beam trigger event")
         else:
             print("Event " + str(ev_id) + " is NOT a beam trigger event")
-        # Adjust drift velocity
-        # USED DURING RAMP, MOSTLY UNNECESSARY NOW
-        #drift_dir = np.full_like(hits['x'], 1)
-        #io_group_mask = hits['io_group'] % 2 == 0
-        #drift_dir[io_group_mask] = -1
-#
-        #orig_drift_v=0.16 #mm/clock cycles 
-        #new_drift_v=0.158#mm/clock cycles, for example. not sure what it is now
-        #orig_drift = hits['x'] # cm
-        #drift_time = hits['t_drift']*0.1 # ticks (0.1 us)
-        ##print("Drift time:", drift_time[:10])
-        ##print("Original drift:", orig_drift[:10])
-        #corrected_drift = ( orig_drift - (drift_dir)*drift_time * np.full_like(drift_time, orig_drift_v)) \
-        #    + (drift_dir)*drift_time* np.full_like(drift_time, new_drift_v)
-        ##print("Corrected drift:", corrected_drift[:10])
-        #corrected_drift = hits['x']
 
         if self.public:
             hits = hits[hits['Q'] > self.charge_threshold]
