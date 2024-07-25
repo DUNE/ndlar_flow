@@ -66,8 +66,6 @@ class LArEventDisplay:
 
             - filedir         (str): path to input file
             - filename        (str): name of flow file
-            - dune_logo       (str): path to DUNE logo image
-            - subexp_logo     (str): path to subexperiment logo image
             - nhits           (int): number of hits (threshold) for events to be made available (default: 1)
             - ntrigs          (int): number of external triggers (threshold)  threshold for events to be made available (default: 0)
             - show_light      (bool): whether to show light information in display (default: True)
@@ -92,11 +90,9 @@ class LArEventDisplay:
 
     '''
 
-    def __init__(self, filedir,filename, dune_logo, subexp_logo, nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, public=False):
+    def __init__(self, filedir,filename, nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, public=False):
         
         f = h5py.File(filedir+filename, 'r')
-        # ARTIFICIALLY ADDING LIGHT INFO:
-        lf = h5py.File('/global/cfs/cdirs/dune/users/calivers/elise_files/mpd_run_hvramp_rctl_091_p39.FLOW.hdf5', 'r')
         if not filepath_mx2==None:
             f_mx2 = uproot.open(filepath_mx2)
             self.show_mx2 = True
@@ -108,7 +104,11 @@ class LArEventDisplay:
         self.show_light = show_light
         self.show_event_light = show_light
         self.public = public
+        self.lar_evd_dir = os.path.dirname(__file__)
+        
+        dune_logo = os.path.join(self.lar_evd_dir, 'DUNElogo.pdf')
         self.dune_logo_pdf = fitz.open(dune_logo)#mpimg.imread(dune_logo)
+        subexp_logo=os.path.join(self.lar_evd_dir, '2x2logo.png')
         self.subexp_logo = mpimg.imread(subexp_logo)
 
         # Resize DUNE logo image to fit in display
@@ -295,7 +295,7 @@ class LArEventDisplay:
     #    self.ax_bdv.view_init(elev=elev, azim=azim)
     #    display(plt.gcf(), self.elev_slider, self.azim_slider)
     def save_to_pdf(self, ev_id):
-        save_dir = os.path.dirname(__file__)
+        save_dir = self.lar_evd_dir
         filename = self.filename.split('.')[0]+'_Event_'+str(ev_id)+'.pdf'
         savepath = os.path.join(save_dir, filename)
         print("Saving to", savepath.split('.')[0]+'_final.pdf')
@@ -344,7 +344,7 @@ class LArEventDisplay:
             elif user_input[0].lower() == 'g':
                 print("Creating GIF of Event Display")
                 # Loop over 3D views
-                gif_dir = os.path.dirname(__file__)
+                gif_dir = self.lar_evd_dir
                 frame_num = 0
                 for (azi,zen,zoom) in zip(self.azimuths,self.zeniths,self.zooms):
                     self.ax_bdv.view_init(zen, azi)   # see mpl_toolkits.mplot3d.axes3d.Axes3D.view_init
