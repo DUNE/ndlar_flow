@@ -67,7 +67,8 @@ class RockMuonSelection(H5FlowStage):
         ('x_mid','f8'),
         ('y_mid','f8'),
         ('z_mid','f8'),
-        ('t','f8')
+        ('t','f8'),
+        ('io_group', 'i4')
     ])
 
     
@@ -127,16 +128,7 @@ class RockMuonSelection(H5FlowStage):
         index_of_track_hits = []
 
         positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
-        #nan_indices = np.unique(np.argwhere(np.isnan(positions))[:,0])
-
-        '''
-        if len(nan_indices) >0:
-            print(nan_indices)
-            positions_filtered = np.delete(positions, nan_indices, axis = 0)
-            print(positions_filtered[4009])
-        else:
-            positions_filtered = positions
-        '''
+        
         hit_cluster = DBSCAN(eps = 8, min_samples = 1).fit(positions)
         
         unique_labels = np.unique(hit_cluster.labels_)
@@ -196,24 +188,6 @@ class RockMuonSelection(H5FlowStage):
     '''
     Checks to see if start/end point of track are close to two different faces of detector. If they are this will return True. Note: >= -1 just in case if a hit is reconstructed outside of detector.
     '''
-    '''
-    #@staticmethod
-    def close_to_two_faces(self,boundaries, start_point, end_point):
-        end_point_distance_to_min_bounds = abs(boundaries - end_point)
-        start_point_distance_to_min_bounds = abs(boundaries - start_point)
-    
-        end_mask_within_2cm, start_mask_within_2cm = np.ravel(end_point_distance_to_min_bounds <= 2), np.ravel(start_point_distance_to_min_bounds <= 2)
-    
-        end_indices_within_2cm = np.where(end_mask_within_2cm == True)[0]
-        start_indices_within_2cm = np.where(start_mask_within_2cm == True)[0]
-    
-        if (len(end_indices_within_2cm) > 0) & (len(start_indices_within_2cm) > 0):
-            penetrated = np.any(start_indices_within_2cm != end_indices_within_2cm)
-        else:
-            penetrated = False
-        
-        return penetrated
-    '''
     def close_to_two_faces(self, boundaries, start_point, end_point):
         # Boundaries are in the order [xmin, ymin, zmin, xmax, ymax, zmax]
         min_bounds = boundaries[:3]  # [xmin, ymin, zmin]
@@ -263,13 +237,34 @@ class RockMuonSelection(H5FlowStage):
 
         # Calculate the Euclidean distance between each point and its projection on the line
         distances = np.linalg.norm(positions - projections, axis=1)
-
+        
         mask_good = distances <= 3.5
 
         filtered_hits = hits[mask_good]
 
         return filtered_hits
+    #@staticmethod
+    def average_distance(self, hits):
+        positions = np.column_stack((hits['x'], hits['y'], hits['z']))
 
+        # Perform PCA to find the principal component
+        pca = PCA(n_components=1)
+        pca.fit(positions)
+        track_direction = pca.components_[0]
+        hits_mean = pca.mean_
+
+
+
+        # Project points onto the principal component (the line)
+        projections = np.dot(positions - hits_mean, track_direction[:, np.newaxis]) * track_direction + hits_mean
+
+        # Calculate the Euclidean distance between each point and its projection on the line
+        distances = np.linalg.norm(positions - projections, axis=1)
+        #print(np.mean(distances))
+        average_distances = np.mean(distances)
+
+        return average_distances
+    
     #@staticmethod
     def select_muon_track(self,hits,Min_max_detector_bounds):
             muon_hits = []
@@ -282,24 +277,28 @@ class RockMuonSelection(H5FlowStage):
             MEVR = self.MEVR #Minimum explained variance ratio
 
             L_cut = self.length_cut #minimum track length requirement
+            
+            filtered_hits = self.clean_noise_hits(hits)
+            
+            explained_var, direction_vector,mean_point = self.PCAs(filtered_hits)
                 
-            explained_var, direction_vector,mean_point = self.PCAs(hits)
-                
-            l_track, start_point, end_point = self.length(hits)
-                         
-            if (explained_var > MEVR) & (l_track > L_cut):
+            l_track, start_point, end_point = self.length(filtered_hits)
+            
+            avg_distance = self.average_distance(filtered_hits)
+
+            if (avg_distance < 1.5) & (l_track > L_cut):
 
                 penetrated = self.close_to_two_faces(faces_of_detector, start_point, end_point)
 
                 if penetrated == True:
-                    filtered_hits = self.clean_noise_hits(hits)
+                    #filtered_hits = self.clean_noise_hits(hits)
 
                     muon_hits.append(filtered_hits)
 
                     #Get the new hits info
-                    explained_var, direction_vector,mean_point = self.PCAs(filtered_hits)
+                    #explained_var, direction_vector,mean_point = self.PCAs(filtered_hits)
 
-                    l_track, start_point, end_point = self.length(filtered_hits)
+                    #l_track, start_point, end_point = self.length(filtered_hits)
 
             return np.array(muon_hits), l_track, start_point, end_point, explained_var, direction_vector
     
@@ -387,19 +386,24 @@ class RockMuonSelection(H5FlowStage):
         hit_ref = []
         
         track = muon_hits[0] #Makes sure hits go back to a (n,) shape instead of (1,n) shape
+        
         #l_track, start_point_track, end_point_track = self.length(track)
         ex_var, direction, mean_point = self.PCAs(track)
         #print(sum(track['Q'])/l_track)
         number_of_hits = len(track)
         hit_density = number_of_hits/est_length_of_track
-
-
-        scale = 12/hit_density
         
         tpc_hits = self.TPC_separation(track)
         
-         
+        same_pixel_pitch = [1,2,3,4,7,8]
+
         for hits in tpc_hits:
+            io_group_of_tpc = np.unique(hits['io_group'])
+            
+            if io_group_of_tpc in same_pixel_pitch:
+                scale = 0.4434
+            else:
+                scale = 0.3857
             if len(hits) != 0:
                 tpc_var, tpc_direction, tpc_mean = self.PCAs(hits)
 
@@ -461,11 +465,12 @@ class RockMuonSelection(H5FlowStage):
                         Energy_of_segment = sum(hits_of_segment['E'])
                         Q_of_segment = sum(hits_of_segment['Q'])
                         drift_time = np.mean(hits_of_segment['t_drift'])
-                
+                        
+                        io_group_of_segment = np.unique(hits_of_segment['io_group'])[0]
                         self.segment_count += 1
 
                         dx = np.linalg.norm(segment_start-segment_end)
-                        segment_info.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Q_of_segment, dx, x_mid, y_mid,z_mid, drift_time])
+                        segment_info.append([self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Q_of_segment, dx, x_mid, y_mid,z_mid, drift_time, io_group_of_segment])
                     
                         for hitss in hits_of_segment:
                             hit_ref.append([self.segment_count, hitss['id']])
@@ -499,7 +504,9 @@ class RockMuonSelection(H5FlowStage):
         for indices in hit_indices:
             if len(indices) > 10:
                 hits = PromptHits_ev[indices]
-                 
+                hits = self.clean_noise_hits(hits)
+                if len(hits) < 1:
+                    continue
                 muon_track,length_of_track, start_point, end_point, explained_var, direction_vector = self.select_muon_track(hits,Min_max_detector_bounds)
                  
                 if len(muon_track) != 0:
