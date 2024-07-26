@@ -332,9 +332,9 @@ class LArEventDisplay:
 
         # First, save figure to PDF (clearing DUNE logo axis)      
         save_dir = self.lar_evd_dir
-        filename = self.filename.split('.')[0]+'_Event_'+str(ev_id)+'_initial.pdf'
+        filename = self.filename.split('.')[0]+'_Event_'+str(ev_id)+'.pdf'
         savepath = os.path.join(save_dir, filename)
-        print("Saving to", savepath.split('.')[0]+'.pdf')
+        print("Saving to", savepath.split('.')[0]+'_Display.pdf')
         self.ax_dune_logo.clear()
         self.ax_dune_logo.axis('off')
         self.fig.savefig(savepath, bbox_inches='tight')
@@ -345,7 +345,7 @@ class LArEventDisplay:
         rect_max_x = saved_pdf_page.rect[2]
         include_dune_logo_rect = fitz.Rect(rect_max_x-300, 2, rect_max_x-5, 65)
         saved_pdf_page.show_pdf_page(include_dune_logo_rect, self.dune_logo_pdf, 0)
-        saved_pdf.save(savepath.split('.')[0]+'.pdf')
+        saved_pdf.save(savepath.split('.')[0]+'_Display.pdf')
 
         # Remove initial PDF without DUNE logo
         os.remove(savepath)
