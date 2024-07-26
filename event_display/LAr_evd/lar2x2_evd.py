@@ -64,13 +64,15 @@ class LArEventDisplay:
 
         Inputs are as follows:
 
-            - filedir         (str): path to input file
-            - filename        (str): name of flow file
-            - nhits           (int): number of hits (threshold) for events to be made available (default: 1)
-            - ntrigs          (int): number of external triggers (threshold)  threshold for events to be made available (default: 0)
-            - show_light      (bool): whether to show light information in display (default: True)
-            - public          (bool): whether to display for public i.e. include extra charge/light thresholds (default: False)
-            - filepath_mx2    (str): path to Mx2 file if using Mx2 data (default: None)
+            - filedir          (str): path to input file
+            - filename         (str): name of flow file
+            - nhits            (int): number of hits (threshold) for events to be made available (default: 1)
+            - ntrigs           (int): number of external triggers (threshold)  threshold for events to be made available (default: 0)
+            - show_light       (bool): whether to show light information in display (default: True)
+            - show_colorbars   (bool): whether to display color bars (default: True)
+            - filepath_mx2     (str): path to Mx2 file if using Mx2 data (default: None)
+            - charge_threshold (float): threshold for charge hits to be shown (default: None)
+            - light_threshold  (float): threshold for light to be shown (default: 150000 ADC counts)
             
         In order to run the display, set up a Jupyter Notebook, import everything in this file,
         and execute the run() method, e.g.:
@@ -82,7 +84,7 @@ class LArEventDisplay:
         f = 'filename'
         dune = '/path/to/dune_logo.png'
         twobytwo = '/path/to/2x2_logo.png'
-        evd = LArEventDisplay(filedir=d, filename=f, dune_logo=dune, subexp_logo=twobytwo, nhits=1, show_light=False, public=False)
+        evd = LArEventDisplay(filedir=d, filename=f, dune_logo=dune, subexp_logo=twobytwo, nhits=1, show_light=False, show_colorbars=False)
         evd.run()
 
         Alternatively, you can a display for a specific event by calling the display_event() method with the event number as an argument, e.g.:
@@ -90,7 +92,7 @@ class LArEventDisplay:
 
     '''
 
-    def __init__(self, filedir,filename, nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, public=False):
+    def __init__(self, filedir,filename, nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, show_colorbars=True, charge_threshold=None, light_threshold=150000):
         
         f = h5py.File(filedir+filename, 'r')
         if not filepath_mx2==None:
@@ -103,7 +105,7 @@ class LArEventDisplay:
         self.filepath_mx2 = filepath_mx2
         self.show_light = show_light
         self.show_event_light = show_light
-        self.public = public
+        self.show_colorbars = show_colorbars
         self.lar_evd_dir = os.path.dirname(__file__)
 
         dune_logo = os.path.join(self.lar_evd_dir, 'DUNElogo.pdf')
@@ -132,8 +134,8 @@ class LArEventDisplay:
         self.hits_ref = f['charge/events/ref/charge/'+self.hits_dset+'/ref']
         self.hits_region = f['charge/events/ref/charge/'+self.hits_dset+'/ref_region']
         self.hits_per_event = nhits
-        self.charge_threshold = 10.
-        self.light_threshold = 150000#3e5
+        self.charge_threshold = charge_threshold
+        self.light_threshold = light_threshold
         if self.show_light:
             # Load light event and waveform datasets
             self.light_events = f['light/events/data']
@@ -221,10 +223,10 @@ class LArEventDisplay:
                                                     per_subplot_kw={"ax_bdv": {"projection": "3d"}, 
                                                                     "ax_mx2": {"projection": "3d"}})
             self.ax_mx2 = self.axes_dict["ax_mx2"]
-            if not self.public and not self.show_light:
+            if not self.show_colorbars and not self.show_light:
                 cbar_ax = self.fig.add_axes([0.15, 0.45, 0.675, 0.015])
                 #self.fig.subplots_adjust(right=0.94)
-            if not self.public and self.show_light:
+            if not self.show_colorbars and self.show_light:
                 cbar_ax = self.fig.add_axes([0.08, 0.45, 0.38, 0.015])
                 light_cbar_ax = self.fig.add_axes([0.51, 0.45, 0.38, 0.015])
                 #cbar_ax = self.fig.add_axes([0.15, 0.47, 0.675, 0.015])
@@ -237,7 +239,7 @@ class LArEventDisplay:
             current_mx2_pos = self.ax_mx2.get_position()
             #print("Current Mx2 position:", current_mx2_pos)
             #padding = 0.02
-            if self.public:
+            if self.show_colorbars:
                 x0_shift = 0.13
                 y0_shift = 0.04
             else: 
@@ -252,11 +254,11 @@ class LArEventDisplay:
             self.axes_mosaic = [["ax_bd", "ax_subexp_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],]
             self.axes_dict = self.fig.subplot_mosaic(self.axes_mosaic, \
                                                     per_subplot_kw={"ax_bdv": {"projection": "3d"}})
-            if not self.public and not self.show_light:
+            if not self.show_colorbars and not self.show_light:
                 cbar_ax = self.fig.add_axes([0.145, 0.001, 0.675, 0.025])
                 #cbar_ax = self.fig.add_axes([0.95, 0.12, 0.015, 0.75])
                 #self.fig.subplots_adjust(right=0.94)
-            if not self.public and self.show_light:
+            if not self.show_colorbars and self.show_light:
                 cbar_ax = self.fig.add_axes([0.08, 0.001, 0.38, 0.025])
                 light_cbar_ax = self.fig.add_axes([0.51, 0.001, 0.38, 0.025])
                 #light_cbar_ax = self.fig.add_axes([0.15, 0.005, 0.75, 0.03])
@@ -273,7 +275,7 @@ class LArEventDisplay:
         self.ax_bv = self.axes_dict["ax_bv"]
         self.ax_dv = self.axes_dict["ax_dv"]
         self.ax_subexp_logo = self.axes_dict["ax_subexp_logo"]
-        if not self.public:
+        if not self.show_colorbars:
             self.cbar_ax = cbar_ax
             if self.show_light:
                 self.light_cbar_ax = light_cbar_ax
@@ -401,7 +403,7 @@ class LArEventDisplay:
         self.ax_bd.cla()
         self.ax_bv.cla()
         self.ax_dv.cla()
-        if not self.public:
+        if not self.show_colorbars:
             self.cbar_ax.cla()
             if self.show_light:
                 self.light_cbar_ax.cla()
@@ -506,11 +508,7 @@ class LArEventDisplay:
                 mmx2 = plt.cm.ScalarMappable(norm=mx2_norm, cmap=mx2_cmap)
 
         # Prepare color map for charge
-        #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
-        if self.public:
-            min_charge = min(hits['Q'])#10#self.charge_threshold
-        else:
-            min_charge = min(hits['Q'])
+        min_charge = min(hits['Q'])
         if max(hits['Q']) > min_charge:
             max_charge = max(hits['Q'])
         else: 
@@ -785,7 +783,7 @@ class LArEventDisplay:
                              [self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2, \
                               self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2],\
                               color='gainsboro', alpha=0.9, linewidth=2,solid_capstyle='butt')
-        if not self.public:
+        if not self.show_colorbars:
             # Set charge colorbar
             cbar = self.fig.colorbar(mcharge, cax=self.cbar_ax, label=r'Charge [$10^3$ e]', orientation='horizontal')
             cbar.set_label(r'Charge [$\mathbf{10^3}$ e]', size=13, weight='bold')
@@ -819,7 +817,7 @@ class LArEventDisplay:
         else:
             print("Event " + str(ev_id) + " is NOT a beam trigger event")
 
-        if self.public:
+        if self.charge_threshold is not None:
             hits = hits[hits['Q'] > self.charge_threshold]
             self.hits_per_event = len(hits)
         # Plot hits in 3D view first so that cathodes/anodes go over the hits
@@ -1058,7 +1056,7 @@ class LArEventDisplay:
                     found_x = 1
                 if found_x ==1:
                     light_x, light_y, light_z = make_z_plane(x1,x2, pos[1]-2.25, pos[1]+2.25,z_pos)
-                    self.ax_bdv.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.2, shade=False)
+                    self.ax_bdv.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.1, shade=False)
                     if self.show_event_mx2:
                         self.ax_mx2.plot_surface(light_z,light_x,light_y,color=cmap_value, alpha=0.1, shade=False)
                     #print("Light sum at:", pos, "is", this_xyz_sum)
