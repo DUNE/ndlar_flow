@@ -67,6 +67,7 @@ class LArEventDisplay:
             - filepath_mx2     (str): path to Mx2 file if using Mx2 data (default: None)
             - charge_threshold (float): threshold for charge hits to be shown (default: None)
             - light_threshold  (float): threshold for light to be shown (default: 150000 ADC counts)
+            - beam_only        (bool): whether to only show beam events (default: False)
             
         In order to run the display and interactively flip through events, set up a Jupyter Notebook, import everything in this file,
         and execute the run() method, e.g.:
@@ -95,7 +96,7 @@ class LArEventDisplay:
 
     # Initialize class
     def __init__(self, filedir, filename, nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, \
-                 show_colorbars=True, charge_threshold=None, light_threshold=150000):
+                 show_colorbars=True, charge_threshold=None, light_threshold=150000, beam_only=False):
         
         # Open files
         f = h5py.File(filedir+filename, 'r')
@@ -114,6 +115,7 @@ class LArEventDisplay:
         self.show_colorbars = show_colorbars
         self.charge_threshold = charge_threshold
         self.light_threshold = light_threshold
+        self.beam_only = beam_only
 
         # Set directory for saving files and finding logo image files
         self.lar_evd_dir = os.path.dirname(__file__)
@@ -134,9 +136,26 @@ class LArEventDisplay:
         self.dune_logo_png = mpimg.imread(dune_logo_buf, format='png')
 
         # Load events dataset
-        events = f['charge/events/data']
-        self.events = events[events['nhit'] > nhits]
+        self.events = f['charge/events/data']
+
+        # Load external triggers dataset
+        self.exttrigs_full = f['charge/ext_trigs/data']
+        self.exttrigs_ref = f['charge/events/ref/charge/ext_trigs/ref']
+        self.exttrigs_region = f['charge/events/ref/charge/ext_trigs/ref_region']
+
+        # Get beam trigger events
+        self.exttrigs_beam = np.where(self.exttrigs_full['iogroup'] == 5)
+        self.beam_events_ref = np.sort(self.exttrigs_ref[:,0][self.exttrigs_beam])
+        self.beam_events = self.events[self.beam_events_ref]
+        if self.beam_only:
+            self.events = self.beam_events
+        self.is_beam_event = beam_only
+
+        # Filter events and beam events based on nhits and ntrigs
+        self.events = self.events[self.events['nhit'] > nhits]
         self.events = self.events[self.events['n_ext_trigs'] >= ntrigs]
+        self.beam_events = self.beam_events[self.beam_events['nhit'] > nhits]
+        self.beam_events = self.beam_events[self.beam_events['n_ext_trigs'] >= ntrigs]
 
         # Load geometry and other info
         self.geometry = f['geometry_info']
@@ -190,15 +209,6 @@ class LArEventDisplay:
                         f_mx2["minerva"]["ev_gps_time_sec"].array(library="np")
                         + f_mx2["minerva"]["ev_gps_time_usec"].array(library="np") / 1e6
                     )
-
-        # # TO DO: Fix beam trigger checking so that it is linked to event IDs for ability to filter out non-beam events
-        #self.exttrigs_ref = f['charge/events/ref/charge/ext_trigs/ref']
-        #self.exttrigs_region = f['charge/events/ref/charge/ext_trigs/ref_region']
-        #all_beam_triggers = []
-        #for ev_idx, iogroup in enumerate(f["charge/ext_trigs/data"]["iogroup"]):
-        #    if iogroup == 5:
-        #        all_beam_triggers.append(ev_idx)
-        #self.beam_triggers = all_beam_triggers
 
         # Set up figure and subplots
         # NOTE: This is very different if Mx2 is shown
@@ -429,16 +439,19 @@ class LArEventDisplay:
         print("Number of available events:", len(self.events))
         print("For fast-forwarding purposes, here is every 10th event number in your sample:", [ev for ev in self.events['id'][9::10]])
 
-        # TO DO: Fix beam trigger checking so that it is linked to event IDs for ability to filter out non-beam events
-        #if not (ev_idx in self.beam_triggers): 
-        #    self.show_event_mx2 = False
-
         # Get event general information
         event = self.events[ev_idx]
         event_datetime = datetime.utcfromtimestamp(
                 event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
   
         print("Number of external triggers in this event:", event['n_ext_trigs'])
+
+        # Check if event is a beam event
+        if not self.beam_only and ev_id in self.beam_events['id']:
+            self.is_beam_event = True
+        # Check if event is a beam event for showing Mx2 (TO DO: Is this necessary for Mx2 matching?)
+        #if not self.is_beam_event: 
+        #    self.show_event_mx2 = False
 
         # Get event charge information
         hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
@@ -603,6 +616,8 @@ class LArEventDisplay:
         self.ax_bdv.set_box_aspect([1,1,1], zoom=0.985)
         self.ax_bdv.view_init(azim=-75, elev=17)
 
+        # NOTE: xlim and ylim for all 2D subplots are the same and based on the 
+        #       maximum and minimum boundary values of the longest detector axis (beam, Z)
         # Set axes for Beam vs Drift (ZX) canvas
         #self.ax_bd.set_xlabel('Beam Axis [cm]', fontsize=14) # Currently not showing x-axis label bc overlap with lower subplot
         self.ax_bd.set_ylabel('Drift Axis [cm]', fontsize=14, weight='bold')
@@ -797,13 +812,11 @@ class LArEventDisplay:
         else:
             mcharge, cmap, charge_norm, cmap_zero = event_info
 
-        # TO DO: Fix beam trigger checking so that it is linked to event IDs for ability to filter out non-beam events
         # Check whether event is a beam trigger event
-        #ev_idx = np.argwhere(self.events['id'] == ev_id)[0][0]
-        #if ev_idx in self.beam_triggers:
-        #    print("Event " + str(ev_id) + " is a beam trigger event")
-        #else:
-        #    print("Event " + str(ev_id) + " is NOT a beam trigger event")
+        if self.is_beam_event:
+            print("Event " + str(ev_id) + " is a beam trigger event")
+        else:
+            print("Event " + str(ev_id) + " is NOT a beam trigger event")
 
         # Reset hits if charge threshold is set
         if self.charge_threshold is not None:
