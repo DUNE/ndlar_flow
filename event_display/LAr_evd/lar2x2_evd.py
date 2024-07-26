@@ -105,7 +105,7 @@ class LArEventDisplay:
         self.show_event_light = show_light
         self.public = public
         self.lar_evd_dir = os.path.dirname(__file__)
-        
+
         dune_logo = os.path.join(self.lar_evd_dir, 'DUNElogo.pdf')
         self.dune_logo_pdf = fitz.open(dune_logo)#mpimg.imread(dune_logo)
         subexp_logo=os.path.join(self.lar_evd_dir, '2x2logo.png')
@@ -131,6 +131,7 @@ class LArEventDisplay:
         self.hits_full = f['charge/'+self.hits_dset+'/data']
         self.hits_ref = f['charge/events/ref/charge/'+self.hits_dset+'/ref']
         self.hits_region = f['charge/events/ref/charge/'+self.hits_dset+'/ref_region']
+        self.hits_per_event = nhits
         self.charge_threshold = 10.
         self.light_threshold = 150000#3e5
         if self.show_light:
@@ -206,10 +207,7 @@ class LArEventDisplay:
         # NOTE: This is very different if Mx2 is shown
         if self.show_mx2: #TODO: go back to 8x8 array vs. 4x4 (whoops)
             
-            if not self.public:
-                self.fig = plt.figure(constrained_layout=False, figsize=(27, 27))
-            else:
-                self.fig = plt.figure(constrained_layout=False, figsize=(15, 15))
+            self.fig = plt.figure(constrained_layout=False, figsize=(15, 15))
             self.axes_mosaic = [["ax_bd", "ax_bd",  "ax_subexp_logo", "ax_subexp_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
                                 ["ax_bd", "ax_bd",  "ax_subexp_logo", "ax_subexp_logo", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
                                 ["ax_bv", "ax_bv", "ax_dv", "ax_dv", "ax_bdv", "ax_bdv", "ax_bdv", "ax_bdv"],\
@@ -223,11 +221,14 @@ class LArEventDisplay:
                                                     per_subplot_kw={"ax_bdv": {"projection": "3d"}, 
                                                                     "ax_mx2": {"projection": "3d"}})
             self.ax_mx2 = self.axes_dict["ax_mx2"]
-            if not self.public:
-                cbar_ax = self.fig.add_axes([0.95, 0.025, 0.015, 0.88])
-                self.fig.subplots_adjust(right=0.92)
-                if self.show_light:
-                    light_cbar_ax = self.fig.add_axes([0.125, 0.47, 0.8, 0.015])
+            if not self.public and not self.show_light:
+                cbar_ax = self.fig.add_axes([0.15, 0.45, 0.675, 0.015])
+                #self.fig.subplots_adjust(right=0.94)
+            if not self.public and self.show_light:
+                cbar_ax = self.fig.add_axes([0.08, 0.45, 0.38, 0.015])
+                light_cbar_ax = self.fig.add_axes([0.51, 0.45, 0.38, 0.015])
+                #cbar_ax = self.fig.add_axes([0.15, 0.47, 0.675, 0.015])
+                #light_cbar_ax = self.fig.add_axes([0.15, 0.4, 0.675, 0.015])
             #else:
                 #self.fig.subplots_adjust(right=0.7)
                 #self.fig.subplots_adjust(top=0.8,bottom=0.4)
@@ -240,8 +241,8 @@ class LArEventDisplay:
                 x0_shift = 0.13
                 y0_shift = 0.04
             else: 
-                x0_shift = 0.055
-                y0_shift = 0.01
+                x0_shift = 0.11
+                y0_shift = 0.04
             new_mx2_pos = [current_mx2_pos.x0-x0_shift, current_mx2_pos.y0-y0_shift, \
                            current_mx2_pos.width*1.2, current_mx2_pos.height*1]
             self.ax_mx2.set_position(new_mx2_pos)
@@ -251,11 +252,14 @@ class LArEventDisplay:
             self.axes_mosaic = [["ax_bd", "ax_subexp_logo", "ax_bdv", "ax_bdv"],["ax_bv", "ax_dv", "ax_bdv", "ax_bdv"],]
             self.axes_dict = self.fig.subplot_mosaic(self.axes_mosaic, \
                                                     per_subplot_kw={"ax_bdv": {"projection": "3d"}})
-            if not self.public:
-                cbar_ax = self.fig.add_axes([0.95, 0.12, 0.015, 0.75])
-                self.fig.subplots_adjust(right=0.92)
-                if self.show_light:
-                    light_cbar_ax = self.fig.add_axes([0.15, 0.005, 0.75, 0.03])
+            if not self.public and not self.show_light:
+                cbar_ax = self.fig.add_axes([0.145, 0.001, 0.675, 0.025])
+                #cbar_ax = self.fig.add_axes([0.95, 0.12, 0.015, 0.75])
+                #self.fig.subplots_adjust(right=0.94)
+            if not self.public and self.show_light:
+                cbar_ax = self.fig.add_axes([0.08, 0.001, 0.38, 0.025])
+                light_cbar_ax = self.fig.add_axes([0.51, 0.001, 0.38, 0.025])
+                #light_cbar_ax = self.fig.add_axes([0.15, 0.005, 0.75, 0.03])
             self.fig.subplots_adjust(bottom=0.1)
             self.fig.subplots_adjust(wspace=0.02, hspace=0.02)
 
@@ -274,6 +278,14 @@ class LArEventDisplay:
             if self.show_light:
                 self.light_cbar_ax = light_cbar_ax
 
+        # Initialize point collections
+        if self.show_mx2:
+            self.mx2_lar_points = self.ax_mx2.scatter([], [], [], c=[], cmap=None, s=1)
+        self.bdv_points = self.ax_bdv.scatter([], [], [], c=[], cmap=None, s=1)
+        self.bd_points = self.ax_bd.scatter([], [], [], c=[], cmap=None, s=1)
+        self.bv_points = self.ax_bv.scatter([], [], [], c=[], cmap=None, s=1)
+        self.dv_points = self.ax_dv.scatter([], [], [], c=[], cmap=None, s=1)
+
         # Setup 3D view angles for GIFs
         self.base_angle = list(range(-180,180,2))
         self.azimuths = [ba for ba in self.base_angle]
@@ -283,7 +295,7 @@ class LArEventDisplay:
         self.azimuths = self.azimuths[self.offset:] + self.azimuths[:self.offset]
         self.zeniths = self.zeniths[self.offset:] + self.zeniths[:self.offset]
         # Set view zoom
-        self.zooms = [10,]*len(self.azimuths)
+        self.zooms = [0.985,]*len(self.azimuths)
 
         # Create sliders for elevation and azimuthal angles # TO DO: FIX SLIDER WIDGET
         #self.elev_slider = widgets.FloatSlider(value=30, min=0, max=90, step=1, description='Elevation:')
@@ -294,7 +306,17 @@ class LArEventDisplay:
     #def update_plot(self, elev, azim):
     #    self.ax_bdv.view_init(elev=elev, azim=azim)
     #    display(plt.gcf(), self.elev_slider, self.azim_slider)
-    def save_to_pdf(self, ev_id):
+    def save_to_pdf(self, ev_id, points_scaled_to_pixel_pitch=False):
+        
+        if points_scaled_to_pixel_pitch:
+            pixel_pitch_sizes = np.full(self.hits_per_event, 0.3)
+            self.bd_points.set_sizes(pixel_pitch_sizes)
+            self.bv_points.set_sizes(pixel_pitch_sizes)
+            self.dv_points.set_sizes(pixel_pitch_sizes)
+            if self.show_event_mx2:
+                self.mx2_lar_points.set_sizes(pixel_pitch_sizes)
+            self.bdv_points.set_sizes(pixel_pitch_sizes)
+              
         save_dir = self.lar_evd_dir
         filename = self.filename.split('.')[0]+'_Event_'+str(ev_id)+'.pdf'
         savepath = os.path.join(save_dir, filename)
@@ -331,7 +353,7 @@ class LArEventDisplay:
             display(plt.gcf()) #, self.elev_slider, self.azim_slider) # TO DO: FIX SLIDER WIDGET
             # Display sliders and plot
             user_input = input(
-                'Next event (q to exit/s to save to pdf/g to create gif/enter for next/number to skip to event)?\n')
+                'Next event (q to exit/s to save to pdf/p to save to pdf with points scald to pixel pitch/g to create gif/enter for next/number to skip to event)?\n')
             if not user_input:
                 clear_output(wait=True)
                 ev_idx += 1
@@ -341,6 +363,8 @@ class LArEventDisplay:
                 sys.exit()
             elif user_input[0].lower() == 's':
                 self.save_to_pdf(ev_id)
+            elif user_input[0].lower() == 'p':
+                self.save_to_pdf(ev_id, points_scaled_to_pixel_pitch=True)
             elif user_input[0].lower() == 'g':
                 print("Creating GIF of Event Display")
                 # Loop over 3D views
@@ -405,6 +429,7 @@ class LArEventDisplay:
         hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
         hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
         hits = self.hits_full[hit_ref]
+        self.hits_per_event = len(hits)
 
         if self.show_light:
             # Get event light information
@@ -483,7 +508,7 @@ class LArEventDisplay:
         # Prepare color map for charge
         #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
         if self.public:
-            min_charge = self.charge_threshold
+            min_charge = 10#self.charge_threshold
         else:
             min_charge = min(hits['Q'])
         if max(hits['Q']) > min_charge:
@@ -500,10 +525,7 @@ class LArEventDisplay:
             # Prepare color map for light
             light_cmap=cmr.get_sub_cmap(cmr.sunburst_r, 0.0, 0.55) #'cmr.ember', 0.35,0.95) #.9 for torch .35 for ember .1 ember_r
             light_cmap_zero=cmr.get_sub_cmap(cmr.sunburst_r, 0.0, 0.55)#'cmr.ember', 0.05, 0.95)# .9 for torch .05 for ember 0.0 ember_r
-            if self.public:
-                min_light = self.light_threshold
-            else:
-                min_light = light_wvfms[0].sum(axis=-1).min()
+            min_light = self.light_threshold
             if light_wvfms[0].sum(axis=-1).max() > min_light:
                 max_light = light_wvfms[0].sum(axis=-1).max()*2
             else:
@@ -571,9 +593,9 @@ class LArEventDisplay:
         # Set axes for Beam vs Drift (ZX) canvas
         #self.ax_bd.set_xlabel('Beam Axis [cm]', fontsize=14)
         self.ax_bd.set_ylabel('Drift Axis [cm]', fontsize=14, weight='bold')
-        self.ax_bd.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][0]-2.95, \
-            self.geometry.attrs['lar_detector_bounds'][1][0]+2.8)
-        self.ax_bd.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2]-3.15,\
+        self.ax_bd.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2]-3, \
+            self.geometry.attrs['lar_detector_bounds'][1][2]+3)
+        self.ax_bd.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2]-3,\
             self.geometry.attrs['lar_detector_bounds'][1][2]+3)
         self.ax_bd.tick_params(axis='y', which='major', labelsize=12.5)
         self.ax_bd.set_xticks([])
@@ -582,10 +604,10 @@ class LArEventDisplay:
         # Set axes for Beam vs Vertical (ZY) canvas
         self.ax_bv.set_xlabel('Beam Axis [cm]', fontsize=14, weight='bold')
         self.ax_bv.set_ylabel('Vertical Axis [cm]', fontsize=14, weight='bold')
-        self.ax_bv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2]-3.15,\
+        self.ax_bv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2]-3,\
             self.geometry.attrs['lar_detector_bounds'][1][2]+3)
-        self.ax_bv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][1]-0.5, \
-            self.geometry.attrs['lar_detector_bounds'][1][1]+0.5)
+        self.ax_bv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2]-3, \
+            self.geometry.attrs['lar_detector_bounds'][1][2]+3)
         self.ax_bv.tick_params(axis='both', which='major', labelsize=12.5)
         self.ax_bv.set_xticks(np.arange(-60,61,20))
         self.ax_bv.set_yticks(np.arange(-60,61,20))
@@ -593,10 +615,10 @@ class LArEventDisplay:
         # Set axes for Drift vs Vertical (XY) canvas
         self.ax_dv.set_xlabel('Drift Axis [cm]', fontsize=14, weight='bold')
         #self.ax_dv.set_ylabel('Vertical Axis [cm]', fontsize=14)
-        self.ax_dv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][0]-2.95,\
-            self.geometry.attrs['lar_detector_bounds'][1][0]+2.8)
-        self.ax_dv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][1]-0.5, \
-            self.geometry.attrs['lar_detector_bounds'][1][1]+0.5)
+        self.ax_dv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2]-3,\
+            self.geometry.attrs['lar_detector_bounds'][1][2]+3)
+        self.ax_dv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2]-3, \
+            self.geometry.attrs['lar_detector_bounds'][1][2]+3)
         self.ax_dv.tick_params(axis='x', which='major', labelsize=12.5)
         self.ax_dv.set_xticks(np.arange(-60,61,20))
         self.ax_dv.set_yticks([])
@@ -620,11 +642,7 @@ class LArEventDisplay:
             self.ax_mx2.xaxis.pane.set_facecolor('white')#cmap_zero(0))
             self.ax_mx2.yaxis.pane.set_facecolor('white')#cmap_zero(0))
             self.ax_mx2.zaxis.pane.set_facecolor('white')#cmap_zero(0))
-            if self.public:
-                mx2_zoom = 1.35
-            else:
-                mx2_zoom = 1.38
-            self.ax_mx2.set_box_aspect([7.75,3.5,3], zoom=mx2_zoom)
+            self.ax_mx2.set_box_aspect([7.75,3.5,3], zoom=1.35)
             self.ax_mx2.view_init(azim=-75, elev=17) # default -75, 17
             #self.ax_mx2.set_aspect('auto')
 
@@ -701,32 +719,32 @@ class LArEventDisplay:
                                 [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.35)
 
                 # Plot outlines of modules for ZX (beam, drift) projections:
-                self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
-                         [self.geometry.attrs['module_RO_bounds'][i][0][0], self.geometry.attrs['module_RO_bounds'][i][1][0]],\
-                         color=cmap_zero(0), alpha=1)
-                self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
-                         [self.geometry.attrs['module_RO_bounds'][i][j][0], self.geometry.attrs['module_RO_bounds'][i][j][0]],\
-                         color=cmap_zero(0), alpha=1)
+                #self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
+                #         [self.geometry.attrs['module_RO_bounds'][i][0][0], self.geometry.attrs['module_RO_bounds'][i][1][0]],\
+                #         color=cmap_zero(0), alpha=1)
+                #self.ax_bd.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
+                #         [self.geometry.attrs['module_RO_bounds'][i][j][0], self.geometry.attrs['module_RO_bounds'][i][j][0]],\
+                #         color=cmap_zero(0), alpha=1)
 
                 # Only two modules represented in ZY and XY projections
                 if i >= 2: continue
 
                 # Plot outlines of modules for ZY (beam, vertical) projections:
-                self.ax_bv.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
-                         [self.geometry.attrs['module_RO_bounds'][i][0][1], self.geometry.attrs['module_RO_bounds'][i][1][1]],\
-                         color=cmap_zero(0), alpha=1)
-                self.ax_bv.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
-                         [self.geometry.attrs['module_RO_bounds'][i][j][1], self.geometry.attrs['module_RO_bounds'][i][j][1]],\
-                         color=cmap_zero(0), alpha=1)
+                #self.ax_bv.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
+                #         [self.geometry.attrs['module_RO_bounds'][i][0][1], self.geometry.attrs['module_RO_bounds'][i][1][1]],\
+                #         color=cmap_zero(0), alpha=1)
+                #self.ax_bv.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
+                #         [self.geometry.attrs['module_RO_bounds'][i][j][1], self.geometry.attrs['module_RO_bounds'][i][j][1]],\
+                #         color=cmap_zero(0), alpha=1)
 
                 # Plot outlines of modules for XY (drift, vertical) projections:
                 # X footprints are the same for i=0 and i=1, but different for i=1 and i=2
-                self.ax_dv.plot([self.geometry.attrs['module_RO_bounds'][i+1][j][0], self.geometry.attrs['module_RO_bounds'][i+1][j][0]], \
-                         [self.geometry.attrs['module_RO_bounds'][i+1][0][1], self.geometry.attrs['module_RO_bounds'][i+1][1][1]],\
-                         color=cmap_zero(0), alpha=1)
-                self.ax_dv.plot([self.geometry.attrs['module_RO_bounds'][i+1][0][0], self.geometry.attrs['module_RO_bounds'][i+1][1][0]], \
-                         [self.geometry.attrs['module_RO_bounds'][i+1][j][1], self.geometry.attrs['module_RO_bounds'][i+1][j][1]],\
-                         color=cmap_zero(0), alpha=1)
+                #self.ax_dv.plot([self.geometry.attrs['module_RO_bounds'][i+1][j][0], self.geometry.attrs['module_RO_bounds'][i+1][j][0]], \
+                #         [self.geometry.attrs['module_RO_bounds'][i+1][0][1], self.geometry.attrs['module_RO_bounds'][i+1][1][1]],\
+                #         color=cmap_zero(0), alpha=1)
+                #self.ax_dv.plot([self.geometry.attrs['module_RO_bounds'][i+1][0][0], self.geometry.attrs['module_RO_bounds'][i+1][1][0]], \
+                #         [self.geometry.attrs['module_RO_bounds'][i+1][j][1], self.geometry.attrs['module_RO_bounds'][i+1][j][1]],\
+                #         color=cmap_zero(0), alpha=1)
 
 
             # Fill modules for ZX (beam, drift) projections:
@@ -769,15 +787,15 @@ class LArEventDisplay:
                               color='gainsboro', alpha=0.9, linewidth=2,solid_capstyle='butt')
         if not self.public:
             # Set charge colorbar
-            cbar = self.fig.colorbar(mcharge, cax=self.cbar_ax, label=r'Charge [$10^3$ e]')
-            cbar.set_label(r'Charge [$\mathbf{10^3}$ e]', size=20, weight='bold')
-            self.cbar_ax.tick_params(labelsize=18)
+            cbar = self.fig.colorbar(mcharge, cax=self.cbar_ax, label=r'Charge [$10^3$ e]', orientation='horizontal')
+            cbar.set_label(r'Charge [$\mathbf{10^3}$ e]', size=13, weight='bold')
+            self.cbar_ax.tick_params(labelsize=11.5)
 
             if self.show_event_light:
                 # Set light colorbar
                 light_cbar = self.fig.colorbar(mlight, cax=self.light_cbar_ax, label=r'Light [ADC Counts]', orientation = 'horizontal')
-                light_cbar.set_label(r'Light [ADC Counts]', size=20, weight='bold')
-                self.light_cbar_ax.tick_params(labelsize=18)
+                light_cbar.set_label(r'Light [ADC Counts]', size=13, weight='bold')
+                self.light_cbar_ax.tick_params(labelsize=11.5)
 
 
     def display_event(self, ev_id):
@@ -803,9 +821,10 @@ class LArEventDisplay:
 
         if self.public:
             hits = hits[hits['Q'] > self.charge_threshold]
+            self.hits_per_event = len(hits)
         # Plot hits in 3D view first so that cathodes/anodes go over the hits
-        self.ax_bdv.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
-                            c=cmap(charge_norm(hits['Q'])), s=0.5, alpha=1, marker="s")
+        self.bdv_points = self.ax_bdv.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
+                            c=cmap(charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
 
         #self.ax_bdv.scatter(hits[hits['io_group'] == 1]['z'], hits[hits['io_group'] == 1]['x'], hits[hits['io_group'] == 1]['y'],\
         #                    lw=0, s=5, alpha=0.9)
@@ -827,8 +846,8 @@ class LArEventDisplay:
 
 
         if self.show_event_mx2:
-            self.ax_mx2.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
-                    c=cmap(charge_norm(hits['Q'])), s=0.5, alpha=1, marker="s")
+            self.mx2_lar_points = self.ax_mx2.scatter(hits['z'], hits['x'], hits['y'], lw=0, ec='C0', \
+                    c=cmap(charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
             #self.ax_mx2.scatter(mx2['mz'], mx2['mx'], mx2['my'], lw=0, ec='C0', \
             #                c=mx2_cmap(mx2_norm(mx2['mq'])), s=15, alpha=1)
             self.ax_mx2.scatter(mx2['mz'], mx2['mx'], mx2['my'], lw=0, ec='C0', \
@@ -842,12 +861,12 @@ class LArEventDisplay:
             self.plot_light(light_wvfms, light_cmap, light_norm, light_cmap_zero)
 
         # Plot 2D charge hits
-        self.ax_bd.scatter(hits['z'], hits['x'], lw=0, ec='C0', c=cmap(
-                charge_norm(hits['Q'])), s=0.5, alpha=1, marker="s")
-        self.ax_bv.scatter(hits['z'], hits['y'], lw=0, ec='C0', c=cmap(
-                charge_norm(hits['Q'])), s=0.5, alpha=1, marker="s")
-        self.ax_dv.scatter(hits['x'], hits['y'], lw=0, ec='C0', c=cmap(
-                charge_norm(hits['Q'])), s=0.5, alpha=1, marker="s")
+        self.bd_points = self.ax_bd.scatter(hits['z'], hits['x'], lw=0, ec='C0', c=cmap(
+                charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
+        self.bv_points = self.ax_bv.scatter(hits['z'], hits['y'], lw=0, ec='C0', c=cmap(
+                charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
+        self.dv_points = self.ax_dv.scatter(hits['x'], hits['y'], lw=0, ec='C0', c=cmap(
+                charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
         # Lines below are for geometry debugging purposes
         #self.ax_bd.scatter(hits[hits['io_group'] == 8]['z'], hits[hits['io_group'] == 8]['x'], lw=0, ec='C0', c=cmap(
         #        charge_norm(hits[hits['io_group'] == 8]['Q'])), s=5, alpha=1)
@@ -916,10 +935,10 @@ class LArEventDisplay:
             this_xz_sum = 0
             for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
                 #if i!=0: continue
-                det_id = self.light_det_id[(i,j)][0]
+                #det_id = self.light_det_id[(i,j)][0]
                 wvfm_factor = 1.
-                if det_id in acl_det_ids:
-                    wvfm_factor = 2.
+                #if det_id in acl_det_ids:
+                #    wvfm_factor = 2.
                 pos=self.sipm_abs_pos[(i,j)][0]
                 rel_pos = self.sipm_rel_pos[(i,j)][0]
                 if pos[0]==-1:
@@ -959,10 +978,10 @@ class LArEventDisplay:
             this_zy_sum = 0
             for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
                 pos=self.sipm_abs_pos[(i,j)][0]
-                det_id = self.light_det_id[(i,j)][0]
+                #det_id = self.light_det_id[(i,j)][0]
                 wvfm_factor = 1.
-                if det_id in acl_det_ids:
-                    wvfm_factor = 2.
+                #if det_id in acl_det_ids:
+                #    wvfm_factor = 2.
                 if pos[0]==-1:
                     continue
                 if (pos[2]==z) and (pos[1]==y):
@@ -987,10 +1006,10 @@ class LArEventDisplay:
                 pos=self.sipm_abs_pos[(i,j)][0]
                 #if i == 4 and j == 4:
                     #print("Position of SiPM where ADC == 4 and Channel == 4:",pos)
-                det_id = self.light_det_id[(i,j)][0]
+                #det_id = self.light_det_id[(i,j)][0]
                 wvfm_factor = 1.
-                if det_id in acl_det_ids:
-                    wvfm_factor = 2.
+                #if det_id in acl_det_ids:
+                #    wvfm_factor = 2.
                 if pos[0]==-1:
                     continue
                 if (abs(pos[0]-x) < 0.5) and (pos[1]==y):
@@ -1009,10 +1028,10 @@ class LArEventDisplay:
         # Plot light for XYZ (beam, drift, vertical) 3D view: 
         for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
             pos=self.sipm_abs_pos[(i,j)][0]
-            det_id = self.light_det_id[(i,j)][0]
+            #det_id = self.light_det_id[(i,j)][0]
             wvfm_factor = 1.
-            if det_id in acl_det_ids:
-                wvfm_factor = 2.
+            #if det_id in acl_det_ids:
+            #    wvfm_factor = 2.
             if pos[0]==-1:
                 continue
             this_xyz_sum = wvfm_factor*light_wvfms[0][i,j].sum()
