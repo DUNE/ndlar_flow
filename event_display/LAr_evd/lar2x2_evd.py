@@ -280,11 +280,11 @@ class LArEventDisplay:
 
         # Initialize point collections
         if self.show_mx2:
-            self.mx2_lar_points = self.ax_mx2.scatter([], [], [], c=[], cmap=None, s=1)
-        self.bdv_points = self.ax_bdv.scatter([], [], [], c=[], cmap=None, s=1)
-        self.bd_points = self.ax_bd.scatter([], [], [], c=[], cmap=None, s=1)
-        self.bv_points = self.ax_bv.scatter([], [], [], c=[], cmap=None, s=1)
-        self.dv_points = self.ax_dv.scatter([], [], [], c=[], cmap=None, s=1)
+            self.mx2_lar_points = self.ax_mx2.scatter([], [], [])
+        self.bdv_points = self.ax_bdv.scatter([], [], [])
+        self.bd_points = self.ax_bd.scatter([], [])
+        self.bv_points = self.ax_bv.scatter([], [])
+        self.dv_points = self.ax_dv.scatter([], [])
 
         # Setup 3D view angles for GIFs
         self.base_angle = list(range(-180,180,2))
@@ -508,7 +508,7 @@ class LArEventDisplay:
         # Prepare color map for charge
         #print("Min charge:", min(hits['Q']), "Max charge:", max(hits['Q']))
         if self.public:
-            min_charge = 10#self.charge_threshold
+            min_charge = min(hits['Q'])#10#self.charge_threshold
         else:
             min_charge = min(hits['Q'])
         if max(hits['Q']) > min_charge:
