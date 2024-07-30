@@ -1055,9 +1055,39 @@ def plot_2d_charge(data, evid):
         showlegend=False,
     )
 
+    cathode_line_1 = go.Scatter(
+        x=[-63.931/2, -63.931/2],
+        y=[-63.931, 63.931],
+        mode="lines",
+        line=dict(color="white", width=1),
+    )
+    cathode_line_2 = go.Scatter(
+        x=[63.931/2, 63.931/2],
+        y=[-63.931, 63.931],
+        mode="lines",
+        line=dict(color="white", width=1),
+    )
+
+    cathode_line_3 = go.Scatter(
+        x=[-63.931, 63.931],
+        y=[-63.931/2, -63.931/2],
+        mode="lines",
+        line=dict(color="white", width=1),
+    )
+    cathode_line_4 = go.Scatter(
+        x=[-63.931, 63.931],
+        y=[63.931/2, 63.931/2],
+        mode="lines",
+        line=dict(color="white", width=1),
+    )
+
     # Add traces to the subplots
     fig.add_trace(prompthits_traces_xy, row=2, col=2)
+    fig.add_trace(cathode_line_1, row=2, col=2)
+    fig.add_trace(cathode_line_2, row=2, col=2)
     fig.add_trace(prompthits_traces_xz, row=1, col=1)
+    fig.add_trace(cathode_line_3, row=1, col=1)
+    fig.add_trace(cathode_line_4, row=1, col=1)
     fig.add_trace(prompthits_traces_yz, row=2, col=1)
     fig.add_trace(
         dummy_trace, row=2, col=2
@@ -1079,7 +1109,7 @@ def plot_2d_charge(data, evid):
         col=1,
         showgrid=False,
         range=[-60, 60],
-        zeroline=False,
+        zeroline=True,
         scaleanchor="x1",
         scaleratio=1,
     )
@@ -1099,7 +1129,7 @@ def plot_2d_charge(data, evid):
         col=1,
         showgrid=False,
         range=[-60, 60],
-        zeroline=True,
+        zeroline=False,
         scaleanchor="x2",
         scaleratio=1,
     )
