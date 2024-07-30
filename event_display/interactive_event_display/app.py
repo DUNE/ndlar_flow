@@ -220,6 +220,8 @@ def load_file(n, file_path):
     if n > 0 and file_path is not None:
         _, num_events = parse_contents(file_path)
         return file_path, file_path, 0, num_events
+    else:
+        return None, None, None, None
 
 
 @app.callback(
@@ -238,7 +240,8 @@ def load_minerva(n, minerva_file_path):
     if n > 0 and minerva_file_path is not None:
         _, minerva_num_events = parse_minerva_contents(minerva_file_path)
         return minerva_file_path, minerva_file_path, 0, minerva_num_events
-
+    else:
+        return None, None, None, None
 
 # Callbacks to handle the event ID and time display
 # ==================================================
@@ -347,12 +350,16 @@ def update_graph(filename, minerva_filename, evid):
     """Update the 3D graph when the event ID is changed"""
     if minerva_filename is not None:
         minerva_data, _ = parse_minerva_contents(minerva_filename)
+    else:
+        minerva_data = None
     if filename is not None:
         data, _ = parse_contents(filename)
         graph, sim_version = create_3d_figure(minerva_data, data, filename, evid)
-    event_datetime = datetime.utcfromtimestamp(
-        data["charge/events", evid]["unix_ts"][0]
-    ).strftime("%Y-%m-%d %H:%M:%S")
+        event_datetime = datetime.utcfromtimestamp(
+            data["charge/events", evid]["unix_ts"][0]
+        ).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        raise PreventUpdate
     return (
         graph,
         sim_version,
