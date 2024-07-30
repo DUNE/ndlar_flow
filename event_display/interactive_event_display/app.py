@@ -300,13 +300,13 @@ def set_evid(value, max_value):
 def next_beam_event(n, filename, evid, max_value):
     """Increment the event ID with the button"""
     if n > 0:
-        new_evid = evid + 1
+        new_evid = (evid + 1) % max_value # wrap around
         # check if beam event
         # otherwise increment until beam event
         while new_evid < max_value:
             if is_beam_event(new_evid, filename):
                 return new_evid
-            new_evid += 1
+            new_evid = (new_evid + 1) % max_value
         return new_evid
     else:
         return 0
