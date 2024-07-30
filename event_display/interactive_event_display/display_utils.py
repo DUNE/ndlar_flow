@@ -270,7 +270,46 @@ def create_3d_figure(minerva_data, data, filename, evid):
             zaxis_title="z [cm]",
             camera=dict(up=dict(x=0, y=1, z=0), eye=dict(x=-1.25, y=1.0, z=-1.0)),
         ),
+        # updatemenus=[ # this will make the plot rotate around the scene, but it's too slow
+        #     dict(
+        #         type="buttons",
+        #         showactive=False,
+        #         buttons=[
+        #             dict(
+        #                 label="Play",
+        #                 method="animate",
+        #                 args=[
+        #                     None,
+        #                     dict(
+        #                         frame=dict(duration=25, redraw=True),
+        #                         fromcurrent=True,
+        #                         transition=dict(duration=5, easing="quadratic-in-out"),
+        #                     ),
+        #                 ],
+        #             )
+        #         ],
+        #     )
+        # ], 
     )
+
+    # frames = [
+    #     go.Frame(
+    #         layout=dict(
+    #             scene=dict(
+    #                 camera=dict(
+    #                     eye=dict(
+    #                         x=-1.25 * np.cos(i * np.pi / 20),
+    #                         y=1.0,
+    #                         z=-1.0 * np.sin(i * np.pi / 20)
+    #                     )
+    #                 )
+    #             )
+    #         )
+    #     )
+    #     for i in range(20)
+    # ]
+
+    # fig.frames = frames # make the camera rotate around the scene
 
     # Plot the prompt hits
     if prompthits_ev["x"].mask[0][0]:
