@@ -15,6 +15,3 @@ params:
   hits_dset_name: 'charge/raw_hits'
 
   # configuration parameters
-
-  configuration_file: '/global/cfs/cdirs/dune/www/data/Module1/TPC12/config_22-02-08_13-37-39.json'
-  pedestal_file: '/global/cfs/cdirs/dune/www/data/Module1/TPC12/dataRuns/Pedestal/packet_2022_02_08_01_40_31_CETevd_ped.json'
