@@ -10,7 +10,7 @@ Resources
 
 * ``yamls/module1_flow/resources/Geometry.yaml``
 
-  Copied and modified from ``yamls/proto_nd_flow/resources/Geometry.yaml`` I set ``det_geometry_file`` to ``data/module1_flow/module0.yaml``. I don't know if that's alright, and I don't think module0 accepted that option. ``crs_geometry_file`` is set to what I found in previously flowed file's metadata. Angela provided me with a  ``lrs_geometry_file``. Also, some module workflows had ``network_agnostic`` True and others False; not sure which is correct. 
+  Copied and modified from ``yamls/proto_nd_flow/resources/Geometry.yaml`` I set ``det_geometry_file`` to ``data/module1_flow/module0.yaml``. I don't know if that's alright, and I don't think module0 accepted that option. ``crs_geometry_file`` is set to what I found in previously flowed file's metadata. For ``lrs_geometry_file``, I copied what was in for the 2x2 and reduced it down to one module. Also, some module workflows had ``network_agnostic`` True and others False; not sure which is correct. 
 
 * ``yamls/module1_flow/resources/LArData.yaml``
 

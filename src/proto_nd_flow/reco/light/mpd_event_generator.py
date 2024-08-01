@@ -10,15 +10,13 @@ from h5flow import H5FLOW_MPI
 import adc64format
 
 
-class LightADC64EventGenerator(H5FlowGenerator):
+class LightMPDEventGenerator(H5FlowGenerator):
     '''
         Light system event builder - converts multiple ADC64-formatted light files to an event-packed
-        h5flow-readable format. Uses the ``adc64format`` library to synchronize and align the
-        events in multiple files.
+        h5flow-readable format. Uses the ``adc64format`` library.
 
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, path to dataset to store raw waveforms
-         - ``sn_table`` : ``list`` of ``int``, required, serial number of each ADC (determines order of the ADCs in the output data type)
          - ``n_adcs`` : ``int``, number of ADC serial numbers (default = 2)
          - ``n_channels`` : ``int``, number of channels per ADC (default = 64)
          - ``sync_channel`` : ``int``, channel index to use for identifying sync events (default = 32)
@@ -26,8 +24,8 @@ class LightADC64EventGenerator(H5FlowGenerator):
          - ``sync_buffer`` : ``int``, optional, number of events to scan to find the first sync for each event builder process, only relevant if using MPI
          - ``clock_timestamp_factor`` : ``float``, tick size for ``tai_ns`` in raw data [ns] (default = 0.625)
          - ``batch_size`` : ``int``, optional, number of events to buffer before initiating next loop iteration (default = 128)
-         - ``utime_ms_window``: ``float``, optional, DAQ unix time window to consider for event matching [ms] (default = 1000)
-         - ``tai_ns_window``: ``float``, optional, event timestamp window to consider for event matching [ns] (default = 1000)
+         - ``sn_table`` : ``list`` of ``int``, optional, serial number of each ADC (determines order of the ADCs in the output data type,
+            if not give order like in data file)
 
 
         Generates a lightweight "event" dataset along with a dataset containing
@@ -70,13 +68,13 @@ class LightADC64EventGenerator(H5FlowGenerator):
             samples     i2(n_adc,n_channels,n_samples), sample 10-bit ADC value (lowest 6 bits are not used)
     '''
     defaults = dict(
-        n_adcs = 2,
+        n_adcs = 8,
         n_channels = 64,
-        batch_size = 128,
-        sync_channel = 32,
-        sync_threshold = 5000,
+        batch_size = 64,
+        sync_channel = 0,
+        sync_threshold = 40000,
         sync_buffer = 200,        
-        clock_timestamp_factor = 1,
+        clock_timestamp_factor = 1.0,
         utime_ms_window = 1000,
         tai_ns_window = 1000,
         )
@@ -85,18 +83,18 @@ class LightADC64EventGenerator(H5FlowGenerator):
         ('id', 'u8'),  # unique identifier
         ('event', 'i4'),  # event number in data file
         ('sn', 'i4', (self.n_adcs,)),  # adc serial number
-        ('ch', 'u1', (self.n_adcs, self.n_channels)),  # channel number
-        ('utime_ms', 'u8', (self.n_adcs)),  # unix time [ms since epoch]
-        ('tai_ns', 'u8', (self.n_adcs)),  # time since PPS [ns]
-        ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels))  # boolean, 1 if channel present in event
-    ])
+        #('ch', 'u1', (self.n_adcs, self.n_channels)),  # channel number
+        ('utime_ms', 'u8', (self.n_adcs,)),  # unix time [ms since epoch]
+        ('tai_ns', 'u8', (self.n_adcs,)),  # time since PPS [ns]
+        ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels))  # boolean, 1 if channel present in event    
+        ])
 
     def wvfm_dtype(self): return np.dtype([
         ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples))  # sample value
     ])
 
     def __init__(self, **params):
-        super(LightADC64EventGenerator, self).__init__(**params)
+        super(LightMPDEventGenerator, self).__init__(**params)
 
         # set up parameters
         for key,val in self.defaults.items():
@@ -106,62 +104,40 @@ class LightADC64EventGenerator(H5FlowGenerator):
         self.wvfm_dset_name = params['wvfm_dset_name']
         self.event_dset_name = self.dset_name
 
-        self.sn_table = params['sn_table']
 
-        # set up input file
-        # find other adc files
-        # match input filename with a known adc
-        hex_sn_repr = [hex(sn) for sn in self.sn_table]
-        input_sn = [sn for sn in hex_sn_repr if sn[2:] in self.input_filename]
-        if len(input_sn) != 1:
-            raise RuntimeError(f'Unable to uniquely match {self.input_filename} to one of the declared ADCs: {hex_sn_repr}')
-        input_sn = input_sn[0]
-
-        # add other ADCs, if possible
-        self.input_filenames = list()
-        for sn in hex_sn_repr:
-            test_filename = self.input_filename.replace(input_sn[2:], sn[2:])
-            if sn == input_sn:
-                self.input_filenames.append(self.input_filename)
-            elif os.path.isfile(test_filename) and sn != input_sn:
-                self.input_filenames.append(test_filename)
-            else:
-                raise RuntimeError(f'Unable to find a file for ADC {sn}, tried at {test_filename}')
-        if self.rank == 0:
-            logging.info(f'Successfully found a file for each ADC: {", ".join([str(t) for t in zip(hex_sn_repr, self.input_filenames)])}')
-
-        self.input_file = adc64format.ADC64Reader(*self.input_filenames)
-        self.input_file.SYNC_CHANNEL = self.sync_channel
-        self.input_file.SYNC_THRESHOLD = self.sync_threshold
-        self.input_file.UNIX_WINDOW = self.utime_ms_window
-        self.input_file.TAI_NS_WINDOW = self.tai_ns_window / self.clock_timestamp_factor
+        self.input_file = adc64format.MPDReader(self.input_filename,self.n_adcs)
         self.input_file.open()
-
+        # Read run info
+        _, self.nbytes_runinfo, self.runinfo =adc64format.mpd_parse_run_start(self.input_file.stream)
         # use the first file for the event reference
-        self.chunk_size = adc64format.chunk_size(self.input_file.streams[0])
-        total_length_b = self.input_file.streams[0].seek(0, 2)
-        self.input_file.streams[0].seek(0, 0)
+        _, self.chunk_size, test_event = adc64format.mpd_parse_chunk(self.input_file.stream)
+        ndevices = len(test_event['data'])
+        total_length_b = self.input_file.stream.seek(0, 2)-self.nbytes_runinfo
+        self.input_file.reset()
+        self.n_samples = test_event['data'][0].dtype['voltage'].shape[-1]
+
+        if 'sn_table' in params:
+            self.sn_table = [int(value,16) for value in params['sn_table']]
+        else:
+            self.sn_table = [device["serial"].item() for device in test_event["device"]]
+
+        #Positions in #chunks/events (not bytes)
         self.end_position = total_length_b // self.chunk_size if self.end_position is None else min(self.end_position, total_length_b // self.chunk_size)
         self.start_position = 0 if self.start_position is None else self.start_position
         self.curr_position = self.start_position
 
         # skip to start position
-        self.input_file.skip(max(0, self.start_position - 1))
+        self.input_file.stream.seek(self.nbytes_runinfo, 0)
 
     def __len__(self):
         return (self.end_position - self.start_position) // (self.batch_size)
 
     def finish(self):
         self.input_file.close()
-        super(LightADC64EventGenerator, self).finish()
+        super(LightMPDEventGenerator, self).finish()
 
     def init(self):
-        super(LightADC64EventGenerator, self).init()
-
-        # extract number of samples from file 0
-        _, _, event = adc64format.parse_chunk(self.input_file.streams[0])
-        self.n_samples = event['data'][0].dtype['voltage'].shape[-1]
-        adc64format.skip_chunks(self.input_file.streams[0], -1)
+        super(LightMPDEventGenerator, self).init()
 
         # fix dataset dtypes
         self.event_dtype = self.event_dtype()
@@ -180,13 +156,12 @@ class LightADC64EventGenerator(H5FlowGenerator):
                                     start_position=self.start_position,
                                     end_position=self.end_position,
                                     input_filename=self.input_filename,
-                                    input_filenames=self.input_filenames,
                                     wvfm_dset_name=self.wvfm_dset_name,
                                     **params
                                     )
 
     def finish(self):
-        super(LightADC64EventGenerator, self).finish()
+        super(LightMPDEventGenerator, self).finish()
         self.input_file.close()
 
     @staticmethod
@@ -198,32 +173,31 @@ class LightADC64EventGenerator(H5FlowGenerator):
         if self.rank == 0:
             # only read from single process
             matched_events = self.input_file.next(self.batch_size)
-
         # format events into output shape / structure
         if matched_events is not None:
             # create new event array / waveform array
-            nevents = len(matched_events[0]['header'])
-            is_matched = np.array([[self.valid_array(entry) for entry in ev['header']] for ev in matched_events], dtype=bool)
+            nevents = len(matched_events)
             event_arr = np.zeros(nevents, dtype=self.event_dtype)
             wvfm_arr = np.zeros(nevents, dtype=self.wvfm_dtype)
-            for iadc,events in enumerate(matched_events):
-                for ievent in range(len(events['header'])):
-                    if not is_matched[iadc, ievent]:
-                        continue
-                    else:
-                        data = events['data'][ievent]
-                        event = events['event'][ievent]
-                        device = events['device'][ievent]
-                        time = events['time'][ievent]
-                        header = events['header'][ievent]
-                        channels = data['channel']
-                        event_arr[ievent]['event'] = event['serial']
-                        event_arr[ievent]['sn'][iadc] = device['serial']
-                        event_arr[ievent]['ch'][iadc, channels] = channels
-                        event_arr[ievent]['utime_ms'][iadc] = header['unix']
-                        event_arr[ievent]['tai_ns'][iadc] = time['tai_s']*1e9 + time['tai_ns']
+            for ievent,events in enumerate(matched_events):
+                if not events:
+                    continue
+                event = events['event']
+                data = np.array(events['data'])
+                device = np.array(events['device'])
+                time = np.array(events['time'])
+                event_arr[ievent]['event'] = event['event']
+                for iadc, sn in enumerate(self.sn_table):
+                    data_index = np.where(device["serial"] == sn)[0]
+                    if len(data_index):
+                        channels = data[data_index]['channel']
+                        event_arr[ievent]['sn'][iadc] = device[data_index]['serial']
+                        event_arr[ievent]['utime_ms'][iadc] = event['unix_ms']
+                        event_arr[ievent]['tai_ns'][iadc] = time[data_index]['tai_s']*1e9 + time[data_index]['tai_ns']
                         event_arr[ievent]['wvfm_valid'][iadc, channels] = True
-                        wvfm_arr[ievent]['samples'][iadc, channels] = data['voltage']
+                        wvfm_arr[ievent]['samples'][iadc, channels] = data[data_index]['voltage']
+                    else:
+                        print("ADC", hex(sn)," not found")
 
             # apply different clock frequency
             event_arr['tai_ns'] = (event_arr['tai_ns'] * self.clock_timestamp_factor).astype(event_arr.dtype['tai_ns'].base)
@@ -242,7 +216,6 @@ class LightADC64EventGenerator(H5FlowGenerator):
         else:
             event_arr = np.empty((0,), dtype=self.event_dtype)
             wvfm_arr = np.empty((0,), dtype=self.wvfm_dtype)
-            
         # write event to file
         event_slice = self.data_manager.reserve_data(self.event_dset_name, len(event_arr))
         event_arr['id'] = np.arange(event_slice.start, event_slice.stop)

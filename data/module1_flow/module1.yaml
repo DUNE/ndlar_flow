@@ -11,16 +11,16 @@ tau_t: 0.75 # us # Measured value from Module 0 data given in Peter Madigan's th
 
 # Charge simulation parameters
 drift_length: 30.27225 # cm
-time_interval: [0, 200.] # us                   
+time_interval: [0, 200.] # us
 response_sampling: 0.1 # us
 #response_sampling: 0.05 # us
-response_bin_size: 0.04434 # cm
+reponse_bin_size: 0.04434 # cm
 time_padding: 190 # us
 time_window: 189.1 # us
 
 # Charge geometry parameters
 tpc_offsets: # cm
-  - [0, -21.8236, 0]
+  - [0,0,0] #[0, -21.8236, 0] need to use different y offset for simulation (?)
 tile_map:
   - [[7,5,3,1],[8,6,4,2]] # switched tiles 7 and 8 for module 1 vs. module 0
   - [[15,14,12,10],[16,13,11,9]] # switched tiles 15 and 16 for module 1 vs. module 0
@@ -48,3 +48,4 @@ tpc_to_op_channel:
     - [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95]
 module_to_tpcs:
   1: [0, 1]
+lut_vox_div: [14, 26, 8]
