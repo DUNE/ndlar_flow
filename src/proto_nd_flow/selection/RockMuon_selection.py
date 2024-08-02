@@ -123,6 +123,7 @@ class RockMuonSelection(H5FlowStage):
         self.data_manager.create_ref(self.rock_muon_segments_dset_name, self.PromptHits_dset_name)
     
     #@staticmethod
+    '''
     def cluster(self, PromptHits_ev):
         
         index_of_track_hits = []
@@ -138,7 +139,72 @@ class RockMuonSelection(H5FlowStage):
             index_of_track_hits.append(index)
 
         return index_of_track_hits
+    '''
+    #@staticmethod
+    def cluster(self,PromptHits_ev):
+        index_of_track_hits = []
+        positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
     
+        # Perform DBSCAN clustering
+        hit_cluster = DBSCAN(eps=1, min_samples=3).fit(positions)
+    
+        cluster_labels = hit_cluster.labels_
+
+        unique_labels = np.unique(cluster_labels)
+
+        if len(unique_labels) < 150:
+
+            # Collect indices of hits for each cluster
+            for unique in unique_labels:
+                index = np.where(cluster_labels == unique)[0]
+                index_of_track_hits.append(index)
+
+            index = 0
+            while index < len(index_of_track_hits):
+                center_of_masses = [np.mean(positions[cluster], axis=0) for cluster in index_of_track_hits]
+                center_of_1 = np.mean(positions[index_of_track_hits[index]], axis=0)
+
+                # Compute distances and lengths
+                distances = np.linalg.norm(center_of_masses - center_of_1, axis=1)
+                lengths = [len(cluster) for cluster in index_of_track_hits]
+            
+                combined_dist_length = [[distances[k], lengths[k]] for k in range(len(distances))]
+
+                # Create a list of indices
+                indices = list(range(len(combined_dist_length)))
+
+                # Sort indices based on length (descending) and distance (ascending)
+                sorted_indices = sorted(indices, key=lambda i: (-combined_dist_length[i][1], combined_dist_length[i][0]))
+            
+                explained_var, direction, original_mean = self.PCAs(PromptHits_ev[index_of_track_hits[index]])
+
+                # Try merging with sorted clusters
+                for j in sorted_indices:
+                    if (j == index) | (len(index_of_track_hits[j]) < 6) | (len(index_of_track_hits[index]) < 6) | (combined_dist_length[j][0] > 100) | (combined_dist_length[j][0] < 2):  # Skip merging with itself
+                        continue
+                    explained_var, direction2, original_mean = self.PCAs(PromptHits_ev[index_of_track_hits[j]])
+                    hits_of_testing_merge = np.concatenate((positions[index_of_track_hits[index]], positions[index_of_track_hits[j]]))
+                    center_of_merge = np.mean(hits_of_testing_merge, axis=0)
+
+                    projections = np.dot(hits_of_testing_merge - center_of_merge, direction[:, np.newaxis]) * direction + center_of_merge
+                    distances = np.linalg.norm(hits_of_testing_merge - projections, axis=1)
+                    average_dist = np.mean(distances)
+                    sim_direction = np.rad2deg(np.arccos(np.abs(np.dot(direction, direction2))))
+
+                    if (average_dist <= 3) & (sim_direction <= 20):  # Adjust distance threshold as needed
+                        index_of_track_hits[index] = np.concatenate([index_of_track_hits[index], index_of_track_hits[j]])
+                        index_of_track_hits.pop(j)
+                        center_of_masses.pop(j)
+                        #print(f'Merging cluster {index} with cluster {j}')
+                        break  # Recompute centers and distances after merge
+                else:
+                    index += 1
+        else:
+            for unique in unique_labels:
+                index = np.where(hit_cluster.labels_ == unique)[0]
+                index_of_track_hits.append(index)
+
+        return index_of_track_hits 
     #@staticmethod
     
     def PCAs(self,hits_of_track):
@@ -188,38 +254,33 @@ class RockMuonSelection(H5FlowStage):
     '''
     Checks to see if start/end point of track are close to two different faces of detector. If they are this will return True. Note: >= -1 just in case if a hit is reconstructed outside of detector.
     '''
-    def close_to_two_faces(self, boundaries, start_point, end_point):
+    def close_to_two_faces(self,boundaries, hits):
         # Boundaries are in the order [xmin, ymin, zmin, xmax, ymax, zmax]
-        min_bounds = boundaries[:3]  # [xmin, ymin, zmin]
-        max_bounds = boundaries[3:]  # [xmax, ymax, zmax]
+        penetrated = False
 
-        # Calculate the distances from points to min and max bounds
-        end_distances_to_min_bounds = abs(min_bounds - end_point)
-        end_distances_to_max_bounds = abs(max_bounds - end_point)
-        start_distances_to_min_bounds = abs(min_bounds - start_point)
-        start_distances_to_max_bounds = abs(max_bounds - start_point)
+        test_face = [False] * len(boundaries)
+        threshold = 2.1
+        for index, face in enumerate(boundaries):
+            if (index == 0) or (index == 3):
+                distance = np.abs(face - hits['x'])
+                #print(f"Checking x boundaries at index {index}: face = {face}, distances = {distance}")
 
-        # Check if any distance is within 2 cm for both min and max boundaries
-        end_mask_within_2cm_min = (end_distances_to_min_bounds <= 2) 
-        end_mask_within_2cm_max = (end_distances_to_max_bounds <= 2)
-        start_mask_within_2cm_min = (start_distances_to_min_bounds <= 2)
-        start_mask_within_2cm_max = (start_distances_to_max_bounds <= 2)
+                if np.any(distance <= threshold):
+                    test_face[index] = True
         
-        end_mask_within_2cm = np.concatenate((end_mask_within_2cm_min,end_mask_within_2cm_max))
-        start_mask_within_2cm = np.concatenate((start_mask_within_2cm_min,start_mask_within_2cm_max))
+            elif (index == 1) or (index == 4):
+                distance = np.abs(face - hits['y'])
+                if np.any(distance <= threshold):
+                    test_face[index] = True
         
-
-        # Identify which boundaries are within 2 cm
-        end_indices_within_2cm = np.where(end_mask_within_2cm)[0]
-        start_indices_within_2cm = np.where(start_mask_within_2cm)[0]
-
-        # Determine if the track penetrates through different boundaries
-        if len(end_indices_within_2cm) > 0 and len(start_indices_within_2cm) > 0:
-            # Check if there are any different indices (meaning close to different boundaries)
-            penetrated = np.any(start_indices_within_2cm != end_indices_within_2cm)
-        else:
-            penetrated = False
-
+            elif (index == 2) or (index == 5): 
+                distance = np.abs(face - hits['z'])
+                if np.any(distance <= threshold):
+                    test_face[index] = True
+        #print(test_face)
+        if sum(test_face)>= 2:
+            penetrated = True
+    
         return penetrated
 
     #@staticmethod
@@ -269,8 +330,8 @@ class RockMuonSelection(H5FlowStage):
     def select_muon_track(self,hits,Min_max_detector_bounds):
             muon_hits = []
             
-            min_boundaries = Min_max_detector_bounds[0] #bounds are z,y,x and hits x,y,z, so bounds must be flipped
-            max_boundaries = Min_max_detector_bounds[1]
+            min_boundaries = np.flip(Min_max_detector_bounds[0]) #bounds are z,y,x and hits x,y,z, so bounds must be flipped
+            max_boundaries = np.flip(Min_max_detector_bounds[1])
             
             faces_of_detector = np.concatenate((min_boundaries,max_boundaries))
             
@@ -286,9 +347,9 @@ class RockMuonSelection(H5FlowStage):
             
             avg_distance = self.average_distance(filtered_hits)
 
-            if (avg_distance < 1.5) & (l_track > L_cut):
+            if (avg_distance <= 1.5) & (l_track >= L_cut):
 
-                penetrated = self.close_to_two_faces(faces_of_detector, start_point, end_point)
+                penetrated = self.close_to_two_faces(faces_of_detector, filtered_hits)
 
                 if penetrated == True:
                     #filtered_hits = self.clean_noise_hits(hits)
@@ -399,11 +460,13 @@ class RockMuonSelection(H5FlowStage):
 
         for hits in tpc_hits:
             io_group_of_tpc = np.unique(hits['io_group'])
-            
+            ''' 
             if io_group_of_tpc in same_pixel_pitch:
                 scale = 0.4434
             else:
                 scale = 0.3857
+            '''
+            scale = 2
             if len(hits) != 0:
                 tpc_var, tpc_direction, tpc_mean = self.PCAs(hits)
 
@@ -424,14 +487,7 @@ class RockMuonSelection(H5FlowStage):
 
                         segment_start = tpc_mean + (abs(i)-1)*scale*direction_to_jump
                         segment_end = tpc_mean + abs(i)*scale*direction_to_jump
-                        '''
-                        if abs(segment_point1[2]) > abs(segment_point2[2]):
-                            segment_end = segment_point1
-                            segment_start = segment_point2
-                        else:
-                            segment_end = segment_point2
-                            segment_start = segment_point1
-                        '''
+                        
                         if (segment_end[2] > max_z) & (i > 0):
                             jump_size = (max_z - segment_start[2])/direction_to_jump[2]
                             segment_end = segment_start + jump_size*direction_to_jump
@@ -545,6 +601,8 @@ class RockMuonSelection(H5FlowStage):
                     
                     track_ref = np.array([(track_number,x) for x in muon_track['id'][0]])
                     
+                    track_event_ref = np.array([(track_number, event_id[0])])
+                    
                     #print(track_ref)            
                     segment_track_ref = np.array([(x) for x in segment_track_ref])
                      
@@ -552,9 +610,8 @@ class RockMuonSelection(H5FlowStage):
                     
                     #Write References
                     self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.PromptHits_dset_name, track_ref)
-                
+                    self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.events_dset_name, track_event_ref) 
                     self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.rock_muon_segments_dset_name, segment_track_ref)
-
                     self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.PromptHits_dset_name, segment_hit_ref)
                 # event -> hit
                 #self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.rock_muon_hits_dset_name, ref)
