@@ -23,6 +23,5 @@ setuptools.setup(name='module0_flow',
                      'scikit-learn',
                      'h5flow>=0.2.0',
                      'pylandau @ git+https://github.com/cuddandr/pylandau.git#egg=pylandau',
-                     'dbscan1d',
                  ]
                  )
