@@ -66,6 +66,7 @@ class WaveformHitFinder(H5FlowStage):
             ('id', 'u4'),
             ('tpc', 'u1'),
             ('det', 'u1'),
+            ('boundary', 'f4', (2,3)),
             ('sample_idx', 'u2'),
             ('ns', 'f8'),
             ('busy_ns', 'f8'),
@@ -155,13 +156,15 @@ class WaveformHitFinder(H5FlowStage):
 
     def run(self, source_name, source_slice, cache):
         super(WaveformHitFinder, self).run(source_name, source_slice, cache)
+        print('source_slice = ', source_slice)
         wvfms = cache[self.wvfm_dset_name].reshape(cache[source_name].shape)[
             'samples']  # 1:1 relationship
-        wvfm_align = cache[self.wvfm_align_dset_name].reshape(cache[source_name].shape)
-        t = cache[self.t_ns_dset_name].reshape(cache[source_name].shape)[
-            't_ns']  # 1:1 relationship
+        if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
+            wvfm_align = cache[self.wvfm_align_dset_name].reshape(cache[source_name].shape)
+        #t = cache[self.t_ns_dset_name].reshape(cache[source_name].shape)[
+        #    't_ns']  # 1:1 relationship
         events = cache[source_name]
-        t = ma.array(t, mask=~events['wvfm_valid'].astype(bool))
+        #t = ma.array(t, mask=~events['wvfm_valid'].astype(bool))
         wvfm_sn = events['sn']
         wvfm_det = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
 
@@ -238,7 +241,9 @@ class WaveformHitFinder(H5FlowStage):
             hit_data = np.empty((len(peaks[-1])), dtype=self.hits_dtype)
             hit_data['tpc'] = peaks[1].ravel()
             hit_data['det'] = wvfm_det[peaks[:3]].ravel()
-            hit_data['ns'] = wvfm_align['ns'][peaks[0]].ravel()
+            hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[(tpc,det)][0]) for tpc, det in zip(peaks[1].ravel(),wvfm_det[peaks[:3]].ravel())]
+            if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
+                hit_data['ns'] = wvfm_align['ns'][peaks[0]].ravel()
             hit_data['sample_idx'] = peaks[-1].ravel() + 1
 
             # =================================================================
@@ -250,18 +255,19 @@ class WaveformHitFinder(H5FlowStage):
             # For deconv/alignment, shape = (n_batch, n_tpc)
             # Here is a simple fix to expand the dim 
             # =================================================================
-            align_sample_idx = wvfm_align['sample_idx']
-            if align_sample_idx.ndim == 2:
-                target_shape = wvfms.shape[:-1] #(n_batch, n_tpc, n_ch)
-                n_ch = target_shape[-1]
-                align_sample_idx = np.reshape(
-                    np.repeat(align_sample_idx, n_ch), target_shape
-                )
+            if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
+                align_sample_idx = wvfm_align['sample_idx']
+                if align_sample_idx.ndim == 2:
+                    target_shape = wvfms.shape[:-1] #(n_batch, n_tpc, n_ch)
+                    n_ch = target_shape[-1]
+                    align_sample_idx = np.reshape(
+                        np.repeat(align_sample_idx, n_ch), target_shape
+                    )
 
-            hit_data['busy_ns'] = (
-                (peaks[-1] + 1 - align_sample_idx[peaks[:3]]).ravel() 
-                * self.sample_rate
-            )
+                hit_data['busy_ns'] = (
+                    (peaks[-1] + 1 - align_sample_idx[peaks[:3]]).ravel() 
+                    * self.sample_rate
+                )
             hit_data['samples'] = peak_samples.reshape(-1, 2 * self.near_samples + 1)
             hit_data['sum'] = peak_sum.ravel()
             hit_data['max'] = peak_max.ravel()
