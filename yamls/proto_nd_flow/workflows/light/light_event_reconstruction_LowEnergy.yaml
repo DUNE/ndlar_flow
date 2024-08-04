@@ -1,0 +1,35 @@
+
+flow:
+  source: 'light/events'
+  #stages: [timestamp_corrector, wvfm_align]#, wvfm_sum, sum_hit_finder]
+  stages: [wvfm_sum, sum_hit_finder]
+  drop: ['light/wvfm']
+  #stages: [timestamp_corrector, wvfm_filt, wvfm_deconv, wvfm_align, wvfm_calib, wvfm_sum, sum_hit_finder]
+
+
+resources:
+  - !include yamls/proto_nd_flow/resources/RunData.yaml
+  - !include yamls/proto_nd_flow/resources/Geometry.yaml
+  - !include yamls/proto_nd_flow/resources/LArData.yaml
+
+
+timestamp_corrector:
+  !include yamls/module1_flow/reco/light/LightTimestampCorrector.yaml
+
+#wvfm_filt:
+#  !include yamls/module1_flow/reco/light/WaveformNoiseFilter.yaml
+
+#wvfm_deconv:
+#  !include yamls/module1_flow/reco/light/WaveformDeconvolution.yaml
+
+#wvfm_align:
+#  !include yamls/module1_flow/reco/light/WaveformAlign.yaml
+
+#wvfm_calib:
+#  !include yamls/module1_flow/reco/light/WaveformCalib.yaml
+
+wvfm_sum:
+  !include yamls/proto_nd_flow/reco/light/WaveformSum_LowEnergy.yaml
+
+sum_hit_finder:
+  !include yamls/proto_nd_flow/reco/light/SumHitFinder_LowEnergy.yaml
