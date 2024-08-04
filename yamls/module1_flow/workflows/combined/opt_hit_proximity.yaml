@@ -1,0 +1,21 @@
+# Generates the charge clusters from hits
+
+flow:
+  source: sum_hits
+  stages: [opt_hit_proximity_cut]
+  drop: []
+  
+resources:
+  - !include yamls/module1_flow/resources/RunData.yaml
+  - !include yamls/module1_flow/resources/LArData.yaml
+  
+sum_hits:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'light/sum_hits'
+  params:
+    chunk_size: 2560000
+
+opt_hit_proximity_cut:
+  !include yamls/module1_flow/reco/combined/OptHitProximityCut.yaml
+

@@ -1,0 +1,19 @@
+classname: OptHitProximityCut # reco/combined/opt_hit_proximity_cut.py
+path: proto_nd_flow.reco.combined.opt_hit_proximity_cut
+requires:
+  - 'light/sum_hits'
+
+params:
+  # inputs
+  events_dset_name: 'charge/events'
+  clusters_dset_name: 'charge/clusters'
+  ext_trigs_dset_name: 'charge/ext_trigs'
+  light_events_dset_name: 'light/events'
+  sum_hits_dset_name: 'light/sum_hits'
+  swvfms_dset_name: 'light/swvfm'
+  y_cut: 15 # cm, distance from photon detector center in y
+  z_cut: 15 # cm, distance from photon detector center in z
+  use_x_drift: False
+  # outputs
+  new_clusters_dset_name: 'charge/clusters_optProx'  
+
