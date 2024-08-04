@@ -1,0 +1,16 @@
+classname: ClusterBuilder # reco/charge/cluster_finder.py
+path: proto_nd_flow.reco.charge.cluster_finder
+requires:
+  - 'charge/events'
+  - 'charge/calib_prompt_hits'
+
+params:
+  # inputs
+  events_dset_name: 'charge/events'
+  hits_name: 'charge/calib_prompt_hits'
+  eps: 2
+  min_samples: 1
+  # outputs
+  clusters_dset_name: 'charge/clusters'
+  
+
