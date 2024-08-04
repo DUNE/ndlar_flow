@@ -97,20 +97,21 @@ class WaveformSum(H5FlowStage):
             len(np.unique(det_ids)), wvfm_dset.dtype['samples'].shape[2])
         self.data_manager.create_dset(self.swvfm_dset_name, dtype=self.swvfm_dtype)
         self.data_manager.create_ref(source_name, self.swvfm_dset_name)
-
-        self.align_dtype = self.align_dtype(len(np.unique(tpc_ids)), len(np.unique(det_ids)))
-        self.data_manager.create_dset(self.align_dset_name, dtype=self.align_dtype)
-        self.data_manager.create_ref(source_name, self.align_dset_name)
+        
+        if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
+            self.align_dtype = self.align_dtype(len(np.unique(tpc_ids)), len(np.unique(det_ids)))
+            self.data_manager.create_dset(self.align_dset_name, dtype=self.align_dtype)
+            self.data_manager.create_ref(source_name, self.align_dset_name)
 
     def run(self, source_name, source_slice, cache):
         super(WaveformSum, self).run(source_name, source_slice, cache)
-
+        print('source slice wvfm sum = ', source_slice)
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape)
-        wvfm_align_data = cache[self.wvfm_align_dset_name].reshape(event_data.shape)
-
+        if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
+            wvfm_align_data = cache[self.wvfm_align_dset_name].reshape(event_data.shape)
+            align_data = np.zeros(event_data.shape, dtype=self.align_dtype)
         swvfm_data = np.zeros(event_data.shape, dtype=self.swvfm_dtype)
-        align_data = np.zeros(event_data.shape, dtype=self.align_dtype)
         for adc in range(wvfm_data['samples'].shape[1]):
             for chan in range(wvfm_data['samples'].shape[2]):
                 tpc_id = resources['Geometry'].tpc_id[(adc,chan)]
@@ -118,8 +119,9 @@ class WaveformSum(H5FlowStage):
                 if tpc_id < 0 or det_id < 0:
                     continue
                 mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
-                align_data['sample_idx'][mask,tpc_id,det_id] = wvfm_align_data['sample_idx'][mask,adc]
-                align_data['ns'][mask] = wvfm_align_data['ns'][mask]
+                if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
+                    align_data['sample_idx'][mask,tpc_id,det_id] = wvfm_align_data['sample_idx'][mask,adc]
+                    align_data['ns'][mask] = wvfm_align_data['ns'][mask]
 
         for adc in range(wvfm_data['samples'].shape[1]):
             for chan in range(wvfm_data['samples'].shape[2]):
@@ -136,14 +138,15 @@ class WaveformSum(H5FlowStage):
         # reserve new data
         swvfm_slice = self.data_manager.reserve_data(self.swvfm_dset_name, source_slice)
         self.data_manager.write_data(self.swvfm_dset_name, source_slice, swvfm_data)
-
-        align_slice = self.data_manager.reserve_data(self.align_dset_name, source_slice)
-        self.data_manager.write_data(self.align_dset_name, align_slice, align_data)
+        if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
+            align_slice = self.data_manager.reserve_data(self.align_dset_name, source_slice)
+            self.data_manager.write_data(self.align_dset_name, align_slice, align_data)
 
         # save references
         ref = np.c_[source_slice, swvfm_slice]
         self.data_manager.write_ref(source_name, self.swvfm_dset_name, ref)
-
-        ref = np.c_[source_slice, align_slice]
-        self.data_manager.write_ref(source_name, self.align_dset_name, ref)
+        
+        if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
+            ref = np.c_[source_slice, align_slice]
+            self.data_manager.write_ref(source_name, self.align_dset_name, ref)
 
