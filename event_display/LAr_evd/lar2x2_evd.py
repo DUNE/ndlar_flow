@@ -526,7 +526,7 @@ class LArEventDisplay:
             #print("Minerva times:", len(self.minerva_times))
             # find the index of the minerva_times that matches the charge_time
             mx2_charge_time_diffs = np.abs(self.minerva_times - np.full_like(self.minerva_times, charge_time))
-            trigger = np.argwhere(mx2_charge_time_diffs < 2).reshape(1,-1)[0] # changed from 0.5 acceptance window
+            trigger = np.argwhere(mx2_charge_time_diffs < 0.5).reshape(1,-1)[0] # changed from 0.5 acceptance window
             print("Time Differences:", mx2_charge_time_diffs[trigger])
             #print("Trigger:", trigger)
             xs = []
