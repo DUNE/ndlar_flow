@@ -65,6 +65,8 @@ class LArEventDisplay:
             - show_light       (bool): whether to show light information in display (default: True)
             - show_colorbars   (bool): whether to display color bars (default: True)
             - filepath_mx2     (str): path to Mx2 file if using Mx2 data (default: None)
+            - hist_projection  (bool): if True, hits are binned in a 2D histogram for the 2D charge hit projections. Bins with 0 charge are not displayed.
+                                       If False, hits are plotted as scatter points for the 2D charge hit projections. (default: True)
             - charge_threshold (float): threshold for charge hits to be shown (default: None)
             - light_threshold  (float): threshold for light to be shown (default: 150000 ADC counts)
             - beam_only        (bool): whether to only show beam events (default: False)
@@ -96,7 +98,8 @@ class LArEventDisplay:
 
     # Initialize class
     def __init__(self, filedir, filename, nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, \
-                 show_colorbars=True, charge_threshold=None, light_threshold=150000, beam_only=False):
+                 show_colorbars=True, charge_threshold=None, light_threshold=150000, beam_only=False, \
+                 hist_projection=True):
         
         # Open files
         f = h5py.File(filedir+filename, 'r')
@@ -116,6 +119,7 @@ class LArEventDisplay:
         self.charge_threshold = charge_threshold
         self.light_threshold = light_threshold
         self.beam_only = beam_only
+        self.hist_projection = hist_projection
 
         # Set directory for saving files and finding logo image files
         self.lar_evd_dir = os.path.dirname(__file__)
@@ -318,14 +322,42 @@ class LArEventDisplay:
     #    display(plt.gcf(), self.elev_slider, self.azim_slider)
 
 
-    def save_to_pdf(self, ev_id, points_scaled_to_pixel_pitch=False):
+    # TO DO: Make hits, cmap, charge_norm class variables vs. separate objects carried around between class methods
+    def save_to_pdf(self, ev_id, points_scaled_to_pixel_pitch=False, hits=None, cmap=None, charge_norm=None):
         
         # Adjust point size in plots if points are scaled to pixel pitch
         if points_scaled_to_pixel_pitch:
-            pixel_pitch_sizes = np.full(self.hits_per_event, 0.3)
-            self.bd_points.set_sizes(pixel_pitch_sizes)
-            self.bv_points.set_sizes(pixel_pitch_sizes)
-            self.dv_points.set_sizes(pixel_pitch_sizes)
+            pixel_pitch_sizes = np.full(self.hits_per_event, 0.3)       
+            if self.hist_projection:
+                self.bd_points.remove()
+                self.bv_points.remove()
+                self.dv_points.remove()
+                z_bins = np.linspace(self.geometry.attrs['lar_detector_bounds'][0][2],self.geometry.attrs['lar_detector_bounds'][1][2],\
+                                     int((self.geometry.attrs['lar_detector_bounds'][1][2]-self.geometry.attrs['lar_detector_bounds'][0][2])/0.4))
+                y_bins = np.linspace(self.geometry.attrs['lar_detector_bounds'][0][1],self.geometry.attrs['lar_detector_bounds'][1][1],\
+                                     int((self.geometry.attrs['lar_detector_bounds'][1][1]-self.geometry.attrs['lar_detector_bounds'][0][1])/0.4))
+                x_bins = np.linspace(self.geometry.attrs['lar_detector_bounds'][0][0],self.geometry.attrs['lar_detector_bounds'][1][0],\
+                                     int((self.geometry.attrs['lar_detector_bounds'][1][0]-self.geometry.attrs['lar_detector_bounds'][0][0])/0.4))
+
+                bd_charge_hist, _, _ = np.histogram2d(hits['z'], hits['x'], bins=[z_bins,x_bins],weights=hits['Q'])
+                bd_charge_hist_masked = np.where(bd_charge_hist==0, np.nan, bd_charge_hist) # TO DO: SHOULD CHARGE ==0 BE MASKED?
+                ZX_Z, ZX_X = np.meshgrid(z_bins[:-1], x_bins[:-1])
+                self.bd_points = self.ax_bd.pcolormesh(ZX_Z, ZX_X, bd_charge_hist_masked.T, cmap=cmap, norm=charge_norm, alpha=1)
+
+                bv_charge_hist, _, _ = np.histogram2d(hits['z'], hits['y'], bins=[z_bins,y_bins],weights=hits['Q'])
+                bv_charge_hist_masked = np.where(bv_charge_hist==0, np.nan, bv_charge_hist) # TO DO: SHOULD CHARGE ==0 BE MASKED?
+                ZY_Z, ZY_Y = np.meshgrid(z_bins[:-1], y_bins[:-1])
+                self.bv_points = self.ax_bv.pcolormesh(ZY_Z, ZY_Y, bv_charge_hist_masked.T, cmap=cmap, norm=charge_norm, alpha=1)
+
+                dv_charge_hist, _, _ = np.histogram2d(hits['x'], hits['y'], bins=[x_bins,y_bins],weights=hits['Q'])
+                dv_charge_hist_masked = np.where(dv_charge_hist==0, np.nan, dv_charge_hist) # TO DO: SHOULD CHARGE ==0 BE MASKED?
+                XY_X, XY_Y = np.meshgrid(x_bins[:-1], y_bins[:-1])
+                self.dv_points = self.ax_dv.pcolormesh(XY_X, XY_Y, dv_charge_hist_masked.T, cmap=cmap, norm=charge_norm, alpha=1)
+            else:
+                self.bd_points.set_sizes(pixel_pitch_sizes)
+                self.bv_points.set_sizes(pixel_pitch_sizes)
+                self.dv_points.set_sizes(pixel_pitch_sizes)
+
             if self.show_event_mx2:
                 self.mx2_lar_points.set_sizes(pixel_pitch_sizes)
             self.bdv_points.set_sizes(pixel_pitch_sizes)
@@ -362,7 +394,7 @@ class LArEventDisplay:
         ev_id = event_ids[ev_idx]
 
         # Display first event 
-        self.display_event(ev_id)
+        hits, cmap, charge_norm = self.display_event(ev_id)
 
         # Displays event until user input determines next action
         # User can quit display (q), save current display to PDF (s), save current display to PDF
@@ -377,13 +409,13 @@ class LArEventDisplay:
                 clear_output(wait=True)
                 ev_idx += 1
                 ev_id = event_ids[ev_idx]
-                self.display_event(ev_id)
+                hits, cmap, charge_norm = self.display_event(ev_id)
             elif user_input[0].lower() == 'q':
                 sys.exit()
             elif user_input[0].lower() == 's':
-                self.save_to_pdf(ev_id)
+                self.save_to_pdf(ev_id, hits=hits, cmap=cmap, charge_norm=charge_norm)
             elif user_input[0].lower() == 'p':
-                self.save_to_pdf(ev_id, points_scaled_to_pixel_pitch=True)
+                self.save_to_pdf(ev_id, points_scaled_to_pixel_pitch=True, hits=hits, cmap=cmap, charge_norm=charge_norm)
             elif user_input[0].lower() == 'g':
                 print("Creating GIF of Event Display")
                 # Loop over 3D views
@@ -402,14 +434,14 @@ class LArEventDisplay:
                     clear_output(wait=True)
                     ev_id = int(user_input)
                     ev_idx = event_ids.index(ev_id)
-                    self.display_event(ev_id)
+                    hits, cmap, charge_norm = self.display_event(ev_id)
                 except:
                     clear_output(wait=True)
                     print("Event number %s not valid" % user_input)
                     print("Proceeded to next available event instead")
                     ev_idx += 1
                     ev_id = event_ids[ev_idx]
-                    self.display_event(ev_id)                 
+                    hits, cmap, charge_norm = self.display_event(ev_id)                 
             if ev_id >= event_ids[-1]:
                 print("End of file")
                 sys.exit()
@@ -856,12 +888,37 @@ class LArEventDisplay:
             self.plot_light(light_wvfms, light_cmap, light_norm, light_cmap_zero)
 
         # Plot 2D charge hits
-        self.bd_points = self.ax_bd.scatter(hits['z'], hits['x'], lw=0, ec='C0', c=cmap(
-                charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
-        self.bv_points = self.ax_bv.scatter(hits['z'], hits['y'], lw=0, ec='C0', c=cmap(
-                charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
-        self.dv_points = self.ax_dv.scatter(hits['x'], hits['y'], lw=0, ec='C0', c=cmap(
-                charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
+        if self.hist_projection:
+            z_bins = np.linspace(self.geometry.attrs['lar_detector_bounds'][0][2],self.geometry.attrs['lar_detector_bounds'][1][2],\
+                                 int((self.geometry.attrs['lar_detector_bounds'][1][2]-self.geometry.attrs['lar_detector_bounds'][0][2])/0.5))
+            y_bins = np.linspace(self.geometry.attrs['lar_detector_bounds'][0][1],self.geometry.attrs['lar_detector_bounds'][1][1],\
+                                 int((self.geometry.attrs['lar_detector_bounds'][1][1]-self.geometry.attrs['lar_detector_bounds'][0][1])/0.5))
+            x_bins = np.linspace(self.geometry.attrs['lar_detector_bounds'][0][0],self.geometry.attrs['lar_detector_bounds'][1][0],\
+                                 int((self.geometry.attrs['lar_detector_bounds'][1][0]-self.geometry.attrs['lar_detector_bounds'][0][0])/0.5))
+
+            bd_charge_hist, _, _ = np.histogram2d(hits['z'], hits['x'], bins=[z_bins,x_bins],weights=hits['Q'])
+            bd_charge_hist_masked = np.where(bd_charge_hist==0, np.nan, bd_charge_hist) # TO DO: SHOULD CHARGE ==0 BE MASKED?
+            ZX_Z, ZX_X = np.meshgrid(z_bins[:-1], x_bins[:-1])
+            self.bd_points = self.ax_bd.pcolormesh(ZX_Z, ZX_X, bd_charge_hist_masked.T, cmap=cmap, norm=charge_norm, alpha=1)
+
+            bv_charge_hist, _, _ = np.histogram2d(hits['z'], hits['y'], bins=[z_bins,y_bins],weights=hits['Q'])
+            bv_charge_hist_masked = np.where(bv_charge_hist==0, np.nan, bv_charge_hist) # TO DO: SHOULD CHARGE ==0 BE MASKED?
+            ZY_Z, ZY_Y = np.meshgrid(z_bins[:-1], y_bins[:-1])
+            self.bv_points = self.ax_bv.pcolormesh(ZY_Z, ZY_Y, bv_charge_hist_masked.T, cmap=cmap, norm=charge_norm, alpha=1)
+
+            dv_charge_hist, _, _ = np.histogram2d(hits['x'], hits['y'], bins=[x_bins,y_bins],weights=hits['Q'])
+            dv_charge_hist_masked = np.where(dv_charge_hist==0, np.nan, dv_charge_hist) # TO DO: SHOULD CHARGE ==0 BE MASKED?
+            XY_X, XY_Y = np.meshgrid(x_bins[:-1], y_bins[:-1])
+            self.dv_points = self.ax_dv.pcolormesh(XY_X, XY_Y, dv_charge_hist_masked.T, cmap=cmap, norm=charge_norm, alpha=1)
+        else:
+            self.bd_points = self.ax_bd.scatter(hits['z'], hits['x'], lw=0, ec='C0', c=cmap(
+                    charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
+            self.bv_points = self.ax_bv.scatter(hits['z'], hits['y'], lw=0, ec='C0', c=cmap(
+                    charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
+            self.dv_points = self.ax_dv.scatter(hits['x'], hits['y'], lw=0, ec='C0', c=cmap(
+                    charge_norm(hits['Q'])), s=0.75, alpha=1, marker="s")
+            
+        return hits, cmap, charge_norm
 
 
     def plot_light(self, light_wvfms, light_cmap, light_norm, light_cmap_zero):
