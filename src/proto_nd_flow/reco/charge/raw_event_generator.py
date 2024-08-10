@@ -272,83 +272,83 @@ class RawEventGenerator(H5FlowGenerator):
                 self.data_manager.create_ref(self.mc_events_dset_name, self.mc_stack_dset_name)
                 self.data_manager.create_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name)
 
-            # create references between trajectories and tracks
-            # eventID --> vertexID for latest production files
-            if self.is_mc_neutrino:
-                stack_evid = self.mc_stack[self.vertex_id_name][:]
-            intr_evid = self.mc_events[self.vertex_id_name][:]
-            traj_evid = self.mc_trajectories[self.vertex_id_name][:]
-            tracks_evid = self.mc_tracks[self.vertex_id_name][:]
-            evs, ev_traj_start, ev_track_start = np.intersect1d(
-                traj_evid, tracks_evid, return_indices=True)
-            evs, ev_traj_end, ev_track_end = np.intersect1d(
-                traj_evid[::-1], tracks_evid[::-1], return_indices=True)
-            ev_traj_end = len(self.mc_trajectories[self.vertex_id_name]) - ev_traj_end
-            ev_track_end = len(self.mc_tracks[self.vertex_id_name]) - ev_track_end
-            truth_slice = slice(
-                ceil(len(evs) / self.size * self.rank),
-                ceil(len(evs) / self.size * (self.rank + 1)))
+            ## create references between trajectories and tracks
+            ## eventID --> vertexID for latest production files
+            #if self.is_mc_neutrino:
+            #    stack_evid = self.mc_stack[self.vertex_id_name][:]
+            #intr_evid = self.mc_events[self.vertex_id_name][:]
+            #traj_evid = self.mc_trajectories[self.vertex_id_name][:]
+            #tracks_evid = self.mc_tracks[self.vertex_id_name][:]
+            #evs, ev_traj_start, ev_track_start = np.intersect1d(
+            #    traj_evid, tracks_evid, return_indices=True)
+            #evs, ev_traj_end, ev_track_end = np.intersect1d(
+            #    traj_evid[::-1], tracks_evid[::-1], return_indices=True)
+            #ev_traj_end = len(self.mc_trajectories[self.vertex_id_name]) - ev_traj_end
+            #ev_track_end = len(self.mc_tracks[self.vertex_id_name]) - ev_track_end
+            #truth_slice = slice(
+            #    ceil(len(evs) / self.size * self.rank),
+            #    ceil(len(evs) / self.size * (self.rank + 1)))
 
-            if self.is_mc_neutrino:
-                stack_trackid = self.mc_stack[self.traj_id_name][:]
-            traj_trackid = self.mc_trajectories[self.traj_id_name][:]
-            tracks_trackid = self.mc_tracks[self.traj_id_name][:]
-            iter_ = tqdm(range(truth_slice.start, truth_slice.stop), smoothing=1, desc='generating truth references') if self.rank == 0 else range(truth_slice.start, truth_slice.stop)
-            for i in iter_:
-                if i < len(evs):
-                    ev = evs[i]
-                    traj_start, traj_end = ev_traj_start[i], ev_traj_end[i]
-                    track_start, track_end = ev_track_start[i], ev_track_end[i]
-                    traj_trackid_block = np.expand_dims(traj_trackid[traj_start:traj_end], -1)
-                    track_trackid_block = np.expand_dims(tracks_trackid[track_start:track_end], 0)
-                    traj_evid_block = np.expand_dims(traj_evid[traj_start:traj_end], -1)
-                    track_evid_block = np.expand_dims(tracks_evid[track_start:track_end], 0)
+            #if self.is_mc_neutrino:
+            #    stack_trackid = self.mc_stack[self.traj_id_name][:]
+            #traj_trackid = self.mc_trajectories[self.traj_id_name][:]
+            #tracks_trackid = self.mc_tracks[self.traj_id_name][:]
+            #iter_ = tqdm(range(truth_slice.start, truth_slice.stop), smoothing=1, desc='generating truth references') if self.rank == 0 else range(truth_slice.start, truth_slice.stop)
+            #for i in iter_:
+            #    if i < len(evs):
+            #        ev = evs[i]
+            #        traj_start, traj_end = ev_traj_start[i], ev_traj_end[i]
+            #        track_start, track_end = ev_track_start[i], ev_track_end[i]
+            #        traj_trackid_block = np.expand_dims(traj_trackid[traj_start:traj_end], -1)
+            #        track_trackid_block = np.expand_dims(tracks_trackid[track_start:track_end], 0)
+            #        traj_evid_block = np.expand_dims(traj_evid[traj_start:traj_end], -1)
+            #        track_evid_block = np.expand_dims(tracks_evid[track_start:track_end], 0)
 
-                    # Create refs for traj --> tracks
-                    ref = np.argwhere((traj_trackid_block == track_trackid_block) &
-                                      (traj_evid_block == track_evid_block))
-                    ref[:, 0] += traj_start
-                    ref[:, 1] += track_start
-                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, ref)
+            #        # Create refs for traj --> tracks
+            #        ref = np.argwhere((traj_trackid_block == track_trackid_block) &
+            #                          (traj_evid_block == track_evid_block))
+            #        ref[:, 0] += traj_start
+            #        ref[:, 1] += track_start
+            #        self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, ref)
 
-                    # Create refs for interactions --> traj
-                    intr_evid_block = np.expand_dims(intr_evid[:], 0) # Might need to modify for MPI running
-                    ref = np.argwhere((ev == intr_evid_block) & (ev == traj_evid_block))
-                    ref[:, 0] += traj_start
-                    ref[:, 1] += 0 #i + inter_sl.start # Might need to modify for MPI running
-                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, ref)
+            #        # Create refs for interactions --> traj
+            #        intr_evid_block = np.expand_dims(intr_evid[:], 0) # Might need to modify for MPI running
+            #        ref = np.argwhere((ev == intr_evid_block) & (ev == traj_evid_block))
+            #        ref[:, 0] += traj_start
+            #        ref[:, 1] += 0 #i + inter_sl.start # Might need to modify for MPI running
+            #        self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, ref)
 
-                    # Create refs for interactions --> tracks
-                    intr_evid_block = np.expand_dims(intr_evid[:], -1) # Might need to modify for MPI running
-                    ref = np.argwhere((ev == track_evid_block) & (ev == intr_evid_block))
-                    ref[:, 0] += 0 #i + inter_sl.start # Might need to modify for MPI running
-                    ref[:, 1] += track_start
-                    self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, ref)
+            #        # Create refs for interactions --> tracks
+            #        intr_evid_block = np.expand_dims(intr_evid[:], -1) # Might need to modify for MPI running
+            #        ref = np.argwhere((ev == track_evid_block) & (ev == intr_evid_block))
+            #        ref[:, 0] += 0 #i + inter_sl.start # Might need to modify for MPI running
+            #        ref[:, 1] += track_start
+            #        self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, ref)
 
-                    if self.is_mc_neutrino:
-                        # Create refs for interactions --> generator particle stack
-                        stack_evid_block = np.expand_dims(stack_evid[:], 0) # Might need to modify for MPI running
-                        ref = np.argwhere((ev == intr_evid_block) & (ev == stack_evid_block))
-                        # ref[:, 0] += 0 # Placeholders for now.
-                        # ref[:, 1] += 0 # This extra offset might be needed for future MPI running
-                        self.data_manager.write_ref(self.mc_events_dset_name, self.mc_stack_dset_name, ref)
+            #        if self.is_mc_neutrino:
+            #            # Create refs for interactions --> generator particle stack
+            #            stack_evid_block = np.expand_dims(stack_evid[:], 0) # Might need to modify for MPI running
+            #            ref = np.argwhere((ev == intr_evid_block) & (ev == stack_evid_block))
+            #            # ref[:, 0] += 0 # Placeholders for now.
+            #            # ref[:, 1] += 0 # This extra offset might be needed for future MPI running
+            #            self.data_manager.write_ref(self.mc_events_dset_name, self.mc_stack_dset_name, ref)
 
-                        # Create refs for generator particle stack --> traj
-                        stack_trackid_block = np.expand_dims(stack_trackid[:], -1) # Might need to modify for MPI running
-                        traj_trackid_block = np.transpose(traj_trackid_block)
-                        stack_evid_block = np.transpose(stack_evid_block) # Might need to modify for MPI running
-                        traj_evid_block = np.transpose(traj_evid_block)
-                        ref = np.argwhere((stack_trackid_block == traj_trackid_block) & (stack_evid_block == traj_evid_block))
-                        ref[:, 0] += 0 # Might need to modify for MPI running
-                        ref[:, 1] += traj_start
-                        self.data_manager.write_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name, ref)
-                else:
-                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
-                    self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, np.empty((0,2)))
-                    self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
-                    if self.is_mc_neutrino:
-                        self.data_manager.write_ref(self.mc_events_dset_name, self.mc_stack_dset_name, np.empty((0,2)))
-                        self.data_manager.write_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name, np.empty((0,2)))
+            #            # Create refs for generator particle stack --> traj
+            #            stack_trackid_block = np.expand_dims(stack_trackid[:], -1) # Might need to modify for MPI running
+            #            traj_trackid_block = np.transpose(traj_trackid_block)
+            #            stack_evid_block = np.transpose(stack_evid_block) # Might need to modify for MPI running
+            #            traj_evid_block = np.transpose(traj_evid_block)
+            #            ref = np.argwhere((stack_trackid_block == traj_trackid_block) & (stack_evid_block == traj_evid_block))
+            #            ref[:, 0] += 0 # Might need to modify for MPI running
+            #            ref[:, 1] += traj_start
+            #            self.data_manager.write_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name, ref)
+            #    else:
+            #        self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
+            #        self.data_manager.write_ref(self.mc_trajectories_dset_name, self.mc_events_dset_name, np.empty((0,2)))
+            #        self.data_manager.write_ref(self.mc_events_dset_name, self.mc_tracks_dset_name, np.empty((0,2)))
+            #        if self.is_mc_neutrino:
+            #            self.data_manager.write_ref(self.mc_events_dset_name, self.mc_stack_dset_name, np.empty((0,2)))
+            #            self.data_manager.write_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name, np.empty((0,2)))
 
         # if self.is_mc:
         #     # copy meta-data from input file
