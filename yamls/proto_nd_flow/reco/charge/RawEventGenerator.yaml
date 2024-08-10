@@ -7,7 +7,7 @@ params:
 
   # configuration parameters
   mc_tracks_dset_name: 'mc_truth/segments'
-  buffer_size: 1152000 #38400 
+  buffer_size: 3456000 #2304000 #38400 
   nhit_cut: 1
   sync_noise_cut: [1000000, 11000000] # 1e6 cut based on Brooke's study
   sync_noise_cut_enabled: True
@@ -16,5 +16,5 @@ params:
     window: 2000 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
     trig_io_grp: 1
     rollover_ticks: 10000000 # PPS = 1e7 ticks
-    build_off_beam_events : True
+    build_off_beam_events : False
     VALIDATE_HACK : False

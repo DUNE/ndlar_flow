@@ -262,15 +262,15 @@ class RawEventGenerator(H5FlowGenerator):
                 self.mc_trajectories_dset_name, traj_sl,
                 self.mc_trajectories[traj_sl])
 
-            # set up references
+            ## set up references
             self.data_manager.create_ref(self.packets_dset_name, self.mc_tracks_dset_name)
-            self.data_manager.create_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name)
-            self.data_manager.create_ref(self.raw_event_dset_name, self.mc_events_dset_name)
-            self.data_manager.create_ref(self.mc_events_dset_name, self.mc_trajectories_dset_name)
-            self.data_manager.create_ref(self.mc_events_dset_name, self.mc_tracks_dset_name)
-            if self.is_mc_neutrino:
-                self.data_manager.create_ref(self.mc_events_dset_name, self.mc_stack_dset_name)
-                self.data_manager.create_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name)
+            #self.data_manager.create_ref(self.mc_trajectories_dset_name, self.mc_tracks_dset_name)
+            #self.data_manager.create_ref(self.raw_event_dset_name, self.mc_events_dset_name)
+            #self.data_manager.create_ref(self.mc_events_dset_name, self.mc_trajectories_dset_name)
+            #self.data_manager.create_ref(self.mc_events_dset_name, self.mc_tracks_dset_name)
+            #if self.is_mc_neutrino:
+            #    self.data_manager.create_ref(self.mc_events_dset_name, self.mc_stack_dset_name)
+            #    self.data_manager.create_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name)
 
             ## create references between trajectories and tracks
             ## eventID --> vertexID for latest production files
@@ -474,37 +474,37 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.write_data(self.mc_packet_fraction_dset_name, sl, np.concatenate(event_mc_assn))
             self.data_manager.write_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name, ref)
 
-            # packet -> segment
-            mc_assn = (np.concatenate(event_mc_assn, axis=0)
-                       if len(event_mc_assn) else np.full((0,), -1, dtype=self.mc_assn.dtype))
-            id_field = 'segment_ids' if 'segment_ids' in mc_assn.dtype.fields else 'track_ids'
-            mc_assn_mask = (mc_assn[id_field] == -1) | (mc_assn['fraction'] == 0.)
-            event_tracks = ma.array(mc_assn[id_field], mask=mc_assn_mask)
+            ## packet -> segment
+            #mc_assn = (np.concatenate(event_mc_assn, axis=0)
+            #           if len(event_mc_assn) else np.full((0,), -1, dtype=self.mc_assn.dtype))
+            #id_field = 'segment_ids' if 'segment_ids' in mc_assn.dtype.fields else 'track_ids'
+            #mc_assn_mask = (mc_assn[id_field] == -1) | (mc_assn['fraction'] == 0.)
+            #event_tracks = ma.array(mc_assn[id_field], mask=mc_assn_mask)
 
-            packets_idcs = np.broadcast_to(packets_idcs[:, np.newaxis], event_tracks.shape)
-            packets_idcs = packets_idcs.ravel()[~event_tracks.mask.ravel()]
+            #packets_idcs = np.broadcast_to(packets_idcs[:, np.newaxis], event_tracks.shape)
+            #packets_idcs = packets_idcs.ravel()[~event_tracks.mask.ravel()]
 
-            segment_id_idcs = {segment_id:idcs for idcs,segment_id in enumerate(self.mc_tracks['segment_id'])}
-            segment_idcs = [segment_id_idcs[seg_id] for seg_id in event_tracks.ravel()[~event_tracks.mask.ravel()]]
+            #segment_id_idcs = {segment_id:idcs for idcs,segment_id in enumerate(self.mc_tracks['segment_id'])}
+            #segment_idcs = [segment_id_idcs[seg_id] for seg_id in event_tracks.ravel()[~event_tracks.mask.ravel()]]
 
-            if len(packets_idcs) != len(segment_idcs):
-                raise Exception("packets_idcs and segment_idcs do not match in size!")
-            ref = np.c_[packets_idcs, segment_idcs]
-            ref = np.unique(ref, axis=0) if len(ref) else ref
-            self.data_manager.write_ref(self.packets_dset_name, self.mc_tracks_dset_name, ref)
+            #if len(packets_idcs) != len(segment_idcs):
+            #    raise Exception("packets_idcs and segment_idcs do not match in size!")
+            #ref = np.c_[packets_idcs, segment_idcs]
+            #ref = np.unique(ref, axis=0) if len(ref) else ref
+            #self.data_manager.write_ref(self.packets_dset_name, self.mc_tracks_dset_name, ref)
 
-            # find events associated with tracks
-            if H5FLOW_MPI:
-                self.comm.barrier()
-            ref_dset, ref_dir = self.data_manager.get_ref(self.mc_tracks_dset_name, self.mc_events_dset_name)
-            ref_region = self.data_manager.get_ref_region(self.mc_tracks_dset_name, self.mc_events_dset_name)
-            mc_evs = dereference(ref[:, 1], ref_dset, region=ref_region,
-                                 ref_direction=ref_dir, indices_only=True)
+            ## find events associated with tracks
+            #if H5FLOW_MPI:
+            #    self.comm.barrier()
+            #ref_dset, ref_dir = self.data_manager.get_ref(self.mc_tracks_dset_name, self.mc_events_dset_name)
+            #ref_region = self.data_manager.get_ref_region(self.mc_tracks_dset_name, self.mc_events_dset_name)
+            #mc_evs = dereference(ref[:, 1], ref_dset, region=ref_region,
+            #                     ref_direction=ref_dir, indices_only=True)
 
-            ev_idcs = np.broadcast_to(np.expand_dims(ev_idcs, axis=-1), event_tracks.shape)
-            ref = np.c_[ev_idcs[~event_tracks.mask].ravel(), mc_evs.ravel()]
-            ref = np.unique(ref, axis=0) if len(ref) else ref
-            self.data_manager.write_ref(self.raw_event_dset_name, self.mc_events_dset_name, ref)
+            #ev_idcs = np.broadcast_to(np.expand_dims(ev_idcs, axis=-1), event_tracks.shape)
+            #ref = np.c_[ev_idcs[~event_tracks.mask].ravel(), mc_evs.ravel()]
+            #ref = np.unique(ref, axis=0) if len(ref) else ref
+            #self.data_manager.write_ref(self.raw_event_dset_name, self.mc_events_dset_name, ref)
 
         return raw_event_slice if nevents else H5FlowGenerator.EMPTY
 

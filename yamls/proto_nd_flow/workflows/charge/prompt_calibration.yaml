@@ -4,7 +4,7 @@
 flow:
   source: raw_events
   stages: [calib_hit_builder]
-  drop: []
+  drop: [charge/raw_hits, charge/packets, charge/raw_events charge/packets_corr_ts, mc_truth/packet_fraction]
 
 
 resources:

@@ -139,8 +139,9 @@ class CalibHitBuilder(H5FlowStage):
             n = 0
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
 
-        if has_mc_truth and ('x_true_seg_t' not in self.calib_hits_dtype.fields):
-            self.calib_hits_dtype = np.dtype(self.calib_hits_dtype.descr + [('x_true_seg_t', f'({packet_seg_bt.shape[-1]},)f8'), ('E_true_recomb_elife', f'({packet_seg_bt.shape[-1]},)f8')])
+        #if has_mc_truth and ('x_true_seg_t' not in self.calib_hits_dtype.fields):
+        #    self.calib_hits_dtype = np.dtype(self.calib_hits_dtype.descr + [('x_true_seg_t', f'({packet_seg_bt.shape[-1]},)f8')])
+        #    #self.calib_hits_dtype = np.dtype(self.calib_hits_dtype.descr + [('x_true_seg_t', f'({packet_seg_bt.shape[-1]},)f8'), ('E_true_recomb_elife', f'({packet_seg_bt.shape[-1]},)f8')])
 
         # save all config info
         self.data_manager.set_attrs(self.calib_hits_dset_name,
@@ -198,10 +199,10 @@ class CalibHitBuilder(H5FlowStage):
             x = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
 
             # true drift position pair
-            if has_mc_truth:
-                drift_t_true = packet_seg_bt_arr['t'] #us
-                drift_d_true = drift_t_true * (resources['LArData'].v_drift) / units.cm # convert mm -> cm
-                x_true_seg_t = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d_true)
+            #if has_mc_truth:
+            #    drift_t_true = packet_seg_bt_arr['t'] #us
+            #    drift_d_true = drift_t_true * (resources['LArData'].v_drift) / units.cm # convert mm -> cm
+            #    x_true_seg_t = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d_true)
 
             zy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
@@ -219,8 +220,8 @@ class CalibHitBuilder(H5FlowStage):
                             for unique_id in hit_uniqueid_str])
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             calib_hits_arr['x'] = x
-            if has_mc_truth:
-                calib_hits_arr['x_true_seg_t'] = x_true_seg_t
+            #if has_mc_truth:
+            #    calib_hits_arr['x_true_seg_t'] = x_true_seg_t
             calib_hits_arr['y'] = zy[:,1]
             calib_hits_arr['z'] = zy[:,0]
             calib_hits_arr['ts_pps'] = raw_hits_arr['ts_pps']
@@ -231,9 +232,9 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['Q'] = hits_charge # ke-
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
             calib_hits_arr['E'] = hits_charge * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV) # MeV
-            if has_mc_truth:
-                true_recomb = resources['LArData'].ionization_recombination(mode=2,dEdx=packet_seg_bt_arr['dEdx'])
-                calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
+            #if has_mc_truth:
+            #    true_recomb = resources['LArData'].ionization_recombination(mode=2,dEdx=packet_seg_bt_arr['dEdx'])
+            #    calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
 
         # if back tracking information was available, write the merged back tracking
         # dataset to file 
