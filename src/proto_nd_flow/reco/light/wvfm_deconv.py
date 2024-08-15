@@ -65,7 +65,7 @@ class WaveformDeconvolution(H5FlowStage):
                     do_filtering: False
                     filter_type: Wiener #, Inverse, or Matched
                     gaus_filter_width: 2 # use a gaussian filter to reduce HF noise
-                    noise_strategy: PPS # or slice
+                    noise_strategy: PPS # or slice or quantile
                     noise_slice: [-256, null] # last 256 samples
 
     '''
@@ -83,6 +83,7 @@ class WaveformDeconvolution(H5FlowStage):
 
     NOISE_PPS = 'pps'
     NOISE_SLICE = 'slice'
+    NOISE_QUANTILE = 'quantile'
 
     def __init__(self, **params):
         super(WaveformDeconvolution, self).__init__(**params)
@@ -92,9 +93,11 @@ class WaveformDeconvolution(H5FlowStage):
         self.pps_channel = params.get('pps_channel', 0)
         self.pps_threshold = params.get('pps_threshold', 0)
         self.noise_strategy = params.get('noise_strategy', self.NOISE_PPS).lower()
-        if self.noise_strategy not in (self.NOISE_PPS, self.NOISE_SLICE):
+        if self.noise_strategy not in (self.NOISE_PPS, self.NOISE_SLICE, self.NOISE_QUANTILE):
+            print(self.noise_strategy)
             raise RuntimeError(f'Invalid noise estimation strategy: {self.noise_strategy}')
         self.noise_slice = slice(*params.get('noise_slice', (None, None)))
+        self.noise_quantile = params.get('noise_quantile', 0)
         self.signal_amplitude = params.get('signal_amplitude', (-np.inf, np.inf))
 
         self.gen_noise_spectrum = params.get('gen_noise_spectrum', False)
@@ -236,6 +239,25 @@ class WaveformDeconvolution(H5FlowStage):
                     self.noise_spectrum['spectrum'] = (n * spectrum +
                                                        old_n * self.noise_spectrum['spectrum']) / (n + old_n + 1.e-9)
                     self.noise_spectrum['n'] = n + old_n
+
+            elif self.noise_strategy == self.NOISE_QUANTILE:
+                # only use events with max amplitude below quantile, use full waveforms
+                quantile_mask = (wvfms.max(axis=-1) > np.quantile(wvfms.max(axis=-1), self.noise_quantile,axis=0,keepdims=True)) \
+                    & (~wvfms.mask).all(axis=-1)
+                quantile_mask = quantile_mask.reshape(quantile_mask.shape + (1,))
+
+                if np.any(quantile_mask):
+                    quantile_fft = np.fft.rfft(wvfms, axis=-1)
+
+                    spectrum = ma.array(np.abs(quantile_fft)**2, mask=~np.broadcast_to(quantile_mask, quantile_fft.shape))
+                    spectrum = spectrum.mean(axis=0)
+                    n = np.count_nonzero(quantile_mask, axis=0)
+
+                    old_n = self.noise_spectrum['n']
+                    self.noise_spectrum['spectrum'] = (n * spectrum +
+                                                       old_n * self.noise_spectrum['spectrum']) / (n + old_n + 1.e-9)
+                    self.noise_spectrum['n'] = n + old_n
+                    
             elif self.noise_strategy == self.NOISE_SLICE:
                 # use all events, but only a subset of waveform
                 mask = (~wvfms.mask).all(axis=-1) #.any(axis=-1)
