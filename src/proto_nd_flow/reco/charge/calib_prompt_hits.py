@@ -56,8 +56,8 @@ class CalibHitBuilder(H5FlowStage):
             x              f8, pixel x location [cm]
             y              f8, pixel y location [cm]
             z              f8, pixel z location [cm]
-            t_drift        u8, drift time [ticks???]
-            ts_pps         f8, PPS packet timestamp [ns]
+            t_drift        u8, drift time [tick = 100ns]
+            ts_pps         f8, PPS packet timestamp [tick = 100ns]
             io_group       u8, io group ID (PACMAN number)
             io_channel     u8, io channel ID (related to PACMAN number & PACMAN UART Number)
             Q              f8, hit charge [ke-]
@@ -232,7 +232,7 @@ class CalibHitBuilder(H5FlowStage):
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
             calib_hits_arr['E'] = hits_charge * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV) # MeV
             if has_mc_truth:
-                true_recomb = resources['LArData'].ionization_recombination(mode=1,dEdx=packet_seg_bt_arr['dEdx'])
+                true_recomb = resources['LArData'].ionization_recombination(mode=2,dEdx=packet_seg_bt_arr['dEdx'])
                 calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
 
         # if back tracking information was available, write the merged back tracking

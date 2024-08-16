@@ -1,0 +1,14 @@
+classname: Geometry # resources/geometry.py
+path: resources.geometry
+params:
+  path: 'geometry_info'
+  det_geometry_file: 'data/ndlar_flow/ndlar-module.yaml'
+  crs_geometry_files: ['data/ndlar_flow/multi_tile_layout-3.0.40.yaml'] 
+  crs_geometry_to_module: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+  # lrs_geometry_file is arbitrary here, passing charge_only
+  # boolean (line below) is work in progress. 
+  lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-2.0.0.yaml'
+  charge_only: True
+  beam_direction: 'z'
+  drift_direction: 'x'
+  network_agnostic: False

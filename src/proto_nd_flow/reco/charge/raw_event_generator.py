@@ -163,6 +163,8 @@ class RawEventGenerator(H5FlowGenerator):
                 self.is_mc_neutrino = False
                 print("Hope you are not processing neutrino simulation! There is no information for neutrino interactions.")
                 pass
+        else:
+            self.is_mc_neutrino = False
 
         # set up attribute name for vertex_id and traj_id
         if 'file_vertex_id' in self.input_fh['vertices'].dtype.names:
