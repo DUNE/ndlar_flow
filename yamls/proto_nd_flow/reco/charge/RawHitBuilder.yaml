@@ -11,10 +11,3 @@ params:
 
   # output
   hits_dset_name: 'charge/raw_hits'
-
-  # configuration parameters
-
-  #pedestal_file: 'data/module0_flow/datalog_2021_04_02_19_00_46_CESTevd_ped.json'
-  # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/datalog_2021_04_02_19_00_46_CESTevd_ped.json
-  #configuration_file: 'data/module0_flow/evd_config_21-03-31_12-36-13.json'
-  # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/evd_config_21-03-31_12-36-13.json
