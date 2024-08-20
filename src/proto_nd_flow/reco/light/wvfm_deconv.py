@@ -242,7 +242,7 @@ class WaveformDeconvolution(H5FlowStage):
 
             elif self.noise_strategy == self.NOISE_QUANTILE:
                 # only use events with max amplitude below quantile, use full waveforms
-                quantile_mask = (wvfms.max(axis=-1) > np.quantile(wvfms.max(axis=-1), self.noise_quantile,axis=0,keepdims=True)) \
+                quantile_mask = (wvfms.max(axis=-1) < np.quantile(wvfms.max(axis=-1), self.noise_quantile,axis=0,keepdims=True)) \
                     & (~wvfms.mask).all(axis=-1)
                 quantile_mask = quantile_mask.reshape(quantile_mask.shape + (1,))
 
@@ -250,7 +250,7 @@ class WaveformDeconvolution(H5FlowStage):
                     quantile_fft = np.fft.rfft(wvfms, axis=-1)
 
                     spectrum = ma.array(np.abs(quantile_fft)**2, mask=~np.broadcast_to(quantile_mask, quantile_fft.shape))
-                    spectrum = spectrum.mean(axis=0)
+                    spectrum = ma.mean(spectrum, axis=0)
                     n = np.count_nonzero(quantile_mask, axis=0)
 
                     old_n = self.noise_spectrum['n']
