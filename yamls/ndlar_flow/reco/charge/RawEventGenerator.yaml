@@ -13,8 +13,8 @@ params:
   sync_noise_cut_enabled: True
   event_builder_class: 'ExtTrigRawEventBuilder' #'SymmetricWindowRawEventBuilder'
   event_builder_config:
-    window: 3500 # ExtTrigRawEventBuilder
+    window: 3030 # ExtTrigRawEventBuilder (50 cm * 0.1648 cm / us).
     trig_io_grp: 1
     rollover_ticks: 10000000 # PPS = 1e7 ticks
-    build_off_beam_events : True
+    build_off_beam_events : False
     VALIDATE_HACK : False
