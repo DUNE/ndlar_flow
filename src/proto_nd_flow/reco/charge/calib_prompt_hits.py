@@ -56,8 +56,8 @@ class CalibHitBuilder(H5FlowStage):
             x              f8, pixel x location [cm]
             y              f8, pixel y location [cm]
             z              f8, pixel z location [cm]
-            t_drift        u8, drift time [ticks???]
-            ts_pps         f8, PPS packet timestamp [ns]
+            t_drift        u8, drift time [tick = 100ns]
+            ts_pps         f8, PPS packet timestamp [tick = 100ns]
             io_group       u8, io group ID (PACMAN number)
             io_channel     u8, io channel ID (related to PACMAN number & PACMAN UART Number)
             Q              f8, hit charge [ke-]
