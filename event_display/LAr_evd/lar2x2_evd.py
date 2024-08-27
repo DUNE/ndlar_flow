@@ -127,8 +127,8 @@ class LArEventDisplay:
         # Load DUNE and 2x2 logos
         dune_logo = os.path.join(self.lar_evd_dir, 'DUNElogo.pdf')
         self.dune_logo_pdf = fitz.open(dune_logo)#mpimg.imread(dune_logo)
-        subexp_logo=os.path.join(self.lar_evd_dir, '2x2logo.png')
-        self.subexp_logo = mpimg.imread(subexp_logo)
+        subexp_logo=os.path.join(self.lar_evd_dir, '2x2logo.pdf')
+        self.subexp_logo_pdf = fitz.open(subexp_logo)#mpimg.imread(subexp_logo)
 
         # Resize DUNE logo image to fit in display
         dune_logo_page = self.dune_logo_pdf.load_page(0)
@@ -138,6 +138,17 @@ class LArEventDisplay:
         dune_logo_image.save(dune_logo_buf, format='png')
         dune_logo_buf.seek(0)
         self.dune_logo_png = mpimg.imread(dune_logo_buf, format='png')
+
+        # Resize 2x2 logo image to fit in display
+        subexp_logo_page = self.subexp_logo_pdf.load_page(0)
+        subexp_logo_pixmap = subexp_logo_page.get_pixmap(matrix=fitz.Matrix(5, 5), dpi=600)
+        subexp_logo_image = Image.frombytes("RGB", [int(subexp_logo_pixmap.width), int(subexp_logo_pixmap.height)], subexp_logo_pixmap.samples)
+        #subexp_logo_height, subexp_logo_width = int(subexp_logo_image_full_size.height*.08), int(subexp_logo_image_full_size.width*.08)
+        #subexp_logo_image = subexp_logo_image_full_size.resize((subexp_logo_width, subexp_logo_height), Image.LANCZOS)
+        subexp_logo_buf = BytesIO()
+        subexp_logo_image.save(subexp_logo_buf, format='png')
+        subexp_logo_buf.seek(0)
+        self.subexp_logo_png = mpimg.imread(subexp_logo_buf, format='png')
 
         # Load events dataset
         self.events = f['charge/events/data']
@@ -362,21 +373,26 @@ class LArEventDisplay:
                 self.mx2_lar_points.set_sizes(pixel_pitch_sizes)
             self.bdv_points.set_sizes(pixel_pitch_sizes)
 
-        # First, save figure to PDF (clearing DUNE logo axis)      
+        # First, save figure to PDF (clearing DUNE and 2x2 logo axes)      
         save_dir = self.lar_evd_dir
         filename = self.filename.split('.')[0]+'_Event_'+str(ev_id)+'.pdf'
         savepath = os.path.join(save_dir, filename)
         print("Saving to", savepath.split('.')[0]+'_Display.pdf')
         self.ax_dune_logo.clear()
         self.ax_dune_logo.axis('off')
+        self.ax_subexp_logo.clear()
+        self.ax_subexp_logo.axis('off')
         self.fig.savefig(savepath, bbox_inches='tight')
 
         # Then, add back vectorized DUNE logo to saved PDF
         saved_pdf = fitz.open(savepath)
         saved_pdf_page = saved_pdf[0]
         rect_max_x = saved_pdf_page.rect[2]
+        rect_max_y = saved_pdf_page.rect[3]
         include_dune_logo_rect = fitz.Rect(rect_max_x-300, 2, rect_max_x-5, 65)
         saved_pdf_page.show_pdf_page(include_dune_logo_rect, self.dune_logo_pdf, 0)
+        include_subexp_logo_rect = fitz.Rect(rect_max_x-635, 78, rect_max_x-425, 288)
+        saved_pdf_page.show_pdf_page(include_subexp_logo_rect, self.subexp_logo_pdf, 0)
         saved_pdf.save(savepath.split('.')[0]+'_Display.pdf')
 
         # Remove initial PDF without DUNE logo
@@ -633,7 +649,7 @@ class LArEventDisplay:
 
         # Show 2x2 and DUNE logos
         self.ax_subexp_logo.axis('off')
-        self.ax_subexp_logo.imshow(self.subexp_logo)
+        self.ax_subexp_logo.imshow(self.subexp_logo_png)
         self.ax_dune_logo.axis('off')
         self.ax_dune_logo.imshow(self.dune_logo_png)
 
