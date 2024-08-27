@@ -735,19 +735,19 @@ class LArEventDisplay:
                 for i in range(len(x_base)):
                     self.ax_mx2.plot([z_base[j][0], z_base[j][0]], 
                                     [x_base[i], x_base[(i + 1) % len(x_base)]], 
-                                    [y_base[i], y_base[(i + 1) % len(x_base)]], color="grey")
+                                    [y_base[i], y_base[(i + 1) % len(x_base)]], color="grey", alpha=0.85)
 
                     self.ax_mx2.plot([z_base[j][1], z_base[j][1]], 
                                     [x_base[i], x_base[(i + 1) % len(x_base)]], 
-                                    [y_base[i], y_base[(i + 1) % len(x_base)]], color="grey")
+                                    [y_base[i], y_base[(i + 1) % len(x_base)]], color="grey", alpha=0.85)
 
                     self.ax_mx2.plot([z_base[j][0], z_base[j][1]], 
                                     [x_base[i], x_base[i]], 
-                                    [y_base[i], y_base[i]], color="blue")
+                                    [y_base[i], y_base[i]], color="blue", alpha=0.85)
 
                     self.ax_mx2.plot([z_base[j][0], z_base[j][1]], 
                                     [x_base[i], x_base[i]], 
-                                    [y_base[i], y_base[i]], color="grey")
+                                    [y_base[i], y_base[i]], color="grey", alpha=0.85)
 
         # Plot cathodes + module outlines for 3D view(s) and fill module volumes + plot cathodes for 2D LAr volume projections           
         for i in range(len(self.geometry.attrs['module_RO_bounds'])):
@@ -758,7 +758,7 @@ class LArEventDisplay:
                                                            self.geometry.attrs['module_RO_bounds'][i][0][0]+self.geometry.attrs['max_drift_distance']+self.geometry.attrs['cathode_thickness']/2)
             self.ax_bdv.plot_surface(Z_cathode,X_cathode,Y_cathode, color='gainsboro', alpha=0.1)
             if self.show_mx2:
-                self.ax_mx2.plot_surface(Z_cathode,X_cathode,Y_cathode, color='gainsboro', alpha=0.1)
+                self.ax_mx2.plot_surface(Z_cathode,X_cathode,Y_cathode, color='gainsboro', alpha=0.05)
             
             for j in range(2):
                 for k in range(2):
@@ -778,15 +778,15 @@ class LArEventDisplay:
                         # Plot outlines of modules for XYZ (beam, drift, vertical) 3D view WITH Mx2:
                         self.ax_mx2.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
                                 [self.geometry.attrs['module_RO_bounds'][i][0][0], self.geometry.attrs['module_RO_bounds'][i][1][0]], \
-                                [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.35)
+                                [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.2)
 
                         self.ax_mx2.plot([self.geometry.attrs['module_RO_bounds'][i][j][2], self.geometry.attrs['module_RO_bounds'][i][j][2]], \
                                 [self.geometry.attrs['module_RO_bounds'][i][k][0], self.geometry.attrs['module_RO_bounds'][i][k][0]], \
-                                [self.geometry.attrs['module_RO_bounds'][i][0][1], self.geometry.attrs['module_RO_bounds'][i][1][1]], color='black', alpha=0.35)
+                                [self.geometry.attrs['module_RO_bounds'][i][0][1], self.geometry.attrs['module_RO_bounds'][i][1][1]], color='black', alpha=0.2)
 
                         self.ax_mx2.plot([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][1][2]], \
                                 [self.geometry.attrs['module_RO_bounds'][i][j][0], self.geometry.attrs['module_RO_bounds'][i][j][0]], \
-                                [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.35)
+                                [self.geometry.attrs['module_RO_bounds'][i][k][1], self.geometry.attrs['module_RO_bounds'][i][k][1]], color='black', alpha=0.2)
 
             # Fill modules for ZX (beam, drift) projections:
             self.ax_bd.fill([self.geometry.attrs['module_RO_bounds'][i][0][2], self.geometry.attrs['module_RO_bounds'][i][0][2], \
