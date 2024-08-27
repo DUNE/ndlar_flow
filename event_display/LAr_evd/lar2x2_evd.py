@@ -536,8 +536,8 @@ class LArEventDisplay:
                 light_wvfms = self.light_wvfms[light_wvfm_ref]["samples"] - light_wvfm_peds
 
                 # Prepare color map for light
-                light_cmap=cmr.get_sub_cmap(cmr.sunburst_r, 0.0, 0.55)
-                light_cmap_zero=cmr.get_sub_cmap(cmr.sunburst_r, 0.0, 0.55)
+                light_cmap=cmr.get_sub_cmap(cmr.voltage_r, 0.0, 0.55)
+                light_cmap_zero=cmr.get_sub_cmap(cmr.voltage_r, 0.0, 0.55)
                 min_light = self.light_threshold
                 if light_wvfms[0].sum(axis=-1).max() > min_light:
                     max_light = light_wvfms[0].sum(axis=-1).max()*2
