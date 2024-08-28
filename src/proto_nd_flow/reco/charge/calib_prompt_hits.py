@@ -116,10 +116,11 @@ class CalibHitBuilder(H5FlowStage):
         if resources['RunData'].is_mc:
             packet_frac_bt = cache['packet_frac_backtrack']
             packet_seg_bt = cache['packet_seg_backtrack']
+            has_mc_truth = packet_frac_bt is not None
+        else:
+            has_mc_truth = False
         t0_data = cache[self.t0_dset_name]
         raw_hits = cache[self.raw_hits_dset_name]
-
-        has_mc_truth = packet_frac_bt is not None
 
         mask = ~rfn.structured_to_unstructured(packets_data.mask).any(axis=-1)
         rh_mask = ~rfn.structured_to_unstructured(raw_hits.mask).any(axis=-1)

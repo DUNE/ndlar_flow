@@ -163,23 +163,24 @@ class RawEventGenerator(H5FlowGenerator):
                 self.is_mc_neutrino = False
                 print("Hope you are not processing neutrino simulation! There is no information for neutrino interactions.")
                 pass
+
+            # set up attribute name for vertex_id and traj_id
+            if 'file_vertex_id' in self.input_fh['vertices'].dtype.names:
+                self.vertex_id_name = 'file_vertex_id'
+            else:
+                self.vertex_id_name = 'vertex_id'
+                warnings.warn("Using 'vertex_id'(unique for beam simulation, but not for mpvmpr) instead of 'file_vertex_id'.")
+
+            if 'file_traj_id' in self.input_fh['trajectories'].dtype.names:
+                self.traj_id_name = 'file_traj_id'
+                if self.is_mc_neutrino and 'file_traj_id' not in self.input_fh['mc_stack'].dtype.names:
+                    self.traj_id_name = 'traj_id'
+            else:
+                self.traj_id_name = 'traj_id'
+                warnings.warn("Using 'traj_id' instead of 'file_traj_id'. 'traj_id' is not unique across the file and will cause reference issues.")
         else:
             self.is_mc_neutrino = False
 
-        # set up attribute name for vertex_id and traj_id
-        if 'file_vertex_id' in self.input_fh['vertices'].dtype.names:
-            self.vertex_id_name = 'file_vertex_id'
-        else:
-            self.vertex_id_name = 'vertex_id'
-            warnings.warn("Using 'vertex_id'(unique for beam simulation, but not for mpvmpr) instead of 'file_vertex_id'.")
-
-        if 'file_traj_id' in self.input_fh['trajectories'].dtype.names:
-            self.traj_id_name = 'file_traj_id'
-            if self.is_mc_neutrino and 'file_traj_id' not in self.input_fh['mc_stack'].dtype.names:
-                self.traj_id_name = 'traj_id'
-        else:
-            self.traj_id_name = 'traj_id'
-            warnings.warn("Using 'traj_id' instead of 'file_traj_id'. 'traj_id' is not unique across the file and will cause reference issues.")
 
         # initialize data objects
         self.data_manager.create_dset(self.raw_event_dset_name, dtype=self.raw_event_dtype)
