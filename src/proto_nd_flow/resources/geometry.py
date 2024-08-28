@@ -546,10 +546,7 @@ class Geometry(H5FlowResource):
 
         # Get vertical position
         # Get Y pos
-        if det_type == 0:
-            vert_pos = self.lrs_geometry_yaml["ch_to_vert_bin"][0][channel]
-        else:
-            vert_pos = self.lrs_geometry_yaml["ch_to_vert_bin"][1][channel]
+        vert_pos = self.lrs_geometry_yaml["ch_to_vert_bin"][adc][channel]
 
         return tpc, side, vert_pos
 
