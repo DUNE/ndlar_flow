@@ -511,7 +511,7 @@ class LArEventDisplay:
         exttrig_ref = self.exttrigs_ref[self.exttrigs_region[ev_id,'start']:self.exttrigs_region[ev_id,'stop']]
         exttrig_ref = np.sort(exttrig_ref[exttrig_ref[:,0] == ev_id, 1])
         exttrigs = self.exttrigs_full[exttrig_ref]
-        print("External trigger information:", exttrigs['iogroup'], exttrigs['ts'], exttrigs['ts_raw'])
+        #print("External trigger information:", exttrigs['iogroup'], exttrigs['ts'], exttrigs['ts_raw'])
 
         # Prepare color map for charge
         min_charge = min(hits['Q'])
@@ -568,14 +568,14 @@ class LArEventDisplay:
         if self.show_event_mx2:
             
             charge_time = (event["unix_ts"] + event["ts_start"]/ 1e7)
-            print("Charge Time:", charge_time)
-            print("Hit t_drift max:", hits['t_drift'].max())
+            #print("Charge Time:", charge_time)
+            #print("Hit t_drift max:", hits['t_drift'].max())
             #print("Minerva time 1:", self.minerva_times[0])
             #print("Minerva times:", len(self.minerva_times))
             # find the index of the minerva_times that matches the charge_time
             mx2_charge_time_diffs = np.abs(self.minerva_times - np.full_like(self.minerva_times, charge_time))
             trigger = np.argwhere(mx2_charge_time_diffs < 0.5).reshape(1,-1)[0] # changed from 0.5 acceptance window
-            print("Time Differences:", mx2_charge_time_diffs[trigger])
+            #print("Time Differences:", mx2_charge_time_diffs[trigger])
             #print("Trigger:", trigger)
             xs = []
             ys = []
@@ -583,9 +583,9 @@ class LArEventDisplay:
             qs = []
             #print("All Minerva tracks:", self.minerva_trk_index[trigger][0])
             for trig in trigger:
-                print("Minerva time:", self.minerva_times[trig])
-                print("Minerva time -1:", self.minerva_times[trig-1])
-                print("Minerva time +1:", self.minerva_times[trig+1])
+                #print("Minerva time:", self.minerva_times[trig])
+                #print("Minerva time -1:", self.minerva_times[trig-1])
+                #print("Minerva time +1:", self.minerva_times[trig+1])
                 for idx in self.minerva_trk_index[trig]:
                     #print("Minerva time:", self.minerva_times[trig])
                     n_nodes = self.minerva_trk_nodes[trig][idx]
