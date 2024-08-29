@@ -1,3 +1,4 @@
+# Contact: ehinkle@uchicago.edu, @Elise Hinkle on DUNE Slack
 # INSTALLING AND IMPORTANT PYTHON MODULES
 # Import packages to check for and install missing packages
 import sys
@@ -111,6 +112,7 @@ class LArEventDisplay:
 
         # Set general class-level variables from inputs
         self.show_event_mx2 = self.show_mx2
+        self.filedir = filedir
         self.filename = filename
         self.filepath_mx2 = filepath_mx2
         self.show_light = show_light
@@ -384,11 +386,13 @@ class LArEventDisplay:
         self.ax_subexp_logo.axis('off')
         self.fig.savefig(savepath, bbox_inches='tight')
 
-        # Then, add back vectorized DUNE logo to saved PDF
+        # Then, add metadata and add back vectorized DUNE logo to saved PDF
         saved_pdf = fitz.open(savepath)
+        saved_pdf_metadata = saved_pdf.metadata
+        saved_pdf_metadata.update({'title' : "Event "+str(ev_id)+" from "+self.filedir+self.filename+" with Mx2 file "+self.filepath_mx2})
+        saved_pdf.set_metadata(saved_pdf_metadata)
         saved_pdf_page = saved_pdf[0]
         rect_max_x = saved_pdf_page.rect[2]
-        rect_max_y = saved_pdf_page.rect[3]
         include_dune_logo_rect = fitz.Rect(rect_max_x-300, 2, rect_max_x-5, 65)
         saved_pdf_page.show_pdf_page(include_dune_logo_rect, self.dune_logo_pdf, 0)
         include_subexp_logo_rect = fitz.Rect(rect_max_x-635, 78, rect_max_x-425, 288)
