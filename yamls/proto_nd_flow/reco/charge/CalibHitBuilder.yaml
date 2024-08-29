@@ -28,7 +28,7 @@ params:
 
   # configuration parameters
 
-  pedestal_file: '/global/common/software/dune/mkramer/devel/flow4pedestal/reference-cold-pedestal-2024_06_05_08_28_19_CDTevd_ped.rescaled.json'
+  pedestal_file: '/global/common/software/dune/mkramer/devel/flow4pedestal/reference-cold-pedestal-2024_06_05_08_28_19_CDTevd_ped.tile_id.decimal.json'
   #pedestal_file: 'data/module0_flow/datalog_2021_04_02_19_00_46_CESTevd_ped.json'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/datalog_2021_04_02_19_00_46_CESTevd_ped.json
   #configuration_file: 'data/module0_flow/evd_config_21-03-31_12-36-13.json'
