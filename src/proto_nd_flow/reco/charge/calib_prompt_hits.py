@@ -9,9 +9,9 @@ import proto_nd_flow.util.units as units
 
 class CalibHitBuilder(H5FlowStage):
     '''
-        Converts larpix data packets into hits - assigns geometric properties,
-        filters by packet type, and performs the conversion from ADC -> mV above
-        pedestal.
+        Converts larpix data packets into calibrated hits - assigns geometric
+        properties, filters by packet type, and performs the conversion from ADC
+        -> mV above pedestal.
 
         The external data files used for ``pedestal_file`` and
         ``configuration_file`` are searched for in the current working
