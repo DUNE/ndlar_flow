@@ -206,8 +206,8 @@ class CalibHitBuilder(H5FlowStage):
             zy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
-            hit_uniqueid = (packets_arr['io_group'].astype(int)*100_000_000
-                            + tile_id.astype(int)*1000_000
+            hit_uniqueid = (packets_arr['io_group'].astype(int)*1000_000_000
+                            + tile_id.astype(int)*100_000
                             + packets_arr['chip_id'].astype(int)*100
                             + packets_arr['channel_id'].astype(int))
             hit_uniqueid_str = hit_uniqueid.astype(str)
