@@ -17,7 +17,7 @@ except ImportError:
 
 # Ensure all non-standard packages are installed
 required_packages = [
-    'numpy', 'h5py', 'cmasher', 'IPython', 'PyMuPDF', 'matplotlib', 'pillow', 'uproot', 'h5flow', 'ipywidgets'
+    'numpy', 'pandas', 'sqlalchemy', 'h5py', 'cmasher', 'IPython', 'PyMuPDF', 'matplotlib', 'pillow', 'uproot', 'h5flow', 'ipywidgets'
 ]
 
 installed_packages = {pkg.key for pkg in pkg_resources.working_set}
@@ -30,6 +30,7 @@ if missing_packages:
 # Import modules
 import fitz
 import numpy as np
+import pandas as pd
 from datetime import datetime
 import ipywidgets as widgets
 from io import BytesIO
@@ -98,7 +99,8 @@ class LArEventDisplay:
     '''
 
     # Initialize class
-    def __init__(self, filedir, filename, nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, \
+    def __init__(self, filedir, filename, runsdb='sqlite:////global/cfs/cdirs/dune/www/data/2x2/DB/RunsDB/releases/mx2x2runs_v0.1_alpha3.sqlite', \
+                 nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, \
                  show_colorbars=True, charge_threshold=None, light_threshold=150000, beam_only=False, \
                  hist_projection=True):
         
@@ -115,6 +117,8 @@ class LArEventDisplay:
         self.filedir = filedir
         self.filename = filename
         self.filepath_mx2 = filepath_mx2
+        self.runsdb = runsdb
+        self.all_subruns_db = pd.read_sql_table('All_global_subruns', runsdb)
         self.show_light = show_light
         self.show_event_light = show_light
         self.show_colorbars = show_colorbars
@@ -180,6 +184,8 @@ class LArEventDisplay:
             'vdrift': f['lar_info'].attrs['v_drift'],
             'clock_period': 0.1,
         }
+        self.run_info = f['run_info']
+        self.is_mc = self.run_info.attrs['is_mc']
 
         # Load charge hits dataset
         self.hits_dset = 'calib_prompt_hits'
@@ -389,7 +395,7 @@ class LArEventDisplay:
         # Then, add metadata and add back vectorized DUNE logo to saved PDF
         saved_pdf = fitz.open(savepath)
         saved_pdf_metadata = saved_pdf.metadata
-        saved_pdf_metadata.update({'title' : "Event "+str(ev_id)+" from "+self.filedir+self.filename+" with Mx2 file "+self.filepath_mx2})
+        saved_pdf_metadata.update({'title' : "Event "+str(ev_id)+" from "+self.filedir+self.filename+" with Mx2 file "+self.filepath_mx2+" and using runs database "+self.runsdb})
         saved_pdf.set_metadata(saved_pdf_metadata)
         saved_pdf_page = saved_pdf[0]
         rect_max_x = saved_pdf_page.rect[2]
@@ -495,6 +501,15 @@ class LArEventDisplay:
         event = self.events[ev_idx]
         event_datetime = datetime.utcfromtimestamp(
                 event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
+        if not self.is_mc:
+            event_run_info = self.all_subruns_db[(self.all_subruns_db['start_time_unix'] <= event['unix_ts']) &
+                                  (self.all_subruns_db['end_time_unix'] > event['unix_ts'])]
+            event_subrun = event_run_info['global_subrun'].values[0]
+            event_run = event_run_info['global_run'].values[0]
+        elif self.is_mc:
+            event_run = 2
+            event_subrun = 2
+
   
         print("Number of external triggers in this event:", event['n_ext_trigs'])
 
@@ -627,8 +642,9 @@ class LArEventDisplay:
         else:
             top_adjust="\n"
             bottom_adjust=""
-        self.fig.suptitle(top_adjust+" Event %i: %s UTC" %
-                          (ev_id, event_datetime)+bottom_adjust, x=0.05, size=28, weight='bold', ha='left', linespacing=0.15)
+        self.fig.suptitle(top_adjust+" Run %i, Subrun %i \n Event %i: %s UTC" %
+                          (event_run, event_subrun, ev_id, event_datetime)+bottom_adjust, x=0.05, \
+                            size=24, weight='bold', ha='left', linespacing=1)
         
 
         # Return event information including charge, light, and Mx2 datasets for plotting and all color scale information
