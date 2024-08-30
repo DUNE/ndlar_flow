@@ -506,9 +506,13 @@ class LArEventDisplay:
                                   (self.all_subruns_db['end_time_unix'] > event['unix_ts'])]
             event_subrun = event_run_info['global_subrun'].values[0]
             event_run = event_run_info['global_run'].values[0]
+            data_sim_watermark = 'DATA'
+            watermark_fs = 78
         elif self.is_mc:
             event_run = 2
             event_subrun = 2
+            data_sim_watermark = 'SIMULATION'
+            watermark_fs = 68
 
   
         print("Number of external triggers in this event:", event['n_ext_trigs'])
@@ -639,14 +643,20 @@ class LArEventDisplay:
         if self.show_mx2:
             title_y = 0.97
             subtitle_y = 0.95
+            watermark_y = 0.91
+            watermark_x = 0.915
         else:
             title_y = 0.945
             subtitle_y = 0.905
+            watermark_y = 0.835
+            watermark_x = 0.905
         self.fig.text(s=" Run %i, Subrun %i" %
                           (event_run, event_subrun), x=0.05, y=title_y,\
                             size=26, weight='bold', ha='left', linespacing=1)
         self.fig.text(x=0.051, y=subtitle_y, s=" Event %i: %s UTC" % (ev_id, event_datetime),\
                             size=22, ha='left', style='italic', linespacing=1)
+        self.fig.text(watermark_x, watermark_y, data_sim_watermark, fontsize=watermark_fs, color='black', alpha=0.15,
+                      ha='right', va='center', weight='bold', style='italic', rotation=0)# zorder=-1)
         
 
         # Return event information including charge, light, and Mx2 datasets for plotting and all color scale information
