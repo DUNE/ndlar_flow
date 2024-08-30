@@ -485,7 +485,7 @@ class LArEventDisplay:
                 self.light_cbar_ax.cla()
         if self.show_mx2:
             self.ax_mx2.cla()
-
+        self.fig.texts.clear()
 
     def get_event(self, ev_id):
 
@@ -637,14 +637,16 @@ class LArEventDisplay:
 
         # Set figure title (uses event information loaded in this method)
         if self.show_mx2:
-            top_adjust=''
-            bottom_adjust="\n\n\n\n\n\n\n\n\n\n\n\n"
+            title_y = 0.97
+            subtitle_y = 0.95
         else:
-            top_adjust="\n"
-            bottom_adjust=""
-        self.fig.suptitle(top_adjust+" Run %i, Subrun %i \n Event %i: %s UTC" %
-                          (event_run, event_subrun, ev_id, event_datetime)+bottom_adjust, x=0.05, \
-                            size=24, weight='bold', ha='left', linespacing=1)
+            title_y = 0.945
+            subtitle_y = 0.905
+        self.fig.text(s=" Run %i, Subrun %i" %
+                          (event_run, event_subrun), x=0.05, y=title_y,\
+                            size=26, weight='bold', ha='left', linespacing=1)
+        self.fig.text(x=0.051, y=subtitle_y, s=" Event %i: %s UTC" % (ev_id, event_datetime),\
+                            size=22, ha='left', style='italic', linespacing=1)
         
 
         # Return event information including charge, light, and Mx2 datasets for plotting and all color scale information
