@@ -62,7 +62,8 @@ class LArEventDisplay:
 
             - filedir          (str): path to input file (minus filename)
             - filename         (str): name of flow file
-            - nhits            (int): number of hits (threshold) for events to be made available (default: 1)
+            - nhits_min        (int): minimum number of hits (threshold) for events to be made available (default: 1)
+            - nhits_max        (int): maximum number of hits allowed in event for events to be made available (default: 1e10)
             - ntrigs           (int): number of external triggers (threshold)  threshold for events to be made available (default: 0)
             - show_light       (bool): whether to show light information in display (default: True)
             - show_colorbars   (bool): whether to display color bars (default: True)
@@ -100,7 +101,7 @@ class LArEventDisplay:
 
     # Initialize class
     def __init__(self, filedir, filename, runsdb='sqlite:////global/cfs/cdirs/dune/www/data/2x2/DB/RunsDB/releases/mx2x2runs_v0.1_alpha3.sqlite', \
-                 nhits=1, ntrigs=0, show_light=True, filepath_mx2=None, \
+                 nhits_min=1, nhits_max=1e10, ntrigs=0, show_light=True, filepath_mx2=None, \
                  show_colorbars=True, charge_threshold=None, light_threshold=150000, beam_only=False, \
                  hist_projection=True):
         
@@ -173,9 +174,11 @@ class LArEventDisplay:
         self.is_beam_event = beam_only
 
         # Filter events and beam events based on nhits and ntrigs
-        self.events = self.events[self.events['nhit'] > nhits]
+        self.events = self.events[self.events['nhit'] >= nhits_min]
+        self.events = self.events[self.events['nhit'] <= nhits_max]
         self.events = self.events[self.events['n_ext_trigs'] >= ntrigs]
-        self.beam_events = self.beam_events[self.beam_events['nhit'] > nhits]
+        self.beam_events = self.beam_events[self.beam_events['nhit'] >= nhits_min]
+        self.beam_events = self.beam_events[self.beam_events['nhit'] <= nhits_max]
         self.beam_events = self.beam_events[self.beam_events['n_ext_trigs'] >= ntrigs]
 
         # Load geometry and other info
@@ -192,7 +195,7 @@ class LArEventDisplay:
         self.hits_full = f['charge/'+self.hits_dset+'/data']
         self.hits_ref = f['charge/events/ref/charge/'+self.hits_dset+'/ref']
         self.hits_region = f['charge/events/ref/charge/'+self.hits_dset+'/ref_region']
-        self.hits_per_event = nhits
+        self.hits_per_event = nhits_min
 
          # Load light event and waveform datasets and light geometry info if using
         if self.show_light:
