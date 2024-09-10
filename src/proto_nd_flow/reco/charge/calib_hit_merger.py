@@ -279,6 +279,11 @@ class CalibHitMerger(H5FlowStage):
         packet_frac_bt = cache['packet_frac_backtrack']
         hits = cache[self.hits_name]
 
+        # exit early if event has no hits
+        n_hits = int((~hits['id'].mask).sum())
+        if n_hits == 0:
+            return
+
         merged, ref, back_track = self.merge_hits(hits, weights=hits['Q'], seg_fracs=packet_frac_bt,dt_cut=self.merge_cut, sum_fields=self.sum_fields, weighted_mean_fields=self.weighted_mean_fields, max_steps=self.max_merge_steps, mode=self.merge_mode)
 
         merged_mask = merged.mask['id']
