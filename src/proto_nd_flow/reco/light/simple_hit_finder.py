@@ -27,12 +27,13 @@ class WaveformHitFinder(H5FlowStage):
 
          ``hits`` datatype::
 
-            id          u4,             unique identifier
-            tpc         u1,             tpc (for sum_hit)
-            det         u1,             detector (for sum_hit/sipm_hit)
-            boundary    f4(3),          (x,y,z) center of det
-            samples     f4(nsamples,),  waveform adc values
-            amplitude   f4,             peak adc value
+            id                  u4,             unique identifier
+            tpc                 u1,             tpc (for sum_hit)
+            det                 u1,             detector (for sum_hit/sipm_hit)
+            boundary            f4(3),          (x,y,z) center of det
+            samples             f4(nsamples,),  waveform adc values
+            samples_filtered    f4(nsamples,),  filtered waveform adc values
+            amplitude           f4,             peak adc value
     '''
     class_version = '2.0.0'
 
@@ -136,7 +137,6 @@ class WaveformHitFinder(H5FlowStage):
             'samples']  # 1:1 relationship
         events = cache[source_name]
         
-        hit_id = 0
         event_id = []
         hits_data = np.zeros((0,), dtype=self.hits_dtype)
         for i in range(len(events)):
@@ -150,7 +150,6 @@ class WaveformHitFinder(H5FlowStage):
                     wvfm_filtered = self.apply_filter(wvfm, 10e6, 2)
                     if np.any(wvfm_filtered > self.threshold[tpc_id][det_id][0]):
                         event_id.append(events[i]['id'])
-                        hit_data['id'] = hit_id
                         hit_data['tpc'] = tpc_id
                         hit_data['det'] = det_id
                         hit_data['samples'] = wvfm
@@ -158,13 +157,13 @@ class WaveformHitFinder(H5FlowStage):
                         hit_data['amplitude'] = np.max(wvfm)
                         hit_data['boundary'] = np.array(resources['Geometry'].det_bounds[(tpc_id,det_id)][0])
                         hits_data = np.concatenate((hits_data, hit_data))
-                        hit_id += 1
                     
         # save data
         hit_slice = self.data_manager.reserve_data(
             self.hits_dset_name, len(hits_data))
         #if len(hit_data):
         #    hit_data['id'] = np.r_[hit_slice]
+        hits_data['id'] = hit_slice.start + np.arange(len(hits_data), dtype=int)
         self.data_manager.write_data(self.hits_dset_name, hit_slice, hits_data)
 
         if len(hits_data):
