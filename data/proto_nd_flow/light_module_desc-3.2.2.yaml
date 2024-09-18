@@ -233,14 +233,14 @@ det_adc:
     6:  5
     7:  5
     # +z, increasing y Note: two SRs swapped internally, s.t. one ACL readout set is in the LCM readout set position
-    8:  4
-    9:  5
-    10: 5
-    11: 5
-    12: 5
-    13: 4
-    14: 4
-    15: 4
+    8:  5
+    9:  4
+    10: 4
+    11: 4
+    12: 4
+    13: 5
+    14: 5
+    15: 5
 
   5:
     # -z, increasing y
