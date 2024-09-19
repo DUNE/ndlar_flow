@@ -76,6 +76,7 @@ class WaveformDeconvolution(H5FlowStage):
     default_signal_impulse_filename = 'wvfm_deconv_signal_impulse.npz'
     default_gaus_filter_width = 0
     default_signal_amplitude = (0, np.inf)
+    default_oversampling = 16
 
     FILT_WIENER = 'wiener'
     FILT_INVERSE = 'inverse'
@@ -83,6 +84,8 @@ class WaveformDeconvolution(H5FlowStage):
 
     NOISE_PPS = 'pps'
     NOISE_SLICE = 'slice'
+    
+    def deconv_dtype(self, nadc, nchannels, nsamples,oversampling): return np.dtype([('samples', 'f4', (nadc, nchannels, nsamples*oversampling))])
 
     def __init__(self, **params):
         super(WaveformDeconvolution, self).__init__(**params)
@@ -96,6 +99,7 @@ class WaveformDeconvolution(H5FlowStage):
             raise RuntimeError(f'Invalid noise estimation strategy: {self.noise_strategy}')
         self.noise_slice = slice(*params.get('noise_slice', (None, None)))
         self.signal_amplitude = params.get('signal_amplitude', (-np.inf, np.inf))
+        self.oversampling = params.get('oversampling', self.default_oversampling)
 
         self.gen_noise_spectrum = params.get('gen_noise_spectrum', False)
         self.gen_signal_spectrum = params.get('gen_signal_spectrum', False)
@@ -141,7 +145,7 @@ class WaveformDeconvolution(H5FlowStage):
             self.signal_impulse = dict(np.load(self.signal_impulse_filename))
 
             # interpolate mis-matched FFTs
-            fft_shape = (2 * wvfm_dset.dtype['samples'].shape[-1]) // 2 + 1
+            fft_shape = (2 * wvfm_dset.dtype['samples'].shape[-1]*self.oversampling) // 2 + 1
             for spectrum in (self.noise_spectrum, self.signal_spectrum):
                 s = spectrum['spectrum']
                 s_shape = s.shape[-1]
@@ -154,8 +158,11 @@ class WaveformDeconvolution(H5FlowStage):
                     s[np.isnan(s)] = 0
                     spectrum['spectrum'] = s
 
-            impulse_shape = 2 * wvfm_dset.dtype['samples'].shape[-1]
+            impulse_shape = 2 * wvfm_dset.dtype['samples'].shape[-1]*self.oversampling
             impulse = self.signal_impulse['impulse']
+            if self.oversampling > 1:
+                imp_spline = scipy.interpolate.CubicSpline(np.arange(0,impulse.shape[-1]),np.nan_to_num(impulse),axis=-1)
+                impulse = spline(np.linspace(0,impulse.shape[-1],impulse.shape[-1]*self.oversampling))
             if impulse.shape[-1] != impulse_shape:
                 if self.rank == 0:
                     logging.warning(f'Input impulse function size mismatch (in: {impulse.shape[-1]}, needed: {impulse_shape}). '
@@ -183,8 +190,8 @@ class WaveformDeconvolution(H5FlowStage):
             signal_impulse_dset = self.write_spectrum_or_impulse('signal_impulse',
                                                                  self.signal_impulse['impulse'], impulse=True,
                                                                  filename=self.signal_impulse_filename)
-
-            self.data_manager.create_dset(self.deconv_dset_name, dtype=wvfm_dset.dtype)
+            self.deconv_dtype = self.deconv_dtype(*wvfm_dset.dtype['samples'].shape,self.oversampling)
+            self.data_manager.create_dset(self.deconv_dset_name, dtype=self.deconv_dtype)
             self.data_manager.create_ref(source_name, self.deconv_dset_name)
             self.data_manager.set_attrs(self.deconv_dset_name,
                                         classname=self.classname,
@@ -213,6 +220,11 @@ class WaveformDeconvolution(H5FlowStage):
         super(WaveformDeconvolution, self).run(source_name, source_slice, cache)
 
         wvfms = cache[self.wvfm_dset_name].reshape(cache[source_name].shape)['samples']  # 1:1 relationship
+        if self.oversampling > 1:
+            wvfms_mask = np.repeat(wvfms.mask,self.oversampling,axis=-1)
+            wvfm_spline = scipy.interpolate.CubicSpline(np.arange(0,wvfms.shape[-1]),wvfms,axis=-1)
+            wvfms = wvfm_spline(np.linspace(0,wvfms.shape[-1],wvfms.shape[-1]*self.oversampling))
+            wvfms = ma.masked_array(wvfms,mask=wvfms_mask)
         wvfm_valid = cache[source_name]['wvfm_valid'].astype(bool)
 
         wvfms.mask = wvfms.mask | np.expand_dims(~wvfm_valid, axis=-1)
@@ -372,7 +384,8 @@ class WaveformDeconvolution(H5FlowStage):
             filt_wvfms = np.fft.irfft(filt_fft, axis=-1)[..., :wvfms.shape[-1]]
 
             # save waveforms
-            fwvfm = cache[self.wvfm_dset_name].reshape(cache[source_name].shape).copy()
+            fwvfm = np.empty(cache[source_name].shape, dtype=self.deconv_dtype)
+            #fwvfm = cache[self.wvfm_dset_name].reshape(cache[source_name].shape).copy()
             unfiltered_mask = ~np.isin(np.arange(fwvfm.dtype['samples'].shape[-2]), self.filter_channels)
             fwvfm['samples'][..., self.filter_channels, :] = filt_wvfms[..., self.filter_channels, :]
             fwvfm['samples'][..., unfiltered_mask, :] = wvfms[..., unfiltered_mask, :]
