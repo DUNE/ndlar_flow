@@ -8,11 +8,10 @@ Resources
 
   Copied and modified from ``yaml/module1_flow/resources/RunData.yaml`` I made my own runlist.txt, I'll have to double check it.
 
+* ``yamls/module1_flow/resources/Geometry.yaml``
+
+  Copied and modified from module1's. I set ``det_geometry_file``. ``data/module2_flow/module2.yaml`` is copied from module1's, but with the tile layout unswapped (Need to check if it comes out right). ``crs_geometry_file`` is set to ``/global/cfs/projectdirs/dune/www/data/Module2/flow_configs/multi_tile_layout-2022_11_18_04_35_CET.yaml``. ``lrs_geometry_file`` is set to the same as module1's.
 ..
-    * ``yamls/module1_flow/resources/Geometry.yaml``
-
-      Copied and modified from ``yamls/proto_nd_flow/resources/Geometry.yaml`` I set ``det_geometry_file`` to ``data/module1_flow/module0.yaml``. I don't know if that's alright, and I don't think module0 accepted that option. ``crs_geometry_file`` is set to what I found in previously flowed file's metadata. For ``lrs_geometry_file``, I copied what was in for the 2x2 and reduced it down to one module. Also, some module workflows had ``network_agnostic`` True and others False; not sure which is correct. 
-
     * ``yamls/module1_flow/resources/LArData.yaml``
 
       Copied and modified from ``yaml/proto_nd_flow/resources/LArData.yaml``.
@@ -35,31 +34,30 @@ Charge
 
   Same as module1's. 
 
+2. ``yamls/module1_flow/workflows/charge/charge_event_reconstruction.yaml``
+
+   Copied and modified from module1's.
+
+* ``yamls/module1_flow/reco/charge/TimestampCorrector.yaml``
+
+  Copied and modified from module1's.
+  Using numbers Karolina derived. 
+
+* ``yamls/module1_flow/reco/charge/ExternalTriggerFinder.yaml``
+
+  Copied from module1's. No changes made .
+
+* ``yamls/module1_flow/reco/charge/RawHitBuilder.yaml``
+
+  Copied and modified from ``yamls/proto_nd_flow/reco/charge/RawHitBuilder.yaml``
+
+  Included ``configuration_file`` and ``pedestal_file``, and set them to what I found in previously flowed file's metadata. I think this was renamed from ``yamls/module0_flow/reco/charge/HitBuilder.yaml`` in the ``module0_flow``. In module workflows 2 and 3, the option ``network_agnostic: True`` is set. Not sure if we want this here too. 
+
+* ``yamls/module1_flow/reco/charge/EventBuilder.yaml``
+
+  Copied from module1's.
+
 ..
-    2. ``yamls/module1_flow/workflows/charge/charge_event_reconstruction.yaml``
-
-       Copied and modified from ``ndlar_flow/yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction.yaml``
-
-    * ``yamls/module1_flow/reco/charge/TimestampCorrector.yaml``
-
-      Copied and modified from ``yamls/proto_nd_flow/reco/charge/TimestampCorrector.yaml``
-      Using numbers I found in previously flowed file's metadata.
-
-    * ``yamls/module1_flow/reco/charge/ExternalTriggerFinder.yaml``
-
-      Copied from ``yamls/proto_nd_flow/reco/charge/ExternalTriggerFinder.yaml``. No changes made .
-
-    * ``yamls/module1_flow/reco/charge/RawHitBuilder.yaml``
-
-      Copied and modified from ``yamls/proto_nd_flow/reco/charge/RawHitBuilder.yaml``
-
-      Included ``configuration_file`` and ``pedestal_file``, and set them to what I found in previously flowed file's metadata. I think this was renamed from ``yamls/module0_flow/reco/charge/HitBuilder.yaml`` in the ``module0_flow``. In module workflows 2 and 3, the option ``network_agnostic: True`` is set. Not sure if we want this here too. 
-
-    * ``yamls/module1_flow/reco/charge/EventBuilder.yaml``
-
-      Copied from ``yamls/proto_nd_flow/reco/charge/EventBuilder.yaml``. No changes.
-
-
     3. ``yamls/module1_flow/workflows/combined/combined_reconstruction.yaml``
 
        Copied and modified from ``yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml``. Only difference is that the ``.yaml`` files point to ``module1_flow`` specific files. ``proto_nd_flow`` only had a ``t0_reco`` step, while module[0,2,3] workflows have ``drift_reco``, ``electron_lifetime_corr``, ``tracklet_reco``, and module[0,2] workflows have ``tracklet_merge``.

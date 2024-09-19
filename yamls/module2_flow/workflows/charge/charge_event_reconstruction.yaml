@@ -3,7 +3,7 @@
 
 flow:
   source: raw_events
-  stages: [timestamp_corrector, ext_trig_finder, hit_builder, event_builder]
+  stages: [timestamp_corrector, ext_trig_finder, raw_hit_builder, event_builder]
   drop: []
 
 
@@ -25,17 +25,13 @@ timestamp_corrector:
 
 
 ext_trig_finder:
-  !include yamls/module0_flow/reco/charge/ExternalTriggerFinder.yaml
+  !include yamls/module2_flow/reco/charge/ExternalTriggerFinder.yaml
 
 
-hit_builder:
-  !include yamls/module2_flow/reco/charge/HitBuilder.yaml
-
-
-  #time_dependent_gain:
-  #!include yamls/module0_flow/reco/charge/TimeDependentGain.yaml
+raw_hit_builder:
+  !include yamls/module2_flow/reco/charge/RawHitBuilder.yaml
 
 
 event_builder:
-  !include yamls/module0_flow/reco/charge/EventBuilder.yaml
+  !include yamls/module2_flow/reco/charge/EventBuilder.yaml
 
