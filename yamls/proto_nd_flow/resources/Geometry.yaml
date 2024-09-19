@@ -11,7 +11,7 @@ params:
                        'data/proto_nd_flow/layouts_v5/multi_tile_layout-2.5.16_mod2_swap_T7T8.yaml',
                        'data/proto_nd_flow/layouts_v5/multi_tile_layout-2.3.16_mod3_swap_T5T8_T9T10.yaml']
   crs_geometry_to_module: [0,1,2,3]
-  lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-3.2.2.yaml'
+  lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-4.0.0.yaml'
   beam_direction: 'z'
   drift_direction: 'x'
   network_agnostic: true
