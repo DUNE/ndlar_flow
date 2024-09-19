@@ -78,7 +78,7 @@ class Geometry(H5FlowResource):
                     lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-0.0.0.yaml'
 
     '''
-    class_version = '0.2.0'
+    class_version = '0.3.0'
 
     default_path = 'geometry_info'
     default_network_agnostic = False
