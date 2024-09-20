@@ -1,10 +1,14 @@
+# Copied from yamls/proto_nd_flow/reco/combined/T0Reconstruction.yaml
+
 classname: T0Reconstruction
-path: module0_flow.reco.combined.t0_reco
+path: proto_nd_flow.reco.combined.t0_reco
 requires:
   - 'charge/ext_trigs'
+  - 'charge/raw_hits'
 params:
   # input
   ext_trigs_dset_name: 'charge/ext_trigs'
+  raw_hits_dset_name: 'charge/raw_hits'
 
   # output
   t0_dset_name: 'combined/t0'

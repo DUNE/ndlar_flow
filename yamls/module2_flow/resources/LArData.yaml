@@ -1,7 +1,17 @@
 classname: LArData
-path: module0_flow.resources.lar_data
+path: proto_nd_flow.resources.lar_data
 params:
   path: 'lar_info'
-  #electron_lifetime_file: 'data/module0_flow/ElecLifetimeFit_Module0.npz'
+  # electron_lifetime_file: 'data/module0_flow/ElecLifetimeFit_Module0.npz'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/electronLifetime/ElecLifetimeFit_Module0.root
-  electron_lifetime: 2600 # us
+  electron_lifetime: 2200 # us
+  #: Recombination :math:`\alpha` constant for the Box model
+  box_alpha: 0.93
+  #: Recombination :math:`\beta` value for the Box model in :math:`(kV/cm)(g/cm^2)/MeV`
+  box_beta: 0.207 #0.3 (MeV/cm)^-1 * 1.383 (g/cm^3)* 0.5 (kV/cm), R. Acciarri et al JINST 8 (2013) P08005
+  #: Recombination :math:`A_b` value for the Birks Model
+  birks_Ab: 0.800
+  #: Recombination :math:`k_b` value for the Birks Model in :math:`(kV/cm)(g/cm^2)/MeV`
+  birks_kb: 0.0486 # g/cm2/MeV Amoruso, et al NIM A 523 (2004) 275
+  #: Average energy expended per ion pair in LAr in :math:`eV` from Phys. Rev. A 10, 1452
+  W_ion: 23.6
