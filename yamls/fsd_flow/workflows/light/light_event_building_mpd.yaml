@@ -5,5 +5,5 @@ flow:
   source: light_event_generator
 
 light_event_generator:
-  !include yamls/proto_nd_flow/reco/light/LightMPDEventGenerator.yaml
+  !include yamls/fsd_flow/reco/light/LightMPDEventGenerator.yaml
   
