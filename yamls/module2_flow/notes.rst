@@ -61,17 +61,15 @@ Charge
 
   Copied from module1's. No changes made.
 
+4. ``yamls/module1_flow/workflows/charge/prompt_calibration.yaml``
+
+    Copied and moified from module1's. 
+
+* ``yamls/module1_flow/reco/charge/CalibHitBuilder.yaml``
+
+  Copied and modified from module1's. Used ``pedestal_file`` and ``configuration_file`` found in older module2 yaml files.
+
 ..
-    4. ``yamls/module1_flow/workflows/charge/prompt_calibration.yaml``
-
-       Copied and modified from yamls/proto_nd_flow/workflows/charge/prompt_calibration.yaml. Only difference is that the ``.yaml`` files point to ``module1_flow`` specific files. I don't see a corresponding file for modules[0,2,3] workflows.
-
-    * ``yamls/module1_flow/reco/charge/CalibHitBuilder.yaml``
-
-      Copied and modified from ``yamls/proto_nd_flow/reco/charge/CalibHitBuilder.yaml``.
-
-      Added option for ``pedestal_file`` and ``configuration_file``, using inputs found in previoulsy flowed file metadata. I don't see this file for module[0,2,3] workflows.
-
     5. ``yamls/module1_flow/workflows/charge/final_calibration.yaml``
 
        Copied and modified from ``yamls/proto_nd_flow/workflows/charge/final_calibration.yaml``. Only difference is that ``.yaml`` files now point to ``module1_flow`` specific files. Don't see corresponding file for module[0,2,3] workflows.

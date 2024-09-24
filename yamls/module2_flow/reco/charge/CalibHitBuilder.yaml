@@ -1,0 +1,27 @@
+classname: CalibHitBuilder # reco/charge/calib_hit_builder.py
+path: proto_nd_flow.reco.charge.calib_prompt_hits
+requires:
+  - 'charge/events'
+  - 'charge/raw_hits'
+  - 'charge/packets'
+  - 'combined/t0'
+  - name: 'charge/packets_index'
+    path: ['charge/packets']
+    index_only: True
+
+params:
+  # inputs
+  events_dset_name: 'charge/events'
+  packets_dset_name: 'charge/packets'
+  packets_index_name: 'charge/packets_index'
+  raw_hits_dset_name: 'charge/raw_hits'
+  t0_dset_name: 'combined/t0'
+  max_contrib_segments: 10
+
+  # output
+  calib_hits_dset_name: 'charge/calib_prompt_hits'
+
+  # configuration parameters
+
+  pedestal_file: '/global/cfs/cdirs/dune/www/data/Module2/flow_configs/ped-evd-2022_11_18_04_35_CET.json'
+  configuration_file: '/global/cfs/cdirs/dune/www/data/Module2/flow_configs/config-evd-2022_11_18_04_35_CET.json'
