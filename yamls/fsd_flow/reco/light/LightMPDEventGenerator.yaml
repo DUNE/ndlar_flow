@@ -9,14 +9,14 @@ params:
   n_adcs: 2
   n_channels: 64
   sn_table:
-   - '0xcd94138'  # Mod0, Slot 3
-   - '0xcd8d648'  # Mod0, Slot 5
-   - '0x2650b3ff'  # Mod1, Slot 7
-   - '0x264bd8ff'  # Mod1, Slot 9
-   - '0x0cd8d636'  # Mod2, Slot 11
-   - '0x26517dff'  # Mod2, Slot 13
-   - '0x0cd93db0'  # Mod3, Slot 15
-   - '0x25b771ff'  # Mod3, Slot 17
+   - '0xcd13dd6'  # Mod0, Slot 
+   - '0xcd9416d'  # Mod0, Slot 5
+   #- '0x2650b3ff'  # Mod1, Slot 7
+   #- '0x264bd8ff'  # Mod1, Slot 9
+   #- '0x0cd8d636'  # Mod2, Slot 11
+   #- '0x26517dff'  # Mod2, Slot 13
+   #- '0x0cd93db0'  # Mod3, Slot 15
+   #- '0x25b771ff'  # Mod3, Slot 17
   sync_channel: 0
   sync_threshold: 40000
   batch_size: 12

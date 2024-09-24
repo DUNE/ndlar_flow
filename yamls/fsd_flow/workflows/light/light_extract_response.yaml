@@ -1,0 +1,30 @@
+# Performs noise subtraction, deconvolution, and peak finding on raw light
+# waveforms
+
+flow:
+  source: 'light/events'
+  stages: [timestamp_corrector, wvfm_filt, wvfm_deconv,]
+
+  # remove waveforms from output file
+  drop: ['light/wvfm'] #, 'light/fwvfm', 'light/deconv']
+
+
+resources:
+  - !include yamls/proto_nd_flow/resources/RunData.yaml
+  - !include yamls/proto_nd_flow/resources/Geometry.yaml
+  - !include yamls/proto_nd_flow/resources/LArData.yaml
+
+
+timestamp_corrector:
+  !include yamls/proto_nd_flow/reco/light/LightTimestampCorrector.yaml
+
+
+wvfm_filt:
+  !include yamls/proto_nd_flow/reco/light/WaveformNoiseFilter.yaml
+
+
+wvfm_deconv:
+  !include yamls/proto_nd_flow/reco/light/WaveformDeconvolution_create_files.yaml
+
+
+

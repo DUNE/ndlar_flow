@@ -1,0 +1,20 @@
+classname: RawEventGenerator
+path: proto_nd_flow.reco.charge.raw_event_generator
+dset_name: 'charge/raw_events'
+params:
+  # secondary output
+  packets_dset_name: 'charge/packets'
+
+  # configuration parameters
+  mc_tracks_dset_name: 'mc_truth/segments'
+  buffer_size: 30000000 #38400
+  nhit_cut: 1
+  sync_noise_cut: [100, 11000000] # Stephen says no need to cut > first 10 usec
+  sync_noise_cut_enabled: True
+  event_builder_class: 'ExtTrigRawEventBuilder' #'SymmetricWindowRawEventBuilder'
+  event_builder_config:
+    window: 2000 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
+    trig_io_grp: 5
+    rollover_ticks: 10000000 # PPS = 1e7 ticks
+    build_off_beam_events : True
+    VALIDATE_HACK : False

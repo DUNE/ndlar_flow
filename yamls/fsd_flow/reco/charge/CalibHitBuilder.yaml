@@ -1,0 +1,35 @@
+classname: CalibHitBuilder # reco/charge/calib_hit_builder.py
+path: proto_nd_flow.reco.charge.calib_prompt_hits
+requires:
+  - 'charge/events'
+  - 'charge/raw_hits'
+  - 'charge/packets'
+  - 'combined/t0'
+  - name: 'charge/packets_index'
+    path: ['charge/packets']
+    index_only: True
+  # - name: 'packet_frac_backtrack'
+  #   path: ['charge/packets','mc_truth/packet_fraction']
+  # - name: 'packet_seg_backtrack'
+  #   path: ['charge/packets','mc_truth/segments']
+
+params:
+  # inputs
+  events_dset_name: 'charge/events'
+  packets_dset_name: 'charge/packets'
+  packets_index_name: 'charge/packets_index'
+  raw_hits_dset_name: 'charge/raw_hits'
+  t0_dset_name: 'combined/t0'
+  max_contrib_segments: 10
+
+  # output
+  calib_hits_dset_name: 'charge/calib_prompt_hits'
+  # mc_hit_frac_dset_name: 'mc_truth/calib_prompt_hit_backtrack'
+
+  # configuration parameters
+
+  pedestal_file: '/global/common/software/dune/mkramer/devel/flow4pedestal/reference-cold-pedestal-2024_06_05_08_28_19_CDTevd_ped.tile_id.decimal.json'
+  #pedestal_file: 'data/module0_flow/datalog_2021_04_02_19_00_46_CESTevd_ped.json'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/datalog_2021_04_02_19_00_46_CESTevd_ped.json
+  #configuration_file: 'data/module0_flow/evd_config_21-03-31_12-36-13.json'
+  # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/evd_config_21-03-31_12-36-13.json
