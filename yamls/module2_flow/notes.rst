@@ -69,16 +69,15 @@ Charge
 
   Copied and modified from module1's. Used ``pedestal_file`` and ``configuration_file`` found in older module2 yaml files.
 
-..
-    5. ``yamls/module1_flow/workflows/charge/final_calibration.yaml``
+5. ``yamls/module1_flow/workflows/charge/final_calibration.yaml``
 
-       Copied and modified from ``yamls/proto_nd_flow/workflows/charge/final_calibration.yaml``. Only difference is that ``.yaml`` files now point to ``module1_flow`` specific files. Don't see corresponding file for module[0,2,3] workflows.
+    Copied and moified from module1's. 
 
-    * ``yamls/module1_flow/reco/charge/CalibHitMerger.yaml``
+* ``yamls/module1_flow/reco/charge/CalibHitMerger.yaml``
 
-      Copied and modified from ``yamls/proto_nd_flow/reco/charge/CalibHitMerger.yaml``. Maybe corresponds to ``yamls/module0_flow/reco/charge/HitMerger.yaml`` in ``module0``? Doesn't exist for module[2,3] workflows.
+    Copied and moified from module1's. 
 
-      Removed ``mc_hit_frac_dset_name``.
+  Removed ``mc_hit_frac_dset_name``.
 
     Light
     -----

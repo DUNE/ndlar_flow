@@ -1,0 +1,22 @@
+classname: CalibHitMerger # reco/charge/calib_hit_merger.py
+path: proto_nd_flow.reco.charge.calib_hit_merger
+requires:
+  - 'charge/events'
+  - 'charge/calib_prompt_hits'
+  - name: 'packet_frac_backtrack'
+    path: ['charge/calib_prompt_hits','charge/packets','mc_truth/packet_fraction']
+  - name: 'packet_seg_backtrack'
+    path: ['charge/calib_prompt_hits','charge/packets','mc_truth/segments']
+
+
+params:
+  # inputs
+  events_dset_name: 'charge/events'
+  hits_name: 'charge/calib_prompt_hits'
+  merged_name: 'charge/calib_final_hits'
+  max_contrib_segments: 200
+  merge_cut: 65 # merge hits with delta t < merge_cut [CRS ticks]
+  max_merge_steps: 50 # max number of iterations when merging
+                       # adjacent packets in time on the same channel
+
+
