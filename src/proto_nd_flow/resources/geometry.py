@@ -592,7 +592,7 @@ class Geometry(H5FlowResource):
             logging.warning(f'Loading geometry from {self.lrs_geometry_file}...')
 
         # enforce that light geometry formatting is as expected
-        assert_compat_version(self.lrs_geometry_yaml['format_version'], '0.2.0')
+        assert_compat_version(self.lrs_geometry_yaml['format_version'], '0.3.0')
 
         mod_ids = np.array([v for v in self.det_geometry_yaml['module_to_tpcs'].keys()])
         tpc_ids = np.array([v for v in self.lrs_geometry_yaml['tpc_center_offset'].keys()])
