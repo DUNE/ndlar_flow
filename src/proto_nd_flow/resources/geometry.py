@@ -78,7 +78,7 @@ class Geometry(H5FlowResource):
                     lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-0.0.0.yaml'
 
     '''
-    class_version = '0.2.0'
+    class_version = '0.3.0'
 
     default_path = 'geometry_info'
     default_network_agnostic = False
@@ -539,8 +539,6 @@ class Geometry(H5FlowResource):
         if tpc == -1 or det == -1:
             return [-1,-1,-1]
 
-        det_type = self.lrs_geometry_yaml["adc_to_det_type"][adc]
-
         # Get TPC side
         side = self.lrs_geometry_yaml["det_side"][det]
 
@@ -594,12 +592,12 @@ class Geometry(H5FlowResource):
             logging.warning(f'Loading geometry from {self.lrs_geometry_file}...')
 
         # enforce that light geometry formatting is as expected
-        assert_compat_version(self.lrs_geometry_yaml['format_version'], '0.2.0')
+        assert_compat_version(self.lrs_geometry_yaml['format_version'], '0.3.0')
 
         mod_ids = np.array([v for v in self.det_geometry_yaml['module_to_tpcs'].keys()])
         tpc_ids = np.array([v for v in self.lrs_geometry_yaml['tpc_center_offset'].keys()])
         det_ids = np.array([v for v in self.lrs_geometry_yaml['det_center'].keys()])
-        adc_ids = np.array([v for v in self.lrs_geometry_yaml['adc_to_det_type'].keys()])
+        adc_ids = np.array([v for v in self.lrs_geometry_yaml['ch_to_vert_bin'].keys()])
         max_chan_per_det = max([len(chan) for tpc in self.lrs_geometry_yaml['det_chan'].values() for chan in tpc.values()])
         chan_ids = np.unique(sum([chan for tpc in self.lrs_geometry_yaml['det_chan'].values() for chan in tpc.values()],[]))
 
@@ -628,7 +626,7 @@ class Geometry(H5FlowResource):
                 det_chan[i,j,:len(self.lrs_geometry_yaml['det_chan'][tpc][det])] = self.lrs_geometry_yaml['det_chan'][tpc][det]
                 tpc_center = (np.array(self.lrs_geometry_yaml['tpc_center_offset'][tpc])
                     + np.array(self.det_geometry_yaml["tpc_offsets"][tpc_mod[i]]))
-                det_geom = self.lrs_geometry_yaml['geom'][self.lrs_geometry_yaml['det_geom'][det]]
+                det_geom = self.lrs_geometry_yaml['geom'][self.lrs_geometry_yaml['det_geom'][tpc][det]]
                 det_center = np.array(self.lrs_geometry_yaml['det_center'][det])
                 det_bounds[i,j,0] = tpc_center + det_center + np.array(det_geom['min'])
                 det_bounds[i,j,1] = tpc_center + det_center + np.array(det_geom['max'])
