@@ -505,10 +505,14 @@ class LArEventDisplay:
         event_datetime = datetime.utcfromtimestamp(
                 event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
         if not self.is_mc:
-            event_run_info = self.all_subruns_db[(self.all_subruns_db['start_time_unix'] <= event['unix_ts']) &
-                                  (self.all_subruns_db['end_time_unix'] > event['unix_ts'])]
-            event_subrun = event_run_info['global_subrun'].values[0]
-            event_run = event_run_info['global_run'].values[0]
+            try:
+                event_run_info = self.all_subruns_db[(self.all_subruns_db['start_time_unix'] <= event['unix_ts']) &
+                                      (self.all_subruns_db['end_time_unix'] > event['unix_ts'])]
+                event_subrun = event_run_info['global_subrun'].values[0]
+                event_run = event_run_info['global_run'].values[0]
+            except:
+                event_run = -1
+                event_subrun = -1
             data_sim_watermark = 'DATA'
             watermark_fs = 78
         elif self.is_mc:
