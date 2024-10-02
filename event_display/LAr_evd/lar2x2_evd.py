@@ -398,7 +398,10 @@ class LArEventDisplay:
         # Then, add metadata and add back vectorized DUNE logo to saved PDF
         saved_pdf = fitz.open(savepath)
         saved_pdf_metadata = saved_pdf.metadata
-        saved_pdf_metadata.update({'title' : "Event "+str(ev_id)+" from "+self.filedir+self.filename+" with Mx2 file "+self.filepath_mx2+" and using runs database "+self.runsdb})
+        if self.filepath_mx2 is None:
+            saved_pdf_metadata.update({'title' : "Event "+str(ev_id)+" from "+self.filedir+self.filename+" with NO Mx2 file and using runs database "+self.runsdb})
+        else:
+            saved_pdf_metadata.update({'title' : "Event "+str(ev_id)+" from "+self.filedir+self.filename+" with Mx2 file "+self.filepath_mx2+" and using runs database "+self.runsdb})
         saved_pdf.set_metadata(saved_pdf_metadata)
         saved_pdf_page = saved_pdf[0]
         rect_max_x = saved_pdf_page.rect[2]
