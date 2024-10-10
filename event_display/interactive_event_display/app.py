@@ -72,14 +72,14 @@ app.layout = html.Div(
                         dcc.Input(
                             id="file-path",
                             type="text",
-                            placeholder="Enter a file path",
+                            placeholder="URL or NERSC path",
                             debounce=True,
                         ),
-                        html.Button("Load File", id="load-button", n_clicks=0),
+                        html.Button("Load Flow File", id="load-button", n_clicks=0),
                         dcc.Input(
                             id="minerva-file-path",
                             type="text",
-                            placeholder="Enter a minerva file path",
+                            placeholder="URL or NERSC path",
                             debounce=True,
                         ),
                         html.Button(
@@ -199,6 +199,15 @@ app.layout = html.Div(
     ],
 )
 
+def resolve_url(url_or_path):
+    prefix = 'https://portal.nersc.gov/project/dune/data'
+    base_path = '/global/cfs/cdirs/dune/www/data'
+    if not url_or_path.startswith('https://'):
+        return url_or_path
+    url = url_or_path
+    assert(url.startswith(prefix))
+    return base_path + url[len(prefix):]
+
 # Callbacks
 
 
@@ -216,6 +225,7 @@ app.layout = html.Div(
     prevent_initial_call=True,
 )
 def load_file(n, file_path):
+    file_path = resolve_url(file_path)
     print(file_path)
     if n > 0 and file_path is not None:
         _, num_events = parse_contents(file_path)
@@ -236,6 +246,7 @@ def load_file(n, file_path):
     prevent_initial_call=True,
 )
 def load_minerva(n, minerva_file_path):
+    minerva_file_path = resolve_url(minerva_file_path)
     print(minerva_file_path)
     if n > 0 and minerva_file_path is not None:
         _, minerva_num_events = parse_minerva_contents(minerva_file_path)
