@@ -3,9 +3,7 @@
 
 flow:
   source: raw_events
-  #source: calib_prompt_hits
-  #stages: [temp_hit_builder, calib_hit_merger]
-  stages: [calib_hit_merger]
+  stages: [calib_noise_filter]
   drop: []
 
 
@@ -19,8 +17,8 @@ raw_events:
   path: h5flow.modules
   dset_name: 'charge/raw_events'
   params:
-    chunk_size: 32
+    chunk_size: 1
 
-calib_hit_merger:
-  !include yamls/proto_nd_flow/reco/charge/CalibHitMerger.yaml
+calib_noise_filter:
+  !include yamls/proto_nd_flow/reco/charge/CalibNoiseFilter.yaml
 

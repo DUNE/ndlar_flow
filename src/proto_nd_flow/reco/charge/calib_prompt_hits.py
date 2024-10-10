@@ -60,6 +60,8 @@ class CalibHitBuilder(H5FlowStage):
             ts_pps         f8, PPS packet timestamp [ns]
             io_group       u8, io group ID (PACMAN number)
             io_channel     u8, io channel ID (related to PACMAN number & PACMAN UART Number)
+            chip_id        u8, chip_id on tile 
+            channel_id     u8, channel_id on single chip (0-63)
             Q              f8, hit charge [ke-]
             E              f8, hit energy [MeV]
 
@@ -86,6 +88,8 @@ class CalibHitBuilder(H5FlowStage):
         ('ts_pps', 'u8'),
         ('io_group', 'u8'),
         ('io_channel', 'u8'),
+        ('chip_id', 'u8'),
+        ('channel_id', 'u8'),
         ('Q', 'f8'),
         ('E', 'f8')
     ])
@@ -227,6 +231,8 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['t_drift'] = drift_t
             calib_hits_arr['io_group'] = packets_arr['io_group']
             calib_hits_arr['io_channel'] = packets_arr['io_channel']
+            calib_hits_arr['chip_id'] = packets_arr['chip_id']
+            calib_hits_arr['channel_id'] = packets_arr['channel_id']
             hits_charge = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) # ke-
             calib_hits_arr['Q'] = hits_charge # ke-
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
