@@ -110,94 +110,94 @@ def create_3d_figure(minerva_data, data, filename, evid):
             print("Cannot process this file type")
             prompthits_segs = None
     event = data["charge/events", evid]
-    if evid in beam_triggers and sim_version == "data":
-        # trigger = beam_triggers.index(evid)
-        minerva_times = (
-            minerva_data["minerva"]["ev_gps_time_sec"].array(library="np")
-            + minerva_data["minerva"]["ev_gps_time_usec"].array(library="np") / 1e6
-        )
-        charge_time = (event["unix_ts"][:] + event["ts_start"][:] / 1e7)[0]
-        # find the index of the minerva_times that matches the charge_time
-        trigger = np.argmin(np.abs(minerva_times - charge_time))
-    if evid in beam_triggers and sim_version == "minirun5":
-        trigger = ((event["unix_ts"][:] + event["ts_start"][:] / 1e7) / 1.2).astype(
-            int
-        )[0]
-    if (
-        minerva_data is not None
-        # and evid < len(minerva_data["minerva"]["offsetX"].array(library="np"))
-        and is_beam_event(evid, filename)
-        and np.abs(minerva_times[trigger] - charge_time) < 1
-    ):
-        minerva = draw_minerva()
-        fig.add_traces(minerva)
+    if minerva_data is not None:
+        if evid in beam_triggers and sim_version == "data":
+            # trigger = beam_triggers.index(evid)
+            minerva_times = (
+                minerva_data["minerva"]["ev_gps_time_sec"].array(library="np")
+                + minerva_data["minerva"]["ev_gps_time_usec"].array(library="np") / 1e6
+            )
+            charge_time = (event["unix_ts"][:] + event["ts_start"][:] / 1e7)[0]
+            # find the index of the minerva_times that matches the charge_time
+            trigger = np.argmin(np.abs(minerva_times - charge_time))
+        if evid in beam_triggers and sim_version == "minirun5":
+            trigger = ((event["unix_ts"][:] + event["ts_start"][:] / 1e7) / 1.2).astype(
+                int
+            )[0]
+        if (
+            # and evid < len(minerva_data["minerva"]["offsetX"].array(library="np"))
+            is_beam_event(evid, filename)
+            and np.abs(minerva_times[trigger] - charge_time) < 1
+        ):
+            minerva = draw_minerva()
+            fig.add_traces(minerva)
 
-        minerva_hits_x_offset = minerva_data["minerva"]["offsetX"].array(library="np")
-        minerva_hits_y_offset = minerva_data["minerva"]["offsetY"].array(library="np")
-        minerva_hits_z_offset = minerva_data["minerva"]["offsetZ"].array(library="np")
+            minerva_hits_x_offset = minerva_data["minerva"]["offsetX"].array(library="np")
+            minerva_hits_y_offset = minerva_data["minerva"]["offsetY"].array(library="np")
+            minerva_hits_z_offset = minerva_data["minerva"]["offsetZ"].array(library="np")
 
-        minerva_hits_x = minerva_data["minerva"]["trk_node_X"].array(library="np")
-        minerva_hits_y = minerva_data["minerva"]["trk_node_Y"].array(library="np")
-        minerva_hits_z = minerva_data["minerva"]["trk_node_Z"].array(library="np")
+            minerva_hits_x = minerva_data["minerva"]["trk_node_X"].array(library="np")
+            minerva_hits_y = minerva_data["minerva"]["trk_node_Y"].array(library="np")
+            minerva_hits_z = minerva_data["minerva"]["trk_node_Z"].array(library="np")
 
-        minerva_trk_index = minerva_data["minerva"]["trk_index"].array(library="np")
-        minerva_trk_nodes = minerva_data["minerva"]["trk_nodes"].array(library="np")
-        minerva_trk_node_energy = minerva_data["minerva"]["clus_id_energy"].array(
-            library="np"
-        )
+            minerva_trk_index = minerva_data["minerva"]["trk_index"].array(library="np")
+            minerva_trk_nodes = minerva_data["minerva"]["trk_nodes"].array(library="np")
+            minerva_trk_node_energy = minerva_data["minerva"]["clus_id_energy"].array(
+                library="np"
+            )
 
-        xs = []
-        ys = []
-        zs = []
-        qs = []
+            xs = []
+            ys = []
+            zs = []
+            qs = []
 
-        for idx in minerva_trk_index[trigger]:
+            for idx in minerva_trk_index[trigger]:
 
-            n_nodes = minerva_trk_nodes[trigger][idx]
-            if n_nodes > 0:
-                x_nodes = (
-                    minerva_hits_x[trigger][idx][:n_nodes]
-                    # - minerva_hits_x_offset[trigger]
-                )
-                y_nodes = (
-                    minerva_hits_y[trigger][idx][:n_nodes]
-                    # - minerva_hits_y_offset[trigger]
-                )
-                z_nodes = minerva_hits_z[trigger][idx][
-                    :n_nodes
-                ]  # - minerva_hits_z_offset[trigger]
-                q_nodes = minerva_trk_node_energy[trigger][:n_nodes]
-            xs.append((x_nodes / 10).tolist())
-            ys.append((y_nodes / 10 - 21.8338).tolist())
-            zs.append((z_nodes / 10 - 691.3).tolist())
-            qs.append((q_nodes).tolist())
-        minerva_hit_traces = go.Scatter3d(
-            x=[item for sublist in xs for item in sublist],
-            y=[item for sublist in ys for item in sublist],
-            z=[item for sublist in zs for item in sublist],
-            marker_color=[item for sublist in qs for item in sublist],
-            marker={
-                "size": 1.75,
-                "opacity": 0.9,
-                "colorscale": colorscale_charge,
-                "colorbar": {
-                    "title": "Mx2 E [MeV]",
-                    "titlefont": {"size": 12},
-                    "tickfont": {"size": 10},
-                    "thickness": 15,
-                    "len": 0.5,
-                    "xanchor": "right",
-                    "x": 0,
+                n_nodes = minerva_trk_nodes[trigger][idx]
+                if n_nodes > 0:
+                    x_nodes = (
+                        minerva_hits_x[trigger][idx][:n_nodes]
+                        # - minerva_hits_x_offset[trigger]
+                    )
+                    y_nodes = (
+                        minerva_hits_y[trigger][idx][:n_nodes]
+                        # - minerva_hits_y_offset[trigger]
+                    )
+                    z_nodes = minerva_hits_z[trigger][idx][
+                        :n_nodes
+                    ]  # - minerva_hits_z_offset[trigger]
+                    q_nodes = minerva_trk_node_energy[trigger][:n_nodes]
+                xs.append((x_nodes / 10).tolist())
+                ys.append((y_nodes / 10 - 21.8338).tolist())
+                zs.append((z_nodes / 10 - 691.3).tolist())
+                qs.append((q_nodes).tolist())
+            minerva_hit_traces = go.Scatter3d(
+                x=[item for sublist in xs for item in sublist],
+                y=[item for sublist in ys for item in sublist],
+                z=[item for sublist in zs for item in sublist],
+                marker_color=[item for sublist in qs for item in sublist],
+                marker={
+                    "size": 1.75,
+                    "opacity": 0.9,
+                    "colorscale": colorscale_charge,
+                    "colorbar": {
+                        "title": "Mx2 E [MeV]",
+                        "titlefont": {"size": 12},
+                        "tickfont": {"size": 10},
+                        "thickness": 15,
+                        "len": 0.5,
+                        "xanchor": "right",
+                        "x": 0,
+                    },
                 },
-            },
-            name="minerva hits",
-            mode="markers",
-            showlegend=True,
-            opacity=0.9,
-            customdata=[item for sublist in qs for item in sublist],
-            hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
-        )
-        fig.add_traces(minerva_hit_traces)
+                name="minerva hits",
+                mode="markers",
+                showlegend=True,
+                opacity=0.9,
+                customdata=[item for sublist in qs for item in sublist],
+                hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
+            )
+            fig.add_traces(minerva_hit_traces)
 
     # Draw the TPC
     tpc_center, anodes, cathodes = draw_tpc(sim_version)
