@@ -47,7 +47,17 @@ class correlated_post_trigger_filter:
         for key in model_pars.keys():
             setattr(self, key,  model_pars[key])
 
+    def filter_chunked(self, hits):
+        filter_mask=np.zeros(hits.shape, dtype=bool)
+
+        for i in range(hits.shape[0]):
+            filter_mask[i,:]=self.filter(hits[i,:])
+
+        return filter_mask
+
     def filter(self, hits):
+        if len(hits.shape)>1 and hits.shape[0]>1: 
+            return self.filter_chunked(hits)
         lrs=np.zeros(hits.shape)
         un = unique_channel_id(hits)
         un_chip = (un//100)*100
@@ -83,7 +93,6 @@ class correlated_post_trigger_filter:
                 lrs[m] = self.get_lr(n_chip_hits, np.array([ts, qs, sumqs]).transpose(), cc, chan_nhit)
     
         return lrs > self.lrs_cut
-
 
     def get_lr(self, n_chip_hits, X, chan, chan_nhit):
         
@@ -154,35 +163,22 @@ class CalibNoiseFilter(H5FlowStage):
         hits_name = 'charge/calib_prompt_hits',
         hit_charge_name = 'charge/calib_prompt_hits',
         merged_name = 'charge/hits/calib_merged_hits',
-        max_merge_steps = 5,
-        max_contrib_segments = 200,
-        merge_mode = 'last-first',
-        merge_cut = 50, # CRS ticks
         mc_hit_frac_dset_name = 'mc_truth/calib_final_hit_backtrack',
         filter_function_names = ['test_filter']
         )
-    valid_merge_modes = ['last-first', 'pairwise']
+    valid_filter_functions = ['test_filter', 'low_current_filter', 'correlated_post_trigger_filter']
 
     merged_dtype = CalibHitBuilder.calib_hits_dtype
-
-    sum_fields = ['Q','E']
-    weighted_mean_fields = ['t_drift', 'ts_pps','x']
 
     def __init__(self, **params):
         super(CalibNoiseFilter, self).__init__(**params)
         for key in self.defaults:
             setattr(self, key, params.get(key, self.defaults[key]))
-        self.merge_mode = self.merge_mode.lower()
-        assert self.merge_mode in self.valid_merge_modes, f'invalid merge mode: {self.merge_mode}'
+        for f in self.filter_function_names:
+            assert f in self.valid_filter_functions, f'invalid filter function name: {f}'
 
     def init(self, source_name):
         super(CalibNoiseFilter, self).init(source_name)
-
-        self.hit_frac_dtype = np.dtype([
-            ('fraction', f'({self.max_contrib_segments},)f8'),
-            ('segment_ids', f'({self.max_contrib_segments},)i8')
-        ])
-
         self.data_manager.create_dset(self.merged_name, dtype=self.merged_dtype)
         if resources['RunData'].is_mc:
             self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=self.hit_frac_dtype)
