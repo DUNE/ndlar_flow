@@ -9,6 +9,8 @@ from pickle import dump, load
 
 from proto_nd_flow.reco.charge.calib_prompt_hits import CalibHitBuilder
 
+## Some useful functions for the filter classes
+##
 def unique_to_io_group(unique):
     return ((unique // (100*1000*1000)) % 1000)
 
@@ -19,16 +21,27 @@ def unique_channel_id(d):
 def unique_to_channel_id(unique):
     return (unique % 100)
 
+##
+
+## Filter classes
+##
 
 class low_current_filter:
+    '''
+        Filters out hits with low indunced current. Specify threshold to remove hitsnwith Q<threshold
+    '''
 
-    def __init__(self, cut=6.):
-        self.cut = cut
-
+    def __init__(self, threshold=6.):
+        self.threshold = float(threshold)
+        print('using threshold:', self.threshold)
     def filter(self, hits):
-        return hits['Q']<self.cut
+        return hits['Q']<self.threshold
 
 class correlated_post_trigger_filter:
+    '''
+        Module2 specific filter for noise from charge injection from ADC reference instability
+    '''
+
     RANGE_Q = [-25, 25]
     SCALE_Q = RANGE_Q[1]-RANGE_Q[0]
 
@@ -144,18 +157,37 @@ class correlated_post_trigger_filter:
             y_cpt = np.exp(kdes_cpth[3].score_samples(X))+1e-5
             return nhit_lr*y_cpt/y
 
-class test_filter:
 
-    def __init__(self):
-        print('initializing test filter!')
-        return
+class hot_pixel_filter:
+
+    def __init__(self, max_n_hits=35):
+        self.max_n_hits = int(max_n_hits)
 
     def filter(self, hits):
-        return hits['Q']>6
+
+        un = unique_channel_id(hits)
+
+        chans, counts = np.unique( un, return_counts=True )
+        
+        hot_pixels = chans[counts>self.max_n_hits]
+
+        mask = np.zeros( hits.shape ).astype(bool) 
+        
+        for pix in hot_pixels:
+            chan_mask = un==pix
+            event_mask = np.sum( chan_mask, axis=-1  ) > self.max_n_hits
+
+            mask = mask | np.dot(event_mask,  chan_mask)
+
+       
+
+        return mask
+#Main class defintion
+##
 
 class CalibNoiseFilter(H5FlowStage):
     '''
-        Noise Filter... documentation to come......
+        Noise Filter for charge readout.
     '''
     class_version = '0.0.0'
     defaults = dict(
@@ -164,9 +196,11 @@ class CalibNoiseFilter(H5FlowStage):
         hit_charge_name = 'charge/calib_prompt_hits',
         merged_name = 'charge/hits/calib_merged_hits',
         mc_hit_frac_dset_name = 'mc_truth/calib_final_hit_backtrack',
-        filter_function_names = ['test_filter']
+        low_current_filter__threshold=6.0,
+        hot_pixel_filter__max_n_hits=35,
+        filter_function_names = ['hot_pixel_filter']
         )
-    valid_filter_functions = ['test_filter', 'low_current_filter', 'correlated_post_trigger_filter']
+    valid_filter_functions = ['low_current_filter', 'correlated_post_trigger_filter', 'hot_pixel_filter']
 
     merged_dtype = CalibHitBuilder.calib_hits_dtype
 
@@ -193,7 +227,10 @@ class CalibNoiseFilter(H5FlowStage):
     def init_filter_functions(self):
         self.filter_functions=[]
         for filter_name in self.filter_function_names:
-            self.filter_functions.append( getattr(sys.modules[__name__], filter_name  )() ) 
+            params={}
+            for p in self.__dict__.keys(): 
+                if filter_name in p: params[p.split('__')[-1]]=getattr(self, p)
+            self.filter_functions.append( getattr(sys.modules[__name__], filter_name  )( **params ) ) 
     
     def default_filter_function(self, hits):
         return hits['Q']>np.inf

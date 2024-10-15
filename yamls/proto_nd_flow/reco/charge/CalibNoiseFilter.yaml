@@ -10,11 +10,12 @@ params:
   # inputs
   events_dset_name: 'charge/events'
   hits_name: 'charge/calib_prompt_hits'
-  max_contrib_segments: 200
-  merge_cut: 65 # merge hits with delta t < merge_cut [CRS ticks]
-  max_merge_steps: 50 # max number of iterations when merging
-                       # adjacent packets in time on the same channel
-  filter_function_names: ['correlated_post_trigger_filter', 'low_current_filter'] #which filter functions to apply to the prompt hits (this is an ordered list!)
+  filter_function_names: ['hot_pixel_filter','correlated_post_trigger_filter', 'low_current_filter'] #which filter functions to apply (this is an ordered list, but all filters will be "OR'd")
+
+
+  #params specific to each cut
+  low_current_filter__threshold: 7.0
+  hot_pixel_filter__max_n_hits: 35
   # outputs
   merged_name: 'charge/calib_final_hits'
   mc_hit_frac_dset_name: 'mc_truth/calib_final_hit_backtrack'
