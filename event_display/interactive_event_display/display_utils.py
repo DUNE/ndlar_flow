@@ -110,7 +110,9 @@ def create_3d_figure(minerva_data, data, filename, evid):
             print("Cannot process this file type")
             prompthits_segs = None
     event = data["charge/events", evid]
-    if evid in beam_triggers and sim_version == "data":
+    if (minerva_data is not None
+        and evid in beam_triggers
+        and sim_version == "data"):
         # trigger = beam_triggers.index(evid)
         minerva_times = (
             minerva_data["minerva"]["ev_gps_time_sec"].array(library="np")
