@@ -102,6 +102,11 @@ class CalibHitBuilder(H5FlowStage):
         self.t0_dset_name = params.get('t0_dset_name')
         self.pedestal_file = params.get('pedestal_file', '')
         self.configuration_file = params.get('configuration_file', '')
+        self.pedestal_mv = params.get('pdestal_mv', 580.0)
+        self.vref_mv = params.get('vref_mv', 1568.0)
+        self.vcm_mv = params.get('vcm_mv', 478.1)
+        self.adc_counts = params.get('adc_counts', 256)
+        self.gain = params.get('gain', 4.522)
 
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
@@ -211,12 +216,19 @@ class CalibHitBuilder(H5FlowStage):
                             + packets_arr['chip_id'].astype(int)) * 64 \
                 + packets_arr['channel_id'].astype(int)
             hit_uniqueid_str = hit_uniqueid.astype(str)
-            vref = np.array(
-                [self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
-            vcm = np.array([self.configuration[unique_id]['vcm_mv']
-                            for unique_id in hit_uniqueid_str])
-            ped = np.array([self.pedestal[unique_id]['pedestal_mv']
-                            for unique_id in hit_uniqueid_str])
+            if self.configuration_file != '':
+                vref = np.array(
+                    [self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
+                vcm = np.array([self.configuration[unique_id]['vcm_mv']
+                                for unique_id in hit_uniqueid_str])
+            else:
+                vref = np.full(len(hit_uniqueid_str), self.vref_mv)
+                vcm = np.full(len(hit_uniqueid_str), self.vcm_mv)
+            if self.pedestal_file != '':
+                ped = np.array([self.pedestal[unique_id]['pedestal_mv']
+                                for unique_id in hit_uniqueid_str])
+            else:
+                ped = np.full(len(hit_uniqueid_str), self.pedestal_mv)
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             calib_hits_arr['x'] = x
             if has_mc_truth:
@@ -227,7 +239,7 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['t_drift'] = drift_t
             calib_hits_arr['io_group'] = packets_arr['io_group']
             calib_hits_arr['io_channel'] = packets_arr['io_channel']
-            hits_charge = self.charge_from_dataword(packets_arr['dataword'],vref,vcm,ped) # ke-
+            hits_charge = self.charge_from_dataword(packets_arr['dataword'], vref, vcm, ped, self.adc_counts, self.gain) # ke-
             calib_hits_arr['Q'] = hits_charge # ke-
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
             calib_hits_arr['E'] = hits_charge * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV) # MeV
@@ -266,8 +278,8 @@ class CalibHitBuilder(H5FlowStage):
 
 
     @staticmethod
-    def charge_from_dataword(dw, vref, vcm, ped):
-        return (dw / 256. * (vref - vcm) + vcm - ped) / 4. # hardcoding 4 mV/ke- conv.
+    def charge_from_dataword(dw, vref, vcm, ped, adc_counts, gain):
+        return (dw / adc_counts * (vref - vcm) + vcm - ped) / gain
 
     def load_pedestals(self):
         if self.pedestal_file != '' and not resources['RunData'].is_mc:

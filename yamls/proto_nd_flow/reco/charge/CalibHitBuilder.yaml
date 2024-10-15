@@ -32,3 +32,9 @@ params:
   # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/datalog_2021_04_02_19_00_46_CESTevd_ped.json
   #configuration_file: 'data/module0_flow/evd_config_21-03-31_12-36-13.json'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/evd_config_21-03-31_12-36-13.json
+
+  pedestal_mv: 580.0
+  vref_mv: 1568.0 #M0-like: 1300 #2x2: 1568.0
+  vcm_mv: 478.1 #M0-like:288 #478.0 #2x2: 478.1
+  adc_counts: 256
+  gain: 4.522 #datasheet: 4 #measurement(?): 4.522
