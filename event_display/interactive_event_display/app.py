@@ -388,6 +388,7 @@ def update_2d_plots(filename, evid):
     if filename is not None:
         data, _ = parse_contents(filename)
         return plot_2d_charge(data, evid)
+    return go.Figure()
 
 
 @app.callback(
