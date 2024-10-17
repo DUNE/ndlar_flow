@@ -324,6 +324,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
         marker_color=prompthits_ev.data[
             "E"
         ].flatten(),  # convert to MeV from GeV for minirun4
+        range_color=[-1.5, 4],
         marker={
             "size": 1.75,
             "opacity": 0.9,
@@ -353,6 +354,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
         y=(finalhits_ev.data["y"].flatten()),
         z=(finalhits_ev.data["z"].flatten()),
         marker_color=finalhits_ev.data["E"].flatten(),
+        range_color=[-1.5, 4],
         marker={
             "size": 1.75,
             "opacity": 0.9,
@@ -1043,6 +1045,7 @@ def plot_2d_charge(data, evid):
         x=prompthits_ev.data["x"].flatten(),
         y=prompthits_ev.data["y"].flatten(),
         mode="markers",
+        range_color=[-1.5, 4],
         marker=dict(
             size=2,
             opacity=0.9,
@@ -1057,6 +1060,7 @@ def plot_2d_charge(data, evid):
         x=prompthits_ev.data["z"].flatten(),
         y=prompthits_ev.data["x"].flatten(),
         mode="markers",
+        range_color=[-1.5, 4],
         marker=dict(
             size=2,
             opacity=0.9,
@@ -1071,6 +1075,7 @@ def plot_2d_charge(data, evid):
         x=prompthits_ev.data["z"].flatten(),
         y=prompthits_ev.data["y"].flatten(),
         mode="markers",
+        range_color=[-1.5, 4],
         marker=dict(
             size=2,
             opacity=0.9,
@@ -1086,6 +1091,7 @@ def plot_2d_charge(data, evid):
         x=[None],
         y=[None],
         mode="markers",
+        range_color=[-1.5, 4],
         marker=dict(
             size=2,
             opacity=0.7,
@@ -1196,6 +1202,7 @@ def plot_2d_charge(data, evid):
     )
 
     fig.update_layout(
+        title_text=f"number of hits: {len(prompthits_ev.data)}",
         showlegend=False,
         plot_bgcolor=bg_color,
         autosize=False,
