@@ -118,8 +118,12 @@ class LArEventDisplay:
         self.filedir = filedir
         self.filename = filename
         self.filepath_mx2 = filepath_mx2
-        self.runsdb = runsdb
-        self.all_subruns_db = pd.read_sql_table('All_global_subruns', runsdb)
+        try:
+            self.runsdb = runsdb
+            self.all_subruns_db = pd.read_sql_table('All_global_subruns', runsdb)
+        except:
+            self.runsdb = None
+            self.all_subruns_db = None
         self.show_light = show_light
         self.show_event_light = show_light
         self.show_colorbars = show_colorbars
@@ -663,7 +667,7 @@ class LArEventDisplay:
         self.fig.text(s=" Run %i, Subrun %i" %
                           (event_run, event_subrun), x=0.05, y=title_y,\
                             size=26, weight='bold', ha='left', linespacing=1)
-        self.fig.text(x=0.051, y=subtitle_y, s=" Event %i: %s UTC" % (ev_id, event_datetime),\
+        self.fig.text(x=0.051, y=subtitle_y, s=" Event %i: %s UTC, nHits: %i" % (ev_id, event_datetime, self.hits_per_event),\
                             size=22, ha='left', style='italic', linespacing=1)
         self.fig.text(watermark_x, watermark_y, data_sim_watermark, fontsize=watermark_fs, color='black', alpha=0.15,
                       ha='right', va='center', weight='bold', style='italic', rotation=0)# zorder=-1)
@@ -696,9 +700,9 @@ class LArEventDisplay:
         self.ax_dune_logo.imshow(self.dune_logo_png)
 
         # Set axes for 3D canvas (Beam, Drift, Vertical)
-        self.ax_bdv.set_xlabel('\nBeam Axis [cm]', fontsize=14, weight='bold', linespacing=2) #z
-        self.ax_bdv.set_ylabel('\nDrift Axis [cm]', fontsize=14, weight='bold', linespacing=2) #x
-        self.ax_bdv.set_zlabel('\nVertical Axis [cm]', fontsize=14, weight='bold', linespacing=2) #y
+        self.ax_bdv.set_xlabel('\nBeam Axis (z) [cm]', fontsize=14, weight='bold', linespacing=2) #z
+        self.ax_bdv.set_ylabel('\nDrift Axis (x) [cm]', fontsize=14, weight='bold', linespacing=2) #x
+        self.ax_bdv.set_zlabel('\nVertical Axis (y) [cm]', fontsize=14, weight='bold', linespacing=2) #y
         self.ax_bdv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2], \
             self.geometry.attrs['lar_detector_bounds'][1][2])
         self.ax_bdv.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][0], \
@@ -720,7 +724,7 @@ class LArEventDisplay:
         #       maximum and minimum boundary values of the longest detector axis (beam, Z)
         # Set axes for Beam vs Drift (ZX) canvas
         #self.ax_bd.set_xlabel('Beam Axis [cm]', fontsize=14) # Currently not showing x-axis label bc overlap with lower subplot
-        self.ax_bd.set_ylabel('Drift Axis [cm]', fontsize=14, weight='bold')
+        self.ax_bd.set_ylabel('Drift Axis (x) [cm]', fontsize=14, weight='bold')
         self.ax_bd.set_ylim(self.geometry.attrs['lar_detector_bounds'][0][2]-3, \
             self.geometry.attrs['lar_detector_bounds'][1][2]+3)
         self.ax_bd.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2]-3,\
@@ -730,7 +734,7 @@ class LArEventDisplay:
         self.ax_bd.set_yticks(np.arange(-60,61,20))
 
         # Set axes for Beam vs Vertical (ZY) canvas
-        self.ax_bv.set_xlabel('Beam Axis [cm]', fontsize=14, weight='bold')
+        self.ax_bv.set_xlabel('Beam Axis (z) [cm]', fontsize=14, weight='bold')
         self.ax_bv.set_ylabel('Vertical Axis [cm]', fontsize=14, weight='bold')
         self.ax_bv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2]-3,\
             self.geometry.attrs['lar_detector_bounds'][1][2]+3)
@@ -741,7 +745,7 @@ class LArEventDisplay:
         self.ax_bv.set_yticks(np.arange(-60,61,20))
 
         # Set axes for Drift vs Vertical (XY) canvas
-        self.ax_dv.set_xlabel('Drift Axis [cm]', fontsize=14, weight='bold')
+        self.ax_dv.set_xlabel('Drift Axis (x) [cm]', fontsize=14, weight='bold')
         #self.ax_dv.set_ylabel('Vertical Axis [cm]', fontsize=14) # Currently not showing y-axis label bc overlap with left subplot
         self.ax_dv.set_xlim(self.geometry.attrs['lar_detector_bounds'][0][2]-3,\
             self.geometry.attrs['lar_detector_bounds'][1][2]+3)

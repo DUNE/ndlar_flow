@@ -63,7 +63,7 @@ def process_event(ev_id):
 
 
 # Make set of PNGs for every event in file
-def main(file, output_dir=None, beam_only=False, show_light=False):
+def main(file, output_dir=None, beam_only=False, show_light=False, n_evts=None):
 
     # Get file name and directory from input
     f = file.split('/')[-1]
@@ -91,8 +91,11 @@ def main(file, output_dir=None, beam_only=False, show_light=False):
     event_ids = evd.events['id']
 
     # Go through all events in file
-    num_events = len(event_ids)
-    print('Number of events: ', num_events)
+    if n_evts:
+        num_events = n_evts
+    else:
+        num_events = len(event_ids)
+    print('Number of events to plot: ', num_events)
 
     # Create PNGs, then store to intermediary PDF
     # Process events in small batches to avoid memory issues
@@ -140,5 +143,6 @@ if __name__ == '__main__':
     parser.add_argument('-od','--output_dir', default=None,type=str,help='''String of output file directory location. If no directory is given, current directory is used.''')
     parser.add_argument('-b','--beam_only', default=False, type=bool, help='''Bool telling whether or not to only save beam events.''')
     parser.add_argument('-l','--show_light', default=False, type=bool, help='''Bool telling whether or not to show light.''')
+    parser.add_argument('-n','--n_evts', default=None, type=int, help='''Number of events to plot.''')
     args = parser.parse_args()
     main(**vars(args))
