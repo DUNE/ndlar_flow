@@ -82,6 +82,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
     # Select the hits for the current event
     beam_triggers = get_all_beam_triggers(filename)
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
+    packets_ev = data["charge/events", "charge/calib_prompt_hits", "charge/packets", evid]
     try:
         finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
     except:
@@ -348,6 +349,44 @@ def create_3d_figure(minerva_data, data, filename, evid):
         hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
     )
     fig.add_traces(prompthits_traces)
+
+    saturated_mask = packets_ev.data["dataword"].flatten() >= 255
+    if np.any(saturated_mask):
+        x = prompthits_ev.data["x"].flatten()[saturated_mask]
+        y = prompthits_ev.data["y"].flatten()[saturated_mask]
+        z = prompthits_ev.data["z"].flatten()[saturated_mask]
+        saturated_traces = go.Scatter3d(
+            x=x,
+            y=y,
+            z=z,
+            marker={
+                "size": 1.75,
+                "symbol": 'x',
+                "color": '#19D3F3',
+                },
+            mode="markers",
+            name="saturated hits",
+        )
+        fig.add_traces(saturated_traces)
+
+    negative_mask = prompthits_ev.data['Q'].flatten()<0.
+    if np.any(negative_mask):
+        x = prompthits_ev.data["x"].flatten()[negative_mask]
+        y = prompthits_ev.data["y"].flatten()[negative_mask]
+        z = prompthits_ev.data["z"].flatten()[negative_mask]
+        negative_traces = go.Scatter3d(
+            x=x,
+            y=y,
+            z=z,
+            marker={
+                "size": 1.75,
+                "symbol": 'x',
+                "color": '#d62728',
+                },
+            mode="markers",
+            name="negative charge hits",
+        )
+        fig.add_traces(negative_traces)
 
     # Plot the final hits
     finalhits_traces = go.Scatter3d(
@@ -1032,6 +1071,7 @@ def plot_2d_charge(data, evid):
 
     # Select the hits for the current event
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
+    packets_ev = data["charge/events", "charge/calib_prompt_hits", "charge/packets", evid]
 
     # Define a colorscale and colorbar for the plots
     colorbar = dict(
@@ -1137,6 +1177,92 @@ def plot_2d_charge(data, evid):
     fig.add_trace(
         dummy_trace, row=2, col=2
     )  # Add the dummy trace to one of the subplots
+
+    saturated_mask = packets_ev.data["dataword"].flatten() >= 255
+    if np.any(saturated_mask):
+        x = prompthits_ev.data["x"].flatten()[saturated_mask]
+        y = prompthits_ev.data["y"].flatten()[saturated_mask]
+        z = prompthits_ev.data["z"].flatten()[saturated_mask]
+
+        saturated_traces_xy = go.Scatter(
+            x=x,
+            y=y,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#19D3F3',
+                },
+            mode="markers",
+        )
+
+        saturated_traces_xz = go.Scatter(
+            x=z,
+            y=x,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#19D3F3',
+                },
+            mode="markers",
+        )
+
+        saturated_traces_yz = go.Scatter(
+            x=z,
+            y=y,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#19D3F3',
+                },
+            mode="markers",
+        )
+
+        fig.add_trace(saturated_traces_xy, row=2, col=2)
+        fig.add_trace(saturated_traces_xz, row=1, col=1)
+        fig.add_trace(saturated_traces_yz, row=2, col=1)
+
+    negative_mask = prompthits_ev.data["Q"].flatten() <0.
+    if np.any(negative_mask):
+        x = prompthits_ev.data["x"].flatten()[negative_mask]
+        y = prompthits_ev.data["y"].flatten()[negative_mask]
+        z = prompthits_ev.data["z"].flatten()[negative_mask]
+
+        negative_traces_xy = go.Scatter(
+            x=x,
+            y=y,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#d62728',
+                },
+            mode="markers",
+        )
+
+        negative_traces_xz = go.Scatter(
+            x=z,
+            y=x,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#d62728',
+                },
+            mode="markers",
+        )
+
+        negative_traces_yz = go.Scatter(
+            x=z,
+            y=y,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#d62728',
+                },
+            mode="markers",
+        )
+
+        fig.add_trace(negative_traces_xy, row=2, col=2)
+        fig.add_trace(negative_traces_xz, row=1, col=1)
+        fig.add_trace(negative_traces_yz, row=2, col=1)
 
     # Add x and y axis labels to the subplots
     fig.update_xaxes(
