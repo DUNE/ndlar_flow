@@ -509,8 +509,8 @@ class LArEventDisplay:
 
         # Get event general information
         event = self.events[ev_idx]
-        event_datetime = datetime.utcfromtimestamp(
-                event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
+        # Use event unix TS in seconds for hand-scanning campaign
+        event_datetime = str(event['unix_ts']) #datetime.utcfromtimestamp(event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
         if not self.is_mc:
             try:
                 event_run_info = self.all_subruns_db[(self.all_subruns_db['start_time_unix'] <= event['unix_ts']) &
@@ -551,12 +551,17 @@ class LArEventDisplay:
         #print("External trigger information:", exttrigs['iogroup'], exttrigs['ts'], exttrigs['ts_raw'])
 
         # Prepare color map for charge
-        min_charge = min(hits['Q'])
-        if max(hits['Q']) > min_charge:
-            max_charge = max(hits['Q'])
-        else: 
-            max_charge = min_charge + 1
-        charge_norm = mpl.colors.Normalize(vmin=min_charge,vmax=max_charge)
+        if len(hits) > 0:
+            min_charge = min(hits['Q'])
+            if max(hits['Q']) > min_charge:
+                max_charge = max(hits['Q'])
+            else: 
+                max_charge = min_charge + 1
+        else:
+            min_charge = 0
+            max_charge = 1
+        # Set charge norm to hardcoded values for hand-scanning campaign
+        charge_norm = mpl.colors.Normalize(vmin=-30,vmax=120) #mpl.colors.Normalize(vmin=min_charge,vmax=max_charge)
         cmap = cmr.get_sub_cmap('cmr.torch_r', 0.13,0.95)
         cmap_zero = cmr.get_sub_cmap('cmr.torch_r', 0.03, 0.95)
         mcharge = plt.cm.ScalarMappable(norm=charge_norm, cmap=cmap)

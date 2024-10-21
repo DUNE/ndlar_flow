@@ -30,7 +30,7 @@ evd = None
 # Function to initialize the global LArEventDisplay object
 def init_evd(filedir, filename, show_light, beam_only):
     global evd
-    evd = LArEventDisplay(filedir=filedir, filename=filename, nhits_min=1, ntrigs=0, show_light=show_light, show_colorbars=True, beam_only=beam_only)
+    evd = LArEventDisplay(filedir=filedir, filename=filename, nhits_min=0, ntrigs=0, show_light=show_light, show_colorbars=True, beam_only=beam_only)
 
 
 # Function to process a single event
@@ -41,7 +41,7 @@ def process_event(ev_id):
     # Save to in-memory buffer 
     buf = io.BytesIO()
     #output_file = output_dir + f.split('.hdf5')[0] + '_event_' + str(ev_id) + '.png'
-    plt.savefig(buf, bbox_inches='tight')
+    plt.savefig(buf, bbox_inches='tight', dpi=320)
     #plt.close()
     buf.seek(0) # moves file to beginning of buffer
 
@@ -52,7 +52,7 @@ def process_event(ev_id):
 
     # Save image with fixed image to buffer
     buf = io.BytesIO()
-    background.save(buf, 'PNG', quality=100)
+    background.save(buf, 'PNG', compress_level=0, optimize=True)
     buf.seek(0)
 
     # Close all figures and clear memory
@@ -91,15 +91,28 @@ def main(file, output_dir=None, beam_only=False, show_light=False, n_evts=None):
     event_ids = evd.events['id']
 
     # Go through all events in file
-    if n_evts:
+    if n_evts and n_evts < len(event_ids):
         num_events = n_evts
+        event_ids = event_ids[:num_events]
     else:
         num_events = len(event_ids)
     print('Number of events to plot: ', num_events)
 
     # Create PNGs, then store to intermediary PDF
     # Process events in small batches to avoid memory issues
-    batch_size = 8
+    total_cpus = os.cpu_count()
+    min_cpus = 1
+    max_cpus = 32
+    if total_cpus == 1:
+        cpus_to_use = 1
+    else:
+        cpus_to_use = int(total_cpus/8)
+        if cpus_to_use > max_cpus:
+            cpus_to_use = max_cpus
+    evts_per_cpu = int(num_events/cpus_to_use)
+    if evts_per_cpu < 1:
+        cpus_to_use = num_events
+    batch_size = cpus_to_use
     batch_id = 0
     batch_pdfs = []
 
@@ -113,14 +126,14 @@ def main(file, output_dir=None, beam_only=False, show_light=False, n_evts=None):
         args = [ev_id for ev_id in batch_ids]
 
         # Create a pool of workers to process events in parallel
-        with Pool(initializer=init_evd, initargs=(d, f, show_light, beam_only), processes=4) as pool:
+        with Pool(initializer=init_evd, initargs=(d, f, show_light, beam_only), processes=cpus_to_use) as pool:
             output_imgs = pool.map(process_event, args)
 
         # Combine all PNGs into a single PDF
         images = [Image.open(buf) for buf in output_imgs]
         pdf_path = output_dir + f.split('.hdf5')[0] + '_EVENT_DISPLAYS'+pdf_file_modifiers+'_BATCH'+str(batch_id)+'.pdf'
         batch_pdfs.append(pdf_path)
-        images[0].save(pdf_path, "PDF" ,resolution=100.0, save_all=True, append_images=images[1:])
+        images[0].save(pdf_path, "PDF" ,resolution=320.0, save_all=True, append_images=images[1:])
 
     # Merge PDFs
     output_file = output_dir + f.split('.hdf5')[0] + '_EVENT_DISPLAYS'+pdf_file_modifiers+'.pdf'
