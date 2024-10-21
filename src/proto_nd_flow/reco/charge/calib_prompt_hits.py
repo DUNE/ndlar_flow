@@ -69,7 +69,7 @@ class CalibHitBuilder(H5FlowStage):
     #: ASIC ADC configuration lookup table
     configuration = defaultdict(lambda: dict(
         vref_mv=1568,
-        vcm_mv=478
+        vcm_mv=478.1
     ))
 
     #: pixel pedestal value
