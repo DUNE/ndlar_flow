@@ -45,6 +45,7 @@ app.layout = html.Div(
         dcc.Store(id="filename", storage_type="local", data=""),
         dcc.Store(id="minerva-filename", storage_type="local", data=""),
         dcc.Store(id="event-id", data=0),
+        dcc.Store(id="event-nhits", data=0),
         dcc.Store(id="minerva-event-id", data=0),
         dcc.Store(id="data-length", data=0),
         dcc.Store(id="minerva-data-length", data=0),
@@ -105,7 +106,8 @@ app.layout = html.Div(
                         html.Div(
                             [
                                 html.Div(id="evid-div", style={"textAlign": "center", "display": "inline-block", "margin-right": "10px"}),
-                                html.Div(children="", id="event-time-div", style={"display": "inline-block"}),
+                                html.Div(children="", id="event-time-div", style={"display": "inline-block", "margin-right": "10px"}),
+                                html.Div(children="", id="event-nhits-div", style={"display": "inline-block"}),
                             ]
                         ),
                     ],
@@ -345,6 +347,14 @@ def update_time(_, time):
     """Update the time display"""
     return f"Event time: {time}"
 
+@app.callback(
+    Output("event-nhits-div", "children"),
+    Input("3d-graph", "figure"),
+    State("event-nhits", "data"),
+)
+def update_nhits(_, nhits):
+    """Update the nhits display"""
+    return f"Number of hits: {nhits}"
 
 # Callback to display the event
 # =============================
@@ -352,6 +362,7 @@ def update_time(_, time):
     Output("3d-graph", "figure"),
     Output("sim-version", "data"),
     Output("event-time", "data"),
+    Output("event-nhits", "data"),
     Input("filename", "data"),
     Input("minerva-filename", "data"),
     Input("event-id", "data"),
@@ -369,12 +380,14 @@ def update_graph(filename, minerva_filename, evid):
         event_datetime = datetime.utcfromtimestamp(
             data["charge/events", evid]["unix_ts"][0]
         ).strftime("%Y-%m-%d %H:%M:%S")
+        n_hits = data["charge/events",evid]["nhit"][0]
     else:
         raise PreventUpdate
     return (
         graph,
         sim_version,
         event_datetime,
+        n_hits
     )  # TODO: move to utils
 
 
