@@ -340,7 +340,7 @@ def update_div(evid, max_value):
 
 @app.callback(
     Output("event-time-div", "children"),
-    Input("event-id", "data"),
+    Input("3d-graph", "figure"),
     State("event-time", "data"),
 )
 def update_time(_, time):
