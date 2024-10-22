@@ -1087,6 +1087,8 @@ def plot_2d_charge(data, evid):
         x=prompthits_ev.data["x"].flatten(),
         y=prompthits_ev.data["y"].flatten(),
         mode="markers",
+        legendgroup= "prompt_2d",
+        name="prompt hits",
         marker=dict(
             size=2,
             opacity=0.9,
@@ -1101,6 +1103,8 @@ def plot_2d_charge(data, evid):
         x=prompthits_ev.data["z"].flatten(),
         y=prompthits_ev.data["x"].flatten(),
         mode="markers",
+        legendgroup="prompt_2d",
+        showlegend=False,
         marker=dict(
             size=2,
             opacity=0.9,
@@ -1115,6 +1119,8 @@ def plot_2d_charge(data, evid):
         x=prompthits_ev.data["z"].flatten(),
         y=prompthits_ev.data["y"].flatten(),
         mode="markers",
+        legendgroup= "prompt_2d",
+        showlegend=False,
         marker=dict(
             size=2,
             opacity=0.9,
@@ -1145,12 +1151,14 @@ def plot_2d_charge(data, evid):
         y=[-63.931, 63.931],
         mode="lines",
         line=dict(color="white", width=1),
+        showlegend=False,
     )
     cathode_line_2 = go.Scatter(
         x=[63.931/2, 63.931/2],
         y=[-63.931, 63.931],
         mode="lines",
         line=dict(color="white", width=1),
+        showlegend=False,
     )
 
     cathode_line_3 = go.Scatter(
@@ -1158,12 +1166,14 @@ def plot_2d_charge(data, evid):
         y=[-63.931/2, -63.931/2],
         mode="lines",
         line=dict(color="white", width=1),
+        showlegend=False,
     )
     cathode_line_4 = go.Scatter(
         x=[-63.931, 63.931],
         y=[63.931/2, 63.931/2],
         mode="lines",
         line=dict(color="white", width=1),
+        showlegend=False,
     )
 
     # Add traces to the subplots
@@ -1187,6 +1197,8 @@ def plot_2d_charge(data, evid):
         saturated_traces_xy = go.Scatter(
             x=x,
             y=y,
+            legendgroup= "saturated_2d",
+            name="saturated hits",
             marker={
                 "size": 4.,
                 "symbol": 'x',
@@ -1198,6 +1210,8 @@ def plot_2d_charge(data, evid):
         saturated_traces_xz = go.Scatter(
             x=z,
             y=x,
+            legendgroup= "saturated_2d",
+            showlegend=False,
             marker={
                 "size": 4.,
                 "symbol": 'x',
@@ -1209,6 +1223,8 @@ def plot_2d_charge(data, evid):
         saturated_traces_yz = go.Scatter(
             x=z,
             y=y,
+            legendgroup= "saturated_2d",
+            showlegend=False,
             marker={
                 "size": 4.,
                 "symbol": 'x',
@@ -1230,6 +1246,8 @@ def plot_2d_charge(data, evid):
         negative_traces_xy = go.Scatter(
             x=x,
             y=y,
+            legendgroup= "negative_2d",
+            name="negative hits",
             marker={
                 "size": 4.,
                 "symbol": 'x',
@@ -1241,6 +1259,8 @@ def plot_2d_charge(data, evid):
         negative_traces_xz = go.Scatter(
             x=z,
             y=x,
+            legendgroup= "negative_2d",
+            showlegend=False,
             marker={
                 "size": 4.,
                 "symbol": 'x',
@@ -1252,6 +1272,8 @@ def plot_2d_charge(data, evid):
         negative_traces_yz = go.Scatter(
             x=z,
             y=y,
+            legendgroup= "negative_2d",
+            showlegend=False,
             marker={
                 "size": 4.,
                 "symbol": 'x',
@@ -1326,7 +1348,8 @@ def plot_2d_charge(data, evid):
     )
 
     fig.update_layout(
-        showlegend=False,
+        showlegend=True,
+        legend=dict(orientation="h"),
         plot_bgcolor=bg_color,
         autosize=False,
         width=800,
