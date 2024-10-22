@@ -338,8 +338,8 @@ def create_3d_figure(minerva_data, data, filename, evid):
                 "xanchor": "left",
                 "x": 0,
             },
-            "cmin": 0.,
-            "cmax": 5.,
+            "cmin": -1.,
+            "cmax": 4.,
         },
         name="prompt hits",
         mode="markers",
@@ -1082,6 +1082,9 @@ def plot_2d_charge(data, evid):
         showticklabels=True,
     )
 
+    prompt_2d_cmin = -1
+    prompt_2d_cmax = 8
+
     # Add 2D projections of the prompt hits
     prompthits_traces_xy = go.Scatter(
         x=prompthits_ev.data["x"].flatten(),
@@ -1090,6 +1093,8 @@ def plot_2d_charge(data, evid):
         legendgroup= "prompt_2d",
         name="prompt hits",
         marker=dict(
+            cmin=prompt_2d_cmin,
+            cmax=prompt_2d_cmax,
             size=2,
             opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
@@ -1106,6 +1111,8 @@ def plot_2d_charge(data, evid):
         legendgroup="prompt_2d",
         showlegend=False,
         marker=dict(
+            cmin=prompt_2d_cmin,
+            cmax=prompt_2d_cmax,
             size=2,
             opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
@@ -1122,6 +1129,8 @@ def plot_2d_charge(data, evid):
         legendgroup= "prompt_2d",
         showlegend=False,
         marker=dict(
+            cmin=prompt_2d_cmin,
+            cmax=prompt_2d_cmax,
             size=2,
             opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
@@ -1137,6 +1146,8 @@ def plot_2d_charge(data, evid):
         y=[None],
         mode="markers",
         marker=dict(
+            cmin=prompt_2d_cmin,
+            cmax=prompt_2d_cmax,
             size=2,
             opacity=0.7,
             colorscale=colorscale_charge,
