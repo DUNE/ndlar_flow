@@ -1158,14 +1158,14 @@ def plot_2d_charge(data, evid):
     )
 
     cathode_line_1 = go.Scatter(
-        x=[-63.931/2, -63.931/2],
+        x=[-(63.931+3.069)/2, -(63.931+3.069)/2],
         y=[-63.931, 63.931],
         mode="lines",
         line=dict(color="white", width=1),
         showlegend=False,
     )
     cathode_line_2 = go.Scatter(
-        x=[63.931/2, 63.931/2],
+        x=[(63.931+3.069)/2, (63.931+3.069)/2],
         y=[-63.931, 63.931],
         mode="lines",
         line=dict(color="white", width=1),
@@ -1174,14 +1174,14 @@ def plot_2d_charge(data, evid):
 
     cathode_line_3 = go.Scatter(
         x=[-63.931, 63.931],
-        y=[-63.931/2, -63.931/2],
+        y=[-(63.931+3.069)/2, -(63.931+3.069)/2],
         mode="lines",
         line=dict(color="white", width=1),
         showlegend=False,
     )
     cathode_line_4 = go.Scatter(
         x=[-63.931, 63.931],
-        y=[63.931/2, 63.931/2],
+        y=[(63.931+3.069)/2, (63.931+3.069)/2],
         mode="lines",
         line=dict(color="white", width=1),
         showlegend=False,
