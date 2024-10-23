@@ -9,10 +9,10 @@ params:
   n_adcs: 4
   n_channels: 64
   sn_table:
-   - '0x0f224192'  # TPC A, Side 0, Slot 8
-   - '0x0cd13dd6'  # TPC A, Side 1, Slot 12
-   - '0x0cd94149'  # TPC B, Side 0, Slot 16
-   - '0x0cd9414a'  # TPC B, Side 1, Slot 19
+   - '0x0e7550ee'  # TPC A, Side 0, Slot 19
+   - '0x0cd13dd6'  # TPC A, Side 1, Slot 16
+   - '0x0cd94149'  # TPC B, Side 0, Slot 12
+   - '0x0cd9414a'  # TPC B, Side 1, Slot 8
   sync_channel: 0
   sync_threshold: 40000
   batch_size: 12
