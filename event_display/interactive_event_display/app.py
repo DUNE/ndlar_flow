@@ -50,6 +50,7 @@ app.layout = html.Div(
         dcc.Store(id="data-length", data=0),
         dcc.Store(id="minerva-data-length", data=0),
         dcc.Store(id="event-time", data=0),
+        dcc.Store(id="unix-time", data=0),
         dcc.Store(id="sim-version", data=0),
         # Header
         html.Div(
@@ -107,6 +108,7 @@ app.layout = html.Div(
                             [
                                 html.Div(id="evid-div", style={"textAlign": "center", "display": "inline-block", "margin-right": "10px"}),
                                 html.Div(children="", id="event-time-div", style={"display": "inline-block", "margin-right": "10px"}),
+                                html.Div(children="", id="unix-time-div", style={"display": "inline-block", "margin-right": "10px"}),
                                 html.Div(children="", id="event-nhits-div", style={"display": "inline-block"}),
                             ]
                         ),
@@ -345,7 +347,16 @@ def update_div(evid, max_value):
 )
 def update_time(_, time):
     """Update the time display"""
-    return f"Event time: {time}"
+    return f"Event time (UTC): {time}"
+
+@app.callback(
+    Output("unix-time-div", "children"),
+    Input("3d-graph", "figure"),
+    State("unix-time", "data"),
+)
+def update_unix_time(_, unix_time):
+    """Update the time display"""
+    return f"unix time: {unix_time}"
 
 @app.callback(
     Output("event-nhits-div", "children"),
@@ -362,6 +373,7 @@ def update_nhits(_, nhits):
     Output("3d-graph", "figure"),
     Output("sim-version", "data"),
     Output("event-time", "data"),
+    Output("unix-time", "data"),
     Output("event-nhits", "data"),
     Input("filename", "data"),
     Input("minerva-filename", "data"),
@@ -380,6 +392,7 @@ def update_graph(filename, minerva_filename, evid):
         event_datetime = datetime.utcfromtimestamp(
             data["charge/events", evid]["unix_ts"][0]
         ).strftime("%Y-%m-%d %H:%M:%S")
+        event_unix_time = data["charge/events", evid]["unix_ts"][0]
         n_hits = data["charge/events",evid]["nhit"][0]
     else:
         raise PreventUpdate
@@ -387,6 +400,7 @@ def update_graph(filename, minerva_filename, evid):
         graph,
         sim_version,
         event_datetime,
+        event_unix_time,
         n_hits
     )  # TODO: move to utils
 

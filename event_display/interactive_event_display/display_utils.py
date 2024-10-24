@@ -362,7 +362,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
             marker={
                 "size": 1.75,
                 "symbol": 'x',
-                "color": '#19D3F3',
+                "color": '17becf', #'#19D3F3',
                 },
             mode="markers",
             name="saturated hits",
@@ -381,7 +381,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
             marker={
                 "size": 1.75,
                 "symbol": 'x',
-                "color": '#d62728',
+                "color": '#2ca02c', #'#d62728',
                 },
             mode="markers",
             name="negative charge hits",
@@ -1210,10 +1210,11 @@ def plot_2d_charge(data, evid):
             y=y,
             legendgroup= "saturated_2d",
             name="saturated hits",
+            showlegend=True,
             marker={
                 "size": 4.,
                 "symbol": 'x',
-                "color": '#19D3F3',
+                "color": '#17becf', #'#19D3F3',
                 },
             mode="markers",
         )
@@ -1222,11 +1223,11 @@ def plot_2d_charge(data, evid):
             x=z,
             y=x,
             legendgroup= "saturated_2d",
-            showlegend=False,
+            showlegend=True,
             marker={
                 "size": 4.,
                 "symbol": 'x',
-                "color": '#19D3F3',
+                "color": '#17becf', #'#19D3F3',
                 },
             mode="markers",
         )
@@ -1235,11 +1236,11 @@ def plot_2d_charge(data, evid):
             x=z,
             y=y,
             legendgroup= "saturated_2d",
-            showlegend=False,
+            showlegend=True,
             marker={
                 "size": 4.,
                 "symbol": 'x',
-                "color": '#19D3F3',
+                "color": '#17becf', #'#19D3F3',
                 },
             mode="markers",
         )
@@ -1259,10 +1260,11 @@ def plot_2d_charge(data, evid):
             y=y,
             legendgroup= "negative_2d",
             name="negative hits",
+            showlegend=True,
             marker={
                 "size": 4.,
                 "symbol": 'x',
-                "color": '#d62728',
+                "color": '#2ca02c', #'#d62728',
                 },
             mode="markers",
         )
@@ -1271,11 +1273,11 @@ def plot_2d_charge(data, evid):
             x=z,
             y=x,
             legendgroup= "negative_2d",
-            showlegend=False,
+            showlegend=True,
             marker={
                 "size": 4.,
                 "symbol": 'x',
-                "color": '#d62728',
+                "color": '#2ca02c',# '#d62728',
                 },
             mode="markers",
         )
@@ -1284,11 +1286,11 @@ def plot_2d_charge(data, evid):
             x=z,
             y=y,
             legendgroup= "negative_2d",
-            showlegend=False,
+            showlegend=True,
             marker={
                 "size": 4.,
                 "symbol": 'x',
-                "color": '#d62728',
+                "color": '#2ca02c', #'#d62728',
                 },
             mode="markers",
         )
