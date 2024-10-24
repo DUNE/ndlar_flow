@@ -1083,7 +1083,7 @@ def plot_2d_charge(data, evid):
     )
 
     prompt_2d_cmin = -1
-    prompt_2d_cmax = 8
+    prompt_2d_cmax = 4
 
     # Add 2D projections of the prompt hits
     prompthits_traces_xy = go.Scatter(
