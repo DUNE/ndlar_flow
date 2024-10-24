@@ -104,13 +104,15 @@ def create_3d_figure(minerva_data, data, filename, evid):
             prompthits_segs = data[
                 "charge/events", "charge/calib_prompt_hits", "charge/packets", evid
             ]
-            sim_version = "data"
+            sim_version = "FSD"
             print("Found data")
         except:
             print("Cannot process this file type")
             prompthits_segs = None
     event = data["charge/events", evid]
-    if evid in beam_triggers and sim_version == "data":
+    if (minerva_data is not None
+        and evid in beam_triggers
+        and sim_version == "FSD"):
         # trigger = beam_triggers.index(evid)
         minerva_times = (
             minerva_data["minerva"]["ev_gps_time_sec"].array(library="np")
@@ -208,21 +210,21 @@ def create_3d_figure(minerva_data, data, filename, evid):
     fig.add_traces(cathodes)
     fig.add_traces(light_detectors)
 
-    # Draw an arrow for the beam direction
-    fig.add_traces(
-        go.Cone(
-            x=[10],
-            y=[20],
-            z=[-75],
-            u=[0],
-            v=[0],
-            w=[1],
-            showscale=False,  # to hide the colorbar
-            sizemode="absolute",
-            sizeref=10,
-            anchor="tail",
-        )
-    )
+    # # Draw an arrow for the beam direction
+    # fig.add_traces(
+    #     go.Cone(
+    #         x=[10],
+    #         y=[20],
+    #         z=[-75],
+    #         u=[0],
+    #         v=[0],
+    #         w=[1],
+    #         showscale=False,  # to hide the colorbar
+    #         sizemode="absolute",
+    #         sizeref=10,
+    #         anchor="tail",
+    #     )
+    # )
 
     fig.update_layout(
         font=dict(size=14),
@@ -375,7 +377,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
     )
     fig.add_traces(finalhits_traces)
 
-    if prompthits_segs is not None and sim_version != "data":
+    if prompthits_segs is not None and sim_version != "FSD":
         segs_traces = plot_segs(
             prompthits_segs[0, :, 0, 0],
             sim_version=sim_version,
@@ -421,6 +423,11 @@ def draw_tpc(sim_version="minirun5"):
         anode_xs = anode_xs[1:2]
         anode_ys = anode_ys
         anode_zs = anode_zs[0:2] + 33
+    if sim_version == "FSD":
+        detector_center = (0, 0, 0)
+        anode_xs = np.array([-50, 50])
+        anode_ys = np.array([-150, 150])
+        anode_zs = np.array([-50, 50])
 
     center = go.Scatter3d(
         x=[detector_center[0]],
@@ -1138,7 +1145,7 @@ def plot_2d_charge(data, evid):
         row=1,
         col=1,
         showgrid=False,
-        range=[-60, 60],
+        range=[-50, 50],
         zeroline=True,
         constrain="domain",
     )
@@ -1147,7 +1154,7 @@ def plot_2d_charge(data, evid):
         row=1,
         col=1,
         showgrid=False,
-        range=[-60, 60],
+        range=[-50, 50],
         zeroline=True,
         scaleanchor="x1",
         scaleratio=1,
@@ -1158,7 +1165,7 @@ def plot_2d_charge(data, evid):
         row=2,
         col=1,
         showgrid=False,
-        range=[-60, 60],
+        range=[-50, 50],
         zeroline=True,
         constrain="domain",
     )
@@ -1167,7 +1174,7 @@ def plot_2d_charge(data, evid):
         row=2,
         col=1,
         showgrid=False,
-        range=[-60, 60],
+        range=[-150, 150],
         zeroline=False,
         scaleanchor="x2",
         scaleratio=1,
@@ -1178,7 +1185,7 @@ def plot_2d_charge(data, evid):
         row=2,
         col=2,
         showgrid=False,
-        range=[-60, 60],
+        range=[-50, 50],
         zeroline=True,
         constrain="domain",
     )
@@ -1187,7 +1194,7 @@ def plot_2d_charge(data, evid):
         row=2,
         col=2,
         showgrid=False,
-        range=[-60, 60],
+        range=[-150, 150],
         zeroline=False,
         scaleanchor="x3",
         scaleratio=1,
