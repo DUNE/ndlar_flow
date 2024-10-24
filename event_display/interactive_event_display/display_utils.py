@@ -82,6 +82,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
     # Select the hits for the current event
     beam_triggers = get_all_beam_triggers(filename)
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
+    packets_ev = data["charge/events", "charge/calib_prompt_hits", "charge/packets", evid]
     try:
         finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
     except:
@@ -337,6 +338,8 @@ def create_3d_figure(minerva_data, data, filename, evid):
                 "xanchor": "left",
                 "x": 0,
             },
+            "cmin": -1.,
+            "cmax": 4.,
         },
         name="prompt hits",
         mode="markers",
@@ -346,6 +349,44 @@ def create_3d_figure(minerva_data, data, filename, evid):
         hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
     )
     fig.add_traces(prompthits_traces)
+
+    saturated_mask = packets_ev.data["dataword"].flatten() >= 255
+    if np.any(saturated_mask):
+        x = prompthits_ev.data["x"].flatten()[saturated_mask]
+        y = prompthits_ev.data["y"].flatten()[saturated_mask]
+        z = prompthits_ev.data["z"].flatten()[saturated_mask]
+        saturated_traces = go.Scatter3d(
+            x=x,
+            y=y,
+            z=z,
+            marker={
+                "size": 1.75,
+                "symbol": 'x',
+                "color": '17becf', #'#19D3F3',
+                },
+            mode="markers",
+            name="saturated hits",
+        )
+        fig.add_traces(saturated_traces)
+
+    negative_mask = prompthits_ev.data['Q'].flatten()<0.
+    if np.any(negative_mask):
+        x = prompthits_ev.data["x"].flatten()[negative_mask]
+        y = prompthits_ev.data["y"].flatten()[negative_mask]
+        z = prompthits_ev.data["z"].flatten()[negative_mask]
+        negative_traces = go.Scatter3d(
+            x=x,
+            y=y,
+            z=z,
+            marker={
+                "size": 1.75,
+                "symbol": 'x',
+                "color": '#2ca02c', #'#d62728',
+                },
+            mode="markers",
+            name="negative charge hits",
+        )
+        fig.add_traces(negative_traces)
 
     # Plot the final hits
     finalhits_traces = go.Scatter3d(
@@ -358,7 +399,7 @@ def create_3d_figure(minerva_data, data, filename, evid):
             "opacity": 0.9,
             "colorscale": colorscale_charge,
             "colorbar": {
-                "title": "Hit energy [MeV]",
+                "title": "Hit E [MeV]",
                 "titlefont": {"size": 12},
                 "tickfont": {"size": 10},
                 "thickness": 15,
@@ -366,6 +407,8 @@ def create_3d_figure(minerva_data, data, filename, evid):
                 "xanchor": "left",
                 "x": 0,
             },
+            "cmin": 0.,
+            "cmax": 5.,
         },
         name="final hits",
         mode="markers",
@@ -1028,6 +1071,7 @@ def plot_2d_charge(data, evid):
 
     # Select the hits for the current event
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
+    packets_ev = data["charge/events", "charge/calib_prompt_hits", "charge/packets", evid]
 
     # Define a colorscale and colorbar for the plots
     colorbar = dict(
@@ -1038,12 +1082,19 @@ def plot_2d_charge(data, evid):
         showticklabels=True,
     )
 
+    prompt_2d_cmin = -1
+    prompt_2d_cmax = 4
+
     # Add 2D projections of the prompt hits
     prompthits_traces_xy = go.Scatter(
         x=prompthits_ev.data["x"].flatten(),
         y=prompthits_ev.data["y"].flatten(),
         mode="markers",
+        legendgroup= "prompt_2d",
+        name="prompt hits",
         marker=dict(
+            cmin=prompt_2d_cmin,
+            cmax=prompt_2d_cmax,
             size=2,
             opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
@@ -1057,7 +1108,11 @@ def plot_2d_charge(data, evid):
         x=prompthits_ev.data["z"].flatten(),
         y=prompthits_ev.data["x"].flatten(),
         mode="markers",
+        legendgroup="prompt_2d",
+        showlegend=False,
         marker=dict(
+            cmin=prompt_2d_cmin,
+            cmax=prompt_2d_cmax,
             size=2,
             opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
@@ -1071,7 +1126,11 @@ def plot_2d_charge(data, evid):
         x=prompthits_ev.data["z"].flatten(),
         y=prompthits_ev.data["y"].flatten(),
         mode="markers",
+        legendgroup= "prompt_2d",
+        showlegend=False,
         marker=dict(
+            cmin=prompt_2d_cmin,
+            cmax=prompt_2d_cmax,
             size=2,
             opacity=0.9,
             color=prompthits_ev.data["E"].flatten(),
@@ -1087,6 +1146,8 @@ def plot_2d_charge(data, evid):
         y=[None],
         mode="markers",
         marker=dict(
+            cmin=prompt_2d_cmin,
+            cmax=prompt_2d_cmax,
             size=2,
             opacity=0.7,
             colorscale=colorscale_charge,
@@ -1097,29 +1158,33 @@ def plot_2d_charge(data, evid):
     )
 
     cathode_line_1 = go.Scatter(
-        x=[-63.931/2, -63.931/2],
+        x=[-(63.931+3.069)/2, -(63.931+3.069)/2],
         y=[-63.931, 63.931],
         mode="lines",
         line=dict(color="white", width=1),
+        showlegend=False,
     )
     cathode_line_2 = go.Scatter(
-        x=[63.931/2, 63.931/2],
+        x=[(63.931+3.069)/2, (63.931+3.069)/2],
         y=[-63.931, 63.931],
         mode="lines",
         line=dict(color="white", width=1),
+        showlegend=False,
     )
 
     cathode_line_3 = go.Scatter(
         x=[-63.931, 63.931],
-        y=[-63.931/2, -63.931/2],
+        y=[-(63.931+3.069)/2, -(63.931+3.069)/2],
         mode="lines",
         line=dict(color="white", width=1),
+        showlegend=False,
     )
     cathode_line_4 = go.Scatter(
         x=[-63.931, 63.931],
-        y=[63.931/2, 63.931/2],
+        y=[(63.931+3.069)/2, (63.931+3.069)/2],
         mode="lines",
         line=dict(color="white", width=1),
+        showlegend=False,
     )
 
     # Add traces to the subplots
@@ -1133,6 +1198,106 @@ def plot_2d_charge(data, evid):
     fig.add_trace(
         dummy_trace, row=2, col=2
     )  # Add the dummy trace to one of the subplots
+
+    saturated_mask = packets_ev.data["dataword"].flatten() >= 255
+    if np.any(saturated_mask):
+        x = prompthits_ev.data["x"].flatten()[saturated_mask]
+        y = prompthits_ev.data["y"].flatten()[saturated_mask]
+        z = prompthits_ev.data["z"].flatten()[saturated_mask]
+
+        saturated_traces_xy = go.Scatter(
+            x=x,
+            y=y,
+            legendgroup= "saturated_2d",
+            name="saturated hits",
+            showlegend=True,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#17becf', #'#19D3F3',
+                },
+            mode="markers",
+        )
+
+        saturated_traces_xz = go.Scatter(
+            x=z,
+            y=x,
+            legendgroup= "saturated_2d",
+            showlegend=True,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#17becf', #'#19D3F3',
+                },
+            mode="markers",
+        )
+
+        saturated_traces_yz = go.Scatter(
+            x=z,
+            y=y,
+            legendgroup= "saturated_2d",
+            showlegend=True,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#17becf', #'#19D3F3',
+                },
+            mode="markers",
+        )
+
+        fig.add_trace(saturated_traces_xy, row=2, col=2)
+        fig.add_trace(saturated_traces_xz, row=1, col=1)
+        fig.add_trace(saturated_traces_yz, row=2, col=1)
+
+    negative_mask = prompthits_ev.data["Q"].flatten() <0.
+    if np.any(negative_mask):
+        x = prompthits_ev.data["x"].flatten()[negative_mask]
+        y = prompthits_ev.data["y"].flatten()[negative_mask]
+        z = prompthits_ev.data["z"].flatten()[negative_mask]
+
+        negative_traces_xy = go.Scatter(
+            x=x,
+            y=y,
+            legendgroup= "negative_2d",
+            name="negative hits",
+            showlegend=True,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#2ca02c', #'#d62728',
+                },
+            mode="markers",
+        )
+
+        negative_traces_xz = go.Scatter(
+            x=z,
+            y=x,
+            legendgroup= "negative_2d",
+            showlegend=True,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#2ca02c',# '#d62728',
+                },
+            mode="markers",
+        )
+
+        negative_traces_yz = go.Scatter(
+            x=z,
+            y=y,
+            legendgroup= "negative_2d",
+            showlegend=True,
+            marker={
+                "size": 4.,
+                "symbol": 'x',
+                "color": '#2ca02c', #'#d62728',
+                },
+            mode="markers",
+        )
+
+        fig.add_trace(negative_traces_xy, row=2, col=2)
+        fig.add_trace(negative_traces_xz, row=1, col=1)
+        fig.add_trace(negative_traces_yz, row=2, col=1)
 
     # Add x and y axis labels to the subplots
     fig.update_xaxes(
@@ -1196,7 +1361,8 @@ def plot_2d_charge(data, evid):
     )
 
     fig.update_layout(
-        showlegend=False,
+        showlegend=True,
+        legend=dict(orientation="h"),
         plot_bgcolor=bg_color,
         autosize=False,
         width=800,
