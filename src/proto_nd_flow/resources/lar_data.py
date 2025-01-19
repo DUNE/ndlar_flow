@@ -290,7 +290,7 @@ class LArData(H5FlowResource):
 
             References:
              - https://lar.bnl.gov/properties/trans.html (summary)
-             - https://doi.org/10.1016/j.nima.2016.01.073 (parameterization)
+             - https://doi.org/10.1016/j.nima.2016.01.094(parameterization)
 
             :param e: electric field in kV/mm
 
