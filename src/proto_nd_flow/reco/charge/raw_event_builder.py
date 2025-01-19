@@ -487,7 +487,8 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         # Only used if off-beam events are built later with unused packets
         used_mask = np.zeros( len(unix_ts) ) < -1
         for i, start_idx in enumerate(beam_trigger_idxs):
-            this_trig_time = ts[start_idx]-self.extended_event_dt # FIXME might need to consider roll-over 
+            this_trig_time = ts[start_idx]-self.extended_event_dt
+            this_trig_time += self.rollover_ticks if this_trig_time < 0 else 0 # Considered Roll-Over Issue
             start_times.append(this_trig_time)
             # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
             hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & trig_mask)
