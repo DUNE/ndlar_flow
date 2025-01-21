@@ -8,9 +8,9 @@ flow:
 
 
 resources:
-  - !include yamls/ndlar_flow/resources/RunData.yaml
+  - !include yamls/ndlar_flow/resources/RunDataMC.yaml
   - !include yamls/proto_nd_flow/resources/LArData.yaml
-  - !include yamls/ndlar_flow/resources/Geometry.yaml
+  - !include yamls/ndlar_flow/resources/GeometryMC.yaml
 
 
 raw_events:
@@ -21,5 +21,5 @@ raw_events:
     chunk_size: 128
 
 calib_hit_builder:
-  !include yamls/proto_nd_flow/reco/charge/CalibHitBuilder.yaml
+  !include yamls/proto_nd_flow/reco/charge/CalibHitBuilderMC.yaml
 

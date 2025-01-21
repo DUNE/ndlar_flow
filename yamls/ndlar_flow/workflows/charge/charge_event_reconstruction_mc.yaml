@@ -8,8 +8,8 @@ flow:
 
 
 resources:
-  - !include yamls/ndlar_flow/resources/RunData.yaml
-  - !include yamls/ndlar_flow/resources/Geometry.yaml
+  - !include yamls/ndlar_flow/resources/RunDataMC.yaml
+  - !include yamls/ndlar_flow/resources/GeometryMC.yaml
 
 
 raw_events:
@@ -21,7 +21,7 @@ raw_events:
 
 
 timestamp_corrector:
-  !include yamls/proto_nd_flow/reco/charge/TimestampCorrector.yaml
+  !include yamls/proto_nd_flow/reco/charge/TimestampCorrectorMC.yaml
 
 
 ext_trig_finder:
