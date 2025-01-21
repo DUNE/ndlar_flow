@@ -409,7 +409,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     '''
     default_window = 1820 * 1.1
     default_rollover_ticks = 1E7
-    default_shifted_event_dt = 70 #This is for accounting the fact that the trigger packet can potentially arrive 7 microseconds later than the beam spill
     default_trig_io_grp = 1     # -1 -> all io groups
     
     default_build_off_beam_events=False
@@ -425,7 +424,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         self.off_beam_window = params.get('off_beam_window', self.default_off_beam_window)
         self.off_beam_threshold = params.get('off_beam_threshold', self.default_off_beam_threshold)
         self.VALIDATE_HACK = params.get('VALIDATE_HACK', False)
-        self.shifted_event_dt = params.get('shifted_event_dt', self.default_shifted_event_dt)
 
         self.event_buffer = np.empty((0,))  
         self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
@@ -487,8 +485,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         # Only used if off-beam events are built later with unused packets
         used_mask = np.zeros( len(unix_ts) ) < -1
         for i, start_idx in enumerate(beam_trigger_idxs):
-            this_trig_time = ts[start_idx]-self.shifted_event_dt
-            this_trig_time += self.rollover_ticks if this_trig_time < 0 else 0 # Considered Roll-Over Issue
+            this_trig_time = ts[start_idx]
             start_times.append(this_trig_time)
             # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
             hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & trig_mask)
