@@ -116,6 +116,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
         _, self.nbytes_runinfo, self.runinfo =adc64format.mpd_parse_run_start(self.input_file.stream)
         # use the first file for the event reference
         _, self.chunk_size, test_event = adc64format.mpd_parse_chunk(self.input_file.stream)
+        self.chunk_size = np.uint64(self.chunk_size) # prevent overflow w/ large files and numpy2
         if any(dev_data is None for dev_data in test_event['data']):
             print("First event corrupted, check second event")
             _, self.chunk_size, test_event = adc64format.mpd_parse_chunk(self.input_file.stream)
