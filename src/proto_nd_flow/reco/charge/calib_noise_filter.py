@@ -94,12 +94,12 @@ class correlated_post_trigger_filter:
                 
                 chan_nhit = np.sum(m)
                 
-                m = np.logical_and(m, hits['Q']<self.RANGE_Q[1])
-                m = np.logical_and(m, hits['Q']>self.RANGE_Q[0])
+                m = np.logical_and(m, hits['Q_raw']<self.RANGE_Q[1])
+                m = np.logical_and(m, hits['Q_raw']>self.RANGE_Q[0])
                 
                 ts = hits['ts_pps'][m].astype(int)-min_ts
-                qs = hits['Q'][m]
-                sumqs = np.array([np.sum(hits['Q'][m])]*ts.shape[0])
+                qs = hits['Q_raw'][m]
+                sumqs = np.array([np.sum(hits['Q_raw'][m])]*ts.shape[0])
                 if np.sum(m)<1: continue
                 
                 lrs[m] = self.get_lr(n_chip_hits, np.array([ts, qs, sumqs]).transpose(), cc, chan_nhit)
