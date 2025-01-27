@@ -8,9 +8,9 @@ flow:
 
 
 resources:
-  - !include yamls/ndlar_flow/resources/RunData.yaml
+  - !include yamls/ndlar_flow/resources/RunDataMC.yaml
 
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files
-  !include yamls/ndlar_flow/reco/charge/RawEventGenerator.yaml
+  !include yamls/ndlar_flow/reco/charge/RawEventGeneratorMC.yaml
 
