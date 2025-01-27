@@ -214,6 +214,8 @@ class CalibHitBuilder(H5FlowStage):
 
             zy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
+            if resources['RunData'].is_mc and np.isnan(zy).any():
+                raise Exception("For simulation, all the channel keys should be valid. Please check your configuration.")
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
             hit_uniqueid = (packets_arr['io_group'].astype(int)*1000_000_000
                             + tile_id.astype(int)*100_000
