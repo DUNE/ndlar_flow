@@ -130,7 +130,16 @@ class RawEventBuilder(object):
             last_sync_ts = fill_with_last(sync_ts)
             offsets[oops_mask] -= last_sync_ts[oops_mask]
 
-        return packets['timestamp'].astype('i8') + offsets
+        ts = packets['timestamp'].astype('i8') + offsets
+
+        # Timestamp packets require special treatment, since their timestamp
+        # field is actually a unix timestamp. For these, we just subtract this
+        # unix timestamp back out, so that their "ts" is the corresponding entry
+        # of "offsets".
+        unix_mask = packets['packet_type'] == 4
+        ts[unix_mask] -= packets[unix_mask]['timestamp'].astype('i8')
+
+        return ts
 
 
 class TimeDeltaRawEventBuilder(RawEventBuilder):
