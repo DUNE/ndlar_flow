@@ -6,6 +6,8 @@ from h5flow import H5FLOW_MPI
 if H5FLOW_MPI:
     from mpi4py import MPI
 
+from proto_nd_flow.util.array import fill_with_last
+
 
 class RawEventBuilder(object):
     '''
@@ -97,6 +99,38 @@ class RawEventBuilder(object):
                 # logging.debug('{}: {} -> {}'.format(attrs,rank,rank+1))
                 d = dict([(attr, getattr(self, attr)) for attr in attrs])
                 comm.send(d, dest=rank + 1)
+
+    @staticmethod
+    def unroll_timestamps(packets: np.ndarray) -> np.ndarray:
+        '''
+            Calculates "unrolled" timestamps for an array of packets. The
+            unrolled timestamps increase monotonically, rather than rolling over
+            every ~second. Each SYNC packet introduces an additional cumulative
+            offset (of ~1E7) that gets added to each subsequent raw timestamp,
+            giving the unrolled timestamps. Each IO group is independent.
+        '''
+        offsets = np.zeros((len(packets),), dtype='i8')
+        for io_group in np.unique(packets['io_group']):
+            mask = packets['io_group'] == io_group
+            sync_mask = (mask &
+                         (packets['packet_type'] == 6) &
+                         (packets['trigger_type'] == 83))
+            sync_ts = np.zeros_like(offsets)
+            # Replace 0 with ~1E7 at each SYNC; ~2E7 if PACMAN missed prev SYNC
+            sync_ts[sync_mask] = packets[sync_mask]['timestamp']
+            # Now get the cumulative sum of all _preceding_ ~1E7s
+            # (subtracting sync_ts[mask] => "preceding")
+            offsets[mask] = np.cumsum(sync_ts[mask]) - sync_ts[mask]
+            # Finally: If the receipt_timestamp is less than the timestamp, this
+            # means that a SYNC arrived while the packet was traveling across
+            # the tile. In that case, subtract the timestamp of the preceding SYNC.
+            oops_mask = (mask &
+                         (packets['packet_type'] == 0) &
+                         (packets['receipt_timestamp'] < packets['timestamp']))
+            last_sync_ts = fill_with_last(sync_ts)
+            offsets[oops_mask] -= last_sync_ts[oops_mask]
+
+        return packets['timestamp'].astype('i8') + offsets
 
 
 class TimeDeltaRawEventBuilder(RawEventBuilder):
@@ -244,13 +278,11 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
 
     default_window = 1820 // 2
     default_threshold = 10
-    default_rollover_ticks = 1E7
 
     def __init__(self, **params):
         super(SymmetricWindowRawEventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
         self.threshold = params.get('threshold', self.default_threshold)
-        self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
 
         self.event_buffer = np.empty((0,))  # keep track of partial events from previous calls
         self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
@@ -260,7 +292,6 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         return dict(
             window=self.window,
             threshold=self.threshold,
-            rollover_ticks=self.rollover_ticks,
         )
 
     def build_events(self, packets, unix_ts, mc_assn=None, ts=None, return_ts=False):
@@ -283,22 +314,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         packets = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
 
         if ts is None:
-            # correct for rollovers
-            rollover = np.zeros((len(packets),), dtype='i8')
-            for io_group in np.unique(packets['io_group']):
-                # find rollovers
-                mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type'] == 83)
-                rollover[mask] = self.rollover_ticks
-                # calculate sum of rollovers
-                mask = (packets['io_group'] == io_group)
-                rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
-                # correct for readout delay (only in real data)
-                if mc_assn is None:
-                    mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
-                        & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
-                    rollover[mask] -= self.rollover_ticks
-
-            ts = packets['timestamp'].astype('i8') + rollover
+            ts = self.unroll_timestamps(packets)
 
         sorted_idcs = np.argsort(ts)
         ts = ts[sorted_idcs]
@@ -409,7 +425,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     An external trigger based event builder. Events are sliced such that they always follow an external trigger and the readout window is configurable. The default is set to 182 x 1.1 units (10% grace period). Note the event builder may contain more than one trigger if they are within a readout window time.
     '''
     default_window = 1820 * 1.1
-    default_rollover_ticks = 1E7
     default_shifted_event_dt = -70 #This is for accounting the fact that the trigger packet can potentially arrive 7 microseconds later than the beam spill
     default_trig_io_grp = 1     # -1 -> all io groups
     default_extendable = False
@@ -421,7 +436,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     def __init__(self, **params):
         super(ExtTrigRawEventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
-        self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
         self.trig_io_grp = params.get('trig_io_grp', self.default_trig_io_grp)
         self.extendable = params.get('extendable', self.default_extendable)
         self.build_off_beam_events = params.get('build_off_beam_events', self.default_build_off_beam_events)
@@ -468,18 +482,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         if len(packets) == 0:
             return ([], []) if mc_assn is None else ([], [], [])
 
-        rollover = np.zeros((len(packets),), dtype='i8')
-        for io_group in np.unique(packets['io_group']):
-            mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 6) & (packets['trigger_type'] == 83)
-            rollover[mask] = self.rollover_ticks
-            mask = (packets['io_group'] == io_group)
-            rollover[mask] = np.cumsum(rollover[mask]) - rollover[mask]
-            if mc_assn is None:
-                mask = (packets['io_group'] == io_group) & (packets['packet_type'] == 0) \
-                    & (packets['receipt_timestamp'].astype(int) - packets['timestamp'].astype(int) < 0)
-                rollover[mask] -= self.rollover_ticks
-
-        ts = packets['timestamp'].astype('i8') + rollover
+        ts = self.unroll_timestamps(packets)
         sorted_idcs = np.argsort(ts)
         ts = ts[sorted_idcs]
 
@@ -558,8 +561,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
 
         # build off beam events using SymmetricRawEventBuilder
         off_beam_config = {'window' : self.off_beam_window,
-                           'threshold' : self.off_beam_threshold,
-                           'rollover_ticks' : self.rollover_ticks
+                           'threshold' : self.off_beam_threshold
                           }
         off_beam_builder = SymmetricWindowRawEventBuilder( **off_beam_config )
         
