@@ -1,3 +1,4 @@
+from collections import defaultdict
 import numpy as np
 import logging
 
@@ -411,6 +412,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     default_rollover_ticks = 1E7
     default_shifted_event_dt = -70 #This is for accounting the fact that the trigger packet can potentially arrive 7 microseconds later than the beam spill
     default_trig_io_grp = 1     # -1 -> all io groups
+    default_extendable = False
     
     default_build_off_beam_events=False
     default_off_beam_window = 1820 // 2
@@ -421,6 +423,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         self.window = params.get('window', self.default_window)
         self.rollover_ticks = params.get('rollover_ticks', self.default_rollover_ticks)
         self.trig_io_grp = params.get('trig_io_grp', self.default_trig_io_grp)
+        self.extendable = params.get('extendable', self.default_extendable)
         self.build_off_beam_events = params.get('build_off_beam_events', self.default_build_off_beam_events)
         self.off_beam_window = params.get('off_beam_window', self.default_off_beam_window)
         self.off_beam_threshold = params.get('off_beam_threshold', self.default_off_beam_threshold)
@@ -432,13 +435,35 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         self.prepend_count = 0  
         self.last_beam_trigger_idx = None
 
+        if not isinstance(self.trig_io_grp, list):
+            self.trig_io_grp = [self.trig_io_grp]
+        self.window = self.to_iog_dict(self.window)
+        self.shifted_event_dt = self.to_iog_dict(self.shifted_event_dt)
+        self.extendable = self.to_iog_dict(self.extendable)
+
+    def to_iog_dict(self, var):
+        '''
+            Convert a scalar or list VAR into a dict, keyed by io_group.
+            If a scalar, use a defaultdict that always yields VAR.
+            If a list, assume the i'th element corresponds to the i'th io_group
+            in self.trig_io_grp.
+        '''
+        if isinstance(var, list):
+            assert len(var) == len(self.trig_io_grp)
+            return {self.trig_io_grp[i]: v for i, v in enumerate(var)}
+        assert len(self.trig_io_grp) == 1
+        if self.trig_io_grp == [-1]:
+            return defaultdict(lambda: var)
+        return {self.trig_io_grp[0]: var}
+
     def get_config(self):
         return dict(
-            window=self.window,
             trig_io_grp=self.trig_io_grp,
-            rollover_ticks=self.rollover_ticks,
-        )    
-    
+            window=list(self.window.items()),
+            shifted_event_dt=list(self.shifted_event_dt.items()),
+            extendable=list(self.extendable.items()),
+        )
+
     def build_events(self, packets, unix_ts, mc_assn=None):
         if len(packets) == 0:
             return ([], []) if mc_assn is None else ([], [], [])
@@ -464,9 +489,10 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             mc_assn = mc_assn[sorted_idcs]
         
         trig_mask = packets['packet_type'] == 7
-        if self.trig_io_grp != -1:
-            trig_mask &= packets['io_group'] == self.trig_io_grp
-        beam_trigger_idxs = np.where(trig_mask)[0]
+        if self.trig_io_grp != [-1]:
+            iog_masks = [packets['io_group'] == iog for iog in self.trig_io_grp]
+            trig_mask &= np.logical_or.reduce(iog_masks)
+        trigger_idcs = np.where(trig_mask)[0]
 
         events = []
         event_unix_ts = []
@@ -477,13 +503,47 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         # Mask to keep track of packets associated to beam events
         # Only used if off-beam events are built later with unused packets
         used_mask = np.zeros( len(unix_ts) ) < -1
-        for i, start_idx in enumerate(beam_trigger_idxs):
-            this_trig_time = ts[start_idx]+self.shifted_event_dt
-            this_trig_time += self.rollover_ticks if this_trig_time < 0 else 0 # Considered Roll-Over Issue
+        used_trig_idcs = set()
+        for i, start_idx in enumerate(trigger_idcs):
+            if start_idx in used_trig_idcs:
+                continue
+            used_trig_idcs.add(start_idx)
+
+            this_io_group = packets[start_idx]['io_group']
+            this_trig_time = ts[start_idx] + self.shifted_event_dt[this_io_group]
+            last_io_group, last_trig_time = this_io_group, this_trig_time
             start_times.append(this_trig_time)
             # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
             hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & trig_mask)
-            mask = ((ts - this_trig_time) >= 0) & ((ts - this_trig_time) <= self.window) & hotfix_mask
+
+            if self.extendable[this_io_group]:
+                while True:
+                    # Scan for further triggers in the window
+                    pileup_trig_mask = ((ts - last_trig_time) > 0) \
+                        & ((ts - last_trig_time) <= self.window[last_io_group]) \
+                        & hotfix_mask \
+                        & trig_mask
+                    if not pileup_trig_mask.any():
+                        break
+                    for pileup_trig_idx in np.where(pileup_trig_mask)[0]:
+                        iog = packets[pileup_trig_idx]['io_group']
+                        if (self.trig_io_grp != -1) and (iog not in self.trig_io_grp):
+                            continue
+                        used_trig_idcs.add(pileup_trig_idx)
+                        last_io_group = iog
+                        last_trig_time = ts[pileup_trig_idx]
+                        # If we find a non-extendable ("beam") trigger then we
+                        # stop at the end of that trigger's window
+                        if not self.extendable[last_io_group]:
+                            break
+                    else: # no break
+                        continue # Scan over new window starting from last trig
+                    break # Or, if we broke out of "for", break out of "while"
+
+            mask = ((ts - this_trig_time) >= 0) \
+                & ((ts - last_trig_time) <= self.window[last_io_group]) \
+                & hotfix_mask
+
             events.append(packets[mask])
             event_unix_ts.append(unix_ts[mask])
             if mc_assn is not None:
