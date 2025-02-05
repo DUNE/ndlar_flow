@@ -17,4 +17,3 @@ params:
     trig_io_grp: 4
     rollover_ticks: 10000000 # PPS = 1e7 ticks
     build_off_beam_events : True
-    VALIDATE_HACK : False

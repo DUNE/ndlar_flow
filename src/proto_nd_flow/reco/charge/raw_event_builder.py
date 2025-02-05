@@ -424,7 +424,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         self.build_off_beam_events = params.get('build_off_beam_events', self.default_build_off_beam_events)
         self.off_beam_window = params.get('off_beam_window', self.default_off_beam_window)
         self.off_beam_threshold = params.get('off_beam_threshold', self.default_off_beam_threshold)
-        self.VALIDATE_HACK = params.get('VALIDATE_HACK', False)
         self.shifted_event_dt = params.get('shifted_event_dt', self.default_shifted_event_dt)
 
         self.event_buffer = np.empty((0,))  
@@ -432,7 +431,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         self.event_buffer_mc_assn = np.empty((0,))
         self.prepend_count = 0  
         self.last_beam_trigger_idx = None
-         
+
     def get_config(self):
         return dict(
             window=self.window,
@@ -469,20 +468,12 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             trig_mask &= packets['io_group'] == self.trig_io_grp
         beam_trigger_idxs = np.where(trig_mask)[0]
 
-        if self.VALIDATE_HACK:
-            n_orig = len(beam_trigger_idxs)
-            beam_trigger_idxs = beam_trigger_idxs[::3]
-            print('\n*****************\nValidation HACK! Ommiting beam some triggers:')
-            print('Total beam triggers:', len(beam_trigger_idxs))
-            print('Total off-beam:', n_orig-len(beam_trigger_idxs))
-            print('\n*****************\n')
-
         events = []
         event_unix_ts = []
         event_mc_assn = [] if mc_assn is not None else None
        
         start_times = []
-        
+
         # Mask to keep track of packets associated to beam events
         # Only used if off-beam events are built later with unused packets
         used_mask = np.zeros( len(unix_ts) ) < -1
@@ -506,7 +497,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
                 else zip(*[v for v in zip(events, event_unix_ts, event_mc_assn)])
 
         # build off beam events using SymmetricRawEventBuilder
-        if self.VALIDATE_HACK: print('USING OFF BEAM BUILDER!!')
         off_beam_config = {'window' : self.off_beam_window,
                            'threshold' : self.off_beam_threshold,
                            'rollover_ticks' : self.rollover_ticks
@@ -523,14 +513,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             if mc_assn is not None:
                 off_beam_event_mc_assn = list(off_beam_events_list[2])
 
-        if self.VALIDATE_HACK:
-            print('N Beam events found:', len(events))
-            print('N Off beam events:', len(off_beam_events))
-
         full_events = events + off_beam_events
-
-        if self.VALIDATE_HACK:
-            print('Total events returning:', len(full_events))
 
         full_event_unix_ts = event_unix_ts + off_beam_event_unix_ts
         if not mc_assn is None: full_event_mc_assn = event_mc_assn + off_beam_event_mc_assn
