@@ -17,18 +17,23 @@ class RawEventBuilder(object):
     '''
     version = '0.0.0'
 
+    default_rollover_ticks = 1E7
+
     def __init__(self, **params):
         '''
             Initialize given parameters for the class, each parameter is
             optional with a default provided by the implemented class
         '''
-        pass
+        self.rollover_ticks = params.get('rollover_ticks',
+                                         self.default_rollover_ticks)
 
     def get_config(self):
         '''
             :returns: a `dict` of the instance configuration parameters
         '''
-        return dict()
+        return dict(
+            rollover_ticks=self.rollover_ticks,
+        )
 
     def build_events(self, packets, unix_ts, mc_assn=None):
         '''
@@ -301,6 +306,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         return dict(
             window=self.window,
             threshold=self.threshold,
+            **super().get_config(),
         )
 
     def build_events(self, packets, unix_ts, mc_assn=None, ts=None, return_ts=False):
@@ -485,6 +491,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             window=list(self.window.items()),
             shifted_event_dt=list(self.shifted_event_dt.items()),
             extendable=list(self.extendable.items()),
+            **super().get_config(),
         )
 
     def build_events(self, packets, unix_ts, mc_assn=None):
