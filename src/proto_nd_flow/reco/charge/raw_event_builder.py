@@ -105,14 +105,16 @@ class RawEventBuilder(object):
                 d = dict([(attr, getattr(self, attr)) for attr in attrs])
                 comm.send(d, dest=rank + 1)
 
-    @staticmethod
-    def unroll_timestamps(packets: np.ndarray) -> np.ndarray:
+    def unroll_timestamps(self, packets: np.ndarray) -> np.ndarray:
         '''
             Calculates "unrolled" timestamps for an array of packets. The
             unrolled timestamps increase monotonically, rather than rolling over
             every ~second. Each SYNC packet introduces an additional cumulative
-            offset (of ~1E7) that gets added to each subsequent raw timestamp,
-            giving the unrolled timestamps. Each IO group is independent.
+            offset (of self.rollover_ticks, e.g. 1E7) that gets added to each
+            subsequent raw timestamp, giving the unrolled timestamps. We round
+            the LArPix timestamp of the SYNC to the nearest self.rollover_ticks,
+            which takes care of the case when a SYNC is missed by the PACMAN.
+            Each IO group is treated independently here.
         '''
         offsets = np.zeros((len(packets),), dtype='i8')
         for io_group in np.unique(packets['io_group']):
@@ -122,8 +124,12 @@ class RawEventBuilder(object):
                          (packets['trigger_type'] == 83))
             sync_ts = np.zeros_like(offsets)
             # Replace 0 with ~1E7 at each SYNC; ~2E7 if PACMAN missed prev SYNC
+            # (assuming self.rollover_ticks is 1E7)
             sync_ts[sync_mask] = packets[sync_mask]['timestamp']
-            # Now get the cumulative sum of all _preceding_ ~1E7s
+            # And round to the nearest 1E7 to prevent clock drift
+            sync_ts[sync_mask] = (np.round(sync_ts[sync_mask] / self.rollover_ticks)
+                                  * self.rollover_ticks)
+            # Now get the cumulative sum of all _preceding_ increments
             # (subtracting sync_ts[mask] => "preceding")
             offsets[mask] = np.cumsum(sync_ts[mask]) - sync_ts[mask]
             # Finally: If the receipt_timestamp is less than the timestamp, this
