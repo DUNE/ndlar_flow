@@ -3,9 +3,7 @@
 
 flow:
   source: raw_events
-  #source: calib_prompt_hits
-  #stages: [temp_hit_builder, calib_hit_merger]
-  stages: [calib_hit_merger]
+  stages: [calib_noise_filter]
   drop: []
 
 
@@ -22,5 +20,5 @@ raw_events:
     chunk_size: 32
 
 calib_hit_merger:
-  !include yamls/ndlar_flow/reco/charge/CalibHitMerger.yaml
+  !include yamls/ndlar_flow/reco/charge/CalibNoiseFilter.yaml
 
