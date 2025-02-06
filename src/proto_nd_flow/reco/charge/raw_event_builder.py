@@ -500,8 +500,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
        
         start_times = []
 
-        # Mask to keep track of packets associated to beam events
-        # Only used if off-beam events are built later with unused packets
+        # Mask to keep track of packets associated to triggers
         used_mask = np.zeros( len(unix_ts) ) < -1
         used_trig_idcs = set()
         for i, start_idx in enumerate(trigger_idcs):
@@ -542,6 +541,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
 
             mask = ((ts - this_trig_time) >= 0) \
                 & ((ts - last_trig_time) <= self.window[last_io_group]) \
+                & ~used_mask \
                 & hotfix_mask
 
             events.append(packets[mask])
