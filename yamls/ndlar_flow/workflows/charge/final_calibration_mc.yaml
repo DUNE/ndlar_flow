@@ -19,6 +19,6 @@ raw_events:
   params:
     chunk_size: 32
 
-calib_hit_merger:
+calib_noise_filter:
   !include yamls/ndlar_flow/reco/charge/CalibNoiseFilter.yaml
 
