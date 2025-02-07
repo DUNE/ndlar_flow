@@ -402,18 +402,28 @@ class RawEventGenerator(H5FlowGenerator):
         # find unix timestamp groups
         ts_mask = packet_buffer['packet_type'] == 4
         ts_grps = np.split(packet_buffer, np.argwhere(ts_mask).ravel())
-        unix_ts_grps = [np.full(len(ts_grp[1:]), ts_grp[0], dtype=packet_buffer.dtype) for ts_grp in ts_grps if len(ts_grp)]
+        unix_ts_grps = [np.full(len(ts_grp), ts_grp[0], dtype=packet_buffer.dtype)
+                        for ts_grp in ts_grps if len(ts_grp)]
         unix_ts = np.concatenate(unix_ts_grps, axis=0) \
             if len(unix_ts_grps) else np.empty((0,), dtype=packet_buffer.dtype)
-        packet_buffer = packet_buffer[~ts_mask]
         if self.is_mc:
-            mc_assn = mc_assn[~ts_mask[1:]]
-        packet_buffer['timestamp'] = packet_buffer['timestamp'].astype(int) % (2**31)  # ignore 32nd bit from pacman triggers
+            # Insert a null MC association at the beginning, corresponding to
+            # the timestamp packet we inserted above. We can grab such a "null"
+            # by taking the MC assn from any timestamp packet. Take the 1st one.
+            a_null_mc_assn = mc_assn[np.argwhere(ts_mask[1:]).ravel()[0]]
+            mc_assn = np.insert(mc_assn, [0], a_null_mc_assn)
+        # ignore 32nd bit from pacman triggers
+        # (don't do this for timestamp packets, where the timestamp is a unix ts)
+        packet_buffer[~ts_mask]['timestamp'] = \
+            packet_buffer[~ts_mask]['timestamp'].astype(int) % (2**31)
         self.last_unix_ts = unix_ts[-1] if len(unix_ts) else self.last_unix_ts
 
         if self.sync_noise_cut_enabled and not self.is_mc:
             # remove all packets that occur before the cut
-            sync_noise_mask = (packet_buffer['timestamp'] > self.sync_noise_cut[0]) & (packet_buffer['timestamp'] < self.sync_noise_cut[1])
+            sync_noise_mask = ((packet_buffer['timestamp'] > self.sync_noise_cut[0]) &
+                               (packet_buffer['timestamp'] < self.sync_noise_cut[1]))
+            # don't apply cut to timestamp packets
+            sync_noise_mask |= packet_buffer['packet_type'] == 4
             packet_buffer = packet_buffer[sync_noise_mask]
             unix_ts = unix_ts[sync_noise_mask]
             if self.is_mc:
