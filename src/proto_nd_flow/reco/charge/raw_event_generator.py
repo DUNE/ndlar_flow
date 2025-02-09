@@ -447,8 +447,7 @@ class RawEventGenerator(H5FlowGenerator):
             if self.is_mc:
                 event_mc_assn = eb_rv[2]
 
-        nevents = len(events)
-        if not nevents:
+        if not events:
             return H5FlowGenerator.EMPTY
 
         # apply nhit cut
@@ -464,6 +463,8 @@ class RawEventGenerator(H5FlowGenerator):
             events, event_unix_ts = list(), list()
             if self.is_mc:
                 event_mc_assn = list()
+
+        nevents = len(events)
 
         # write event to file
         raw_event_array = np.zeros((nevents,), dtype=self.raw_event_dtype)
