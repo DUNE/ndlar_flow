@@ -363,6 +363,19 @@ class RawEventGenerator(H5FlowGenerator):
                 self.last_unix_ts = p
                 break
 
+    def get_null_mc_assn(self):
+        '''
+            Return a "null" element for padding of mc_packets_assn. The IDs are
+            all -1 and the fractions are all zero.
+        '''
+        elt = np.zeros(1, self.mc_assn.dtype)
+        elt['event_ids'] = -1
+        elt['segment_ids'] = -1
+        elt['fraction'] = 0
+        elt['file_traj_ids'] = -1
+        elt['fraction_traj'] = 0
+        return elt
+
     def finish(self):
         super(RawEventGenerator, self).finish()
         self.input_fh.close()
@@ -407,11 +420,7 @@ class RawEventGenerator(H5FlowGenerator):
         unix_ts = np.concatenate(unix_ts_grps, axis=0) \
             if len(unix_ts_grps) else np.empty((0,), dtype=packet_buffer.dtype)
         if self.is_mc:
-            # Insert a null MC association at the beginning, corresponding to
-            # the timestamp packet we inserted above. We can grab such a "null"
-            # by taking the MC assn from any timestamp packet. Take the 1st one.
-            a_null_mc_assn = mc_assn[np.argwhere(ts_mask[1:]).ravel()[0]]
-            mc_assn = np.insert(mc_assn, [0], a_null_mc_assn)
+            mc_assn = np.insert(mc_assn, [0], self.get_null_mc_assn())
         # ignore 32nd bit from pacman triggers
         # (don't do this for timestamp packets, where the timestamp is a unix ts)
         packet_buffer[~ts_mask]['timestamp'] = \
