@@ -35,6 +35,7 @@ class WaveformSum(H5FlowStage):
     class_version = '1.0.0'
 
     default_detector_channels = [list(range(64))]
+    default_baseline_subtract = False
 
     def swvfm_dtype(self, ntpc, ndet, nsamples):
         return np.dtype([('samples', 'f4', (ntpc, ndet, nsamples))])
@@ -49,7 +50,7 @@ class WaveformSum(H5FlowStage):
         self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
         self.swvfm_dset_name = params.get('swvfm_dset_name')
         self.align_dset_name = f'{self.swvfm_dset_name}/alignment'
-
+        self.baseline_subtract = params.get('baseline_subtract', self.default_baseline_subtract)
                 
     def init(self, source_name):
         super(WaveformSum, self).init(source_name)
@@ -104,8 +105,11 @@ class WaveformSum(H5FlowStage):
                     continue
                 # WARNING: does not handle case where different channels on same detector are not aligned (not relevant for Module 0 data)
                 mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
-                swvfm_data['samples'][mask,tpc_id,det_id,:] += (
-                    wvfm_data['samples'][mask,adc,chan].filled(0))
+                if self.baseline_subtract:
+                    swvfm_data['samples'][mask,tpc_id,det_id,:] += (
+                        (wvfm_data['samples'][mask,adc,chan] - np.mean(wvfm_data['samples'][mask,adc,chan])).filled(0))
+                else:
+                    swvfm_data['samples'][mask,tpc_id,det_id,:] += (wvfm_data['samples'][mask,adc,chan].filled(0))
 
         # reserve new data
         swvfm_slice = self.data_manager.reserve_data(self.swvfm_dset_name, source_slice)
