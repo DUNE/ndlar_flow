@@ -68,13 +68,13 @@ class CalibHitBuilder(H5FlowStage):
 
     #: ASIC ADC configuration lookup table
     configuration = defaultdict(lambda: dict(
-        vref_mv=1300,
-        vcm_mv=288
+        vref_mv=1567.96875,
+        vcm_mv=478.125
     ))
 
     #: pixel pedestal value
     pedestal = defaultdict(lambda: dict(
-        pedestal_mv=580
+        pedestal_mv=600
     ))
 
     calib_hits_dtype = np.dtype([
@@ -113,6 +113,8 @@ class CalibHitBuilder(H5FlowStage):
         events_data = cache[self.events_dset_name]
         packets_data = cache[self.packets_dset_name]
         packets_index = cache[self.packets_index_name]
+        packet_frac_bt = None
+        
         if resources['RunData'].is_mc:
             packet_frac_bt = cache['packet_frac_backtrack']
             packet_seg_bt = cache['packet_seg_backtrack']
@@ -206,8 +208,8 @@ class CalibHitBuilder(H5FlowStage):
             zy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
-            hit_uniqueid = (((packets_arr['io_group'].astype(int)) * 100000
-                             + packets_arr['io_channel'].astype(int)) * 1000
+            hit_uniqueid = (((packets_arr['io_group'].astype(int)) * 256
+                             + packets_arr['io_channel'].astype(int)) * 256
                             + packets_arr['chip_id'].astype(int)) * 64 \
                 + packets_arr['channel_id'].astype(int)
             hit_uniqueid_str = hit_uniqueid.astype(str)
