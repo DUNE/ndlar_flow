@@ -3,6 +3,7 @@ import numpy.ma as ma
 import logging
 import warnings
 import yaml
+import os
 
 from h5flow.core import H5FlowResource
 from h5flow.core import resources
@@ -109,20 +110,24 @@ class Geometry(H5FlowResource):
 
     def init(self, source_name):
         super(Geometry, self).init(source_name)
-
         # create group (if not present)
         self.data_manager.set_attrs(self.path)
         # load data (if present)
         self.data = dict(self.data_manager.get_attrs(self.path))
 
+        self.charge_only = False
         if not self.data:
             # first time loading geometry, save to file
-
+            
             with open(self.det_geometry_file) as dgf:
                 self.det_geometry_yaml = yaml.load(dgf, Loader=yaml.FullLoader)
-
-            with open(self.lrs_geometry_file) as gf:
-                self.lrs_geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
+            print(f'Trying to load {self.lrs_geometry_file}')
+            if os.path.isfile(self.lrs_geometry_file):
+                with open(self.lrs_geometry_file) as gf:
+                    self.lrs_geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
+            else:
+                logging.warning("Either no lrs_geometry_yaml was provided or the one provided doesnt exist - lrs geometry will not be loaded")
+                self.charge_only = True
 
             self.load_geometry()
 
@@ -146,11 +151,12 @@ class Geometry(H5FlowResource):
             write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
             write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
 
-            write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
-            write_lut(self.data_manager, self.path, self.sipm_rel_pos, 'sipm_rel_pos')
-            write_lut(self.data_manager, self.path, self.det_id, 'det_id')
-            write_lut(self.data_manager, self.path, self.det_bounds, 'det_bounds')
-            write_lut(self.data_manager, self.path, self.sipm_abs_pos, 'sipm_abs_pos')
+            if not self.charge_only:
+                write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
+                write_lut(self.data_manager, self.path, self.sipm_rel_pos, 'sipm_rel_pos')
+                write_lut(self.data_manager, self.path, self.det_id, 'det_id')
+                write_lut(self.data_manager, self.path, self.det_bounds, 'det_bounds')
+                write_lut(self.data_manager, self.path, self.sipm_abs_pos, 'sipm_abs_pos')
         else:
             assert_compat_version(self.class_version, self.data['class_version'])
 
@@ -165,18 +171,23 @@ class Geometry(H5FlowResource):
             self._drift_dir = read_lut(self.data_manager, self.path, 'drift_dir')
             self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
-            self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
-            self._sipm_rel_pos = read_lut(self.data_manager, self.path, 'sipm_rel_pos')
 
-            self._det_id = read_lut(self.data_manager, self.path, 'det_id')
-            self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
-            self._sipm_abs_pos = read_lut(self.data_manager, self.path, 'sipm_abs_pos')
+            if not self.charge_only:
+                self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
+                self._sipm_rel_pos = read_lut(self.data_manager, self.path, 'sipm_rel_pos')
+                self._det_id = read_lut(self.data_manager, self.path, 'det_id')
+                self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
+                self._sipm_abs_pos = read_lut(self.data_manager, self.path, 'sipm_abs_pos')
 
-        lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
-                    + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
-                    + self.det_rel_pos.nbytes + self.det_rel_pos.nbytes 
-                    + self.det_id.nbytes + self.det_bounds.nbytes
-                    + self.sipm_abs_pos.nbytes)
+        if not self.charge_only:
+            lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
+                        + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
+                        + self.det_rel_pos.nbytes + self.det_rel_pos.nbytes 
+                        + self.det_id.nbytes + self.det_bounds.nbytes
+                        + self.sipm_abs_pos.nbytes)
+        else:
+            lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
+                        + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes)
 
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
@@ -540,17 +551,12 @@ class Geometry(H5FlowResource):
         if tpc == -1 or det == -1:
             return [-1,-1,-1]
 
-        det_type = self.lrs_geometry_yaml["adc_to_det_type"][adc]
-
         # Get TPC side
         side = self.lrs_geometry_yaml["det_side"][det]
 
         # Get vertical position
         # Get Y pos
-        if det_type == 0:
-            vert_pos = self.lrs_geometry_yaml["ch_to_vert_bin"][0][channel]
-        else:
-            vert_pos = self.lrs_geometry_yaml["ch_to_vert_bin"][1][channel]
+        vert_pos = self.lrs_geometry_yaml["ch_to_vert_bin"][adc][channel]
 
         return tpc, side, vert_pos
 
@@ -561,48 +567,53 @@ class Geometry(H5FlowResource):
 
         tpc, side, vert_pos = self.get_sipm_rel_pos(adc,channel)
         tpc_channel = vert_pos + side*(len(self.lrs_geometry_yaml["sipm_center"])//2)
-
+        
         if np.isnan(tpc):
             return [-1,-1,-1]
-
+        if tpc == 3 or tpc == 2:
+            print('tpc = ', tpc)
+            print('tpc offset = ', self.det_geometry_yaml["tpc_offsets"][tpc//2][0])
+            print('tpc center offset = ', self.lrs_geometry_yaml["tpc_center_offset"][tpc][0])
         # Get X pos
         x_pos = self.det_geometry_yaml["tpc_offsets"][tpc//2][0] + self.lrs_geometry_yaml["tpc_center_offset"][tpc][0] 
+        if tpc == 3 or tpc == 2:
+            print('x_pos = ', x_pos)
         if tpc % 2 == 0:
             x_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][0]
         else:
             x_pos -= self.lrs_geometry_yaml["sipm_center"][tpc_channel][0]
-
+        if tpc == 3 or tpc == 2:
+            print('x_pos again = ', x_pos)
         # Get Y pos
         y_pos = self.det_geometry_yaml["tpc_offsets"][tpc//2][1] + self.lrs_geometry_yaml["tpc_center_offset"][tpc][1] 
         y_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][1]
 
         # Get Z pos
         z_pos = self.det_geometry_yaml["tpc_offsets"][tpc//2][2] + self.lrs_geometry_yaml["tpc_center_offset"][tpc][2]
-        if tpc % 2 == 0:
-            z_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][2]
-        else:
-            z_pos -= self.lrs_geometry_yaml["sipm_center"][tpc_channel][2]
+        z_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][2]
 
         return x_pos, y_pos, z_pos
-
 
     ## Load light and charge geometry ##
     def load_geometry(self):
         self._load_charge_geometry()
-        self._load_light_geometry()
+        if not self.charge_only:
+            self._load_light_geometry()
 
+    def rotate_y(det_bounds):
+        return det_bounds*np.array([-1,1,-1])
 
     def _load_light_geometry(self):
         if self.rank == 0:
             logging.warning(f'Loading geometry from {self.lrs_geometry_file}...')
-
+        
         # enforce that light geometry formatting is as expected
-        assert_compat_version(self.lrs_geometry_yaml['format_version'], '0.2.0')
+        assert_compat_version(self.lrs_geometry_yaml['format_version'], '0.4.0')
 
         mod_ids = np.array([v for v in self.det_geometry_yaml['module_to_tpcs'].keys()])
         tpc_ids = np.array([v for v in self.lrs_geometry_yaml['tpc_center_offset'].keys()])
         det_ids = np.array([v for v in self.lrs_geometry_yaml['det_center'].keys()])
-        adc_ids = np.array([v for v in self.lrs_geometry_yaml['adc_to_det_type'].keys()])
+        adc_ids = np.array([v for v in self.lrs_geometry_yaml['ch_to_vert_bin'].keys()])
         max_chan_per_det = max([len(chan) for tpc in self.lrs_geometry_yaml['det_chan'].values() for chan in tpc.values()])
         chan_ids = np.unique(sum([chan for tpc in self.lrs_geometry_yaml['det_chan'].values() for chan in tpc.values()],[]))
 
@@ -631,7 +642,7 @@ class Geometry(H5FlowResource):
                 det_chan[i,j,:len(self.lrs_geometry_yaml['det_chan'][tpc][det])] = self.lrs_geometry_yaml['det_chan'][tpc][det]
                 tpc_center = (np.array(self.lrs_geometry_yaml['tpc_center_offset'][tpc])
                     + np.array(self.det_geometry_yaml["tpc_offsets"][tpc_mod[i]]))
-                det_geom = self.lrs_geometry_yaml['geom'][self.lrs_geometry_yaml['det_geom'][det]]
+                det_geom = self.lrs_geometry_yaml['geom'][self.lrs_geometry_yaml['det_geom'][tpc][det]]
                 det_center = np.array(self.lrs_geometry_yaml['det_center'][det])
                 det_bounds[i,j,0] = tpc_center + det_center + np.array(det_geom['min'])
                 det_bounds[i,j,1] = tpc_center + det_center + np.array(det_geom['max'])
@@ -661,6 +672,7 @@ class Geometry(H5FlowResource):
 
         for adc in adc_ids:
             for chan in chan_ids:
+                print('adc, chan = ', adc, ', ', chan)
                 self._sipm_rel_pos[(adc,chan)] = np.array(self.get_sipm_rel_pos(adc,chan))
                 self._sipm_abs_pos[(adc,chan)] = np.array(self.get_sipm_abs_pos(adc,chan))
 
