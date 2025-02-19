@@ -294,7 +294,7 @@ class CalibHitBuilder(H5FlowStage):
         if has_mc_truth:
             self.data_manager.write_ref(self.calib_hits_dset_name,self.mc_hit_frac_dset_name,np.c_[calib_hits_arr['id'],calib_hits_arr['id']])
 
-    def get_vref_vcm_correction(self, t, t_hits, tau_rc_vref = 5000.0, impulse_vref=-0.5, tau_rc_vcm=4000.0, impulse_vcm=0.4):
+    def get_vref_vcm_correction(self, t, t_hits, tau_rc_vref = 4400.0, impulse_vref=-0.352, tau_rc_vcm=1460.0, impulse_vcm=0.352):
         return self.exp_sum( t, t_hits, impulse_vref, tau_rc_vref), self.exp_sum( t, t_hits, impulse_vcm, tau_rc_vcm  )
 
     def exp_sum(self, t, ts, amps, taus ):
