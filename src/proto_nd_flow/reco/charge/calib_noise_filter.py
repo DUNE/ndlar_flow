@@ -265,10 +265,11 @@ class CalibNoiseFilter(H5FlowStage):
         self.data_manager.create_dset(self.calib_hits_dset_name, dtype=self.hits_dtype)
         if has_mc_truth:
             self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=hits_frac_bt.dtype)
+        self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(self.hits_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(source_name, self.calib_hits_dset_name)
-        self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
-        if has_mc_truth:
+        print("source_name: ", source_name)
+        if self.hit_ref and has_mc_truth:
             self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name)
 
         event_id = np.r_[source_slice]
@@ -320,6 +321,6 @@ class CalibNoiseFilter(H5FlowStage):
         self.data_manager.write_ref(self.events_dset_name, self.calib_hits_dset_name, ev_ref)
 
         # hit -> backtracking
-        if has_mc_truth:
+        if self.hit_ref and has_mc_truth:
             self.data_manager.write_ref(self.calib_hits_dset_name,self.mc_hit_frac_dset_name,np.c_[new_hits['id'], new_hits['id']])
 

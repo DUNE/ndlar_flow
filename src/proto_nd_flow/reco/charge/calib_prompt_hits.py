@@ -168,10 +168,11 @@ class CalibHitBuilder(H5FlowStage):
         if has_mc_truth:
             self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=packet_frac_bt_arr.dtype)
         self.data_manager.create_ref(source_name, self.calib_hits_dset_name)
-        self.data_manager.create_ref(self.calib_hits_dset_name, self.packets_dset_name)
         self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
-        if has_mc_truth:
-            self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name)
+        if self.hit_ref:
+            self.data_manager.create_ref(self.calib_hits_dset_name, self.packets_dset_name)
+            if has_mc_truth:
+                self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name)
 
         # reserve new data
         calib_hits_slice = self.data_manager.reserve_data(self.calib_hits_dset_name, n)
@@ -276,13 +277,14 @@ class CalibHitBuilder(H5FlowStage):
         # event -> hit
         self.data_manager.write_ref(self.events_dset_name, self.calib_hits_dset_name, ref)
 
-        # hit -> packet
-        ref = np.c_[calib_hits_arr['id'], index_arr]
-        self.data_manager.write_ref(self.calib_hits_dset_name, self.packets_dset_name, ref)
+        if self.hit_ref:
+            # hit -> packet
+            ref = np.c_[calib_hits_arr['id'], index_arr]
+            self.data_manager.write_ref(self.calib_hits_dset_name, self.packets_dset_name, ref)
 
-        # hit -> backtracking
-        if has_mc_truth:
-            self.data_manager.write_ref(self.calib_hits_dset_name,self.mc_hit_frac_dset_name,np.c_[calib_hits_arr['id'],calib_hits_arr['id']])
+            # hit -> backtracking
+            if has_mc_truth:
+                self.data_manager.write_ref(self.calib_hits_dset_name,self.mc_hit_frac_dset_name,np.c_[calib_hits_arr['id'],calib_hits_arr['id']])
 
 
     @staticmethod

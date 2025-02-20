@@ -26,6 +26,8 @@ params:
   calib_hits_dset_name: 'charge/calib_prompt_hits'
   mc_hit_frac_dset_name: 'mc_truth/calib_prompt_hit_backtrack'
 
+  hit_ref: False
+
   # configuration parameters
   pedestal_mv: 580.0
   vref_mv: 1568.0 #M0-like: 1300 #2x2: 1568.0
