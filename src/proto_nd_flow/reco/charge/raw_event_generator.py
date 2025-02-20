@@ -441,12 +441,12 @@ class RawEventGenerator(H5FlowGenerator):
             
         # apply nhit cut
         nhit_filtered = list(filter(lambda x: (len(x[0]) >= self.nhit_cut) and (len(x[0]) <= self.nhit_limit), zip(events, event_unix_ts, event_clusters)))
-        if self.is_mc:
+        if self.is_mc and False:
             mc_assn_filtered = list(filter(lambda x: (len(x) >= self.nhit_cut) and (len(x) <= self.nhit_limit), event_mc_assn))
 
         if len(nhit_filtered):
             events, event_unix_ts, event_clusters = zip(*nhit_filtered)
-            if self.is_mc:
+            if self.is_mc and False:
                 event_mc_assn = mc_assn_filtered
         else:
             events, event_unix_ts, event_clusters = list(), list(), list()
@@ -484,7 +484,7 @@ class RawEventGenerator(H5FlowGenerator):
         ref = np.c_[ev_idcs, packets_idcs]
         self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, ref)
 
-        if self.is_mc:
+        if self.is_mc and False:
 
             # packet -> mc_packet_assn
             ref = np.c_[packets_idcs.ravel(), packets_idcs.ravel()]

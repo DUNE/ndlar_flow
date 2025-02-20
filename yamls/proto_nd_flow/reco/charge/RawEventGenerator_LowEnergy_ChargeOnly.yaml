@@ -8,7 +8,7 @@ params:
   packets_dset_name: 'charge/packets'
 
   # configuration parameters
-  buffer_size: 384000
+  buffer_size: 50000
   nhit_cut: 1
   nhit_limit: 50
   skip_mc_truth: True
@@ -20,5 +20,5 @@ params:
      min_samples: 1
      max_cluster_nhit: 10
      rollover_ticks: 10000000
-     pedestal_file: '/global/common/software/dune/mkramer/devel/flow4pedestal/reference-cold-pedestal-2024_06_05_08_28_19_CDTevd_ped.rescaled.json'
+     #pedestal_file: '/global/common/software/dune/mkramer/devel/flow4pedestal/reference-cold-pedestal-2024_06_05_08_28_19_CDTevd_ped.rescaled.json'
     

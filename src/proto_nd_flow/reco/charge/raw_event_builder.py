@@ -670,7 +670,7 @@ class LowEnergyEventBuilder(RawEventBuilder):
         channel_id = packets['channel_id']
         io_channel = packets['io_channel']
         chipid = packets['chip_id']
-        unique_ids = ((packets['io_group'] * 256 + packets['io_channel']) * 256 + packets['chip_id']) * 64 + packets['channel_id']
+        unique_ids = ((packets['io_group'].astype(int) * 256 + packets['io_channel'].astype(int)) * 256 + packets['chip_id'].astype(int)) * 64 + packets['channel_id'].astype(int)
         
         #hits = hits[indices_sorted]
         ts = ts[indices_sorted]
@@ -680,9 +680,9 @@ class LowEnergyEventBuilder(RawEventBuilder):
         n_vals_mask = n_vals != 0
         n_vals = n_vals[n_vals_mask]
         #packets = packets[n_vals_mask]
-        
+        #print((packets['dataword'] / 256 * (1568 - 478.1) + 478.1 - 580) * 0.221)
         q_clusters = np.bincount(labels, weights=hits_charge[labels_mask])[n_vals_mask]
-
+        print(q_clusters * 0.221)
         label_indices = np.concatenate(([0], np.flatnonzero(labels[:-1] != labels[1:])+1, [len(labels)]))[1:-1]
         label_timestamps = np.split(ts, label_indices)
         label_pps = np.split(ts, label_indices)
@@ -779,7 +779,7 @@ class LowEnergyEventBuilder(RawEventBuilder):
         unique_labels = np.unique(labels)[nhit_mask]
         label_packets = np.split(packets, label_indices)
         label_unix_ts = np.split(unix_ts, label_indices)
-        if mc_assn:
+        if mc_assn is not None:
             label_mc_assn = np.split(mc_assn, label_indices)
         for i in range(len(label_packets)):
             events.append(label_packets[i])
@@ -797,6 +797,7 @@ class LowEnergyEventBuilder(RawEventBuilder):
     
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped):
+        ped = ped*580/600
         return dw / 256. * (vref - vcm) + vcm - ped
 
     def load_pedestals(self):
