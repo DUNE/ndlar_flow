@@ -194,7 +194,8 @@ class CalibNoiseFilter(H5FlowStage):
         mc_hit_frac_dset_name = 'mc_truth/calib_final_hit_backtrack',
         low_current_filter__threshold=6.0,
         hot_pixel_filter__max_n_hits=35,
-        filter_function_names = ['hot_pixel_filter']
+        filter_function_names = ['hot_pixel_filter'],
+        hit_ref = False
         )
     valid_filter_functions = ['low_current_filter', 'correlated_post_trigger_filter', 'hot_pixel_filter']
 

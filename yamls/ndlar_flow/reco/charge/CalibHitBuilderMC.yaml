@@ -9,9 +9,9 @@ requires:
     path: ['charge/packets']
     index_only: True
   - name: 'packet_frac_backtrack'
-    path: ['charge/packets','mc_truth/packet_fraction']
-  - name: 'packet_seg_backtrack'
-    path: ['charge/packets','mc_truth/segments']
+    path: ['charge/packets', 'mc_truth/packet_fraction']
+      #  - name: 'packet_seg_backtrack'
+      #    path: ['charge/packets','mc_truth/segments']
 
 params:
   # inputs
