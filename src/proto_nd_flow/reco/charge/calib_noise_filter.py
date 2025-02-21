@@ -269,7 +269,6 @@ class CalibNoiseFilter(H5FlowStage):
         self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(self.hits_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(source_name, self.calib_hits_dset_name)
-        print("source_name: ", source_name)
         if self.hit_ref and has_mc_truth:
             self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name)
 
