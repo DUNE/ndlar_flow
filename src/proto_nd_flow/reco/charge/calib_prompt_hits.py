@@ -62,7 +62,8 @@ class CalibHitBuilder(H5FlowStage):
             io_channel     u8, io channel ID (related to PACMAN number & PACMAN UART Number)
             chip_id        u8, chip_id on tile 
             channel_id     u8, channel_id on single chip (0-63)
-            Q              f8, hit charge [ke-]
+            Q_raw          f8, hit charge [ke-] (uncalibrated for ADC droop)
+            Q              f8, calibrated hit charge with ADC droop corrections
             E              f8, hit energy [MeV]
 
     '''
@@ -90,6 +91,7 @@ class CalibHitBuilder(H5FlowStage):
         ('io_channel', 'u8'),
         ('chip_id', 'u8'),
         ('channel_id', 'u8'),
+        ('Q_raw', 'f8'),
         ('Q', 'f8'),
         ('E', 'f8')
     ])
@@ -111,6 +113,7 @@ class CalibHitBuilder(H5FlowStage):
         self.vcm_mv = params.get('vcm_mv', 478.1)
         self.adc_counts = params.get('adc_counts', 256)
         self.gain = params.get('gain', 4.522)
+        self.adc_droop_calibration = params.get('adc_droop_calibration', False)
 
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
@@ -122,6 +125,7 @@ class CalibHitBuilder(H5FlowStage):
         events_data = cache[self.events_dset_name]
         packets_data = cache[self.packets_dset_name]
         packets_index = cache[self.packets_index_name]
+        
         if resources['RunData'].is_mc:
             packet_frac_bt = cache['packet_frac_backtrack']
             packet_seg_bt = cache['packet_seg_backtrack']
@@ -160,9 +164,11 @@ class CalibHitBuilder(H5FlowStage):
                                     packets_dset=self.packets_dset_name,
                                     t0_dset=self.t0_dset_name,
                                     pedestal_file=self.pedestal_file,
-                                    configuration_file=self.configuration_file
+                                    configuration_file=self.configuration_file,
+                                    adc_droop_calibration=self.adc_droop_calibration
                                     )
-
+        
+        
         # then set up new datasets
         self.data_manager.create_dset(self.calib_hits_dset_name, dtype=self.calib_hits_dtype)
         if has_mc_truth:
@@ -248,7 +254,13 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['chip_id'] = packets_arr['chip_id']
             calib_hits_arr['channel_id'] = packets_arr['channel_id']
             hits_charge = self.charge_from_dataword(packets_arr['dataword'], vref, vcm, ped, self.adc_counts, self.gain) # ke-
-            calib_hits_arr['Q'] = hits_charge # ke-
+            calib_hits_arr['Q_raw'] = hits_charge # ke-
+            if self.adc_droop_calibration: 
+                hits_charge_calibrated = self.charge_from_dataword_corrected(packets_arr['dataword'], packets_arr['timestamp'], hit_uniqueid, vref, vcm, ped, self.adc_counts, self.gain) # ke- 
+                calib_hits_arr['Q'] = hits_charge_calibrated # ke-
+            else:
+                calib_hits_arr['Q'] = hits_charge
+
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
             calib_hits_arr['E'] = hits_charge * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV) # MeV
             if has_mc_truth:
@@ -284,6 +296,51 @@ class CalibHitBuilder(H5FlowStage):
         if has_mc_truth:
             self.data_manager.write_ref(self.calib_hits_dset_name,self.mc_hit_frac_dset_name,np.c_[calib_hits_arr['id'],calib_hits_arr['id']])
 
+    def get_vref_vcm_correction(self, t, t_hits, tau_rc_vref = 4400.0, impulse_vref=-0.352, tau_rc_vcm=1460.0, impulse_vcm=0.352):
+        return self.exp_sum( t, t_hits, impulse_vref, tau_rc_vref), self.exp_sum( t, t_hits, impulse_vcm, tau_rc_vcm  )
+
+    def exp_sum(self, t, ts, amps, taus ):
+        mask = ts <= t
+        ts = ts[ mask ]
+        if not type(amps) in [int, float, np.float64]:
+            amps = amps[mask]
+            taus = taus[mask]
+        if np.sum(mask)==0:
+            return 0
+        return np.sum( amps * np.exp( -1*(t - ts)/taus  )  ) 
+
+    
+    def charge_from_dataword_corrected(self, dw, ts, uid, vref, vcm, ped, adc_counts, gain):
+        #accounts for changes in vref, vcm due to nonlinearities in adc (excessive load on vref/vcm bypass capacitors on tile PCB) 
+
+        # Find chips that had 
+        chip_uid = (uid // 100)*100
+        chips, counts = np.unique(chip_uid, return_counts=True)
+        
+        vref_arr = np.full( dw.shape, vref  )
+        vcm_arr =  np.full( dw.shape, vcm   )
+        
+        for chip in chips[counts > 1]:
+     
+            mask = chip_uid==chip
+
+            chip_ts = ts[mask]
+
+            #collect all vref, vcm corrections for hits on this chip
+            vref_corrs = np.zeros( chip_ts.shape )
+            vcm_corrs = np.zeros( chip_ts.shape )
+            
+            for ihit, t in enumerate(chip_ts):
+
+                vref_corr, vcm_corr = self.get_vref_vcm_correction(t, chip_ts)
+
+                vref_corrs[ihit] = vref_corr
+                vcm_corrs[ihit] = vcm_corr
+
+            vcm_arr[mask] += vcm_corrs
+            vref_arr[mask] += vref_corrs
+             
+        return (dw / adc_counts * (vref_arr - vcm_arr) + vcm_arr - ped) / gain
 
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped, adc_counts, gain):
