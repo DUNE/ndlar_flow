@@ -813,20 +813,26 @@ class Geometry(H5FlowResource):
                     y += mod_centers[module_id-1][1] # det geo yaml is already in cm
                     self._pixel_coordinates_2D[(io_group, io_channel, chip, channel)] = z, y
 
+        # Determine full drift length
+        mod_anodes = np.array(list(tile_pos.values()))[:, 0]
+        d_anode2anode = max(mod_anodes) - min(mod_anodes)
+        try:
+            # all modules should have the same drift length
+            self._max_drift_distance = geometry_yamls[0]['drift_length'] / units.cm # convert mm -> cm
+        except:
+            self._max_drift_distance = 0.5 * d_anode2anode / units.cm
+
         # Determine module readout bounds
         self._get_module_RO_bounds()
 
         # Determine LAr detector bounds
         self._lar_detector_bounds = np.array([np.min(np.array([bound[0] for bound in self._module_RO_bounds]), axis=0),
                                               np.max(np.array([bound[1] for bound in self._module_RO_bounds]), axis=0)])
-        
+
         # Determine cathode thickness
-        cathode_x_coords = np.unique(np.array(mod_centers)[:,0])
-        anode_to_cathode = np.min(np.array([abs(self.lar_detector_bounds[0][0] - cathode_x)
-                                            for cathode_x in cathode_x_coords]))
-        
-        if self.max_drift_distance < anode_to_cathode:
-            # Difference b/w max drift dist and anode-cathode dist is 1/2 cathode thickness
-            self._cathode_thickness = abs(anode_to_cathode - self.max_drift_distance) * 2.0
-        else: 
+        if d_anode2anode > 2*self._max_drift_distance:
+            self._cathode_thickness = d_anode2anode - 2*self._max_drift_distance
+        elif d_anode2anode = 2*self._max_drift_distance:
             self._cathode_thickness = 0.0
+        else:
+            raise ValueError("Please check the pixel layout! The tile position and drift length are not compatible.")

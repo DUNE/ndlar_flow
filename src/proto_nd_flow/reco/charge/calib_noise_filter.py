@@ -6,7 +6,7 @@ import sys
 from h5flow.core import H5FlowStage, resources
 from sklearn.neighbors import KernelDensity
 from pickle import dump, load
-
+import json
 from proto_nd_flow.reco.charge.calib_prompt_hits import CalibHitBuilder
 
 ## Some useful functions for the filter classes
@@ -28,12 +28,41 @@ class low_current_filter:
         Filters out hits with low indunced current. Specify threshold to remove hitsnwith Q<threshold
     '''
 
-    def __init__(self, threshold=6.):
+    def __init__(self, threshold=1., channel_threshold_file=''):
         self.threshold = float(threshold)
         print('using threshold:', self.threshold)
-    def filter(self, hits):
-        return hits['Q']<self.threshold
+        self.channel_threshold_file=channel_threshold_file
+        try:
+            with open(self.channel_threshold_file, 'r') as fi:
+                self.channel_thresholds=json.load(fi)
+        except:
+            self.channel_thresholds={}
+            print('Unable to open channel threshold file! {}\nProceeding with default threshold for all channels.'.format(self.channel_threshold_file))
+    
+    def unique_channel_id(self, d):
+        return ((d['io_group'].astype(int)*1000+d['io_channel'].astype(int))*1000 \
+            + d['chip_id'].astype(int))*100 + d['channel_id'].astype(int)
 
+    def filter(self, hits, default_threshold=5.0):
+        
+        #Get channel by channel thresholds
+        tile_id = resources['Geometry'].tile_id[hits['io_group'],hits['io_channel']]
+        hit_uniqueid = self.unique_channel_id(hits)
+
+        charge_above_threshold = np.ones(hits.shape)*99.
+
+        unique_ids, counts = np.unique(hit_uniqueid, return_counts=True)
+        threshold=default_threshold
+        for u in unique_ids:
+            if not str(u) in self.channel_thresholds.keys():
+                print('No threshold found for channel {}! Using default threshold of {} ke-!'.format(u, default_threshold))
+            else:
+                threshold = self.channel_thresholds[str(u)] 
+            m = hit_uniqueid==u
+            charge_above_threshold[m] = hits[m]['Q']-threshold
+
+        return charge_above_threshold<self.threshold
+        
 class correlated_post_trigger_filter:
     '''
         Module 2 (v2b) specific filter for noise from charge injection from ADC reference instability
@@ -94,12 +123,12 @@ class correlated_post_trigger_filter:
                 
                 chan_nhit = np.sum(m)
                 
-                m = np.logical_and(m, hits['Q']<self.RANGE_Q[1])
-                m = np.logical_and(m, hits['Q']>self.RANGE_Q[0])
+                m = np.logical_and(m, hits['Q_raw']<self.RANGE_Q[1])
+                m = np.logical_and(m, hits['Q_raw']>self.RANGE_Q[0])
                 
                 ts = hits['ts_pps'][m].astype(int)-min_ts
-                qs = hits['Q'][m]
-                sumqs = np.array([np.sum(hits['Q'][m])]*ts.shape[0])
+                qs = hits['Q_raw'][m]
+                sumqs = np.array([np.sum(hits['Q_raw'][m])]*ts.shape[0])
                 if np.sum(m)<1: continue
                 
                 lrs[m] = self.get_lr(n_chip_hits, np.array([ts, qs, sumqs]).transpose(), cc, chan_nhit)
@@ -194,8 +223,10 @@ class CalibNoiseFilter(H5FlowStage):
         mc_hit_frac_dset_name = 'mc_truth/calib_final_hit_backtrack',
         low_current_filter__threshold=6.0,
         hot_pixel_filter__max_n_hits=35,
+        low_current_filter__channel_threshold_file='data/proto_nd_flow/thresholds_2x2.json',
         filter_function_names = ['hot_pixel_filter'],
         hit_ref = False
+
         )
     valid_filter_functions = ['low_current_filter', 'correlated_post_trigger_filter', 'hot_pixel_filter']
 
@@ -240,7 +271,7 @@ class CalibNoiseFilter(H5FlowStage):
         old_ids = hits.data['id'].copy()[...,np.newaxis]
         old_id_mask = hits.mask['id'].copy()[...,np.newaxis]
         filter_mask = self.default_filter_function(new_hits)
-
+        
         for f in self.filter_functions:
             filter_mask = filter_mask | f.filter(hits)
 
