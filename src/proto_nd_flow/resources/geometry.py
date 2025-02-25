@@ -818,13 +818,13 @@ class Geometry(H5FlowResource):
                             print(io_group, ioc, chip, channel)
 
         # Determine full drift length
-        mod_anodes = np.array(list(tile_pos.values()))[:, 0]
+        mod_anodes = np.array(list(tile_pos.values()))[:, 0] / units.cm
         d_anode2anode = max(mod_anodes) - min(mod_anodes)
         try:
             # all modules should have the same drift length
             self._max_drift_distance = geometry_yamls[0]['drift_length'] / units.cm # convert mm -> cm
         except:
-            self._max_drift_distance = 0.5 * d_anode2anode / units.cm
+            self._max_drift_distance = 0.5 * d_anode2anode
 
         # Determine module readout bounds
         self._get_module_RO_bounds()
@@ -836,7 +836,7 @@ class Geometry(H5FlowResource):
         # Determine cathode thickness
         if d_anode2anode > 2*self._max_drift_distance:
             self._cathode_thickness = d_anode2anode - 2*self._max_drift_distance
-        elif d_anode2anode = 2*self._max_drift_distance:
+        elif d_anode2anode == 2*self._max_drift_distance:
             self._cathode_thickness = 0.0
         else:
             raise ValueError("Please check the pixel layout! The tile position and drift length are not compatible.")
