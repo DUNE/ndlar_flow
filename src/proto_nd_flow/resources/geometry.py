@@ -818,8 +818,8 @@ class Geometry(H5FlowResource):
                             print(io_group, ioc, chip, channel)
 
         # Determine full drift length
-        mod_anodes = np.array(list(tile_pos.values()))[:, 0]
-        d_anode2anode = max(mod_anodes) - min(mod_anodes) / units.cm  # convert mm -> cm
+        mod_anodes = np.array(list(tile_pos.values()))[:, 0] / units.cm  # convert mm -> cm
+        d_anode2anode = max(mod_anodes) - min(mod_anodes)
         try:
             # all modules should have the same drift length
             self._max_drift_distance = geometry_yamls[0]['drift_length'] / units.cm # convert mm -> cm
