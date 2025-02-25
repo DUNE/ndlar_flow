@@ -224,7 +224,9 @@ class CalibNoiseFilter(H5FlowStage):
         low_current_filter__threshold=6.0,
         hot_pixel_filter__max_n_hits=35,
         low_current_filter__channel_threshold_file='data/proto_nd_flow/thresholds_2x2.json',
-        filter_function_names = ['hot_pixel_filter']
+        filter_function_names = ['hot_pixel_filter'],
+        hit_ref = False
+
         )
     valid_filter_functions = ['low_current_filter', 'correlated_post_trigger_filter', 'hot_pixel_filter']
 
@@ -295,10 +297,10 @@ class CalibNoiseFilter(H5FlowStage):
         self.data_manager.create_dset(self.calib_hits_dset_name, dtype=self.hits_dtype)
         if has_mc_truth:
             self.data_manager.create_dset(self.mc_hit_frac_dset_name, dtype=hits_frac_bt.dtype)
+        self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(self.hits_name, self.calib_hits_dset_name)
         self.data_manager.create_ref(source_name, self.calib_hits_dset_name)
-        self.data_manager.create_ref(self.events_dset_name, self.calib_hits_dset_name)
-        if has_mc_truth:
+        if self.hit_ref and has_mc_truth:
             self.data_manager.create_ref(self.calib_hits_dset_name, self.mc_hit_frac_dset_name)
 
         event_id = np.r_[source_slice]
@@ -350,6 +352,6 @@ class CalibNoiseFilter(H5FlowStage):
         self.data_manager.write_ref(self.events_dset_name, self.calib_hits_dset_name, ev_ref)
 
         # hit -> backtracking
-        if has_mc_truth:
+        if self.hit_ref and has_mc_truth:
             self.data_manager.write_ref(self.calib_hits_dset_name,self.mc_hit_frac_dset_name,np.c_[new_hits['id'], new_hits['id']])
 
