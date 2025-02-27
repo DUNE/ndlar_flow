@@ -401,7 +401,10 @@ class RawEventGenerator(H5FlowGenerator):
         else:
             mc_assn = None
 
-        mask = (block['valid_parity'].astype(bool) & (block['packet_type'] == 0))  # data packets
+        mask_disabled_channels = np.array(
+            [(p[['io_group', 'io_channel', 'chip_id', 'channel_id']]) not in resources['Geometry'].disabled_channels for p in block]
+            , dtype=bool)
+        mask = (block['valid_parity'].astype(bool) & (block['packet_type'] == 0) & mask_disabled_channels)  # data packets
         mask = mask | (block['packet_type'] == 4)  # timestamp packets
         mask = mask | (block['packet_type'] == 7)  # external trigger packets
         mask = mask | (block['packet_type'] == 6)  # sync packets

@@ -7,6 +7,7 @@ params:
                        'data/proto_nd_flow/multi_tile_layout-2.5.16.yaml']
   crs_geometry_to_module: [0,0,1,0]
   lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-4.0.0.yaml'
+  disabled_channels_file: 'data/proto_nd_flow/disabled_channels_2x2.json'
   beam_direction: 'z'
   drift_direction: 'x'
   network_agnostic: true
