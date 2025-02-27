@@ -245,9 +245,9 @@ class WaveformHitFinder(H5FlowStage):
         peaks = np.where(peaks)
 
 
-        if np.any(peaks[3] >= 999):  # Axis 3 is the issue
+        if np.any(peaks[3] >= 999): 
             print("Warning: Some peak indices exceed valid range.")
-            peaks = tuple(np.clip(p, 0, 998) for p in peaks)
+            peaks = tuple(np.clip(p, 0, 998) for p in peaks) 
         peak_max = wvfms[..., 1:][peaks]  # waveform value at each peak
 
         threshold_mask = peak_max >=self.threshold[peaks[1:-1]].ravel()
@@ -259,15 +259,6 @@ class WaveformHitFinder(H5FlowStage):
             # hits are present in event, extract parameters
             peaks = tuple(p[threshold_mask].reshape(-1, 1) for p in peaks)
             peak_max = peak_max[threshold_mask]
-
-
-
-        # if (len(peak_max)>0):
-        #     # print (peaks.shape)
-
-        #     # hits are present in event, extract parameters
-        #     peaks = tuple(p.reshape(-1, 1) for p in peaks)
-            # peak_max = peak_max[threshold_mask]
 
             # get neighboring samples
             peak_sample_index = np.clip(peaks[-1].reshape(-1, 1)
