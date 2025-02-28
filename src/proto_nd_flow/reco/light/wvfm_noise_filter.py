@@ -49,8 +49,8 @@ class WaveformNoiseFilter(H5FlowStage):
     '''
     class_version = '1.0.0'
 
-    default_filter_samples = (0, 80)
-    default_modulo_param = 10
+    default_filter_samples = (0, 100)
+    default_modulo_param = 25
     default_keep_noise = False
     default_noise_dset_name = 'light/fwvfm_noise'
 
