@@ -2,6 +2,7 @@ import numpy as np
 import numpy.ma as ma
 from collections import defaultdict
 import scipy.interpolate
+from scipy.ndimage import uniform_filter1d
 
 from h5flow.core import H5FlowStage, resources
 
@@ -105,6 +106,47 @@ class WaveformHitFinder(H5FlowStage):
         else:
             raise RuntimeError(f'Invalid hit level {self.hit_level}')
 
+    def get_noise_threshold(self, wvfms, n_mad_factor=5.0):
+        # Initialize median and MAD
+        median = np.ma.median(wvfms, axis=-1)
+        mad = np.ma.median(np.abs(wvfms - median[..., np.newaxis]), axis=-1)
+        # identify outliers in the waveform
+        mad_factor = n_mad_factor * mad
+        noise_mask = np.abs(wvfms - median[..., np.newaxis]) < mad_factor[..., np.newaxis]
+        # set non mask values to nan
+        noise_samples = np.where(noise_mask, wvfms, np.nan)
+        # calculate noise as stddev of noise_samples
+        noise = np.where(np.nansum(noise_samples,axis=-1) != 0,np.nanstd(noise_samples),np.nan)
+        
+        return  noise
+
+        
+    def interaction_finder(self, wvfm, noise,
+                       n_noise_factor = 50.0,
+                       n_bins_rolled = 10,
+                       n_sqrt_rt_factor = 30.0,
+                       pe_weight = 1.0):
+        # save hitfinder settings to config
+        hit_config = {'n_noise_factor': n_noise_factor,
+                        'n_bins_rolled': n_bins_rolled,
+                        'n_sqrt_rt_factor': n_sqrt_rt_factor,
+                        'pe_weight': pe_weight}
+
+        # height = flat threshold over noise (n*sigma)
+        height = n_noise_factor * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
+        # dynamic_threshold = rolling threshold of previous 5 bins + n*sqrt(rolling threshold)
+        wvfm_rolled = np.roll(wvfm, n_bins_rolled)
+        rolling_average = uniform_filter1d(wvfm_rolled, size=n_bins_rolled)
+        sqrt_rolling_average = np.sqrt(np.abs(rolling_average) * pe_weight**2)
+        sqrt_rolling_average[sqrt_rolling_average == 0] = 1
+        dynamic_threshold = rolling_average + n_sqrt_rt_factor*sqrt_rolling_average
+        # find rising edges
+        bins_over_dynamic_threshold = (wvfm > dynamic_threshold) & (wvfm > height)
+        # remove consecutive bins, keep only the first
+        bins_over_dynamic_threshold[..., 1:] = bins_over_dynamic_threshold[..., 1:] & ~bins_over_dynamic_threshold[..., :-1]
+
+        return bins_over_dynamic_threshold
+
     def __init__(self, **params):
         super(WaveformHitFinder, self).__init__(**params)
         self.wvfm_dset_name = params.get('wvfm_dset_name')
@@ -189,24 +231,28 @@ class WaveformHitFinder(H5FlowStage):
         # t = np.tile(np.expand_dims(t,axis=2), (1, 1, 64))
         events = cache[source_name]
         # t = ma.array(t, mask=~events['wvfm_valid'].astype(bool))
-        wvfm_sn = events['sn']
         wvfm_det = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
         # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
-        peaks = ((np.sign(wvfm_d[..., 1:]) * np.sign(wvfm_d[..., :-1]) < 0)
-                 & (np.sign(np.diff(wvfm_d, axis=-1)) <= 0)
-                 & ~np.isin(np.arange(self.ndet), self.mask).reshape(1, 1, -1, 1)
-                 & np.all(~wvfms.mask, axis=-1, keepdims=True))
-        peaks = np.where(peaks)  # tuple of (ev, tpc, det, index)
+        noise = self.get_noise_threshold(wvfms)
+
+        peaks = self.interaction_finder(wvfms,noise)
+        peaks = np.where(peaks)
+
+
+        if np.any(peaks[3] >= 999): 
+            print("Warning: Some peak indices exceed valid range.")
+            peaks = tuple(np.clip(p, 0, 998) for p in peaks) 
         peak_max = wvfms[..., 1:][peaks]  # waveform value at each peak
 
-        # apply threshold
-        threshold_mask = peak_max >= self.threshold[peaks[1:-1]].ravel()
+        threshold_mask = peak_max >=self.threshold[peaks[1:-1]].ravel()
 
         if np.count_nonzero(threshold_mask):
+
             # hits are present in event, extract parameters
             peaks = tuple(p[threshold_mask].reshape(-1, 1) for p in peaks)
             peak_max = peak_max[threshold_mask]
+
             # get neighboring samples
             peak_sample_index = np.clip(peaks[-1].reshape(-1, 1)
                                         + np.arange(-self.near_samples + 1, self.near_samples + 2), 0, self.nsamples - 1)
