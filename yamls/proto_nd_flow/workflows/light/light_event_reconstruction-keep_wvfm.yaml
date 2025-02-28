@@ -8,9 +8,9 @@ flow:
 
 
 resources:
-  - !include yamls/module0_flow/resources/RunDataData.yaml
-  - !include yamls/module0_flow/resources/GeometryData.yaml
-  - !include yamls/module0_flow/resources/LArData.yaml
+  - !include yamls/proto_nd_flow/resources/RunDataData.yaml
+  - !include yamls/proto_nd_flow/resources/GeometryData.yaml
+  - !include yamls/proto_nd_flow/resources/LArData.yaml
 
 
 #timestamp_corrector:
@@ -18,7 +18,7 @@ resources:
 
 
 wvfm_filt:
-  !include yamls/module0_flow/reco/light/WaveformNoiseFilter.yaml
+  !include yamls/proto_nd_flow/reco/light/WaveformNoiseFilter.yaml
 
 
 # wvfm_align_filt:
