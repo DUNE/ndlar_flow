@@ -102,8 +102,6 @@ class WaveformNoiseFilter(H5FlowStage):
 
         # # subtract noise from waveform
         fwvfm = np.empty(wvfm_data.shape, dtype=self.fwvfm_dtype)
-        # fwvfm['samples'] = wvfm_samples.reshape(noise.shape) - noise
-        # fwvfm['samples'] = wvfm_samples.reshape(noise.shape)
 
         # subtract pedestal value
         fwvfm['samples'] = wvfm_data['samples'] - wvfm_data['samples'][..., self.filter_samples[0]:self.filter_samples[-1]].mean(axis=-1, keepdims=True)
