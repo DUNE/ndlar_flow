@@ -117,7 +117,6 @@ class WaveformHitFinder(H5FlowStage):
         noise_samples = np.where(noise_mask, wvfms, np.nan)
         # calculate noise as stddev of noise_samples
         noise = np.where(np.nansum(noise_samples,axis=-1) != 0,np.nanstd(noise_samples),np.nan)
-        
         return  noise
 
         
@@ -235,24 +234,19 @@ class WaveformHitFinder(H5FlowStage):
         # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
         noise = self.get_noise_threshold(wvfms)
-
         peaks = self.interaction_finder(wvfms,noise)
         peaks = np.where(peaks)
-
 
         if np.any(peaks[3] >= 999): 
             print("Warning: Some peak indices exceed valid range.")
             peaks = tuple(np.clip(p, 0, 998) for p in peaks) 
         peak_max = wvfms[..., 1:][peaks]  # waveform value at each peak
-
         threshold_mask = peak_max >=self.threshold[peaks[1:-1]].ravel()
 
         if np.count_nonzero(threshold_mask):
-
             # hits are present in event, extract parameters
             peaks = tuple(p[threshold_mask].reshape(-1, 1) for p in peaks)
             peak_max = peak_max[threshold_mask]
-
             # get neighboring samples
             peak_sample_index = np.clip(peaks[-1].reshape(-1, 1)
                                         + np.arange(-self.near_samples + 1, self.near_samples + 2), 0, self.nsamples - 1)
