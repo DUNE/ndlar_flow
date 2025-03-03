@@ -888,10 +888,20 @@ class Geometry(H5FlowResource):
             
         for key in disabled_channels_json:
             
-            io_group, io_channel, chip_id = key.split('-')
+            io_group, io_channel, chip_id = list(map(int,key.split('-')))
             
-            for channel_id in disabled_channels_json[key]:
+            for channel_id in list(map(int,disabled_channels_json[key])):
                 
-                disabled_channels_list.append((int(io_group), int(io_channel), int(chip_id), int(channel_id)))
+                if self.network_agnostic == True:
+
+                    start_io_channel = ((io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
+
+                    for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
+
+                        disabled_channels_list.append((io_group, io_channel, chip_id, channel_id))
+
+                else:
+
+                    disabled_channels_list.append((io_group, io_channel, chip_id, channel_id))
         
         self._disabled_channels = np.array(disabled_channels_list, dtype = disabled_channels_dtype)
