@@ -307,7 +307,8 @@ class CalibHitBuilder(H5FlowStage):
             taus = taus[mask]
         if np.sum(mask)==0:
             return 0
-        return np.sum( amps * np.exp( -1*(t - ts)/taus  )  ) 
+        dt = np.int64(t - ts)   # uint64 -> int64 (avoid OverflowError below)
+        return np.sum( amps * np.exp( -1*dt/taus  )  )
 
     
     def charge_from_dataword_corrected(self, dw, ts, uid, vref, vcm, ped, adc_counts, gain):
