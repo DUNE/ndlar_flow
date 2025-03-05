@@ -117,6 +117,10 @@ class TimestampCorrector(H5FlowStage):
             for io_group in np.unique(packets_data['io_group']):
                 mask = packets_data['io_group'] == io_group
                 ts_corr_data['ts'][mask] = (packets_data[mask]['timestamp'].astype('f8') - self.correction[io_group][0]) / (1. + self.correction[io_group][1])
+                # Correct for missed sync.
+                # TODO yaml-parameterize this and verify that it works for
+                # nonzero correction constants.
+                ts_corr_data['ts'][mask] %= 1E7
 
         # save corrected timestamps
         ts_slice = self.data_manager.reserve_data(self.ts_dset_name, len(ts_corr_data))
