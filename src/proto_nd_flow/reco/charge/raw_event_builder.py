@@ -141,7 +141,10 @@ class RawEventBuilder(object):
             last_sync_ts = fill_with_last(sync_ts)
             offsets[oops_mask] -= last_sync_ts[oops_mask]
 
-        ts = packets['timestamp'].astype('i8') + offsets
+        # The offsets are already corrected for the cases when the SYNC was
+        # missed by the PACMAN. Now the "% self.rollover_ticks" takes care of
+        # LArPix ASICs (as opposed to PACMEN) that missed one or more SYNCs.
+        ts = (packets['timestamp'].astype('i8') % self.rollover_ticks) + offsets
 
         # Timestamp packets require special treatment, since their timestamp
         # field is actually a unix timestamp. For these, we just subtract this
