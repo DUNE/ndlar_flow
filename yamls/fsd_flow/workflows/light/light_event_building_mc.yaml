@@ -8,7 +8,7 @@ flow:
 
 
 resources:
-  - !include yamls/fsd_flow/resources/RunData.yaml
+  - !include yamls/fsd_flow/resources/RunDataMC.yaml
 
 
 light_event_generator_mc:
