@@ -10,7 +10,7 @@ flow:
 resources:
   - !include yamls/fsd_flow/resources/RunData.yaml
   - !include yamls/fsd_flow/resources/LArData.yaml
-  - !include yamls/fsd_flow/resources/Geometry.yaml
+  - !include yamls/fsd_flow/resources/GeometryMC.yaml
 
 
 raw_events:
