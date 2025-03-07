@@ -224,7 +224,7 @@ class CalibNoiseFilter(H5FlowStage):
         low_current_filter__threshold=6.0,
         hot_pixel_filter__max_n_hits=35,
         low_current_filter__channel_threshold_file='data/proto_nd_flow/thresholds_2x2.json',
-        filter_function_names = ['hot_pixel_filter']
+        filter_function_names = ['hot_pixel_filter'],
         hit_ref = False
         )
     valid_filter_functions = ['low_current_filter', 'correlated_post_trigger_filter', 'hot_pixel_filter']
