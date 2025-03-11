@@ -8,7 +8,7 @@ flow:
 
 
 resources:
-  - !include yamls/fsd_flow/resources/RunData.yaml
+  - !include yamls/fsd_flow/resources/RunDataData.yaml
   - !include yamls/fsd_flow/resources/LArData.yaml
   - !include yamls/fsd_flow/resources/GeometryData.yaml
 
@@ -21,5 +21,5 @@ raw_events:
     chunk_size: 128
 
 calib_hit_builder:
-  !include yamls/fsd_flow/reco/charge/CalibHitBuilder.yaml
+  !include yamls/fsd_flow/reco/charge/CalibHitBuilderData.yaml
 
