@@ -401,15 +401,7 @@ class RawEventGenerator(H5FlowGenerator):
         else:
             mc_assn = None
 
-        mask_disabled_channels = np.array(
-            [(p[['io_group', 'io_channel', 'chip_id', 'channel_id']]) not in resources['Geometry'].disabled_channels for p in block]
-            , dtype=bool)
-
-        mask_disabled_chips = np.array(
-            [(p[['io_group', 'io_channel', 'chip_id']]) not in resources['Geometry'].disabled_chips for p in block]
-            , dtype=bool)
-
-        mask = (block['valid_parity'].astype(bool) & (block['packet_type'] == 0) & mask_disabled_channels & mask_disabled_chips)  # data packets
+        mask = (block['valid_parity'].astype(bool) & (block['packet_type'] == 0))  # data packets
         mask = mask | (block['packet_type'] == 4)  # timestamp packets
         mask = mask | (block['packet_type'] == 7)  # external trigger packets
         mask = mask | (block['packet_type'] == 6)  # sync packets
@@ -459,14 +451,30 @@ class RawEventGenerator(H5FlowGenerator):
             return H5FlowGenerator.EMPTY
 
         # apply nhit cut
-        nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
+        def nhit_filter(x):
+
+            event = x[0]
+            mask_disabled_channels = np.array(
+            [(p[['io_group', 'io_channel', 'chip_id', 'channel_id']]) in resources['Geometry'].disabled_channels for p in event]
+            , dtype=bool)
+
+            mask_disabled_chips = np.array(
+            [(p[['io_group', 'io_channel', 'chip_id']]) in resources['Geometry'].disabled_chips for p in event]
+            , dtype=bool)
+            
+            return len(event[~(mask_disabled_channels | mask_disabled_chips)]) >= self.nhit_cut
+
         if self.is_mc:
-            mc_assn_filtered = list(filter(lambda x: len(x) >= self.nhit_cut, event_mc_assn))
+            nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts, event_mc_assn)))
+        else:
+            nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts)))
 
         if len(nhit_filtered):
-            events, event_unix_ts = zip(*nhit_filtered)
             if self.is_mc:
-                event_mc_assn = mc_assn_filtered
+                events, event_unix_ts, event_mc_assn = zip(*nhit_filtered)
+            else:
+                events, event_unix_ts = zip(*nhit_filtered)
+                
         else:
             events, event_unix_ts = list(), list()
             if self.is_mc:
