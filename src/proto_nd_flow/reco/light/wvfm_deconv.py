@@ -96,6 +96,7 @@ class WaveformDeconvolution(H5FlowStage):
             raise RuntimeError(f'Invalid noise estimation strategy: {self.noise_strategy}')
         self.noise_slice = slice(*params.get('noise_slice', (None, None)))
         self.signal_amplitude = params.get('signal_amplitude', (-np.inf, np.inf))
+        print("Signal amplitude is: " + str(self.signal_amplitude))
 
         self.gen_noise_spectrum = params.get('gen_noise_spectrum', False)
         self.gen_signal_spectrum = params.get('gen_signal_spectrum', False)
@@ -344,10 +345,11 @@ class WaveformDeconvolution(H5FlowStage):
 
         if self.do_filtering:
             # zero-pad to remove cyclic artifacts
-            padding = np.zeros_like(wvfms)
-            fft = np.fft.rfft(np.concatenate((wvfms,padding), axis=-1), axis=-1)
-            impulse_fft = np.fft.rfft(self.signal_impulse['impulse'])
-
+            #padding = np.zeros_like(wvfms)
+            #fft = np.fft.rfft(np.concatenate((wvfms,padding), axis=-1), axis=-1)
+            #impulse_fft = np.fft.rfft(self.signal_impulse['impulse'])
+            impulse_fft = np.fft.rfft(self.signal_impulse['impulse'], n=wvfms.shape[-1] * 2)
+            
             with np.errstate(divide='ignore', invalid='ignore'):
                 if self.filter_type == self.FILT_WIENER:
                     # wiener deconvolution assuming delta-funtion (or gaussian) signal (optimizes MSE)

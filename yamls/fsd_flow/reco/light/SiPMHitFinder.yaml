@@ -16,5 +16,5 @@ params:
   near_samples: 4
   hit_level: 'sipm'
 
-  threshold: !include yamls/fsd_flow/reco/light/sipm_threshold.yaml
-  #threshold: 80
+  #threshold: !include yamls/fsd_flow/reco/light/sipm_threshold.yaml
+  threshold: 0.4
