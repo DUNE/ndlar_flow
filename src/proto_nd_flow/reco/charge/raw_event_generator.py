@@ -86,7 +86,7 @@ class RawEventGenerator(H5FlowGenerator):
     default_mc_tracks_dset_name = 'mc_truth/segments'
     default_mc_trajectories_dset_name = 'mc_truth/trajectories'
     default_mc_packet_fraction_dset_name = 'mc_truth/packet_fraction'
-    default_truth_ref = False
+    default_truth_ref = True
 
     raw_event_dtype = np.dtype([
         ('id', 'u8'),
