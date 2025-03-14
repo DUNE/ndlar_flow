@@ -93,8 +93,7 @@ class CalibHitBuilder(H5FlowStage):
         ('channel_id', 'u8'),
         ('Q_raw', 'f8'),
         ('Q', 'f8'),
-        ('E', 'f8'),
-        ('is_disabled', '?')
+        ('E', 'f8')
     ])
 
     def __init__(self, **params):
@@ -155,7 +154,7 @@ class CalibHitBuilder(H5FlowStage):
             index_arr = np.zeros((0,), dtype=packets_index.dtype)
 
         if has_mc_truth and ('x_true_seg_t' not in self.calib_hits_dtype.fields):
-            self.calib_hits_dtype = np.dtype(self.calib_hits_dtype.descr + [('x_true_seg_t', f'({packet_seg_bt.shape[-1]},)f8'), ('E_true_recomb_elife', f'({packet_seg_bt.shape[-1]},)f8')])
+            self.calib_hits_dtype = np.dtype(self.calib_hits_dtype.descr + [('is_disabled', '?'), ('x_true_seg_t', f'({packet_seg_bt.shape[-1]},)f8'), ('E_true_recomb_elife', f'({packet_seg_bt.shape[-1]},)f8')])
 
         # save all config info
         self.data_manager.set_attrs(self.calib_hits_dset_name,
@@ -268,13 +267,9 @@ class CalibHitBuilder(H5FlowStage):
                 true_recomb = resources['LArData'].ionization_recombination(mode=2,dEdx=packet_seg_bt_arr['dEdx'])
                 calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
 
-                mask_disabled_channels = np.array(
-                    [(p[['io_group', 'io_channel', 'chip_id', 'channel_id']]) in resources['Geometry'].disabled_channels for p in packets_arr]
-                    , dtype=bool)
+                mask_disabled_channels = np.isin(packets_arr[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
 
-                mask_disabled_chips = np.array(
-                    [(p[['io_group', 'io_channel', 'chip_id']]) in resources['Geometry'].disabled_chips for p in packets_arr]
-                    , dtype=bool)
+                mask_disabled_chips = np.isin(packets_arr[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
 
                 calib_hits_arr['is_disabled'] = mask_disabled_channels | mask_disabled_chips
 
