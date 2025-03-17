@@ -270,6 +270,8 @@ class WaveformHitFinder(H5FlowStage):
             # project back to 0-crossing
             peak_spline_d = peak_spline.derivative(1)(subsamples)
             
+            peak_spline_d = np.where(peak_spline_d == 0, np.nan,peak_spline_d)
+            
             peak_rising_spline_samples = ma.array(subsamples
                                                   - peak_spline_subsamples / peak_spline_d,
                                                   mask=subsamples >= peak_ns_spline)
