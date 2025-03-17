@@ -139,7 +139,6 @@ class WaveformNoiseFilter(H5FlowStage):
         # subtract pedestal value
         pedestal = self.min_range_baseline(wvfm_data['samples'], self.segment_size, self.num_segment)
         fwvfm['samples'] = wvfm_data['samples']  - pedestal[..., np.newaxis]
-        # fwvfm['samples'] = wvfm_data['samples'] - wvfm_data['samples'][..., self.filter_samples[0]:self.filter_samples[-1]].mean(axis=-1, keepdims=True)
 
         # reserve new data
         fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
