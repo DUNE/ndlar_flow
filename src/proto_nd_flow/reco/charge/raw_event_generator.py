@@ -466,14 +466,27 @@ class RawEventGenerator(H5FlowGenerator):
             return H5FlowGenerator.EMPTY
 
         # apply nhit cut
-        nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
+        def nhit_filter(x):
+
+            event = x[0]
+
+            mask_disabled_channels = np.isin(event[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
+
+            mask_disabled_chips = np.isin(event[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
+            
+            return (~(mask_disabled_channels | mask_disabled_chips)).sum() >= self.nhit_cut
+
         if self.is_mc:
-            mc_assn_filtered = list(filter(lambda x: len(x) >= self.nhit_cut, event_mc_assn))
+            nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts, event_mc_assn)))
+        else:
+            nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts)))
 
         if len(nhit_filtered):
-            events, event_unix_ts = zip(*nhit_filtered)
             if self.is_mc:
-                event_mc_assn = mc_assn_filtered
+                events, event_unix_ts, event_mc_assn = zip(*nhit_filtered)
+            else:
+                events, event_unix_ts = zip(*nhit_filtered)
+                
         else:
             events, event_unix_ts = list(), list()
             if self.is_mc:

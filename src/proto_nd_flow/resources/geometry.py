@@ -4,6 +4,7 @@ import logging
 import os
 import warnings
 import yaml
+import json
 
 from h5flow.core import H5FlowResource
 from h5flow.core import resources
@@ -89,6 +90,8 @@ class Geometry(H5FlowResource):
     default_det_geometry_file = '-'
     default_crs_geometry_file = ['-']
     default_lrs_geometry_file = '-'
+    default_disabled_channels_file = '-'
+    default_disabled_chips_file = '-'
     default_beam_direction    = 'z'
     default_drift_direction   = 'x'
     default_crs_geometry_to_module = [0]
@@ -102,6 +105,8 @@ class Geometry(H5FlowResource):
         self.charge_only = params.get('charge_only', self.default_charge_only) 
         self.n_io_channels_per_tile = params.get('n_io_channels_per_tile', self.default_n_io_channels_per_tile)
         self.crs_geometry_files = params.get('crs_geometry_files', self.default_crs_geometry_file)
+        self.disabled_channels_file = params.get('disabled_channels_file', self.default_disabled_channels_file)
+        self.disabled_chips_file = params.get('disabled_chips_file', self.default_disabled_chips_file)
         self.crs_geometry_to_module = params.get('crs_geometry_to_module', self.default_crs_geometry_to_module)
         self.det_geometry_file = params.get('det_geometry_file', self.default_det_geometry_file)
         self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
@@ -111,6 +116,8 @@ class Geometry(H5FlowResource):
         self._lar_detector_bounds = None # min and max xyz coordinates for full LAr detector
         self._max_drift_distance = None # max drift distance in each LArTPC (2 TPCs per module)
         self._module_RO_bounds = None # min and max xyz coordinates for each pixel LArTPC module
+        self._disabled_channels = None
+        self._disabled_chips = None
 
     def init(self, source_name):
         super(Geometry, self).init(source_name)
@@ -155,6 +162,14 @@ class Geometry(H5FlowResource):
             write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
             write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
 
+            self.data_manager.create_dset(self.path+'/disabled_channels', dtype=self.disabled_channels.dtype)
+            disabled_channels_slice = self.data_manager.reserve_data(self.path+'/disabled_channels', len(self.disabled_channels))
+            self.data_manager.write_data(self.path+'/disabled_channels',  disabled_channels_slice, self.disabled_channels)
+
+            self.data_manager.create_dset(self.path+'/disabled_chips', dtype=self.disabled_chips.dtype)
+            disabled_chips_slice = self.data_manager.reserve_data(self.path+'/disabled_chips', len(self.disabled_chips))
+            self.data_manager.write_data(self.path+'/disabled_chips',  disabled_chips_slice, self.disabled_chips)
+
             if not self.charge_only:
                 self.data_manager.set_attrs(self.path, lrs_geometry_file=self.lrs_geometry_file)
                 write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
@@ -171,6 +186,8 @@ class Geometry(H5FlowResource):
             self._max_drift_distance = self.data['max_drift_distance']
             self._module_RO_bounds = self.data['module_RO_bounds']
             self._pixel_pitch = self.data['pixel_pitch']
+            self._disabled_channels = self.data_manager.get_dset(self.path+'/disabled_channels')
+            self._disabled_chips = self.data_manager.get_dset(self.path+'/disabled_chips')
 
             self._anode_drift_coordinate = read_lut(self.data_manager, self.path, 'anode_drift_coordinate')
             self._drift_dir = read_lut(self.data_manager, self.path, 'drift_dir')
@@ -422,6 +439,13 @@ class Geometry(H5FlowResource):
             
         self._module_RO_bounds = np.array(self._module_RO_bounds)
 
+    @property
+    def disabled_channels(self):
+        return self._disabled_channels
+
+    @property
+    def disabled_chips(self):
+        return self._disabled_chips
 
     @staticmethod
     def _rotate_pixel(pixel_pos, tile_orientation):
@@ -850,3 +874,82 @@ class Geometry(H5FlowResource):
         #    self._cathode_thickness = abs(anode_to_cathode - self.max_drift_distance) * 2.0
         #else: 
         #    self._cathode_thickness = 0.0
+
+        self._load_disabled_channels()
+
+        self._load_disabled_chips()
+
+    def _load_disabled_channels(self):
+
+        # Parses the disabled channels file into a structured array.
+        # The first iteration of the file is a json dictionary where the keys are strings 
+        # '<io_group>-<io_channel>-<chip_id>' and the values are lists of the channel_ids
+
+        disabled_channels_dtype = np.dtype([
+        ('io_group', 'u8'),
+        ('io_channel', 'u8'),
+        ('chip_id', 'u8'),
+        ('channel_id', 'u8')
+        ])
+        
+        disabled_channels_list = []
+        if self.disabled_channels_file == '-':
+            self._disabled_channels = np.array([], dtype = disabled_channels_dtype)
+            return
+        
+        with open(self.disabled_channels_file, 'r') as f:
+            disabled_channels_json = json.load(f)
+            
+        for key in disabled_channels_json:
+            
+            io_group, io_channel, chip_id = list(map(int,key.split('-')))
+            
+            for channel_id in list(map(int,disabled_channels_json[key])):
+                
+                if self.network_agnostic == True:
+
+                    start_io_channel = ((io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
+
+                    for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
+
+                        disabled_channels_list.append((io_group, io_channel, chip_id, channel_id))
+
+                else:
+
+                    disabled_channels_list.append((io_group, io_channel, chip_id, channel_id))
+        
+        self._disabled_channels = np.array(disabled_channels_list, dtype = disabled_channels_dtype)
+
+    def _load_disabled_chips(self):
+
+        disabled_chips_dtype = np.dtype([
+        ('io_group', 'u8'),
+        ('io_channel', 'u8'),
+        ('chip_id', 'u8')
+        ])
+
+        disabled_chips_list = []
+        if self.disabled_chips_file == '-':
+            self._disabled_chips = np.array([], dtype = disabled_chips_dtype)
+            return
+
+        with open(self.disabled_chips_file, 'r') as f:
+            disabled_chips_json = json.load(f)
+
+        for chip in disabled_chips_json:
+
+            io_group, io_channel, chip_id = list(map(int,chip.split('-')))
+
+            if self.network_agnostic == True:
+
+                start_io_channel = ((io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
+
+                for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
+
+                    disabled_chips_list.append((io_group, io_channel, chip_id))
+
+            else:
+
+                disabled_chips_list.append((io_group, io_channel, chip_id))
+
+        self._disabled_chips = np.array(disabled_chips_list, dtype = disabled_chips_dtype)

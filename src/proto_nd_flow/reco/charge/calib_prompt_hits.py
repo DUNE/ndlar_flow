@@ -93,7 +93,8 @@ class CalibHitBuilder(H5FlowStage):
         ('channel_id', 'u8'),
         ('Q_raw', 'f8'),
         ('Q', 'f8'),
-        ('E', 'f8')
+        ('E', 'f8'),
+        ('is_disabled', '?')
     ])
 
     def __init__(self, **params):
@@ -268,6 +269,12 @@ class CalibHitBuilder(H5FlowStage):
             #if has_mc_truth:
             #    true_recomb = resources['LArData'].ionization_recombination(mode=2,dEdx=packet_seg_bt_arr['dEdx'])
             #    calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
+
+            mask_disabled_channels = np.isin(packets_arr[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
+
+            mask_disabled_chips = np.isin(packets_arr[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
+
+            calib_hits_arr['is_disabled'] = mask_disabled_channels | mask_disabled_chips
 
         # if back tracking information was available, write the merged back tracking
         # dataset to file 
