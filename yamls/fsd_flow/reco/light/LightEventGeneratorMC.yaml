@@ -9,7 +9,7 @@ params:
   n_modules: 1
   n_adcs: 4
   n_channels: 64
-  n_sipms_per_module: 480
+  n_sipms_per_module: 240
   adc_sn:
    - 0
    - 1
