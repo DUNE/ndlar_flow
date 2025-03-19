@@ -7,6 +7,7 @@ params:
 
   # configuration parameters
   mc_tracks_dset_name: 'mc_truth/segments'
+  truth_ref: True
   buffer_size: 100000
   nhit_cut: 20
   sync_noise_cut: [100, 11000000] # Stephen says no need to cut > first 10 usec
