@@ -11,13 +11,13 @@ import proto_nd_flow.util.units as units
 
 class RunData(H5FlowResource):
     '''
-        Provides access to run-level data:
+        Provides access to run-level data, including:
 
-         - ``charge_data_file``: charge raw data file source name
-         - ``light_data_file``: light raw data file source name
+         - ``charge_filename``: charge raw data file source name
+         - ``light_filename``: light raw data file source name
          - ``e_field``: TPC electric field in kV/mm
-         - ``light_nsamples``: light system number of samples
-         - ``charge_threshold``: charge system global thresholds (either
+         - ``light_samples``: light system number of samples
+         - ``charge_thresholds``: charge system global thresholds (either
            ``high`` or ``medm``)
          - ``is_mc``: boolean flag, ``True`` if file was produced by simulation
 
@@ -64,14 +64,20 @@ class RunData(H5FlowResource):
     source_filename_columns = ('charge_filename', 'light_filename')
     required_attr = ('charge_filename', 'light_filename', 'e_field',
                      'light_samples', 'charge_thresholds', 'is_mc', 'crs_ticks',
-                     'lrs_ticks')
+                     'lrs_ticks', 'rollover_ticks')
+
+    class_defaults = {
+        'rollover_ticks': int(1E7),
+    }
 
     def __init__(self, **params):
         super(RunData, self).__init__(**params)
 
         self.path = params.get('path', self.default_path)
         self.runlist_file = params.get('runlist_file', self.default_runlist_file)
-        self.defaults = params.get('defaults', dict())
+
+        self.defaults = dict(RunData.class_defaults)
+        self.defaults.update(params.get('defaults', dict()))
 
     def init(self, source_name):
         super(RunData, self).init(source_name)
@@ -231,11 +237,6 @@ class RunData(H5FlowResource):
         return self.data['is_mc']
 
     @property
-    def cds_ticks(self):
-        ''' Charge readout system clock cycle (us) '''
-        return self.data['cds_ticks']
-
-    @property
     def crs_ticks(self):
         ''' Charge readout system clock cycle (us) '''
         return self.data['crs_ticks']
@@ -244,3 +245,8 @@ class RunData(H5FlowResource):
     def lrs_ticks(self):
         ''' Light readout system clock cycle (us) '''
         return self.data['lrs_ticks']
+
+    @property
+    def rollover_ticks(self):
+        ''' Nominal number of CRS ticks between SYNC rollovers '''
+        return self.data['rollover_ticks']
