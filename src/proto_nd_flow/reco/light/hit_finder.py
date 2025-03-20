@@ -236,10 +236,9 @@ class WaveformHitFinder(H5FlowStage):
         noise = self.get_noise_threshold(wvfms)
         peaks = self.interaction_finder(wvfms,noise)
         peaks = np.where(peaks)
-
-        if np.any(peaks[3] >= 999): 
+        if np.any(peaks[3] >= wvfms.shape[-1]): 
             print("Warning: Some peak indices exceed valid range.")
-            peaks = tuple(np.clip(p, 0, 998) for p in peaks) 
+            peaks = tuple(np.clip(p, 0, wvfms.shape[-1]-1) for p in peaks) 
         peak_max = wvfms[..., 1:][peaks]  # waveform value at each peak
         threshold_mask = peak_max >=self.threshold[peaks[1:-1]].ravel()
 
@@ -269,6 +268,8 @@ class WaveformHitFinder(H5FlowStage):
 
             # project back to 0-crossing
             peak_spline_d = peak_spline.derivative(1)(subsamples)
+            
+            peak_spline_d = np.where(peak_spline_d == 0, np.nan,peak_spline_d)
             
             peak_rising_spline_samples = ma.array(subsamples
                                                   - peak_spline_subsamples / peak_spline_d,
