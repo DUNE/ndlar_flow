@@ -6,6 +6,8 @@ from h5flow import H5FLOW_MPI
 if H5FLOW_MPI:
     from mpi4py import MPI
 
+from h5flow.core import resources
+
 from proto_nd_flow.util.array import fill_with_last
 
 
@@ -17,22 +19,19 @@ class RawEventBuilder(object):
     '''
     version = '0.0.0'
 
-    default_rollover_ticks = 1E7
-
     def __init__(self, **params):
         '''
             Initialize given parameters for the class, each parameter is
             optional with a default provided by the implemented class
         '''
-        self.rollover_ticks = params.get('rollover_ticks',
-                                         self.default_rollover_ticks)
+        pass
 
     def get_config(self):
         '''
             :returns: a `dict` of the instance configuration parameters
         '''
         return dict(
-            rollover_ticks=self.rollover_ticks,
+            rollover_ticks=resources['RunData'].rollover_ticks,
         )
 
     def build_events(self, packets, unix_ts, mc_assn=None):
@@ -110,12 +109,13 @@ class RawEventBuilder(object):
             Calculates "unrolled" timestamps for an array of packets. The
             unrolled timestamps increase monotonically, rather than rolling over
             every ~second. Each SYNC packet introduces an additional cumulative
-            offset (of self.rollover_ticks, e.g. 1E7) that gets added to each
+            offset (of rollover_ticks, e.g. 1E7) that gets added to each
             subsequent raw timestamp, giving the unrolled timestamps. We round
-            the LArPix timestamp of the SYNC to the nearest self.rollover_ticks,
+            the LArPix timestamp of the SYNC to the nearest rollover_ticks,
             which takes care of the case when a SYNC is missed by the PACMAN.
             Each IO group is treated independently here.
         '''
+        rollover_ticks = resources['RunData'].rollover_ticks
         offsets = np.zeros((len(packets),), dtype='i8')
         for io_group in np.unique(packets['io_group']):
             mask = packets['io_group'] == io_group
@@ -124,11 +124,11 @@ class RawEventBuilder(object):
                          (packets['trigger_type'] == 83))
             sync_ts = np.zeros_like(offsets)
             # Replace 0 with ~1E7 at each SYNC; ~2E7 if PACMAN missed prev SYNC
-            # (assuming self.rollover_ticks is 1E7)
+            # (assuming rollover_ticks is 1E7)
             sync_ts[sync_mask] = packets[sync_mask]['timestamp']
             # And round to the nearest 1E7 to prevent clock drift
-            sync_ts[sync_mask] = (np.round(sync_ts[sync_mask] / self.rollover_ticks)
-                                  * self.rollover_ticks)
+            sync_ts[sync_mask] = (np.round(sync_ts[sync_mask] / rollover_ticks)
+                                  * rollover_ticks)
             # Now get the cumulative sum of all _preceding_ increments
             # (subtracting sync_ts[mask] => "preceding")
             offsets[mask] = np.cumsum(sync_ts[mask]) - sync_ts[mask]
@@ -142,9 +142,9 @@ class RawEventBuilder(object):
             offsets[oops_mask] -= last_sync_ts[oops_mask]
 
         # The offsets are already corrected for the cases when the SYNC was
-        # missed by the PACMAN. Now the "% self.rollover_ticks" takes care of
+        # missed by the PACMAN. Now the "% rollover_ticks" takes care of
         # LArPix ASICs (as opposed to PACMEN) that missed one or more SYNCs.
-        ts = (packets['timestamp'].astype('i8') % self.rollover_ticks) + offsets
+        ts = (packets['timestamp'].astype('i8') % rollover_ticks) + offsets
 
         # Timestamp packets require special treatment, since their timestamp
         # field is actually a unix timestamp. For these, we just subtract this
