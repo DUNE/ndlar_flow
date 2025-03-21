@@ -55,7 +55,7 @@ class TimestampCorrector(H5FlowStage):
         ('id', 'u8'),  # unique identifier
         ('ts', 'f8')  # PPS timestamp after correcting for timestamp drift [ticks]
     ])
-    correction_dtype = np.dtype([('iogroup', 'u1'), ('offset', 'f8'), ('slope', 'f8')])
+    correction_dtype = np.dtype([('iogroup', 'u1'), ('offset', 'f8'), ('slope', 'f8'),('ave_pps_ts','u4')])
 
     def __init__(self, **params):
         super(TimestampCorrector, self).__init__(**params)
@@ -91,6 +91,7 @@ class TimestampCorrector(H5FlowStage):
             correction_arr[i]['iogroup'] = key
             correction_arr[i]['slope'] = val[1]
             correction_arr[i]['offset'] = val[0]
+            correction_arr[i]['ave_pps_ts'] = val[2] if len(val)>2 else resources['RunData'].rollover_ticks
         self.data_manager.set_attrs(self.ts_dset_name,
                                     correction=correction_arr
                                     )
@@ -116,9 +117,12 @@ class TimestampCorrector(H5FlowStage):
         if len(packets_data):
             for io_group in np.unique(packets_data['io_group']):
                 mask = packets_data['io_group'] == io_group
-                ts_corr_data['ts'][mask] = (packets_data[mask]['timestamp'].astype('f8') - self.correction[io_group][0]) / (1. + self.correction[io_group][1])
                 # Correct for missed sync.
-                ts_corr_data['ts'][mask] %= resources['RunData'].rollover_ticks
+                ave_rollover_ticks = (self.correction[io_group][2]
+                                      if len(self.correction[io_group]) > 2
+                                      else resources['RunData'].rollover_ticks)
+                ts_corr_data['ts'][mask] = packets_data[mask]['timestamp'].astype('f8') % ave_rollover_ticks
+                ts_corr_data['ts'][mask] = (ts_corr_data['ts'][mask] - self.correction[io_group][0]) / (1. + self.correction[io_group][1])
 
         # save corrected timestamps
         ts_slice = self.data_manager.reserve_data(self.ts_dset_name, len(ts_corr_data))
