@@ -115,7 +115,7 @@ class CalibHitBuilder(H5FlowStage):
         self.adc_counts = params.get('adc_counts', 256)
         self.gain = params.get('gain', 4.522)
         self.adc_droop_calibration = params.get('adc_droop_calibration', False)
-        self.hit_ref = params.get('hit_ref', False)
+        self.hit_ref = params.get('hit_ref', True)
 
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
