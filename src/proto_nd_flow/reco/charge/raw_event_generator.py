@@ -444,8 +444,14 @@ class RawEventGenerator(H5FlowGenerator):
 
         if self.sync_noise_cut_enabled and not self.is_mc:
             # remove all packets that occur before the cut
-            sync_noise_mask = ((packet_buffer['timestamp'] > self.sync_noise_cut[0]) &
-                               (packet_buffer['timestamp'] < self.sync_noise_cut[1]))
+
+            # We % rollover_ticks in the second sub-condition to avoid vetoing
+            # everything after a chip misses a SYNC. (Should we just get rid of
+            # the sync noise upper cut? Current default of 1.1E7 is effectively
+            # null now.)
+            R = resources['RunData'].rollover_ticks
+            sync_noise_mask = ((packet_buffer['timestamp']   > self.sync_noise_cut[0]) &
+                               (packet_buffer['timestamp']%R < self.sync_noise_cut[1]))
             # don't apply cut to timestamp packets
             sync_noise_mask |= packet_buffer['packet_type'] == 4
             packet_buffer = packet_buffer[sync_noise_mask]

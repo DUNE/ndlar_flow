@@ -16,5 +16,4 @@ params:
     window: 3300 # 0.1 usec ticks; 10% buffer added to previous 3000
     trig_io_grp: 4
     extendable: True
-    rollover_ticks: 10000000 # PPS = 1e7 ticks
     build_off_beam_events : True
