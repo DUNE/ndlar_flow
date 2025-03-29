@@ -18,9 +18,6 @@ curl -O https://raw.githubusercontent.com/DUNE/larnd-sim/develop/larndsim/pixel_
 # 2x2 detector description
 curl -O https://raw.githubusercontent.com/DUNE/larnd-sim/MiniRun6-v1/larndsim/detector_properties/2x2.yaml
 
-# place holder for run list
-curl -O https://portal.nersc.gov/project/dune/data/2x2/simulation/kwood_dev/proto_nd_flow_inputs/runlist-2x2-mcexample.txt
-
 # place holder for light system geometry description
 curl -O https://portal.nersc.gov/project/dune/data/2x2/simulation/kwood_dev/proto_nd_flow_inputs/light_module_desc-0.0.0.yaml
 

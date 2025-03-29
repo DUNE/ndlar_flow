@@ -5,6 +5,7 @@ docs/_static*
 docs/_templates*
 *.ipynb
 *.txt
+!runlist*.txt
 *.npz
 *.npy
 build/
