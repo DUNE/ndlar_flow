@@ -311,7 +311,7 @@ class WaveformHitFinder(H5FlowStage):
                 hit_data['chan'] = wvfm_det[peaks[:3]].ravel()
                 hit_data['pos'] = [np.array(resources['Geometry'].sipm_abs_pos[(adc,chan)][0]) for adc, chan in zip(peaks[1].ravel(),wvfm_det[peaks[:3]].ravel())]
             hit_data['ns'] = wvfm_align['ns'][peaks[0]].ravel()
-            hit_data['sample_idx'] = peaks[-1].ravel() + 1
+            hit_data['sample_idx'] = peaks[-1].ravel()
 
             # =================================================================
             # 2022-05-17 kvtsang
@@ -331,7 +331,7 @@ class WaveformHitFinder(H5FlowStage):
                 )
 
             hit_data['busy_ns'] = (
-                (peaks[-1] + 1 - align_sample_idx[peaks[:3]]).ravel() 
+                (peaks[-1] - align_sample_idx[peaks[:3]]).ravel() 
                 * self.sample_rate
             )
             hit_data['samples'] = peak_samples.reshape(-1, 2 * self.near_samples + 1)
