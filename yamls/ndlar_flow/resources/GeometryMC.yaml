@@ -1,5 +1,5 @@
 classname: Geometry # resources/geometry.py
-path: resources.geometry
+path: proto_nd_flow.resources.geometry
 params:
   path: 'geometry_info'
   det_geometry_file: 'data/ndlar_flow/ndlar-module.yaml'
