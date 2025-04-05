@@ -31,13 +31,18 @@ class low_current_filter:
     def __init__(self, threshold=1., channel_threshold_file=''):
         self.threshold = float(threshold)
         print('using threshold:', self.threshold)
+        self.channel_thresholds = {}
         self.channel_threshold_file=channel_threshold_file
-        try:
-            with open(self.channel_threshold_file, 'r') as fi:
-                self.channel_thresholds=json.load(fi)
-        except:
-            self.channel_thresholds={}
-            print('Unable to open channel threshold file! {}\nProceeding with default threshold for all channels.'.format(self.channel_threshold_file))
+        if not self.channel_threshold_file:
+            print('No channel threshold file provided. Proceeding with default threshold for all channels.')
+        else:
+            try:
+                with open(self.channel_threshold_file, 'r') as fi:
+                    self.channel_thresholds=json.load(fi)
+            except:
+                print('Unable to open channel threshold file! {}\nProceeding with default threshold for all channels.'.format(self.channel_threshold_file))
+
+        self.reported_channels = set()
     
     def unique_channel_id(self, d):
         return ((d['io_group'].astype(int)*1000+d['io_channel'].astype(int))*1000 \
@@ -55,7 +60,9 @@ class low_current_filter:
         threshold=default_threshold
         for u in unique_ids:
             if not str(u) in self.channel_thresholds.keys():
-                print('No threshold found for channel {}! Using default threshold of {} ke-!'.format(u, default_threshold))
+                if self.channel_thresholds and (str(u) not in self.reported_channels):
+                    print('No threshold found for channel {}! Using default threshold of {} ke-!'.format(u, default_threshold))
+                    self.reported_channels.add(str(u))
             else:
                 threshold = self.channel_thresholds[str(u)] 
             m = hit_uniqueid==u
