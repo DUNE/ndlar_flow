@@ -35,6 +35,7 @@ class RawEventGenerator(H5FlowGenerator):
          - ``packets_dset_name`` : ``str``, required, output dataset path for packet groups
          - ``buffer_size`` : ``int``, optional, number of packets to load at a time
          - ``nhit_cut`` : ``int``, optional, minimum number of packets in an event
+         - ``nhit_limit`` : ``int``, optional, maximum number of packets in an event
          - ``sync_noise_cut_enabled`` : ``bool``, optional, remove hits occuring soon after a SYNC event
          - ``sync_noise_cut`` : ``int``, optional, if ``sync_noise_cut_enabled`` removes all events that have a timestamp less than this value
          - ``event_builder_class`` : ``str``, optional, event builder algorithm to use (see ``raw_event_builder.py``)
@@ -58,6 +59,7 @@ class RawEventGenerator(H5FlowGenerator):
                     packets_dset_name: 'charge/packets'
                     buffer_size: 38400
                     nhit_cut: 100
+                    nhit_limit: 1_000_000_000
                     sync_noise_cut: [100000, 10000000]
                     sync_noise_cut_enabled: True
                     event_builder_class: 'SymmetricWindowRawEventBuilder'
@@ -76,6 +78,7 @@ class RawEventGenerator(H5FlowGenerator):
 
     default_buffer_size = 38400
     default_nhit_cut = 100
+    default_nhit_limit= 1_000_000_000
     default_sync_noise_cut = [100000, 10000000]
     default_sync_noise_cut_enabled = True
     default_event_builder_class = 'SymmetricWindowRawEventBuilder'
@@ -103,6 +106,7 @@ class RawEventGenerator(H5FlowGenerator):
         # set up parameters
         self.buffer_size = params.get('buffer_size', self.default_buffer_size)
         self.nhit_cut = params.get('nhit_cut', self.default_nhit_cut)
+        self.nhit_limit = params.get('nhit_limit', self.default_nhit_limit)
         self.sync_noise_cut = params.get('sync_noise_cut', self.default_sync_noise_cut)
         self.sync_noise_cut_enabled = params.get('sync_noise_cut_enabled', self.default_sync_noise_cut_enabled)
         self.event_builder_class = params.get('event_builder_class', self.default_event_builder_class)
@@ -477,11 +481,12 @@ class RawEventGenerator(H5FlowGenerator):
                 event = x[0]
                 mask_disabled_channels = np.isin(event[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
                 mask_disabled_chips = np.isin(event[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
-                return (~(mask_disabled_channels | mask_disabled_chips)).sum() >= self.nhit_cut
+                mask_sum = (~(mask_disabled_channels | mask_disabled_chips)).sum()
+                return (mask_sum >= self.nhit_cut) and (mask_sum <= self.nhit_limit)
 
             nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts, event_mc_assn)))
         else:
-            nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
+            nhit_filtered = list(filter(lambda x: (len(x[0]) >= self.nhit_cut) & (len(x[0]) <= self.nhit_limit), zip(events, event_unix_ts)))
 
         if len(nhit_filtered):
             if self.is_mc:
