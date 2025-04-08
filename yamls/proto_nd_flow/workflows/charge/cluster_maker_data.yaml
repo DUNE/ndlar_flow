@@ -1,0 +1,20 @@
+# Generates the charge clusters from hits
+
+flow:
+  source: raw_events
+  stages: [cluster_maker]
+  drop: []
+  
+resources:
+  - !include yamls/proto_nd_flow/resources/RunDataData.yaml
+  - !include yamls/proto_nd_flow/resources/LArData.yaml
+  
+raw_events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'charge/raw_events'
+  params:
+    chunk_size: 128
+
+cluster_maker:
+  !include yamls/proto_nd_flow/reco/charge/ClusterMakerData.yaml
