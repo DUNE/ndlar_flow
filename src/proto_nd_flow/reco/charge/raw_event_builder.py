@@ -449,6 +449,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     An external trigger based event builder. Events are sliced such that they always follow an external trigger and the readout window is configurable. The default is set to 182 x 1.1 units (10% grace period). Note the event builder may contain more than one trigger if they are within a readout window time.
     '''
     default_window = 1820 * 1.1
+    default_lower_window = 0
     default_shifted_event_dt = -70 #This is for accounting the fact that the trigger packet can potentially arrive 7 microseconds later than the beam spill
     default_trig_io_grp = 1     # -1 -> all io groups
     default_extendable = False
@@ -460,6 +461,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     def __init__(self, **params):
         super(ExtTrigRawEventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
+        self.lower_window = params.get('lower_window', self.default_lower_window)
         self.trig_io_grp = params.get('trig_io_grp', self.default_trig_io_grp)
         self.extendable = params.get('extendable', self.default_extendable)
         self.build_off_beam_events = params.get('build_off_beam_events', self.default_build_off_beam_events)
@@ -476,6 +478,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         if not isinstance(self.trig_io_grp, list):
             self.trig_io_grp = [self.trig_io_grp]
         self.window = self.to_iog_dict(self.window)
+        self.lower_window = self.to_iog_dict(self.lower_window)
         self.shifted_event_dt = self.to_iog_dict(self.shifted_event_dt)
         self.extendable = self.to_iog_dict(self.extendable)
 
@@ -498,6 +501,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         return dict(
             trig_io_grp=self.trig_io_grp,
             window=list(self.window.items()),
+            lower_window=list(self.lower_window.items()),
             shifted_event_dt=list(self.shifted_event_dt.items()),
             extendable=list(self.extendable.items()),
             **super().get_config(),
@@ -546,7 +550,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             if self.extendable[this_io_group]:
                 while True:
                     # Scan for further triggers in the window
-                    pileup_trig_mask = ((ts - last_trig_time) > 0) \
+                    pileup_trig_mask = ((ts - last_trig_time) >= self.lower_window[last_io_group]) \
                         & ((ts - last_trig_time) <= self.window[last_io_group]) \
                         & hotfix_mask \
                         & trig_mask
@@ -567,7 +571,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
                         continue # Scan over new window starting from last trig
                     break # Or, if we broke out of "for", break out of "while"
 
-            mask = ((ts - this_trig_time) >= 0) \
+            mask = ((ts - this_trig_time) >= self.lower_window[last_io_group]) \
                 & ((ts - last_trig_time) <= self.window[last_io_group]) \
                 & ~used_mask \
                 & hotfix_mask
@@ -578,7 +582,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
                 event_mc_assn.append(mc_assn[mask])
 
             used_mask = np.logical_or( used_mask, mask )
-
         
         if not self.build_off_beam_events:
             return zip(*[v for v in zip(events, event_unix_ts)]) if mc_assn is None \
