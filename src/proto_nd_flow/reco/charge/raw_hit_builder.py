@@ -8,21 +8,14 @@ from h5flow.core import H5FlowStage, resources
 
 class RawHitBuilder(H5FlowStage):
     '''
-        Converts larpix data packets into hits - assigns geometric properties,
-        filters by packet type, and performs the conversion from ADC -> mV above
-        pedestal.
-
-        The external data files used for ``pedestal_file`` and
-        ``configuration_file`` are searched for in the current working
-        directory, if the paths are not specified as global paths.
+        Converts larpix data packets into raw hits - assigns pixel coordinates,
+        timestamps, and ADC values, and filters by packet type.
 
         Parameters:
          - ``hits_dset_name`` : ``str``, required, output dataset path
          - ``packets_dset_name`` : ``str``, required, input dataset path for packets
          - ``packets_index_name`` : ``str``, required, input dataset path for packet index (defaults to ``{packets_dset_name}_index'``)
          - ``ts_dset_name`` : ``str``, required, input dataset path for clock-corrected packet timestamps
-         - ``pedestal_file`` : ``str``, optional, path to a pedestal json file
-         - ``configuration_file`` : ``str``, optional, path to a vref/vcm config json file
 
         ``packets_dset_name``, ``ts_dset_name``, and ``packets_index_name`` are required in
         the data cache. ``packets_index_name`` must point to the index for ``packets_dset_name``.
@@ -44,30 +37,17 @@ class RawHitBuilder(H5FlowStage):
                     packets_dset_name: 'charge/packets'
                     packets_index_name: 'charge/packets_index'
                     ts_dset_name: 'charge/packets_corr_ts'
-                    pedestal_file: 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
-                    configuration_file: 'evd_config_21-03-31_12-36-13.json'
 
         ``raw_hits`` datatype::
 
-            x_pix          f8, pixel x location [mm]
-            y_pix          f8, pixel y location [mm]
-            z_pix          f8, pixel z location [mm]
+            x_pix          f8, pixel x location [cm]
+            y_pix          f8, pixel y location [cm]
+            z_pix          f8, pixel z location [cm]
             ts_pps         u8, PPS packet timestamp [ticks]
             ADC            u1, hit charge [ADC]
 
     '''
     class_version = '1.0.0'
-
-    #: ASIC ADC configuration lookup table
-    configuration = defaultdict(lambda: dict(
-        vref_mv=1300,
-        vcm_mv=288
-    ))
-
-    #: pixel pedestal value
-    pedestal = defaultdict(lambda: dict(
-        pedestal_mv=580
-    ))
 
     #hits_dtype = np.dtype([
     #    ('id', 'u4'),
@@ -96,13 +76,9 @@ class RawHitBuilder(H5FlowStage):
         self.packets_dset_name = params.get('packets_dset_name')
         self.packets_index_name = params.get('packets_index_name', self.packets_dset_name + '_index')
         self.ts_dset_name = params.get('ts_dset_name')
-        self.pedestal_file = params.get('pedestal_file', '')
-        self.configuration_file = params.get('configuration_file', '')
 
     def init(self, source_name):
         super(RawHitBuilder, self).init(source_name)
-        self.load_pedestals()
-        self.load_configurations()
 
         # save all config info
         self.data_manager.set_attrs(self.hits_dset_name,
@@ -110,9 +86,7 @@ class RawHitBuilder(H5FlowStage):
                                     class_version=self.class_version,
                                     source_dset=source_name,
                                     packets_dset=self.packets_dset_name,
-                                    ts_dset=self.ts_dset_name,
-                                    pedestal_file=self.pedestal_file,
-                                    configuration_file=self.configuration_file
+                                    ts_dset=self.ts_dset_name
                                     )
 
         # then set up new datasets
@@ -145,17 +119,15 @@ class RawHitBuilder(H5FlowStage):
         # convert to hits array
         raw_hits_arr = np.zeros((n,), dtype=self.hits_dtype)
         if n:
-            xy = resources['Geometry'].pixel_xy[packets_arr['io_group'],
+            zy = resources['Geometry'].pixel_coordinates_2D[packets_arr['io_group'],
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
-            print(min(tile_id), max(tile_id))
-            z = resources['Geometry'].anode_z[(tile_id,)]
+            x = resources['Geometry'].anode_drift_coordinate[(tile_id,)]
 
             raw_hits_arr['id'] = raw_hits_slice.start + np.arange(n, dtype=int)
-            # NOTE: swapping x <--> z coordinates so the z is ~ in the beam direction
-            raw_hits_arr['x_pix'] = z
-            raw_hits_arr['y_pix'] = xy[:,1]
-            raw_hits_arr['z_pix'] = xy[:,0]
+            raw_hits_arr['x_pix'] = x
+            raw_hits_arr['y_pix'] = zy[:,1]
+            raw_hits_arr['z_pix'] = zy[:,0]
             raw_hits_arr['ts_pps'] = ts_arr['ts']
             raw_hits_arr['ADC'] = packets_arr['dataword']
 
@@ -171,19 +143,3 @@ class RawHitBuilder(H5FlowStage):
         # hit -> packet
         ref = np.c_[raw_hits_arr['id'], index_arr]
         self.data_manager.write_ref(self.hits_dset_name, self.packets_dset_name, ref)
-
-    @staticmethod
-    def charge_from_dataword(dw, vref, vcm, ped):
-        return dw / 256. * (vref - vcm) + vcm - ped
-
-    def load_pedestals(self):
-        if self.pedestal_file != '' and not resources['RunData'].is_mc:
-            with open(self.pedestal_file, 'r') as infile:
-                for key, value in json.load(infile).items():
-                    self.pedestal[key] = value
-
-    def load_configurations(self):
-        if self.configuration_file != '' and not resources['RunData'].is_mc:
-            with open(self.configuration_file, 'r') as infile:
-                for key, value in json.load(infile).items():
-                    self.configuration[key] = value

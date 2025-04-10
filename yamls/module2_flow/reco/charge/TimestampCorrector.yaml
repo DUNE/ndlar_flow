@@ -1,5 +1,5 @@
 classname: TimestampCorrector
-path: module0_flow.reco.charge.timestamp_corrector
+path: proto_nd_flow.reco.charge.timestamp_corrector
 requires:
   - 'charge/packets'
   - name: 'charge/packets_index'
@@ -14,5 +14,5 @@ params:
 
   # configuration parameters
   correction:
-    1: [0.0, 0.0]
-    2: [0.0, 0.0]
+    1: [-12.6752, 4.871e-7]
+    2: [-12.4990, 2.123e-6]

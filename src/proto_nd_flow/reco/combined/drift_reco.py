@@ -1,6 +1,7 @@
 import numpy as np
 
 from h5flow.core import H5FlowStage, resources
+import proto_nd_flow.util.units as units
 
 
 class DriftReconstruction(H5FlowStage):
@@ -19,10 +20,11 @@ class DriftReconstruction(H5FlowStage):
 
          ``drift`` datatype::
 
-            id          u4,     unique identifier
-            t_drift     f8,     relative PPS timestamp to be used for T0 [crs ticks]
-            d_drift     f8,     drift distance [mm]
-            z           f8,     z (drift) coordinate of hit [mm]
+            id                         u4,     unique identifier
+            t_drift                    f8,     relative PPS timestamp to be used for T0 [crs ticks]
+            d_drift                    f8,     drift distance [cm]
+            drift_coordinate           f8,     drift coordinate of hit (see geometry_info 'drift_direction'  
+                                               attribute for Cartesian coordinate) [cm]
 
 
     '''
@@ -32,7 +34,7 @@ class DriftReconstruction(H5FlowStage):
         ('id', 'u4'),
         ('t_drift', 'f8'),
         ('d_drift', 'f8'),
-        ('z', 'f8'),
+        ('drift_coordinate', 'f8'),
     ])
 
     default_t0_dset_name = 'combined/t0'
@@ -70,11 +72,11 @@ class DriftReconstruction(H5FlowStage):
         hits = cache[self.hits_dset_name]
 
         drift_t = hits['ts'] - t0['ts']
-        drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks)
-        z = resources['Geometry'].get_z_coordinate(hits['iogroup'], hits['iochannel'], drift_d)
+        drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks) / units.cm # convert mm -> cm
+        drift_coordinate = resources['Geometry'].get_drift_coordinate(hits['iogroup'], hits['iochannel'], drift_d)
 
         drift_array = np.empty(hits['id'].compressed().shape, dtype=self.drift_dtype)
-        drift_array['z'] = z.compressed()
+        drift_array['drift_coordinate'] = drift_coordinate.compressed()
         drift_array['t_drift'] = drift_t.compressed()
         drift_array['d_drift'] = drift_d.compressed()
 

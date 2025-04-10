@@ -1,38 +1,67 @@
 import numpy as np
 import numpy.ma as ma
 import logging
+import os
+import warnings
 import yaml
+import json
 
 from h5flow.core import H5FlowResource
 from h5flow.core import resources
 
 from proto_nd_flow.util.lut import LUT, write_lut, read_lut
 from proto_nd_flow.util.compat import assert_compat_version
+import proto_nd_flow.util.units as units
 
 
 class Geometry(H5FlowResource):
     '''
-        Provides helper functions for looking up geometric properties
+        Provides helper functions for looking up geometric properties. 
+
+        Input charge geometry file is assumed to use distance units of [mm] and input 
+        detector geometry file is assumed to use units of [cm].
+
+        **!! All output CHARGE attributes and datasets are saved in units of cm !!**
 
         Parameters:
          - ``path``: ``str``, path to stored geometry data within file
+         - ``network_agnostic``: ``bool``, optional, ignore the (io_channel % 4), useful if the io_channel mapping changes run-to-run (``True == ignore``)
+         - ``n_io_channels_per_tile``: ``int``, optional, only used with ``network_agnostic == True``, sets the number of io channels to have same geometry info
          - ``crs_geometry_file``: ``str``, path to yaml file describing charge readout system geometry
+         - ``det_geometry_file``: ``str``, path to yaml file describing overall detector geometry
          - ``lrs_geometry_file``: ``str``, path to yaml file describing light readout system
+         - ``beam_direction``   : ``str``, Cartesian coordinate of beam direction, e.g. 'x', 'y', 'z'
+         - ``drift_direction``  : ``str``, Cartesian coordinate of drift direction, e.g. 'x', 'y', 'z'
 
         Provides (for charge geometry):
-         - ``pixel_pitch``: pixel pitch in mm
-         - ``pixel_xy``: lookup table for pixel (x,y) coordinates
-         - ``tile_id``: lookup table for io channel tile ids
-         - ``anode_z``: lookup table for tile z coordinate
-         - ``drift_dir``: lookup table for tile drift direction (±z)
-         - ``regions``: drift regions minimum and maximum corners of TPC drift regions
-         - ``in_fid()``: helper function for defining fiducial volumes
-         - ``get_z_coordinate()``: helper function for converting drift time to z coordinate
+         - ``beam_direction``    [param->attr]: Cartesian coordinate of beam direction
+         - ``crs_geometry_files`` [param->attr]: path to yaml files describing charge 
+                                                readout system geometry
+         - ``drift_direction``   [param->attr]: Cartesian coordinate of drift direction
+
+         - ``cathode_thickness``        [attr]: thickness of cathode [cm]
+         - ``lar_detector_bounds``      [attr]: min and max xyz coordinates for full LAr detector [cm]
+         - ``max_drift_distance``       [attr]: max drift distance in each LArTPC (2 TPCs/module) [cm]
+         - ``module_RO_bounds``         [attr]: min and max xyz coordinates for each module [cm]   
+         - ``pixel_pitch``              [attr]: distance between adjacent pixel centers [cm]
+         - ``charge_only``              [attr]: boolean switch that is set to true when no lrs_geometry_file is provided
+
+         - ``anode_drift_coordinate``   [dset]: lookup table for tile drift coordinate [cm]
+         - ``drift_dir``                [dset]: lookup table for tile drift direction (either ±1)
+         - ``pixel_coordinates_2D``     [dset]: lookup table for pixel coordinates in 2D pixel plane [cm]
+         - ``tile_id``                  [dset]: lookup table for io channel tile ids 
+
+         - ``get_drift_coordinate()``   [mthd]: class method converting drift time to drift coordinate [cm]
+         - ``in_fid()``                 [mthd]: class method for determing whether an xyz coordinate [cm] 
+                                                is in the LAr fiducial volume
 
         Provides (for light geometry):
-         - ``tpc_id``: lookup table for TPC number for light detectors
+         - ``lrs_geometry_file`` [param->attr]: path to yaml file describing light readout system geometry
+         - ``det_rel_pos``: lookup table for relative position (TPC,side,vertical position from bottom) of light detectors (Full ArCLight or LCM)
+         - ``sipm_rel_pos``: lookup table for lookup table for relative position (TPC,side,vertical position from bottom) of SiPMs (Single SiPM)
          - ``det_id``: lookup table for detector number from adc, channel id
          - ``det_bounds``: lookup table for detector minimum and maximum corners light detectors
+         - ``sipm_abs_pos``: lookup table for sipm absolute position (x,y,z) in cm
          - ``solid_angle()``: helper function for determining the solid angle of a given detector
 
         Example usage::
@@ -52,23 +81,43 @@ class Geometry(H5FlowResource):
                     lrs_geometry_file: 'data/proto_nd_flow/light_module_desc-0.0.0.yaml'
 
     '''
-    class_version = '0.1.0'
+    class_version = '0.3.0'
 
     default_path = 'geometry_info'
+    default_network_agnostic = False
+    default_charge_only = False
+    default_n_io_channels_per_tile = 4
     default_det_geometry_file = '-'
-    default_crs_geometry_file = '-'
+    default_crs_geometry_file = ['-']
     default_lrs_geometry_file = '-'
+    default_disabled_channels_file = '-'
+    default_disabled_chips_file = '-'
+    default_beam_direction    = 'z'
+    default_drift_direction   = 'x'
+    default_crs_geometry_to_module = [0]
 
 
     def __init__(self, **params):
         super(Geometry, self).__init__(**params)
 
         self.path = params.get('path', self.default_path)
-        self.det_geometry_file = params.get('det_geometry_file', self.default_crs_geometry_file)
-        self.crs_geometry_file = params.get('crs_geometry_file', self.default_crs_geometry_file)
+        self.network_agnostic = params.get('network_agnostic', self.default_network_agnostic)
+        self.charge_only = params.get('charge_only', self.default_charge_only) 
+        self.n_io_channels_per_tile = params.get('n_io_channels_per_tile', self.default_n_io_channels_per_tile)
+        self.crs_geometry_files = params.get('crs_geometry_files', self.default_crs_geometry_file)
+        self.disabled_channels_file = params.get('disabled_channels_file', self.default_disabled_channels_file)
+        self.disabled_chips_file = params.get('disabled_chips_file', self.default_disabled_chips_file)
+        self.crs_geometry_to_module = params.get('crs_geometry_to_module', self.default_crs_geometry_to_module)
+        self.det_geometry_file = params.get('det_geometry_file', self.default_det_geometry_file)
         self.lrs_geometry_file = params.get('lrs_geometry_file', self.default_lrs_geometry_file)
-        self._regions = None  # active TPC regions
-
+        self.beam_direction = params.get('beam_direction', self.default_beam_direction)
+        self.drift_direction = params.get('drift_direction', self.default_drift_direction)
+        self._cathode_thickness = 0.0 # thickness of cathode [cm]
+        self._lar_detector_bounds = None # min and max xyz coordinates for full LAr detector
+        self._max_drift_distance = None # max drift distance in each LArTPC (2 TPCs per module)
+        self._module_RO_bounds = None # min and max xyz coordinates for each pixel LArTPC module
+        self._disabled_channels = None
+        self._disabled_chips = None
 
     def init(self, source_name):
         super(Geometry, self).init(source_name)
@@ -80,81 +129,166 @@ class Geometry(H5FlowResource):
 
         if not self.data:
             # first time loading geometry, save to file
+
+            with open(self.det_geometry_file) as dgf:
+                self.det_geometry_yaml = yaml.load(dgf, Loader=yaml.FullLoader)
+
+            if os.path.isfile(self.lrs_geometry_file):
+                with open(self.lrs_geometry_file) as gf:
+                    self.lrs_geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
+            else:
+                logging.warning("Either no lrs_geometry_yaml was provided or the one provided doesnt exist - lrs geometry will not be loaded")
+                self.charge_only = True
+
             self.load_geometry()
 
             self.data_manager.set_attrs(self.path,
                                         classname=self.classname,
                                         class_version=self.class_version,
+                                        beam_direction=self.beam_direction,
+                                        crs_geometry_files=self.crs_geometry_files, 
+                                        crs_geometry_to_module=self.crs_geometry_to_module, 
+                                        drift_direction=self.drift_direction,
+                                        cathode_thickness=self.cathode_thickness,
+                                        lar_detector_bounds=self.lar_detector_bounds,
+                                        max_drift_distance=self.max_drift_distance,
+                                        module_RO_bounds=self.module_RO_bounds,
                                         pixel_pitch=self.pixel_pitch,
-                                        crs_geometry_file=self.crs_geometry_file
+                                        network_agnostic=self.network_agnostic,
+                                        n_io_channels_per_tile=self.n_io_channels_per_tile
                                         )
-            write_lut(self.data_manager, self.path, self.pixel_xy, 'pixel_xy')
-            write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
-            write_lut(self.data_manager, self.path, self.anode_z, 'anode_z')
+            write_lut(self.data_manager, self.path, self.anode_drift_coordinate, 'anode_drift_coordinate')
             write_lut(self.data_manager, self.path, self.drift_dir, 'drift_dir')
+            write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
+            write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
 
-            write_lut(self.data_manager, self.path, self.tpc_id, 'tpc_id')
-            write_lut(self.data_manager, self.path, self.det_id, 'det_id')
-            write_lut(self.data_manager, self.path, self.det_bounds, 'det_bounds')
+            self.data_manager.create_dset(self.path+'/disabled_channels', dtype=self.disabled_channels.dtype)
+            disabled_channels_slice = self.data_manager.reserve_data(self.path+'/disabled_channels', len(self.disabled_channels))
+            self.data_manager.write_data(self.path+'/disabled_channels',  disabled_channels_slice, self.disabled_channels)
+
+            self.data_manager.create_dset(self.path+'/disabled_chips', dtype=self.disabled_chips.dtype)
+            disabled_chips_slice = self.data_manager.reserve_data(self.path+'/disabled_chips', len(self.disabled_chips))
+            self.data_manager.write_data(self.path+'/disabled_chips',  disabled_chips_slice, self.disabled_chips)
+
+            if not self.charge_only:
+                self.data_manager.set_attrs(self.path, lrs_geometry_file=self.lrs_geometry_file)
+                write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
+                write_lut(self.data_manager, self.path, self.sipm_rel_pos, 'sipm_rel_pos')
+                write_lut(self.data_manager, self.path, self.det_id, 'det_id')
+                write_lut(self.data_manager, self.path, self.det_bounds, 'det_bounds')
+                write_lut(self.data_manager, self.path, self.sipm_abs_pos, 'sipm_abs_pos')
         else:
             assert_compat_version(self.class_version, self.data['class_version'])
 
             # load geometry from file
+            self._cathode_thickness = self.data['cathode_thickness']
+            self._lar_detector_bounds = self.data['lar_detector_bounds']
+            self._max_drift_distance = self.data['max_drift_distance']
+            self._module_RO_bounds = self.data['module_RO_bounds']
             self._pixel_pitch = self.data['pixel_pitch']
-            self._pixel_xy = read_lut(self.data_manager, self.path, 'pixel_xy')
-            self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
-            self._anode_z = read_lut(self.data_manager, self.path, 'anode_z')
+            self._disabled_channels = self.data_manager.get_dset(self.path+'/disabled_channels')
+            self._disabled_chips = self.data_manager.get_dset(self.path+'/disabled_chips')
+
+            self._anode_drift_coordinate = read_lut(self.data_manager, self.path, 'anode_drift_coordinate')
             self._drift_dir = read_lut(self.data_manager, self.path, 'drift_dir')
+            self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
+            self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
 
-            self._tpc_id = read_lut(self.data_manager, self.path, 'tpc_id')
-            self._det_id = read_lut(self.data_manager, self.path, 'det_id')
-            self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
+            if not self.charge_only:
+                self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
+                self._sipm_rel_pos = read_lut(self.data_manager, self.path, 'sipm_rel_pos')
+                self._det_id = read_lut(self.data_manager, self.path, 'det_id')
+                self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
+                self._sipm_abs_pos = read_lut(self.data_manager, self.path, 'sipm_abs_pos')
 
-        lut_size = (self.pixel_xy.nbytes + self.tile_id.nbytes
-                    + self.anode_z.nbytes + self.drift_dir.nbytes
-                    + self.tpc_id.nbytes + self.det_id.nbytes
-                    + self.det_bounds.nbytes) * 4
+        if not self.charge_only:
+            lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
+                        + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
+                        + self.det_rel_pos.nbytes + self.det_rel_pos.nbytes 
+                        + self.det_id.nbytes + self.det_bounds.nbytes
+                        + self.sipm_abs_pos.nbytes)
+        else:
+            lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
+                        + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes)
 
         if self.rank == 0:
             logging.info(f'Geometry LUT(s) size: {lut_size/1024/1024:0.02f}MB')
 
 
-    def _create_regions(self):
-        self._regions = []
+    ## Charge geometry attributes, datasets, and methods ##
+    @property
+    def cathode_thickness(self):
+        ''' Thickness of cathode [cm] '''
+        return self._cathode_thickness
+    
 
-        io_group, io_channel, chip_id, channel_id = self.pixel_xy.keys()
-        xy = self.pixel_xy[(io_group, io_channel, chip_id, channel_id)]
-        tile_id = self.tile_id[(io_group, io_channel)]
-        anode_z = self.anode_z[(tile_id,)]
-        drift_dir = self.drift_dir[(tile_id,)]
+    @property
+    def lar_detector_bounds(self):
+        '''
+            Array of shape ``(2,3)`` representing the minimum xyz coordinate 
+            and the maximum xyz coordinate for the full LAr detector being studied
+            (e.g. single module, 2x2, ND-LAr, etc.) [cm]
+        '''
+        return self._lar_detector_bounds
+    
 
-        anode_zs, inv = np.unique(anode_z, return_inverse=True)
-        for i, z in enumerate(anode_zs):
-            mask = (inv == i)
-
-            min_x, max_x = xy[mask, 0].min(), xy[mask, 0].max()
-            min_y, max_y = xy[mask, 1].min(), xy[mask, 1].max()
-            min_z, max_z = (z * (drift_dir[mask][0] > 0), z * (drift_dir[mask][0] < 0))
-
-            self._regions.append(np.array([[min_x, min_y, min_z],
-                                           [max_x, max_y, max_z]]))
+    @property
+    def max_drift_distance(self):
+        '''
+            Maximum possible drift distance for ionization electrons in each TPC (2 TPCs
+            per module). This is the distance between the surface of the cathode and the
+            surface of one of the two anodes in a module [cm]
+        '''
+        return self._max_drift_distance
 
 
     @property
+    def module_RO_bounds(self):
+        '''
+            Array of active volume extent for each module shape: ``(# modules,2,3)`` 
+            representing the minimum xyz coordinate and the maximum xyz coordinate  
+            for each module in the LAr detector [cm]
+        '''
+        return self._module_RO_bounds
+    
+
+    @property
     def pixel_pitch(self):
-        ''' Pixel pitch in mm '''
+        ''' Distance between pixel centers [cm] '''
         return self._pixel_pitch
 
 
     @property
-    def pixel_xy(self):
+    def anode_drift_coordinate(self):
         '''
-            Lookup table for pixel xy coordinate, usage::
+            Lookup table for anode drift coordinate [cm], usage::
 
-                resource['Geometry'].pixel_xy[(io_group,io_channel,chip_id,channel_id)]
+                resource['Geometry'].anode_drift_coordinate[(tile_id,)]
 
         '''
-        return self._pixel_xy
+        return self._anode_drift_coordinate
+
+
+    @property
+    def drift_dir(self):
+        '''
+            Lookup table for drift direction (+/-1), usage::
+
+                resource['Geometry'].drift_dir[(tile_id,)]
+
+        '''
+        return self._drift_dir 
+
+
+    @property
+    def pixel_coordinates_2D(self):
+        '''
+            Lookup table for pixel coordinates (2D) [cm], usage::
+
+                resource['Geometry'].pixel_coordinates_2D[(io_group,io_channel,chip_id,channel_id)]
+
+        '''
+        return self._pixel_coordinates_2D
 
 
     @property
@@ -168,105 +302,182 @@ class Geometry(H5FlowResource):
         return self._tile_id
 
 
-    @property
-    def anode_z(self):
+    def get_drift_coordinate(self, io_group, io_channel, drift):
         '''
-            Lookup table for anode z coordinate, usage::
+            Convert a drift distance on a set of ``(io group, io channel)`` to
+            the drift coordinate.
 
-                resource['Geometry'].anode_z[(tile_id,)]
+            :param io_group: io group to calculate z coordinate, ``shape: (N,)``
 
-        '''
-        return self._anode_z
+            :param io_channel: io channel to calculate z coordinate, ``shape: (N,)``
 
+            :param drift: drift distance [cm], ``shape: (N,)``
 
-    @property
-    def drift_dir(self):
-        '''
-            Lookup table for drift direction, usage::
-
-                resource['Geometry'].drift_dir[(tile_id,)]
+            :returns: drift coordinate [cm], ``shape: (N,)``
 
         '''
-        return self._drift_dir
+        tile_id = self.tile_id[(io_group, io_channel)]
+        anode_drift_coord = self.anode_drift_coordinate[(np.array(tile_id),)]
+        drift_direction = self.drift_dir[(np.array(tile_id),)]
 
-
-    @property
-    def regions(self):
-        '''
-            List of active volume extent for each TPC, each shape: ``(2,3)``
-            representing the minimum xyz coordinate and the maximum xyz
-            coordinate
-        '''
-        if self._regions is None:
-            self._create_regions()
-        return self._regions
+        if len(drift.shape) == 1:
+            return anode_drift_coord.reshape(drift.shape) + \
+                drift_direction.reshape(drift.shape) * drift
+        else:
+            return anode_drift_coord.reshape((drift.shape[0],1)) + \
+                drift_direction.reshape((drift.shape[0],1)) * drift
 
 
     def in_fid(self, xyz, cathode_fid=0.0, field_cage_fid=0.0, anode_fid=0.0):
         '''
             Check if xyz point is contained in the specified fiducial volume
 
-            :param xyz: point to check, array ``shape: (N,3)``
+            :param xyz: point to check, array ``shape: (N,3)`` [cm]
 
-            :param cathode_fid: fiducial boundary for cathode and anode, ``float``, optional
+            :param cathode_fid: fiducial boundary for cathode and anode [cm], ``float``, optional
 
-            :param field_cage_fid: fiducial boundary for field cage walls, ``float``, optional
+            :param field_cage_fid: fiducial boundary for field cage walls [cm], ``float``, optional
 
             :returns: boolean array, ``shape: (N,)``, True indicates point is within fiducial volume
 
         '''
-        fid_cathode = np.array([field_cage_fid, field_cage_fid, cathode_fid])
-        fid_anode = np.array([field_cage_fid, field_cage_fid, anode_fid])
-        fid = [(fid_cathode, fid_anode) if np.around(boundary[0,2]) == 0 else (fid_anode, fid_cathode) for boundary in self.regions]
-        coord_in_fid = ma.concatenate([np.expand_dims((xyz < np.expand_dims(boundary[1] - fid[i][1], 0))
-                                                      & (xyz > np.expand_dims(boundary[0] + fid[i][0], 0)), axis=-1)
-                                       for i,boundary in enumerate(self.regions)], axis=-1)
-        in_fid = ma.all(coord_in_fid, axis=1)
-        in_any_fid = ma.any(in_fid, axis=-1)
+        # Define xyz coordinates of fiducial boundaries
+        fid_cathode = np.array([cathode_fid, field_cage_fid, field_cage_fid])
+        fid_anode = np.array([anode_fid, field_cage_fid, field_cage_fid])
+
+        # Define drift regions
+        positive_drift_regions = np.array([bound for bound in self.module_RO_bounds])
+        negative_drift_regions = np.array([bound for bound in self.module_RO_bounds])
+        
+        for i in range(len(self.module_RO_bounds)):
+            positive_drift_regions[i][0][0] = positive_drift_regions[i][1][0] - self.max_drift_distance
+            negative_drift_regions[i][1][0] = negative_drift_regions[i][0][0] + self.max_drift_distance
+
+        # Define fiducial boundaries for each drift region
+        fid_positive_drift = np.array([[fid_cathode, fid_anode] for module in self.module_RO_bounds])
+        fid_negative_drift = np.array([[fid_anode, fid_cathode] for module in self.module_RO_bounds])
+
+        # Check if coordinate is in fiducial volume for any drift region
+        # In very rare situations, a coordinate very close (<1e-7 cm) to a fiducial volume boundary
+        # may be classified as outside the fiducial volume due to floating point precision
+        # errors. To avoid this, we should explore rounding position coordinates based on detector
+        # resolution. For now, we can tolerate treating these hits as outside the fiducial volume.
+        coord_in_positive_drift_fid = ma.concatenate([np.expand_dims(\
+                                    (xyz < np.expand_dims(boundary[1] - fid_positive_drift[i][1], 0)) &\
+                                    (xyz > np.expand_dims(boundary[0] + fid_positive_drift[i][0], 0)), axis=-1)\
+                                    for i,boundary in enumerate(positive_drift_regions)], axis=-1)
+        coord_in_negative_drift_fid = ma.concatenate([np.expand_dims(\
+                                    (xyz < np.expand_dims(boundary[1] - fid_negative_drift[i][1], 0)) &\
+                                    (xyz > np.expand_dims(boundary[0] + fid_negative_drift[i][0], 0)), axis=-1)\
+                                    for i,boundary in enumerate(negative_drift_regions)], axis=-1)
+        in_positive_fid = ma.all(coord_in_positive_drift_fid, axis=1)
+        in_negative_fid = ma.all(coord_in_negative_drift_fid, axis=1)
+        in_any_positive_fid = ma.any(in_positive_fid, axis=-1)
+        in_any_negative_fid = ma.any(in_negative_fid, axis=-1)
+        in_any_fid = in_any_positive_fid | in_any_negative_fid
         return in_any_fid
+    
 
-
-    def get_z_coordinate(self, io_group, io_channel, drift):
+    def _get_module_RO_bounds(self):
         '''
-            Convert a drift distance on a set of ``(io group, io channel)`` to
-            a z-coordinate.
-
-            :param io_group: io group to calculate z coordinate, ``shape: (N,)``
-
-            :param io_channel: io channel to calculate z coordinate, ``shape: (N,)``
-
-            :param drift: drift distance [mm], ``shape: (N,)``
-
-            :returns: z coordinate [mm], ``shape: (N,)``
-
+            Get module_RO_bounds from pre-saved 2D pixel coordinates and anode drift coordinates 
         '''
-        tile_id = self.tile_id[(io_group, io_channel)]
-        z_anode = self.anode_z[(np.array(tile_id),)]
-        drift_direction = self.drift_dir[(np.array(tile_id),)]
+        with open(self.det_geometry_file) as dgf:
+            det_geometry_yaml = yaml.load(dgf, Loader=yaml.FullLoader)
 
-        return z_anode.reshape(drift.shape) + \
-            drift_direction.reshape(drift.shape) * drift
+        module_to_io_groups = det_geometry_yaml['module_to_io_groups']
+
+        self._module_RO_bounds = []
+
+        # Loop through modules
+        for module_id in module_to_io_groups:  
+            io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
+            min_coord = np.finfo(self.pixel_coordinates_2D.dtype).min
+            max_coord = np.finfo(self.pixel_coordinates_2D.dtype).max
+            min_x, max_x = min_coord, max_coord
+            min_y, max_y = min_coord, max_coord
+            min_z, max_z = min_coord, max_coord
+
+            # Loop through io_groups
+            for iog in module_to_io_groups[module_id]:
+                
+                mask = (io_group == iog)
+
+                # Get zy coordinates for io_group
+                zy = self.pixel_coordinates_2D[(io_group[mask], io_channel[mask], chip_id[mask], channel_id[mask])]
+            
+                if (min_y == min_coord) and (max_y == max_coord) \
+                    and (min_z == min_coord) and (max_z == max_coord):
+
+                    # Assign min and max y,z coordinates for initial io_group
+                    min_y, max_y = zy[:,1].min(), zy[:,1].max()
+                    min_z, max_z = zy[:,0].min(), zy[:,0].max()
+
+                else:
+                    # Update min and max y,z coordinates based on subsequent io_group
+                    min_y, max_y = min(min_y, zy[:,1].min()), max(max_y, zy[:,1].max())
+                    min_z, max_z = min(min_z, zy[:,0].min()), max(max_z, zy[:,0].max())
+
+                # Get x coordinates for anode corresponding to io_group
+                tile_id = self.tile_id[(io_group[mask], io_channel[mask])]
+                anode_drift_coordinate = np.unique(self.anode_drift_coordinate[(tile_id,)])[0]
+
+                # For first io_group in loop, set min_x and max_x to io_group anode drift coordinate
+                if (min_x == min_coord) and (max_x == max_coord):
+
+                    min_x, max_x = anode_drift_coordinate, anode_drift_coordinate
+
+                # For subsequent io_groups, update min_x and max_x based on new io_group anode drift coordinates
+                else: 
+                    min_x, max_x = min(min_x, anode_drift_coordinate), max(max_x, anode_drift_coordinate)
+
+
+            # Append module boundaries to module readout bounds list
+            # Subtract/add half of pixel pitch to pixel 2D coordinates (yz here) to get true module boundaries
+            self._module_RO_bounds.append(np.array([[min_x, min_y-self.pixel_pitch[module_id-1]/2., min_z-self.pixel_pitch[module_id-1]/2.],
+                                                    [max_x, max_y+self.pixel_pitch[module_id-1]/2., max_z+self.pixel_pitch[module_id-1]/2.]]))
+            
+        self._module_RO_bounds = np.array(self._module_RO_bounds)
+
+    @property
+    def disabled_channels(self):
+        return self._disabled_channels
+
+    @property
+    def disabled_chips(self):
+        return self._disabled_chips
 
     @staticmethod
     def _rotate_pixel(pixel_pos, tile_orientation):
         return pixel_pos[0] * tile_orientation[2], pixel_pos[1] * tile_orientation[1]
 
 
+    ## Light geometry methods ##
     @property
-    def tpc_id(self):
+    def det_rel_pos(self):
         '''
-            Lookup table for TPC id, usage::
+            Lookup table for detector relative position, usage::
 
-                resource['Geometry'].tpc_id[(adc_index, channel_index)]
+                resource['Geometry'].det_rel_pos[(tpc_index, detector_index)]
 
         '''
-        return self._tpc_id
+        return self._det_rel_pos
+
+    @property
+    def sipm_rel_pos(self):
+        '''
+            Lookup table for detector relative position, usage::
+
+                resource['Geometry'].sipm_rel_pos[(adc_index, channel_index)]
+
+        '''
+        return self._sipm_rel_pos
 
 
     @property
     def det_id(self):
         '''
-            Lookup table for detector id within a TPC, usage::
+            Lookup table for TPC and detector id, usage::
 
                 resource['Geometry'].det_id[(adc_index, channel_index)]
 
@@ -283,6 +494,17 @@ class Geometry(H5FlowResource):
 
         '''
         return self._det_bounds
+
+    @property
+    def sipm_abs_pos(self):
+        '''
+            Lookup table for SiPM center xyz coordinate, usage::
+
+                resource['Geometry'].sipm_abs_pos[(adc_index, channel_index)]
+
+        '''
+        return self._sipm_abs_pos
+
 
 
     @staticmethod
@@ -333,63 +555,144 @@ class Geometry(H5FlowResource):
 
         return omega
 
+    def get_sipm_rel_pos(self, adc, channel):
+        ''' Returns 
+        - TPC number starting at 0 (Attention not to be confused wiht CRS IO group)
+        - TPC side with 0: -z direction 1: +z direction
+        - Vertical position starting from bottom
+        if channel not used, returns NaN,NaN,NaN
+        '''
 
+        # Get TPC/det number
+        tpc = -1
+        det = -1
+        for tpc_temp, det_map in self.lrs_geometry_yaml["det_adc"].items():
+            for det_temp, adc_map in det_map.items():
+                if adc_map == adc:
+                    if channel in self.lrs_geometry_yaml["det_chan"][tpc_temp][det_temp]:
+                        tpc = tpc_temp
+                        det = det_temp
+
+        # Return NaN if adc-channel does not exist
+        if tpc == -1 or det == -1:
+            return [-1,-1,-1]
+
+        # Get TPC side
+        side = self.lrs_geometry_yaml["det_side"][det]
+
+        # Get vertical position
+        # Get Y pos
+        vert_pos = self.lrs_geometry_yaml["ch_to_vert_bin"][adc][channel]
+
+        return tpc, side, vert_pos
+
+
+    def get_sipm_abs_pos(self,adc,channel):
+        '''Returns x,y,z position of each SiPM in cm (z=beam direction)
+        if channel not used, returns NaN,NaN,NaN'''
+
+        tpc, side, vert_pos = self.get_sipm_rel_pos(adc,channel)
+        tpc_channel = vert_pos + side*(len(self.lrs_geometry_yaml["sipm_center"])//2)
+
+        if np.isnan(tpc):
+            return [-1,-1,-1]
+
+        # Get X pos
+        x_pos = self.det_geometry_yaml["tpc_offsets"][tpc//2][0] + self.lrs_geometry_yaml["tpc_center_offset"][tpc][0] 
+        if tpc % 2 == 0:
+            x_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][0]
+        else:
+            x_pos -= self.lrs_geometry_yaml["sipm_center"][tpc_channel][0]
+
+        # Get Y pos
+        y_pos = self.det_geometry_yaml["tpc_offsets"][tpc//2][1] + self.lrs_geometry_yaml["tpc_center_offset"][tpc][1] 
+        y_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][1]
+
+        # Get Z pos
+        z_pos = self.det_geometry_yaml["tpc_offsets"][tpc//2][2] + self.lrs_geometry_yaml["tpc_center_offset"][tpc][2]
+        z_pos += self.lrs_geometry_yaml["sipm_center"][tpc_channel][2]
+
+        return x_pos, y_pos, z_pos
+
+
+    ## Load light and charge geometry ##
     def load_geometry(self):
         self._load_charge_geometry()
-        self._load_light_geometry()
+        if not self.charge_only:
+            self._load_light_geometry()
 
 
     def _load_light_geometry(self):
         if self.rank == 0:
             logging.warning(f'Loading geometry from {self.lrs_geometry_file}...')
 
-        with open(self.lrs_geometry_file) as gf:
-            geometry = yaml.load(gf, Loader=yaml.FullLoader)
-
         # enforce that light geometry formatting is as expected
-        assert_compat_version(geometry['format_version'], '0.0.0')
+        assert_compat_version(self.lrs_geometry_yaml['format_version'], '0.4.0')
 
-        tpc_ids = np.array([v for v in geometry['tpc_center'].keys()])
-        det_ids = np.array([v for v in geometry['det_center'].keys()])
-        max_chan = max([len(chan) for tpc in geometry['det_chan'].values() for chan in tpc.values()])
+        mod_ids = np.array([v for v in self.det_geometry_yaml['module_to_tpcs'].keys()])
+        tpc_ids = np.array([v for v in self.lrs_geometry_yaml['tpc_center_offset'].keys()])
+        det_ids = np.array([v for v in self.lrs_geometry_yaml['det_center'].keys()])
+        adc_ids = np.array([v for v in self.lrs_geometry_yaml['ch_to_vert_bin'].keys()])
+        max_chan_per_det = max([len(chan) for tpc in self.lrs_geometry_yaml['det_chan'].values() for chan in tpc.values()])
+        chan_ids = np.unique(sum([chan for tpc in self.lrs_geometry_yaml['det_chan'].values() for chan in tpc.values()],[]))
+
+        tpc_mod = np.full(tpc_ids.shape, -1, dtype=int)
+        for i, mod in enumerate(self.det_geometry_yaml["module_to_tpcs"]):
+            for j, tpc in enumerate(self.det_geometry_yaml["module_to_tpcs"][mod]):
+                tpc_mod[tpc] = i
+
+        det_min_max = [(min(tpc_ids), max(tpc_ids)),
+                       (min(det_ids), max(det_ids))]
+        self._det_rel_pos = LUT('i4', *det_min_max, shape=(3,))
+        self._det_rel_pos.default = -1
 
         shape = tpc_ids.shape + det_ids.shape
         det_adc = np.full(shape, -1, dtype=int)
-        det_chan = np.full(shape + (max_chan,), -1, dtype=int)
-        det_chan_mask = np.zeros(shape + (max_chan,), dtype=bool)
+        det_side = np.full(shape, -1, dtype=int)
+        det_vert_pos = np.full(shape, -1, dtype=int)
+        det_chan = np.full(shape + (max_chan_per_det,), -1, dtype=int)
+        det_chan_mask = np.zeros(shape + (max_chan_per_det,), dtype=bool)
         det_bounds = np.zeros(shape + (2,3), dtype=float)
         for i, tpc in enumerate(tpc_ids):
             for j, det in enumerate(det_ids):
-                det_adc[i,j] = geometry['det_adc'][tpc][det]
-                det_chan[i,j,:len(geometry['det_chan'][tpc][det])] = geometry['det_chan'][tpc][det]
-
-                tpc_center = np.array(geometry['tpc_center'][tpc])
-                det_geom = geometry['geom'][geometry['det_geom'][det]]
-                det_center = np.array(geometry['det_center'][det])
+                det_adc[i,j] = self.lrs_geometry_yaml['det_adc'][tpc][det]
+                det_side[i,j] = self.lrs_geometry_yaml['det_side'][det]
+                det_vert_pos[i,j] = [key for key, value in self.lrs_geometry_yaml['det_side'].items() if value == det_side[i,j]].index(det)
+                det_chan[i,j,:len(self.lrs_geometry_yaml['det_chan'][tpc][det])] = self.lrs_geometry_yaml['det_chan'][tpc][det]
+                tpc_center = (np.array(self.lrs_geometry_yaml['tpc_center_offset'][tpc])
+                    + np.array(self.det_geometry_yaml["tpc_offsets"][tpc_mod[i]]))
+                det_geom = self.lrs_geometry_yaml['geom'][self.lrs_geometry_yaml['det_geom'][tpc][det]]
+                det_center = np.array(self.lrs_geometry_yaml['det_center'][det])
                 det_bounds[i,j,0] = tpc_center + det_center + np.array(det_geom['min'])
                 det_bounds[i,j,1] = tpc_center + det_center + np.array(det_geom['max'])
+                self._det_rel_pos[i,j] = np.array((tpc,det_side[i,j],det_vert_pos[i,j]))
 
         det_chan_mask = det_chan != -1
 
         det_adc, det_chan, tpc_ids, det_ids = np.broadcast_arrays(
-            det_adc[...,np.newaxis], det_chan,
-            tpc_ids[...,np.newaxis,np.newaxis], det_ids[...,np.newaxis])
+            det_adc[...,np.newaxis],
+            det_chan, tpc_ids[...,np.newaxis,np.newaxis], det_ids[...,np.newaxis])
 
-        adc_chan_min_max = [(min(det_adc[det_chan_mask]), max(det_adc[det_chan_mask])),
-                            (min(det_chan[det_chan_mask]), max(det_chan[det_chan_mask]))]
-        self._tpc_id = LUT('i4', *adc_chan_min_max)
-        self._tpc_id.default = -1
+        adc_chan_min_max = [(min(adc_ids), max(adc_ids)), 
+                            (min(chan_ids), max(chan_ids))]
+        self._sipm_abs_pos = LUT('f4', *adc_chan_min_max, shape=(3,))
+        self._sipm_abs_pos.default = -1
+
+        self._sipm_rel_pos = LUT('i4', *adc_chan_min_max, shape=(3,))
+        self._sipm_rel_pos.default = -1
 
         self._det_id = LUT('i4', *adc_chan_min_max)
         self._det_id.default = -1
 
-        det_min_max = [(min(tpc_ids[det_chan_mask]), max(tpc_ids[det_chan_mask])),
-                       (min(det_ids[det_chan_mask]), max(det_ids[det_chan_mask]))]
         self._det_bounds = LUT('f4', *det_min_max, shape=(2,3))
         self._det_bounds.default = 0.
 
-        self._tpc_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = tpc_ids[det_chan_mask]
         self._det_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = det_ids[det_chan_mask]
+
+        for adc in adc_ids:
+            for chan in chan_ids:
+                self._sipm_rel_pos[(adc,chan)] = np.array(self.get_sipm_rel_pos(adc,chan))
+                self._sipm_abs_pos[(adc,chan)] = np.array(self.get_sipm_abs_pos(adc,chan))
 
         tpc_ids, det_ids, det_chan_mask = tpc_ids[...,0], det_ids[...,0], det_chan_mask[...,0]
         self._det_bounds[(tpc_ids[det_chan_mask], det_ids[det_chan_mask])] = det_bounds[det_chan_mask]
@@ -397,84 +700,105 @@ class Geometry(H5FlowResource):
 
     def _load_charge_geometry(self):
         if self.rank == 0:
-            logging.warning(f'Loading geometry from {self.crs_geometry_file}...')
+            logging.warning(f'Loading geometry from {self.crs_geometry_files}...')
 
-        with open(self.crs_geometry_file) as gf:
-            geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
+        geometry_yamls = []
+        for crs_geometry_file in self.crs_geometry_files:
+            with open(crs_geometry_file) as gf:
+                geometry_yamls.append(yaml.load(gf, Loader=yaml.FullLoader))
+                if 'multitile_layout_version' not in geometry_yamls[-1].keys():
+                    raise RuntimeError('Only multi-tile geometry configurations are accepted')
 
         with open(self.det_geometry_file) as dgf:
             det_geometry_yaml = yaml.load(dgf, Loader=yaml.FullLoader)
 
-        if 'multitile_layout_version' not in geometry_yaml.keys():
-            raise RuntimeError('Only multi-tile geometry configurations are accepted')
-
-        self._pixel_pitch = geometry_yaml['pixel_pitch']
-        chip_channel_to_position = geometry_yaml['chip_channel_to_position']
-        tile_orientations = geometry_yaml['tile_orientations']
-        tile_positions = geometry_yaml['tile_positions']
-        tpc_centers = geometry_yaml['tpc_centers']
-        tile_indeces = geometry_yaml['tile_indeces']
-        mod_centers = det_geometry_yaml['tpc_offsets']
-        tile_chip_to_io = geometry_yaml['tile_chip_to_io']
-
-        xs = np.array(list(chip_channel_to_position.values()))[:, 0] * self.pixel_pitch
-        ys = np.array(list(chip_channel_to_position.values()))[:, 1] * self.pixel_pitch
-        x_size = max(xs) - min(xs) + self.pixel_pitch
-        y_size = max(ys) - min(ys) + self.pixel_pitch
+        module_to_io_groups = det_geometry_yaml['module_to_io_groups']
+        iog_per_mod = len(next(iter(module_to_io_groups.values())))
 
         tile_geometry = {}
 
-        tiles = np.arange(1,len(geometry_yaml['tile_chip_to_io'])*len(det_geometry_yaml['module_to_io_groups'])+1)
+        ## warning, this is assuming same number of tiles in all modules for now
+        tiles = np.arange(1,len(geometry_yamls[0]['tile_chip_to_io'])*len(det_geometry_yaml['module_to_io_groups'])+1)
         io_groups = [
-            geometry_yaml['tile_chip_to_io'][tile][chip] // 1000 * (mod-1)*2
-            for tile in geometry_yaml['tile_chip_to_io']
-            for chip in geometry_yaml['tile_chip_to_io'][tile]
-            for mod in det_geometry_yaml['module_to_io_groups']
+            geometry_yamls[self.crs_geometry_to_module[mod-1]]['tile_chip_to_io'][tile][chip] // 1000 + (mod-1)*iog_per_mod
+            for mod in module_to_io_groups
+            for tile in geometry_yamls[self.crs_geometry_to_module[mod-1]]['tile_chip_to_io']
+            for chip in geometry_yamls[self.crs_geometry_to_module[mod-1]]['tile_chip_to_io'][tile]
         ]
         io_channels = [
-            geometry_yaml['tile_chip_to_io'][tile][chip] % 1000
-            for tile in geometry_yaml['tile_chip_to_io']
-            for chip in geometry_yaml['tile_chip_to_io'][tile]
-            for mod in det_geometry_yaml['module_to_io_groups']
+            geometry_yamls[self.crs_geometry_to_module[mod-1]]['tile_chip_to_io'][tile][chip] % 1000
+            for mod in module_to_io_groups
+            for tile in geometry_yamls[self.crs_geometry_to_module[mod-1]]['tile_chip_to_io']
+            for chip in geometry_yamls[self.crs_geometry_to_module[mod-1]]['tile_chip_to_io'][tile]
         ]
         chip_ids = [
             chip_channel // 1000
-            for chip_channel in geometry_yaml['chip_channel_to_position']
-            for mod in det_geometry_yaml['module_to_io_groups']
+            for mod in module_to_io_groups
+            for chip_channel in geometry_yamls[self.crs_geometry_to_module[mod-1]]['chip_channel_to_position']
         ]
         channel_ids = [
             chip_channel % 1000
-            for chip_channel in geometry_yaml['chip_channel_to_position']
-            for mod in det_geometry_yaml['module_to_io_groups']
+            for mod in module_to_io_groups
+            for chip_channel in geometry_yamls[self.crs_geometry_to_module[mod-1]]['chip_channel_to_position']
         ]
  
-        pixel_xy_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
-        self._pixel_xy = LUT('f4', *pixel_xy_min_max, shape=(2,))
-        self._pixel_xy.default = 0.
+        pixel_coordinates_2D_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
+        self._pixel_coordinates_2D = LUT('f4', *pixel_coordinates_2D_min_max, shape=(2,))
+        self._pixel_coordinates_2D.default = np.nan
     
-        tile_min_max = [(min(v), len(det_geometry_yaml['module_to_io_groups'])*max(v)) for v in (io_groups, io_channels)]
+        tile_min_max = [(min(v), len(module_to_io_groups)*max(v)) for v in (io_groups, io_channels)]
         self._tile_id = LUT('i4', *tile_min_max)
         self._tile_id.default = -1
     
-        anode_min_max = [(min(tiles), len(det_geometry_yaml['module_to_io_groups'])*max(tiles))]
-        self._anode_z = LUT('f4', *anode_min_max)
-        self._anode_z.default = 0.
+        anode_min_max = [(min(tiles), len(module_to_io_groups)*max(tiles))]
+        self._anode_drift_coordinate = LUT('f4', *anode_min_max)
+        self._anode_drift_coordinate.default = 0.
         self._drift_dir = LUT('i1', *anode_min_max)
         self._drift_dir.default = 0.
 
-        self._anode_z[(tiles,)] = [tile_positions[(tile-1)%16+1][0]+10.*mod_centers[((tile-1)//16)%4][0] for tile in tiles]
+        mod_centers = det_geometry_yaml['tpc_offsets']
+        n_modules = len(det_geometry_yaml['module_to_io_groups'])
+        n_tiles = sum(len(j) for i in det_geometry_yaml['tile_map'] for j in i)
+        # DOUBLE WARNING!: I'm doing a terrible thing and hardcoding things based on
+        #                  the first geometry file option in the list...
+        #                  Please, fix me! (move into loop below)
+        tile_or = geometry_yamls[0]['tile_orientations']
+        tile_pos = geometry_yamls[0]['tile_positions']
+        self._anode_drift_coordinate[(tiles,)] = [tile_pos[(tile-1)%n_tiles+1][0]/units.cm+mod_centers[((tile-1)//n_tiles)%n_modules][0] for tile in tiles] # convert mm -> cm for crs yaml; det geo yaml in cm already
 
-        self._drift_dir[(tiles,)] = [tile_orientations[(tile-1)%16+1][0] for tile in tiles]
-        for module_id in det_geometry_yaml['module_to_io_groups']:
+        self._drift_dir[(tiles,)] = [tile_or[(tile-1)%n_tiles+1][0] for tile in tiles]
+        self._module_RO_bounds = []
+        self._pixel_pitch = [0.]*n_modules
+
+        # Loop through modules
+        for module_id in module_to_io_groups:
+            geometry_yaml = geometry_yamls[self.crs_geometry_to_module[module_id-1]]
+            pixel_pitch = geometry_yaml['pixel_pitch'] / units.cm # convert mm -> cm
+            self._pixel_pitch[module_id-1] = pixel_pitch
+            chip_channel_to_position = geometry_yaml['chip_channel_to_position']
+            tile_orientations = geometry_yaml['tile_orientations']
+            tile_positions = geometry_yaml['tile_positions']
+            tile_chip_to_io = geometry_yaml['tile_chip_to_io']
+            zs = np.array(list(chip_channel_to_position.values()))[:, 0] * pixel_pitch
+            ys = np.array(list(chip_channel_to_position.values()))[:, 1] * pixel_pitch
+            z_size = max(zs) - min(zs) + pixel_pitch
+            y_size = max(ys) - min(ys) + pixel_pitch
             for tile in tile_chip_to_io:
                 tile_orientation = tile_orientations[tile]
-                tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
+                tile_geometry[tile] = [pos / units.cm for pos in tile_positions[tile]], tile_orientations[tile] # convert mm -> cm
 
                 for chip in tile_chip_to_io[tile]:
                     io_group_io_channel = tile_chip_to_io[tile][chip]
                     io_group = io_group_io_channel//1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
                     self._tile_id[([io_group], [io_channel])] = tile+(module_id-1)*len(tile_chip_to_io)
+
+                    if self.network_agnostic == True:
+                        # if we don't care about the network configuration, then we
+                        # can just loop over every N io channels and add them to the LUT
+                        start_io_channel = ((io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
+                        for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
+                            self._tile_id[([io_group], [io_channel])] = tile+(module_id-1)*len(tile_chip_to_io)
 
                 for chip_channel in chip_channel_to_position:
                     chip = chip_channel // 1000
@@ -483,20 +807,149 @@ class Geometry(H5FlowResource):
                     try:
                         io_group_io_channel = tile_chip_to_io[tile][chip]
                     except KeyError:
-                        continue
+                        if self.network_agnostic == True:
+                            warnings.warn('Encountered an out-of-network chip, but because you enabled ``network_agnostic``, we will carry on with assumptions about the io group and io channel')
+                            # using the info about the first chip on the tile for all others
+                            io_group_io_channel = list(geometry_yaml['tile_chip_to_io'][tile].values())[0]
+                        else:
+                            continue
 
                     io_group = io_group_io_channel // 1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
 
-                    x = chip_channel_to_position[chip_channel][0] * \
-                        self.pixel_pitch - x_size / 2 + self.pixel_pitch / 2
+                    z = chip_channel_to_position[chip_channel][0] * \
+                        pixel_pitch - z_size / 2 + pixel_pitch / 2
                     y = chip_channel_to_position[chip_channel][1] * \
-                        self.pixel_pitch - y_size / 2 + self.pixel_pitch / 2
+                        pixel_pitch - y_size / 2 + pixel_pitch / 2
 
-                    x, y = self._rotate_pixel((x, y), tile_orientation)
+                    z, y = self._rotate_pixel((z, y), tile_orientation)
 
-                    x += tile_positions[tile][2]
-                    y += tile_positions[tile][1]
-                    x += mod_centers[module_id-1][2]*10
-                    y += mod_centers[module_id-1][1]*10
-                    self._pixel_xy[(io_group, io_channel, chip, channel)] = x, y
+                    z += tile_positions[tile][2]/units.cm # convert mm -> cm 
+                    y += tile_positions[tile][1]/units.cm # convert mm -> cm
+                    z += mod_centers[module_id-1][2] # det geo yaml is already in cm
+                    y += mod_centers[module_id-1][1] # det geo yaml is already in cm
+
+                    if self.network_agnostic:
+                        tile_min_io_channel = (io_channel-1) // 4 * 4 + 1
+                        io_channels = range(tile_min_io_channel, 4 + tile_min_io_channel)
+                    else:
+                        io_channels = [io_channel]
+
+                    for ioc in io_channels:
+                        try:
+                            self._pixel_coordinates_2D[(io_group, ioc, chip, channel)] = z, y
+                        except:
+                            print(io_group, ioc, chip, channel)
+
+        # Determine full drift length
+        mod_anodes = np.array(list(tile_pos.values()))[:, 0] / units.cm  # convert mm -> cm
+        d_anode2anode = max(mod_anodes) - min(mod_anodes)
+        try:
+            # all modules should have the same drift length
+            self._max_drift_distance = geometry_yamls[0]['drift_length'] / units.cm # convert mm -> cm
+        except:
+            self._max_drift_distance = 0.5 * d_anode2anode
+
+        # Determine module readout bounds
+        self._get_module_RO_bounds()
+
+        # Determine LAr detector bounds
+        self._lar_detector_bounds = np.array([np.min(np.array([bound[0] for bound in self._module_RO_bounds]), axis=0),
+                                              np.max(np.array([bound[1] for bound in self._module_RO_bounds]), axis=0)])
+        
+        # Determine cathode thickness
+        if d_anode2anode > 2*self._max_drift_distance:
+            self._cathode_thickness = d_anode2anode - 2*self._max_drift_distance
+        elif d_anode2anode == 2*self._max_drift_distance:
+            self._cathode_thickness = 0.0
+        else:
+            raise ValueError("Please check the pixel layout! The tile position and drift length are not compatible.")
+
+        #cathode_x_coords = np.unique(np.array(mod_centers)[:,0])
+        #anode_to_cathode = np.min(np.array([abs(self.lar_detector_bounds[0][0] - cathode_x)
+        #                                    for cathode_x in cathode_x_coords]))
+        #
+        #if self.max_drift_distance < anode_to_cathode:
+        #    # Difference b/w max drift dist and anode-cathode dist is 1/2 cathode thickness
+        #    self._cathode_thickness = abs(anode_to_cathode - self.max_drift_distance) * 2.0
+        #else: 
+        #    self._cathode_thickness = 0.0
+
+        self._load_disabled_channels()
+
+        self._load_disabled_chips()
+
+    def _load_disabled_channels(self):
+
+        # Parses the disabled channels file into a structured array.
+        # The first iteration of the file is a json dictionary where the keys are strings 
+        # '<io_group>-<io_channel>-<chip_id>' and the values are lists of the channel_ids
+
+        disabled_channels_dtype = np.dtype([
+        ('io_group', 'u8'),
+        ('io_channel', 'u8'),
+        ('chip_id', 'u8'),
+        ('channel_id', 'u8')
+        ])
+        
+        disabled_channels_list = []
+        if self.disabled_channels_file == '-':
+            self._disabled_channels = np.array([], dtype = disabled_channels_dtype)
+            return
+        
+        with open(self.disabled_channels_file, 'r') as f:
+            disabled_channels_json = json.load(f)
+            
+        for key in disabled_channels_json:
+            
+            io_group, io_channel, chip_id = list(map(int,key.split('-')))
+            
+            for channel_id in list(map(int,disabled_channels_json[key])):
+                
+                if self.network_agnostic == True:
+
+                    start_io_channel = ((io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
+
+                    for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
+
+                        disabled_channels_list.append((io_group, io_channel, chip_id, channel_id))
+
+                else:
+
+                    disabled_channels_list.append((io_group, io_channel, chip_id, channel_id))
+        
+        self._disabled_channels = np.array(disabled_channels_list, dtype = disabled_channels_dtype)
+
+    def _load_disabled_chips(self):
+
+        disabled_chips_dtype = np.dtype([
+        ('io_group', 'u8'),
+        ('io_channel', 'u8'),
+        ('chip_id', 'u8')
+        ])
+
+        disabled_chips_list = []
+        if self.disabled_chips_file == '-':
+            self._disabled_chips = np.array([], dtype = disabled_chips_dtype)
+            return
+
+        with open(self.disabled_chips_file, 'r') as f:
+            disabled_chips_json = json.load(f)
+
+        for chip in disabled_chips_json:
+
+            io_group, io_channel, chip_id = list(map(int,chip.split('-')))
+
+            if self.network_agnostic == True:
+
+                start_io_channel = ((io_channel-1)//self.n_io_channels_per_tile)*self.n_io_channels_per_tile + 1
+
+                for io_channel in range(start_io_channel, start_io_channel+self.n_io_channels_per_tile):
+
+                    disabled_chips_list.append((io_group, io_channel, chip_id))
+
+            else:
+
+                disabled_chips_list.append((io_group, io_channel, chip_id))
+
+        self._disabled_chips = np.array(disabled_chips_list, dtype = disabled_chips_dtype)

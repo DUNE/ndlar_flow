@@ -6,7 +6,7 @@ with open('README.rst', 'r', encoding='utf-8') as fh:
 with open('VERSION', 'r') as fh:
     version = fh.read().strip()
 
-setuptools.setup(name='module0_flow',
+setuptools.setup(name='ndlar_flow',
                  version=version,
                  description='An h5flow-based analysis framework for Module0 data',
                  long_description=long_description,
@@ -20,8 +20,9 @@ setuptools.setup(name='module0_flow',
                      'pytest',
                      'scipy',
                      'scikit-image',
-                     'scikit-learn',
+                     'scikit-learn>=1.3.0',
                      'h5flow>=0.2.0',
-                     'pylandau',
+                     'pylandau @ git+https://github.com/cuddandr/pylandau.git#egg=pylandau',
+                     'adc64format @ git+https://github.com/larpix/adc64format.git@v0.1.2#egg=adc64format',
                  ]
                  )

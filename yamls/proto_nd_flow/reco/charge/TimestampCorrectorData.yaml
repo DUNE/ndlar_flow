@@ -1,0 +1,24 @@
+classname: TimestampCorrector
+path: proto_nd_flow.reco.charge.timestamp_corrector
+requires:
+  - 'charge/packets'
+  - name: 'charge/packets_index'
+    path: 'charge/packets'
+    index_only: True
+params:
+  # input
+  packets_dset_name: 'charge/packets'
+
+  # output
+  ts_dset_name: 'charge/packets_corr_ts' # new dataset
+
+  # configuration parameters
+  correction:
+    1: [0., 3.0e-7]
+    2: [0., 2.5e-6]
+    3: [0., 0.]
+    4: [0., 7.0e-7]
+    5: [0., 1.7e-6]
+    6: [0., 3.1e-6]
+    7: [0., 4.0e-6]
+    8: [0.,-2.0e-7]

@@ -1,0 +1,8 @@
+cmasher==1.8.0
+dash==2.17.0
+dash_extensions==1.0.16
+dash_uploader==0.6.0
+numpy==1.26.4
+pandas==2.2.2
+plotly==5.16.1
+uproot==5.3.7

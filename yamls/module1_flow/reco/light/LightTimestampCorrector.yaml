@@ -1,0 +1,13 @@
+# Copied and modified from yamls/proto_nd_flow/reco/light/LightTimestampCorrector.yaml
+
+classname: LightTimestampCorrector
+path: proto_nd_flow.reco.light.timestamp_corrector
+params:
+  # output
+  t_ns_dset_name: 'light/t_ns'
+
+  # configuration parameters
+  slope:
+    0: 0
+    1: 0
+    

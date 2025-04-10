@@ -1,0 +1,16 @@
+classname: GeometryTestFix # test_geo_xz_coord_fix.py
+path: proto_nd_flow.util.test_geo_xz_coord_fix
+requires:
+  - 'charge/calib_prompt_hits'
+  #- name: 'mc_truth/trajectories'
+  #  path: ['charge/raw_events', 'mc_truth/events', 'mc_truth/trajectories']
+
+params:
+  # inputs
+  hits_dset_name: 'charge/calib_prompt_hits'
+  charge_dset_name: 'charge/calib_prompt_hits'
+  
+  # configuration parameters
+  fid_cut: 0.0 # cm
+  cathode_fid_cut: 0.0 # cm
+  anode_fid_cut: 0.0 # cm

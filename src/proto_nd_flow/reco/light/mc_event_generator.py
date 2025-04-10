@@ -20,15 +20,16 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, path to dataset to store raw waveforms
+         - ``n_modules`` : ``int``, number of modules
          - ``n_adcs`` : ``int``, number of ADC serial numbers
          - ``n_channels`` : ``int``, number of channels per ADC
-         - ``n_sipms`` : ``int``, total number of SiPM channels in simulation data
-         - ``n_modules`` : ``int``, number of proto ND modules
+         - ``n_sipms_per_module`` : ``int``, total number of SiPM channels per module
          - ``adc_sn`` : ``list`` of ``int``, serial number of each ADC
          - ``channel_map``: ``list`` of ``list`` of ``int``, mapping from simulation optical detector to adc, channel, ``-1`` values indicate channel is not connected
          - ``busy_channel``: ``list`` of ``int``, channel used for busy signal on each ADC (if relevant)
          - ``busy_delay``: ``int``, number of ticks prior to busy signal for each trigger
          - ``disabled_channels``: ``list`` of ``(adc_idx, channel_idx)``, channels to zero out (optional)
+         - ``baseline_offset``: ``int``, offset to add to all waveforms
 
         Requires RunData resource in workflow.
 
@@ -43,12 +44,14 @@ class LightEventGeneratorMC(H5FlowGenerator):
                 dset_name: 'light/events'
                 params:
                     wvfm_dset_name: 'light/wvfm'
-                    n_adcs: 2
+                    n_modules: 4
+                    n_adcs: 8
                     n_channels: 64
-                    n_simps: 96
+                    n_sipms_per_module: 96
                     adc_sn:
                      - 0
                      - 1
+                    baseline_offset: -28000
                     channel_map:
                      - [0,1,2,3,4,5,6,7,8,9,
                         10,11,12,13,14,15,16,17,18,19,20,
@@ -77,13 +80,14 @@ class LightEventGeneratorMC(H5FlowGenerator):
     defaults = dict(
         wvfm_dset_name='light/wvfm',
         mc_truth_dset_name='mc_truth/light',
+        n_modules=4,
         n_adcs=2,
         n_channels=64,
-        n_sipms=96,
-        n_modules=4,
+        n_sipms_per_module= 96,
         busy_delay=123,
         busy_ampl=20e3,
-        chunk_size=32
+        chunk_size=32,
+        baseline_offset=0
         )
 
 
@@ -93,6 +97,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
         # set up parameters
         for key,val in self.defaults.items():
             setattr(self, key, params.get(key, val))
+        print("baseline_offset: ",self.baseline_offset)
 
         self.adc_sn = np.array(params['adc_sn'])
         self.channel_map = np.array(params['channel_map'])
@@ -165,14 +170,15 @@ class LightEventGeneratorMC(H5FlowGenerator):
         self.data_manager.set_attrs(self.event_dset_name,
                                     classname=self.classname,
                                     class_version=self.class_version,
+                                    n_modules=self.n_modules,
                                     n_adcs=self.n_adcs,
                                     n_channels=self.n_channels,
-                                    n_sipms=self.n_sipms,
-                                    n_modules=self.n_modules,
+                                    n_sipms_per_module=self.n_sipms_per_module,
                                     n_samples=self.n_samples,
                                     chunk_size=self.chunk_size,
                                     busy_delay=self.busy_delay,
                                     adc_sn=self.adc_sn,
+                                    baseline_offset=self.baseline_offset,
                                     channel_map=self.channel_map,
                                     #busy_channel=self.busy_channel,
                                     disabled_channels=self.disabled_channels,
@@ -184,15 +190,45 @@ class LightEventGeneratorMC(H5FlowGenerator):
                                     )
 
         # copy and remap the truth information
-        self.data_manager.create_dset(self.mc_truth_dset_name, dtype=self.light_dat.dtype, shape=self.channel_map.shape)
-        truth_len = ceil(self.light_dat.shape[0] // self.size)
+        if type(self.light_dat) is h5py.Group: # We have four 96-column matrices
+            if 'light_dat_allmodules' in self.light_dat:
+                light_dat = self.light_dat['light_dat_allmodules']
+            else:
+                light_dat = self._bloat_light_dat(self.light_dat) # Now have 384 col
+        else:                   # We have the old 384-column matrix
+            light_dat = self.light_dat
+
+        self.data_manager.create_dset(self.mc_truth_dset_name, dtype=light_dat.dtype, shape=self.channel_map.shape)
+        truth_len = ceil(light_dat.shape[0] // self.size)
         truth_slice = slice(self.rank * truth_len, (self.rank+1) * truth_len)
-        remapped_light_dat = self._remap_array(self.channel_map, self.light_dat[truth_slice], axis=-1)
+        remapped_light_dat = self._remap_array(self.channel_map, light_dat[truth_slice], axis=-1)
         self.data_manager.reserve_data(self.mc_truth_dset_name, truth_slice)
         self.data_manager.write_data(self.mc_truth_dset_name, truth_slice, remapped_light_dat)
 
-        mc_channel = np.indices(self.light_dat[0:1].shape)[1]
-        
+        mc_channel = np.indices(light_dat[0:1].shape)[1]
+
+
+    @staticmethod
+    def _bloat_light_dat(light_dat_group: h5py.Group) -> np.array:
+        """ HACK
+        Merge the four 96-channel matrices into a 384-channel matrix like the
+        one that larnd-sim formerly produced. Avoids modifying downstream code. """
+        def blocks(i):
+            """Return the `light_dat` for module `i` and a clone with
+            `n_photons_det` set to 0."""
+            dat = light_dat_group[f'light_dat_module{i}']
+            nulls = np.array(dat)
+            nulls['n_photons_det'] = 0
+            return dat, nulls
+        dat0, nulls0 = blocks(0)
+        dat1, nulls1 = blocks(1)
+        dat2, nulls2 = blocks(2)
+        dat3, nulls3 = blocks(3)
+        light_dat_wide0 = np.hstack([dat0, nulls0, nulls0, nulls0])
+        light_dat_wide1 = np.hstack([nulls1, dat1, nulls1, nulls1])
+        light_dat_wide2 = np.hstack([nulls2, nulls2, dat2, nulls2])
+        light_dat_wide3 = np.hstack([nulls3, nulls3, nulls3, dat3])
+        return np.vstack([light_dat_wide0, light_dat_wide1, light_dat_wide2, light_dat_wide3])
 
     def finish(self):
         super(LightEventGeneratorMC, self).finish()
@@ -210,9 +246,9 @@ class LightEventGeneratorMC(H5FlowGenerator):
         next_startch = [tr_ev[0][0] for tr_ev in next_trig]
         
         # convert channel map
-        tmp_wvfms = np.zeros((next_wvfms.shape[0], self.n_sipms, next_wvfms.shape[-1]),dtype=next_wvfms.dtype)
+        tmp_wvfms = np.zeros((next_wvfms.shape[0], self.n_modules*self.n_sipms_per_module, next_wvfms.shape[-1]),dtype=next_wvfms.dtype)
         for ev in range(next_wvfms.shape[0]):
-            tmp_wvfms[ev,next_startch[ev]:next_startch[ev]+(self.n_sipms//self.n_modules),:] = next_wvfms[ev]
+            tmp_wvfms[ev,next_startch[ev]:(next_startch[ev]+next_wvfms[ev].shape[0]),:] = next_wvfms[ev]
         next_wvfms=tmp_wvfms
         del tmp_wvfms
         remapped_wvfms = self._remap_array(self.channel_map, -next_wvfms, axis=-2)
@@ -220,9 +256,13 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         # mock busy signal
         # remapped_wvfms[:, np.r_[range(self.n_adcs)], self.busy_channel, self.busy_delay:] = self.busy_ampl
+        
+        # add baseline offset
+        remapped_wvfms += self.baseline_offset
 
         # zero out disabled channels
-        remapped_wvfms[:, self.disabled_channels[...,0], self.disabled_channels[...,1]] = 0.
+        if self.disabled_channels.shape[0]:
+            remapped_wvfms[:, :, self.disabled_channels, :] = 0.
 
         # clip to ensure within datatype bounds
         remapped_wvfms = remapped_wvfms.clip(np.iinfo(self.wvfm_dtype['samples'].base).min, np.iinfo(self.wvfm_dtype['samples'].base).max)

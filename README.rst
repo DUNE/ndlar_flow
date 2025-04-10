@@ -12,7 +12,36 @@ environment
 First, download this code::
 
     git clone https://github.com/larpix/ndlar_flow
+
+venv method (recommended)
+-------------------------
+
+Create and activate a virtual environment::
+
+    python -m venv ndlar_flow.venv
+    source ndlar_flow.venv/bin/activate
+
+Install the ``h5flow`` framework::
+
+    git clone https://github.com/larpix/h5flow
+    cd h5flow
+    pip install -e .
+    cd ..
+
+Finally, install ``ndlar_flow``::
+
     cd ndlar_flow
+    pip install -e .
+
+Note that the ``-e`` option installs the packages in "editable" mode, meaning
+any changes you make will take effect without the need to re-run ``pip install``.
+
+The next section describes the older setup procedure based on ``conda``. The
+comments regarding MPI are historical; h5flow's MPI support is slated to be
+removed in the future.
+
+conda method (deprecated)
+-------------------------
 
 To install proper dependencies, use the provided conda environment file ``env.yaml``::
 
@@ -24,8 +53,8 @@ To update an existing environment::
     conda env update -f env.yaml -n <environment name>
 
 If MPI is not available, you may use the alternative environment file
-(``env-nompi.yaml``) that does not install parallel-HDF5. The module0 flow code
-is built off of ``h5flow`` [https://github.com/peter-madigan/h5flow], so you
+(``env-nompi.yaml``) that does not install parallel-HDF5. The ``ndlar_flow`` code
+is built off of ``h5flow`` [https://github.com/larpix/h5flow], so you
 will also need to install this in order to run any of the workflows described
 here.
 
@@ -33,24 +62,10 @@ To install::
 
     pip install .
 
-tips for installing at NERSC
-----------------------------
-
-Because CORI uses a special build of MPICH MPI, you will need to follow the
-instructions at [https://docs.nersc.gov/development/languages/python/parallel-python/]
-to install a parallelized version of h5py *before* installing ``h5flow``. Note
-that this environment will then only be usable on the CORI compute nodes, unless
-you have ``h5flow>=0.2.1`` which provides flags for running without MPI.
-
-If you'd like to set up a debugging environment that works on the CORI login
-nodes, install using the ``*-nompi`` environment files. This will not allow you
-to take advantage of the parallelism of ``h5flow``, and so isn't recommended for
-production jobs.
-
 usage
 =====
 
-There is no "executable" for ``module0_flow``, instead, it uses ``h5flow``
+There is no "executable" for ``ndlar_flow``, instead, it uses ``h5flow``
 workflow yaml files and one of the entry points to ``h5flow``:
 ``python -m h5flow -c ...``, ``run_h5flow.py -c ...``, or ``h5flow -c ...``.
 When this is run, it will set up a loop using the yaml file and
@@ -58,26 +73,26 @@ following the ``h5flow`` specification, namely,
 a loop dataset, a series of "stages" to run on that dataset, and a set of
 "resources" to make available to each stage. ``h5flow`` handles the
 instantiation of python objects, the access to the data file, and the workflow
-sequencing, while ``module0_flow`` provides workflow descriptions (under
-``yamls/module0_flow/workflows/``), module configurations (under
-``yamls/module0_flow/{reco,resources,...}``), and the source code for each module
-for those workflows (under ``module0_flow/``). The intention behind using
+sequencing, while ``ndlar_flow`` provides workflow descriptions (under
+``yamls/proto_nd_flow/workflows/``), module configurations (under
+``yamls/proto_ndflow/{reco,resources,...}``), and the source code for each module
+for those workflows (under ``src/proto_nd_flow/``). The intention behind using
 ``h5flow`` and separating the reconstruction and calibration into modules is
 to allow for:
 
  1. flexibility - a purely modular workflow has better separation of code which enables easier collaboration between multiple developers and can allow for code reuse by making modules generic and re-usable for different purposes.
- 2. portability - the only dependency for reading ``h5flow`` files is HDF5 which makes interfacing with ``module0_flow`` files easier, module-wise versioning makes developers think about compatiblitity early and often, and module-wise persistency makes adding new data objects easier and often with no reprocessing of data
+ 2. portability - the only dependency for reading ``h5flow`` files is HDF5 which makes interfacing with ``ndlar_flow`` files easier, module-wise versioning makes developers think about compatiblitity early and often, and module-wise persistency makes adding new data objects easier and often with no reprocessing of data
  3. incrementalism - intermediate data objects can be saved and built upon, so development can occur from any intermediate step and data processing can be checkpointed at any stage.
 
 That is the intention at any rate - if you have questions/comments/suggestions
 for improvement, please feel welcome to open an issue at
-[https://github.com/peter-madigan/module0_flow/issues] :)
+[https://github.com/larpix/ndlar_flow/issues] :)
 
 There is a tutorial repo at
 [https://github.com/peter-madigan/module0_flow_tutorial] that should help you
-get started, but below are the basic building blocks for ``module0_flow``:
+get started, but below are the basic building blocks for ``ndlar_flow``:
 
-The ``module0_flow`` reconstruction chain breaks up the reconstruction into the
+The ``ndlar_flow`` reconstruction chain breaks up the reconstruction into the
 following steps for each component of the reconstruction. For charge-only
 reconstruction, there are two workflows:
 
@@ -87,7 +102,7 @@ reconstruction, there are two workflows:
 which are run in sequence. For light-only reconstruction, there are
 corresponding workflows:
 
-    1. light_event_building_adc64.yaml (and light_event_building_mc.yaml)
+    1. light_event_building_mpd.yaml (and light_event_building_mc.yaml)
     2. light_event_recontruction.yaml
 
 Finally, to perform the combined reconstruction using information from both
@@ -100,7 +115,7 @@ charge event building
 
 To run charge event builder::
 
-    mpiexec h5flow -c yamls/module0_flow/workflows/charge/charge_event_building.yaml \
+    h5flow -c yamls/proto_nd_flow/workflows/charge/charge_event_building.yaml \
         -i <input file> -o <output file>
 
 This generates the ``charge/raw_events`` and ``charge/packets`` datasets. The
@@ -112,11 +127,11 @@ charge event reconstruction
 
 To run charge reconstruction::
 
-    mpiexec h5flow -c yamls/module0_flow/workflows/charge/charge_event_reconstruction.yaml \
+    h5flow -c yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction.yaml \
         -i <input file> -o <output file>
 
 This generates ``charge/packets_corr_ts``, ``charge/ext_trigs``, ``charge/hits``,
-and ``charge/events`` datasets. The input file is a charge event built ``module0_flow``
+and ``charge/events`` datasets. The input file is a charge event built ``proto_flow``
 file.
 
 light event building
@@ -124,7 +139,7 @@ light event building
 
 To run light event builder on data::
 
-    mpiexec h5flow -c yamls/module0_flow/workflows/light/light_event_building_adc64.yaml \
+    h5flow -c yamls/proto_nd_flow/workflows/light/light_event_building_adc64.yaml \
         -i <input file> -o <output file>
 
 This generates the ``light/events`` and ``light/wvfm`` datasets. The input file
@@ -132,7 +147,7 @@ is a raw ADC64-formatted .data file.
 
 To run light event builder on simulation::
 
-    mpiexec h5flow -c yamls/module0_flow/workflows/light/light_event_building_adcmc.yaml \
+    h5flow -c yamls/proto_nd_flow/workflows/light/light_event_building_adcmc.yaml \
         -i <input file> -o <output file>
 
 This generates the same ``light/events`` and ``light/wvfm`` datasets as the data, but the input file
@@ -143,10 +158,10 @@ light event reconstruction
 
 To run light reconstruction::
 
-    mpiexec h5flow -c yamls/module0_flow/workflows/light/light_event_reconstruction.yaml \
+    h5flow -c yamls/proto_nd_flow/workflows/light/light_event_reconstruction.yaml \
         -i <input file> -o <output file>
 
-This generates ``light/t_ns`` and ``light/hits`` datasets. The input file is a light event built ``module0_flow``
+This generates ``light/t_ns`` and ``light/hits`` datasets. The input file is a light event built ``ndlar_flow``
 file. The light event reconstruction also removes raw waveforms from the file.
 
 charge-to-light association
@@ -154,7 +169,7 @@ charge-to-light association
 
 To associate charge events to light events, run::
 
-    mpiexec h5flow -c yamls/module0_flow/workflows/charge/charge_light_association.yaml \
+    h5flow -c yamls/proto_nd_flow/workflows/charge/charge_light_association.yaml \
         -i <input file> -o <output file>
 
 This creates references between ``charge/ext_trigs`` and ``light/events`` as well
@@ -176,7 +191,7 @@ merged event reconstruction
 
 To generate T0s and tracks, run::
 
-    mpiexec h5flow -c yamls/module0_flow/workflows/combined/combined_reconstruction.yaml \
+    h5flow -c yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml \
         -i <input file> -o <output file>
 
 minimal staging
@@ -187,17 +202,17 @@ version 0.1.8, you can combine them into only two commands::
 
     output_file=<output file>
 
-    mpiexec h5flow -c \
-        yamls/module0_flow/workflows/light/light_event_building_adc64.yaml \
-        yamls/module0_flow/workflows/light/light_event_reconstruction.yaml \
+    h5flow -c \
+        yamls/ndlar_flow/workflows/light/light_event_building_adc64.yaml \
+        yamls/ndlar_flow/workflows/light/light_event_reconstruction.yaml \
         -i <input light file> \
         -o $output_file
 
-    mpiexec h5flow -c \
-        yamls/module0_flow/workflows/charge/charge_event_building.yaml \
-        yamls/module0_flow/workflows/charge/charge_event_reconstruction.yaml \
-        yamls/module0_flow/workflows/charge/charge_light_association.yaml \
-        yamls/module0_flow/workflows/combined/combined_reconstruction.yaml \
+    h5flow -c \
+        yamls/ndlar_flow/workflows/charge/charge_event_building.yaml \
+        yamls/ndlar_flow/workflows/charge/charge_event_reconstruction.yaml \
+        yamls/ndlar_flow/workflows/charge/charge_light_association.yaml \
+        yamls/ndlar_flow/workflows/combined/combined_reconstruction.yaml \
         -i <input charge file> \
         -o $output_file
 

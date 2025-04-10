@@ -10,8 +10,8 @@ flow:
 
 
 resources:
-  - !include yamls/proto_nd_flow/resources/RunData.yaml
-  - !include yamls/proto_nd_flow/resources/Geometry.yaml
+  - !include yamls/proto_nd_flow/resources/RunDataData.yaml
+  - !include yamls/proto_nd_flow/resources/GeometryData.yaml
   - !include yamls/proto_nd_flow/resources/LArData.yaml
 
 

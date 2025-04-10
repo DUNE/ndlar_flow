@@ -11,7 +11,7 @@ OUTPUT_DIR=`pwd` #!!! change me
 OUTPUT_NAME=(${INPUT_FILE//"/"/ })
 OUTPUT_NAME=${OUTPUT_NAME[-1]}
 OUTPUT_FILE="${OUTPUT_DIR}/${OUTPUT_NAME}"
-OUTPUT_FILE=${OUTPUT_FILE//.h5/.proto_nd_flow.h5}
+OUTPUT_FILE=${OUTPUT_FILE//.data/.proto_nd_flow.h5}
 echo ${OUTPUT_FILE}
 
 # for running on a login node
@@ -20,7 +20,7 @@ H5FLOW_CMD='h5flow'
 #H5FLOW_CMD='srun -n32 h5flow'
 
 # run all stages
-WORKFLOW1='yamls/proto_nd_flow/workflows/light/light_event_building_adc64.yaml'
+WORKFLOW1='yamls/proto_nd_flow/workflows/light/light_event_building_mpd.yaml'
 
 HERE=`pwd`
 #cd ndlar_flow

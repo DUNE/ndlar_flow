@@ -1,0 +1,18 @@
+classname: FlashFinder # light/hit_finder.py
+path: proto_nd_flow.reco.light.flash_finder
+requires:
+  - 'light/cwvfm'
+  - 'light/sipm_hits'
+  - 'light/sum_hits'
+params:
+  # inputs
+  cwvfm_dset_name: 'light/cwvfm'
+  sipm_hits_dset_name: 'light/sipm_hits'
+  sum_hits_dset_name: 'light/sum_hits'
+  
+  eps: 10
+  min_samples: 1  # >1 not supported in current implemenation
+  nchantpc: 48
+
+  # output
+  flash_dset_name: 'light/flash' # new dataset to produce
