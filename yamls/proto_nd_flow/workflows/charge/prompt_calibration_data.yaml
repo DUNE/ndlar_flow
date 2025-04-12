@@ -11,6 +11,7 @@ resources:
   - !include yamls/proto_nd_flow/resources/RunDataData.yaml
   - !include yamls/proto_nd_flow/resources/LArData.yaml
   - !include yamls/proto_nd_flow/resources/GeometryData.yaml
+  - !include yamls/proto_nd_flow/resources/CalibrateData.yaml
 
 
 raw_events:

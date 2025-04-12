@@ -23,8 +23,6 @@ class CalibHitBuilder(H5FlowStage):
          - ``packets_dset_name`` : ``str``, required, input dataset path for packets
          - ``packets_index_name`` : ``str``, required, input dataset path for packet index (defaults to ``{packets_dset_name}_index'``)
          - ``ts_dset_name`` : ``str``, required, input dataset path for clock-corrected packet timestamps
-         - ``pedestal_file`` : ``str``, optional, path to a pedestal json file
-         - ``configuration_file`` : ``str``, optional, path to a vref/vcm config json file
 
         ``packets_dset_name``, ``ts_dset_name``, and ``packets_index_name`` are required in
         the data cache. ``packets_index_name`` must point to the index for ``packets_dset_name``.
@@ -48,9 +46,7 @@ class CalibHitBuilder(H5FlowStage):
                     packets_dset_name: 'charge/packets'
                     packets_index_name: 'charge/packets_index'
                     t0_dset_name: 'combined/t0'
-                    pedestal_file: 'datalog_2021_04_02_19_00_46_CESTevd_ped.json'
-                    configuration_file: 'evd_config_21-03-31_12-36-13.json'
-
+                    
         ``calib_prompt_hits`` datatype::
 
             x              f8, pixel x location [cm]
@@ -68,17 +64,6 @@ class CalibHitBuilder(H5FlowStage):
 
     '''
     class_version = '1.0.0'
-
-    #: ASIC ADC configuration lookup table
-    configuration = defaultdict(lambda: dict(
-        vref_mv=1568.0,
-        vcm_mv=478.1
-    ))
-
-    #: pixel pedestal value
-    pedestal = defaultdict(lambda: dict(
-        pedestal_mv=580
-    ))
 
     calib_hits_dtype = np.dtype([
         ('id', 'u4'),
@@ -107,20 +92,11 @@ class CalibHitBuilder(H5FlowStage):
         self.packets_dset_name = params.get('packets_dset_name')
         self.packets_index_name = params.get('packets_index_name', self.packets_dset_name + '_index')
         self.t0_dset_name = params.get('t0_dset_name')
-        self.pedestal_file = params.get('pedestal_file', '')
-        self.configuration_file = params.get('configuration_file', '')
-        self.pedestal_mv = params.get('pedestal_mv', 580.0)
-        self.vref_mv = params.get('vref_mv', 1568.0)
-        self.vcm_mv = params.get('vcm_mv', 478.1)
-        self.adc_counts = params.get('adc_counts', 256)
-        self.gain = params.get('gain', 4.522)
         self.adc_droop_calibration = params.get('adc_droop_calibration', False)
         self.hit_ref = params.get('hit_ref', True)
 
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
-        self.load_pedestals()
-        self.load_configurations()
 
     def run(self, source_name, source_slice, cache):
         super(CalibHitBuilder, self).run(source_name, source_slice, cache)
@@ -165,8 +141,6 @@ class CalibHitBuilder(H5FlowStage):
                                     source_dset=source_name,
                                     packets_dset=self.packets_dset_name,
                                     t0_dset=self.t0_dset_name,
-                                    pedestal_file=self.pedestal_file,
-                                    configuration_file=self.configuration_file,
                                     adc_droop_calibration=self.adc_droop_calibration
                                     )
         
@@ -225,25 +199,7 @@ class CalibHitBuilder(H5FlowStage):
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             if resources['RunData'].is_mc and np.isnan(zy).any():
                 raise Exception("For simulation, all the channel keys should be valid. Please check your configuration.")
-            tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
-            hit_uniqueid = (packets_arr['io_group'].astype(int)*1000_000_000
-                            + tile_id.astype(int)*100_000
-                            + packets_arr['chip_id'].astype(int)*100
-                            + packets_arr['channel_id'].astype(int))
-            hit_uniqueid_str = hit_uniqueid.astype(str)
-            if self.configuration_file != '':
-                vref = np.array(
-                    [self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
-                vcm = np.array([self.configuration[unique_id]['vcm_mv']
-                                for unique_id in hit_uniqueid_str])
-            else:
-                vref = np.full(len(hit_uniqueid_str), self.vref_mv)
-                vcm = np.full(len(hit_uniqueid_str), self.vcm_mv)
-            if self.pedestal_file != '':
-                ped = np.array([self.pedestal[unique_id]['pedestal_mv']
-                                for unique_id in hit_uniqueid_str])
-            else:
-                ped = np.full(len(hit_uniqueid_str), self.pedestal_mv)
+
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             calib_hits_arr['x'] = x
             #if has_mc_truth:
@@ -256,10 +212,10 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['io_channel'] = packets_arr['io_channel']
             calib_hits_arr['chip_id'] = packets_arr['chip_id']
             calib_hits_arr['channel_id'] = packets_arr['channel_id']
-            hits_charge = self.charge_from_dataword(packets_arr['dataword'], vref, vcm, ped, self.adc_counts, self.gain) # ke-
+            hits_charge = resources['Calibrate'].charge_from_dataword(packets_arr) # ke-
             calib_hits_arr['Q_raw'] = hits_charge # ke-
             if self.adc_droop_calibration: 
-                hits_charge_calibrated = self.charge_from_dataword_corrected(packets_arr['dataword'], packets_arr['timestamp'], hit_uniqueid, vref, vcm, ped, self.adc_counts, self.gain) # ke- 
+                hits_charge_calibrated = resources['Calibrate'].charge_from_dataword_corrected(packets_arr) # ke- 
                 calib_hits_arr['Q'] = hits_charge_calibrated # ke-
             else:
                 calib_hits_arr['Q'] = hits_charge
@@ -305,67 +261,3 @@ class CalibHitBuilder(H5FlowStage):
             # hit -> backtracking
             if has_mc_truth:
                 self.data_manager.write_ref(self.calib_hits_dset_name,self.mc_hit_frac_dset_name,np.c_[calib_hits_arr['id'],calib_hits_arr['id']])
-
-    def get_vref_vcm_correction(self, t, t_hits, tau_rc_vref = 4400.0, impulse_vref=-0.352, tau_rc_vcm=1460.0, impulse_vcm=0.352):
-        return self.exp_sum( t, t_hits, impulse_vref, tau_rc_vref), self.exp_sum( t, t_hits, impulse_vcm, tau_rc_vcm  )
-
-    def exp_sum(self, t, ts, amps, taus ):
-        mask = ts <= t
-        ts = ts[ mask ]
-        if not type(amps) in [int, float, np.float64]:
-            amps = amps[mask]
-            taus = taus[mask]
-        if np.sum(mask)==0:
-            return 0
-        dt = np.int64(t - ts)   # uint64 -> int64 (avoid OverflowError below)
-        return np.sum( amps * np.exp( -1*dt/taus  )  )
-
-    
-    def charge_from_dataword_corrected(self, dw, ts, uid, vref, vcm, ped, adc_counts, gain):
-        #accounts for changes in vref, vcm due to nonlinearities in adc (excessive load on vref/vcm bypass capacitors on tile PCB) 
-
-        # Find chips that had 
-        chip_uid = (uid // 100)*100
-        chips, counts = np.unique(chip_uid, return_counts=True)
-        
-        vref_arr = np.full( dw.shape, vref  )
-        vcm_arr =  np.full( dw.shape, vcm   )
-        
-        for chip in chips[counts > 1]:
-     
-            mask = chip_uid==chip
-
-            chip_ts = ts[mask]
-
-            #collect all vref, vcm corrections for hits on this chip
-            vref_corrs = np.zeros( chip_ts.shape )
-            vcm_corrs = np.zeros( chip_ts.shape )
-            
-            for ihit, t in enumerate(chip_ts):
-
-                vref_corr, vcm_corr = self.get_vref_vcm_correction(t, chip_ts)
-
-                vref_corrs[ihit] = vref_corr
-                vcm_corrs[ihit] = vcm_corr
-
-            vcm_arr[mask] += vcm_corrs
-            vref_arr[mask] += vref_corrs
-             
-        return (dw / adc_counts * (vref_arr - vcm_arr) + vcm_arr - ped) / gain
-
-    @staticmethod
-    def charge_from_dataword(dw, vref, vcm, ped, adc_counts, gain):
-        return (dw / adc_counts * (vref - vcm) + vcm - ped) / gain
-
-    def load_pedestals(self):
-        if self.pedestal_file != '' and not resources['RunData'].is_mc:
-            with open(self.pedestal_file, 'r') as infile:
-                for key, value in json.load(infile).items():
-                    self.pedestal[key] = value
-
-    def load_configurations(self):
-        if self.configuration_file != '' and not resources['RunData'].is_mc:
-            with open(self.configuration_file, 'r') as infile:
-                for key, value in json.load(infile).items():
-                    self.configuration[key] = value
-
