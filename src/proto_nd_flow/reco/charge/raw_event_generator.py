@@ -6,6 +6,7 @@ import logging
 import warnings
 from math import ceil
 from tqdm import tqdm
+from sklearn.cluster import DBSCAN
 
 from h5flow.core import H5FlowGenerator, resources
 from h5flow.data import dereference
@@ -89,6 +90,8 @@ class RawEventGenerator(H5FlowGenerator):
     default_mc_tracks_dset_name = 'mc_truth/segments'
     default_mc_trajectories_dset_name = 'mc_truth/trajectories'
     default_mc_packet_fraction_dset_name = 'mc_truth/packet_fraction'
+    default_clusters_dset_name = 'charge/clusters'
+    default_clusters_hits_dset_name = 'charge/clusters_hits'
     default_truth_ref = True
 
     raw_event_dtype = np.dtype([
@@ -96,6 +99,13 @@ class RawEventGenerator(H5FlowGenerator):
         ('unix_ts', 'u8')
     ])
 
+    clusters_dtype = np.dtype([('id', 'u4'), ('nhit', 'u4'), ('Q', 'f8'), 
+                    ('io_group', 'u8'), ('unix_ts', 'u8'), ('x', 'f8', (3,)), ('x_pix', 'f8', (3,)), ('y_pix', 'f8', (3,)), \
+                    ('z_pix', 'f8', (3,)), ('ts', 'u8', (3,)), ('t_drift', 'f8', (3,)), ('is_matched', 'u4')])
+
+    clusters_hits_dtype = np.dtype([('id', 'u4'),('x_pix', 'f8'),('y_pix', 'f8'),('z_pix', 'f8'),('x', 'f8'),('t_drift', 'f8'),\
+        ('ts', 'u8'),('io_group', 'u8'),('io_channel', 'u8'),('chip_id', 'u8'),('channel_id', 'u8'),('Q', 'f8'),('is_matched', 'u4')])
+    
     # mc_event_dtype = np.dtype([
         # ('id', 'u8'),
     # ])
@@ -120,6 +130,9 @@ class RawEventGenerator(H5FlowGenerator):
         self.mc_tracks_dset_name = params.get('mc_tracks_dset_name', self.default_mc_tracks_dset_name)
         self.mc_trajectories_dset_name = params.get('mc_trajectories_dset_name', self.default_mc_trajectories_dset_name)
         self.mc_packet_fraction_dset_name = params.get('mc_packet_fraction_dset_name', self.default_mc_packet_fraction_dset_name)
+        self.clusters_dset_name = params.get('clusters_dset_name', self.default_clusters_dset_name)
+        self.clusters_hits_dset_name = params.get('clusters_hits_dset_name', self.default_clusters_hits_dset_name)
+        
         # set up whether to store truth reference
         self.truth_ref = params.get('truth_ref', self.default_truth_ref)
 
@@ -213,8 +226,17 @@ class RawEventGenerator(H5FlowGenerator):
                                     end_position=self.end_position,
                                     input_filename=self.input_filename,
                                     packets_dset_name=self.packets_dset_name,
+                                    clusters_dset_name=self.clusters_dset_name,
+                                    clusters_hits_dset_name=self.clusters_hits_dset_name,
                                     **self.event_builder.get_config()
                                     )
+        if self.event_builder_class == 'LowEnergyRawEventBuilder':            
+            self.data_manager.create_dset(self.clusters_dset_name, dtype=self.clusters_dtype)
+            self.data_manager.create_dset(self.clusters_hits_dset_name, dtype=self.clusters_hits_dtype)
+            self.data_manager.create_ref(self.clusters_dset_name, self.packets_dset_name)
+            self.data_manager.create_ref(self.raw_event_dset_name, self.clusters_dset_name)
+            self.data_manager.create_ref(self.clusters_dset_name, self.clusters_hits_dset_name)
+            
         if self.is_mc:
             self.data_manager.set_attrs(self.raw_event_dset_name,
                                         mc_tracks_dset_name=self.mc_tracks_dset_name,
@@ -464,40 +486,46 @@ class RawEventGenerator(H5FlowGenerator):
                 mc_assn = mc_assn[sync_noise_mask]
 
         # run event builder
-        events, event_unix_ts, event_mc_assn = [], [], None
+        events, event_unix_ts, event_clusters, event_clusters_hits, event_mc_assn = [], [], None, None, None
         eb_rv = list(self.event_builder.build_events(packet_buffer, unix_ts, mc_assn))
 
         if eb_rv:
-            events, event_unix_ts = eb_rv[:2]
-            if self.is_mc:
-                event_mc_assn = eb_rv[2]
+            if self.event_builder_class == 'LowEnergyRawEventBuilder':  
+                events, event_unix_ts, event_clusters, event_clusters_hits = eb_rv[:4]
+                if self.is_mc:
+                    event_mc_assn = eb_rv[4]
+            else:
+                events, event_unix_ts = eb_rv[:2]
+                if self.is_mc:
+                    event_mc_assn = eb_rv[2]
 
         if not events:
             return H5FlowGenerator.EMPTY
 
-        if self.is_mc:
-            # apply disable channel mask
-            def nhit_filter(x):
-                event = x[0]
-                mask_disabled_channels = np.isin(event[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
-                mask_disabled_chips = np.isin(event[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
-                mask_sum = (~(mask_disabled_channels | mask_disabled_chips)).sum()
-                return (mask_sum >= self.nhit_cut) and (mask_sum <= self.nhit_limit)
-
-            nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts, event_mc_assn)))
-        else:
-            nhit_filtered = list(filter(lambda x: (len(x[0]) >= self.nhit_cut) & (len(x[0]) <= self.nhit_limit), zip(events, event_unix_ts)))
-
-        if len(nhit_filtered):
+        if self.event_builder_class != 'LowEnergyRawEventBuilder':
             if self.is_mc:
-                events, event_unix_ts, event_mc_assn = zip(*nhit_filtered)
+                # apply disable channel mask
+                def nhit_filter(x):
+                    event = x[0]
+                    mask_disabled_channels = np.isin(event[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
+                    mask_disabled_chips = np.isin(event[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
+                    mask_sum = (~(mask_disabled_channels | mask_disabled_chips)).sum()
+                    return (mask_sum >= self.nhit_cut) and (mask_sum <= self.nhit_limit)
+                    
+                    nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts, event_mc_assn)))
             else:
-                events, event_unix_ts = zip(*nhit_filtered)
-                
-        else:
-            events, event_unix_ts = list(), list()
-            if self.is_mc:
-                event_mc_assn = list()
+                    nhit_filtered = list(filter(lambda x: (len(x[0]) >= self.nhit_cut) & (len(x[0]) <= self.nhit_limit), zip(events, event_unix_ts)))
+
+        if self.event_builder_class != 'LowEnergyRawEventBuilder':
+            if len(nhit_filtered):
+                if self.is_mc:
+                    events, event_unix_ts, event_mc_assn = zip(*nhit_filtered)
+                else:
+                    events, event_unix_ts = zip(*nhit_filtered)
+            else:
+                events, event_unix_ts = list(), list()
+                if self.is_mc:
+                    event_mc_assn = list()
 
         nevents = len(events)
 
@@ -516,6 +544,32 @@ class RawEventGenerator(H5FlowGenerator):
         packets_idcs = np.arange(packets_slice.start, packets_slice.stop)
         self.data_manager.write_data(self.packets_dset_name, packets_slice, packets_array)
 
+        if self.event_builder_class == 'LowEnergyRawEventBuilder':
+            # write clusters to file
+            clusters_array = np.concatenate(event_clusters, axis=0)
+            clusters_slice = self.data_manager.reserve_data(self.clusters_dset_name, len(clusters_array))
+            clusters_array['id'] = clusters_slice.start + np.arange(len(clusters_array), dtype=int)
+            self.data_manager.write_data(self.clusters_dset_name, clusters_slice, clusters_array)
+            # clusters -> packet refs
+            cluster_idcs = np.repeat(clusters_array['id'], clusters_array['nhit'])
+            ref = np.c_[cluster_idcs, packets_idcs]
+            self.data_manager.write_ref(self.clusters_dset_name, self.packets_dset_name, ref)
+            
+            # write cluster hits to file
+            clusters_hits_array = np.concatenate(event_clusters_hits, axis=0)
+            clusters_hits_slice = self.data_manager.reserve_data(self.clusters_hits_dset_name, len(clusters_hits_array))
+            clusters_hits_array['id'] = clusters_hits_slice.start + np.arange(len(clusters_hits_array), dtype=int)
+            self.data_manager.write_data(self.clusters_hits_dset_name, clusters_hits_slice, clusters_hits_array)
+            
+            # clusters -> hits refs
+            ref = np.c_[cluster_idcs, clusters_hits_array['id']]
+            self.data_manager.write_ref(self.clusters_dset_name, self.clusters_hits_dset_name, ref)
+
+            # event -> clusters ref
+            event_idcs = np.repeat(raw_event_idcs, [len(ev_cl) for ev_cl in event_clusters])
+            ref = np.c_[event_idcs, clusters_array['id']]
+            self.data_manager.write_ref(self.raw_event_dset_name, self.clusters_dset_name, ref)
+            
         # set up references
         #   event -> packet refs
         ev_idcs = np.concatenate([np.full(len(ev), i_ev) for i_ev, ev in zip(raw_event_idcs, events)], axis=0) \
@@ -528,6 +582,7 @@ class RawEventGenerator(H5FlowGenerator):
             # packet -> mc_packet_assn
             ref = np.c_[packets_idcs.ravel(), packets_idcs.ravel()]
             sl = self.data_manager.reserve_data(self.mc_packet_fraction_dset_name, len(ref))
+            
             self.data_manager.write_data(self.mc_packet_fraction_dset_name, sl, np.concatenate(event_mc_assn))
             self.data_manager.write_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name, ref)
 
