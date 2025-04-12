@@ -11,7 +11,6 @@ resources:
   - !include yamls/proto_nd_flow/resources/RunDataMC.yaml
   - !include yamls/proto_nd_flow/resources/GeometryMC.yaml
 
-
 raw_events:
   classname: H5FlowDatasetLoopGenerator
   path: h5flow.modules

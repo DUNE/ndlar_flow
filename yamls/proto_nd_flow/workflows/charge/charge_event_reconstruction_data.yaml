@@ -3,14 +3,14 @@
 
 flow:
   source: raw_events
-  stages: [timestamp_corrector, ext_trig_finder, raw_hit_builder, event_builder]
+  stages: [timestamp_corrector]
+  #, ext_trig_finder, raw_hit_builder, event_builder]
   drop: []
 
 
 resources:
   - !include yamls/proto_nd_flow/resources/RunDataData.yaml
   - !include yamls/proto_nd_flow/resources/GeometryData.yaml
-
 
 raw_events:
   classname: H5FlowDatasetLoopGenerator
@@ -24,14 +24,14 @@ timestamp_corrector:
   !include yamls/proto_nd_flow/reco/charge/TimestampCorrectorData.yaml
 
 
-ext_trig_finder:
-  !include yamls/proto_nd_flow/reco/charge/ExternalTriggerFinder.yaml
+#ext_trig_finder:
+#  !include yamls/proto_nd_flow/reco/charge/ExternalTriggerFinder.yaml
 
 
-raw_hit_builder:
-  !include yamls/proto_nd_flow/reco/charge/RawHitBuilder.yaml
+#raw_hit_builder:
+#  !include yamls/proto_nd_flow/reco/charge/RawHitBuilder.yaml
 
 
-event_builder:
-  !include yamls/proto_nd_flow/reco/charge/EventBuilder.yaml
+#event_builder:
+#  !include yamls/proto_nd_flow/reco/charge/EventBuilder.yaml
 
