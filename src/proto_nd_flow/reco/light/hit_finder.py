@@ -121,15 +121,17 @@ class WaveformHitFinder(H5FlowStage):
 
         
     def interaction_finder(self, wvfm, noise,
-                       n_noise_factor = 50.0,
-                       n_bins_rolled = 10,
-                       n_sqrt_rt_factor = 30.0,
-                       pe_weight = 1.0):
+                           n_noise_factor = 50.0,
+                           n_bins_rolled = 10,
+                           n_sqrt_rt_factor = 30.0,
+                           pe_weight = 1.0,
+                           use_rising_edge=False,
+                           use_local_maxima=True):
         # save hitfinder settings to config
         hit_config = {'n_noise_factor': n_noise_factor,
-                        'n_bins_rolled': n_bins_rolled,
-                        'n_sqrt_rt_factor': n_sqrt_rt_factor,
-                        'pe_weight': pe_weight}
+                      'n_bins_rolled': n_bins_rolled,
+                      'n_sqrt_rt_factor': n_sqrt_rt_factor,
+                      'pe_weight': pe_weight}
 
         # height = flat threshold over noise (n*sigma)
         height = n_noise_factor * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
@@ -139,12 +141,36 @@ class WaveformHitFinder(H5FlowStage):
         sqrt_rolling_average = np.sqrt(np.abs(rolling_average) * pe_weight**2)
         sqrt_rolling_average[sqrt_rolling_average == 0] = 1
         dynamic_threshold = rolling_average + n_sqrt_rt_factor*sqrt_rolling_average
-        # find rising edges
+        # find bins over dynamic threshold and noise floor
         bins_over_dynamic_threshold = (wvfm > dynamic_threshold) & (wvfm > height)
-        # remove consecutive bins, keep only the first
-        bins_over_dynamic_threshold[..., 1:] = bins_over_dynamic_threshold[..., 1:] & ~bins_over_dynamic_threshold[..., :-1]
+        # Find first bins over threshold (rising edge)
+        first_bins_over = bins_over_dynamic_threshold.copy()
+        first_bins_over[..., 1:] &= ~bins_over_dynamic_threshold[..., :-1]
+        if use_rising_edge:
+            return first_bins_over, hit_config
 
-        return bins_over_dynamic_threshold
+        # Peak finding
+        elif use_local_maxima:
+        # check 5 bins after first_bins_over and add argmax
+        peak_bins = np.zeros_like(wvfm, dtype=bool)
+        first_bins_indices = np.where(first_bins_over)
+        for idx in zip(*first_bins_indices):
+            start_idx = idx[-1]
+            end_idx = min(start_idx + 5, wvfm.shape[-1])
+            peak_bin = np.argmax(wvfm[idx[:-1] + (slice(start_idx, end_idx),)])
+            peak_bins[idx[:-1] + (start_idx + peak_bin,)] = True
+        else:
+            # Derivative-based peak detection
+            wvfm_d1 = np.gradient(wvfm, axis=-1)
+            wvfm_d2 = np.gradient(wvfm_d1, axis=-1)
+
+            peak_bins = (wvfm > dynamic_threshold) & (wvfm > height) & \
+                (wvfm_d1 < 0) & (wvfm_d2 < 0)
+
+            # Keep only the first peak in consecutive runs
+            peak_bins[..., 1:] &= ~peak_bins[..., :-1]
+        return peak_bins, hit_config
+
 
     def __init__(self, **params):
         super(WaveformHitFinder, self).__init__(**params)
