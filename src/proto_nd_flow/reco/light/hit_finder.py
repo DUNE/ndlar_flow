@@ -121,9 +121,9 @@ class WaveformHitFinder(H5FlowStage):
 
         
     def interaction_finder(self, wvfm, noise,
-                           n_noise_factor = 50.0,
-                           n_bins_rolled = 10,
-                           n_sqrt_rt_factor = 30.0,
+                           n_noise_factor = 5.0,
+                           n_bins_rolled = 5,
+                           n_sqrt_rt_factor = 5.0,
                            pe_weight = 1.0,
                            use_rising_edge=False,
                            use_local_maxima=True):
