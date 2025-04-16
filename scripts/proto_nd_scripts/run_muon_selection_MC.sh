@@ -21,11 +21,11 @@ H5FLOW_CMD='h5flow'
 
 # run all stages
 # run all stages
-#WORKFLOW1='yamls/proto_nd_flow/workflows/charge/charge_event_building_data.yaml'
-#WORKFLOW2='yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction_data.yaml'
-#WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction_data.yaml'
-#WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration_data.yaml'
-#WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration_data.yaml'
+WORKFLOW1='yamls/proto_nd_flow/workflows/charge/charge_event_building_mc.yaml'
+WORKFLOW2='yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction_mc.yaml'
+WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction_mc.yaml'
+WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration_mc.yaml'
+WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration_mc.yaml'
 WORKFLOW6='yamls/proto_nd_flow/workflows/rock_muon_selection_MC.yaml'
 
 HERE=`pwd`
@@ -39,9 +39,9 @@ if [ -e $OUTPUT_FILE ]; then
     rm $OUTPUT_FILE
 fi
 
-#$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
+$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
 
-$H5FLOW_CMD -c $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
+#$H5FLOW_CMD -c $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
 
 echo "Done!"
 echo "Output can be found at $OUTPUT_FILE"
