@@ -125,13 +125,14 @@ class LightEventGeneratorMC(H5FlowGenerator):
     def __len__(self):
         return len(self.slices)
 
+    # XXX
     @staticmethod
     def _remap_array(channel_map, arr, axis=0):
         '''
-            Remap an array of shape (..., Ni, ...) to (..., Nj, Nk, ...) using
+            Remap an array of shape (..., Ni, ...) to (..., Nj, ...) using
             an array of indices
 
-            :param channel_map: 2D array of indices into ``Ni`` to remap, shape: ``(Nj, Nk)``
+            :param channel_map: 1D array of indices into ``Ni`` to remap, shape: ``(Nj,)``
 
             :param arr: ND array to remap, shape ``(..., Ni, ...)``
         '''
@@ -139,12 +140,12 @@ class LightEventGeneratorMC(H5FlowGenerator):
             axis = arr.ndim + axis
         new_shape = tuple(np.r_[arr.shape[:axis], channel_map.shape, arr.shape[axis+1:]].astype(int))
         new_arr = np.zeros(new_shape, dtype=arr.dtype)
-        for i in range(channel_map.shape[0]):
-            np.copyto(new_arr,
-                np.expand_dims(
-                    np.take(arr, channel_map[i], axis=axis),
-                    axis=axis),
-                where=(np.indices(new_arr.shape)[axis] == i))
+        new_arr = np.take(new_arr, channel_map, axis=axis)
+        # np.copyto(new_arr,
+        #     np.expand_dims(
+        #         np.take(arr, channel_map, axis=axis),
+        #         axis=axis),
+        #     where=(np.indices(new_arr.shape)[axis] == i))
         return new_arr
 
 
@@ -198,16 +199,34 @@ class LightEventGeneratorMC(H5FlowGenerator):
         else:                   # We have the old 384-column matrix
             light_dat = self.light_dat
 
+        assert isinstance(self.light_dat, h5py.Group)
+        nmod = len(self.light_dat)
+        for imod in range(nmod):
+            in_name = f'light_dat_module{imod}'
+            this_light_dat = self.light_dat[in_name]
+            adc0 = imod // ADC_PER_MOD * ADC_PER_MOD
+            this_channel_map = self.channel_map[adc0:adc0+ADC_PER_MOD]
+            out_name = f'{self.mc_truth_dset_name}_module{imod}'
+            self.data_manager.create_dset(out_name, dtype=this_light_dat.dtype,
+                                          shape=this_channel_map.shape)
+            this_remapped_light_dat = self._remap_array(this_channel_map, this_light_dat, axis=-1,
+                                                        offset=imod*2*SIPM_PER_TPC)
+
+
+            # XXX need to adjust the shape
         self.data_manager.create_dset(self.mc_truth_dset_name, dtype=light_dat.dtype, shape=self.channel_map.shape)
         truth_len = ceil(light_dat.shape[0] // self.size)
         truth_slice = slice(self.rank * truth_len, (self.rank+1) * truth_len)
+        # XXX
         remapped_light_dat = self._remap_array(self.channel_map, light_dat[truth_slice], axis=-1)
         self.data_manager.reserve_data(self.mc_truth_dset_name, truth_slice)
         self.data_manager.write_data(self.mc_truth_dset_name, truth_slice, remapped_light_dat)
 
+        # XXX ???
         mc_channel = np.indices(light_dat[0:1].shape)[1]
 
 
+    # XXX
     @staticmethod
     def _bloat_light_dat(light_dat_group: h5py.Group) -> np.array:
         """ HACK
