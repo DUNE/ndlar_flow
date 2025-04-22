@@ -165,7 +165,7 @@ class LArEventDisplayFSD:
         self.lar_evd_dir = os.path.dirname(__file__)
         
         # Set the output path
-        if (output_path == None):
+        if (output_path is None):
             self.output_path = os.path.join(os.path.dirname(__file__) ,'FSD_eventDisplay/')
         else:
             self.output_path = os.path.abspath(output_path)
@@ -303,9 +303,11 @@ class LArEventDisplayFSD:
         self.ax_subexp_logo = self.axes_dict["ax_subexp_logo"]
         # Colorbar
         if self.show_colorbars:
-            self.cbar_ax = self.fig.add_axes([0.145, 0.001, 0.675, 0.025])
             if self.show_light:
+                self.cbar_ax = self.fig.add_axes([0.08, 0.001, 0.38, 0.025])
                 self.light_cbar_ax = self.fig.add_axes([0.51, 0.001, 0.38, 0.025])
+            else:
+                self.cbar_ax = self.fig.add_axes([0.145, 0.001, 0.675, 0.025])
 
         # Initialize point collections for plotting
         self.dvb_points = self.ax_dvb.scatter([], [], [])
@@ -1259,8 +1261,6 @@ class LArEventDisplayFSD:
         '''
         # Create the output directories if necessary
         os.makedirs(self.output_path, exist_ok=True)
-
-        print(events_id)
 
         # Check the event ID argument
         if events_id is None:
