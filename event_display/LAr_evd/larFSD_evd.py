@@ -80,13 +80,35 @@ class LArEventDisplayFSD:
             - beam_only        (bool):  only show beam events (default: False)
             - show_fig_wfms    (bool):  show a second figure with the light waveforms and SiPM coordinates (default: False)
             - ouput_path        (str):  Path where to save the figures, if None: save in LAr_evd/FSD_eventDisplay/ (default: None)
+
+        Class methods:
+
+            - run()                 :   Interactive script to browse through the selected events
+            - display_event(ev_id)  :   Display the initialized plots corresponding to the event 'ev_id'
+            - save_plots(which_plot, events_id):    Save the plots in the output repository
+            - events_id()           :   Return a list of events number that passed the selection
+
+        In order to run the display and interactively flip through events, set up a Jupyter Notebook, import everything in this file,
+        and execute the run() method, e.g.:
+
+        from larFSD_evd import *
+        plt.ion()
+
+        d = '/path/to/file/'
+        f = 'filename'
+        evd = LArEventDisplay(filedir=d, filename=f, nhits=1, ntrigs=1)
+        evd.run()
+
+        Alternatively, you can a display for a specific event by calling the display_event() method with the event ID as an argument, e.g.:
+        evd.display_event(123). 
+
             
     '''
 
     # Initialize class
-    def __init__(self, filedir, filename, runsdb=None, \
-                 nhits_min=1, nhits_max=1e10, ntrigs=0, show_light=True, \
-                 show_colorbars=True, charge_threshold=None, light_threshold=1000, beam_only=False, \
+    def __init__(self, filedir, filename, runsdb=None, 
+                 nhits_min=1, nhits_max=1e10, ntrigs=0, show_light=True, 
+                 show_colorbars=True, charge_threshold=None, light_threshold=1000, beam_only=False, 
                  hist_projection=True, light_event_only=False, show_fig_wfms=False, output_path=None):
         
         # Open files
@@ -631,78 +653,66 @@ class LArEventDisplayFSD:
         print(f"Number of events in the selection: {len(self.events)}")
         
  
-    # def run(self):
-  
-    #     # Get event IDs and initialize event index
-    #     print(f'Hello? {len(self.events)}')
-    #     event_ids = [ev['id'] for ev in self.events]
-    #     ev_idx = 0
-    #     ev_id = event_ids[ev_idx]
+    def run(self):
+        '''
+        Interactive script to browse through the selected events
 
-    #     # Display first event 
-    #     hits, cmap, charge_norm = self.display_event(ev_id)
+        Args:
+            None
 
-    #     # Displays event until user input determines next action
-    #     # User can quit display (q), save current display to PDF (s), save current display to PDF
-    #     # with points scaled to pixel pitch (p), skip to next event (enter),
-    #     # make a GIF of an event (g), or skip to a specific event ID (type number)
-    #     while True:
+        Return:
+            None
+        '''
+    
+        # Get event IDs and initialize event index
+        event_ids = [ev['id'] for ev in self.events]
+        ev_idx = 0
 
-    #         display(plt.gcf())
-    #         user_input = input(
-    #             'Next event (q to exit/s to save to pdf/p to save to pdf with points scald to pixel pitch/g to create gif/enter for next/number to skip to event)?\n')
-    #         if not user_input:
-    #             clear_output(wait=True)
-    #             ev_idx += 1
-    #             ev_id = event_ids[ev_idx]
-    #             # try:
-    #             #     hits, cmap, charge_norm = self.display_event(ev_id)
-    #             # except: 
-    #             #     print(f'Wrong dude! try better')
-    #             #print(f'It will crash probably')
-    #             hits, cmap, charge_norm = self.display_event(ev_id)
-    #         elif user_input[0].lower() == 'q':
-    #             sys.exit()
-    #         elif user_input[0].lower() == 's':
-    #             self.save_to_pdf(ev_id, hits=hits, cmap=cmap, charge_norm=charge_norm)
-    #         elif user_input[0].lower() == 'p':
-    #             self.save_to_pdf(ev_id, points_scaled_to_pixel_pitch=True, hits=hits, cmap=cmap, charge_norm=charge_norm)
-    #         elif user_input[0].lower() == 'g':
-    #             print("Creating GIF of Event Display")
-    #             # Loop over 3D views
-    #             gif_dir = self.lar_evd_dir
-    #             frame_num = 0
-    #             for (azi,zen,zoom) in zip(self.azimuths,self.zeniths,self.zooms):
-    #                 self.ax_dvb.view_init(zen, azi)  
-    #                 self.ax_dvb.dist = zoom
-    #                 self.ax_dvb.set_box_aspect([1,1,1])
-    #                 figname = gif_dir+'frame_%04d_%04d.png' % (ev_id, frame_num)
-    #                 self.fig.savefig(figname)
-    #                 frame_num += 1
-    #             os.system("convert -delay 10 "+gif_dir+"frame*.png "+gif_dir+"animated_"+str(ev_id)+"no_axes.gif")
-    #         else:
-    #             try:
-    #                 clear_output(wait=True)
-    #                 print(f'Before new event: ev_idx: {ev_idx}, ev_id: {ev_id}')
-    #                 ev_id = int(user_input)
-    #                 print(f' User input is: {user_input}, ({int(user_input)})')
-    #                 print(f' Is the user_input in event_ids? {np.isin(user_input, event_ids)}')
-    #                 ev_idx = event_ids.index(ev_id)
-    #                 hits, cmap, charge_norm = self.display_event(ev_id)
-    #                 print(f'After, ev_idx: {ev_idx}, ev_id: {ev_id}')
-    #             except:
-    #                 clear_output(wait=True)
-    #                 print("Event number %s not valid" % user_input)
-    #                 print(f' User input is: {user_input}, ({int(user_input)})')
-    #                 print(f'Error! ev_idx: {ev_idx}, ev_id: {ev_id}')
-    #                 print(f' Is the user_input in event_ids? {np.isin(user_input, event_ids)}')
-    #                 print("Proceeded to next available event instead")
-    #                 ev_idx += 1
-    #                 ev_id = event_ids[ev_idx]
-    #                 hits, cmap, charge_norm = self.display_event(ev_id)                 
-    #         if ev_id >= event_ids[-1]:
-    #             print("End of file")
-    #             sys.exit()
+        # Display first event 
+        self.display_event(event_ids[ev_idx])
+
+        # Displays event until user input determines next action
+        # User can:
+        # - skip to next event (enter)
+        # - skip to a specific event ID (type number)
+        # - list the event ID in the selection (l)
+        # - save current display to png (s)
+        # - quit display (q)
+        while True:
+
+            user_input = input(
+                "Next event (Enter: go to next event/'ev_id' + Enter: skip to event 'ev_id'/ l + Enter: list the events ID in the selection/ s + Enter: save the current plot as png/ q + Enter: exit/)?\n")
+            if not user_input:
+                clear_output(wait=True)
+                ev_idx += 1
+                self.display_event(event_ids[ev_idx])
+            elif user_input[0].lower() == 'q':
+                sys.exit()
+            elif user_input[0].lower() == 's':
+                self.save_plots(events_id = event_ids[ev_idx])
+
+            elif user_input[0].lower() == 'l':
+                clear_output(wait=True)
+                print(self.events_id())
+            else:
+                clear_output(wait=True)
+                try:
+                    ev_id = int(user_input)
+                except ValueError as e:
+                    print(f'{e}\nPlease enter a valid input')
+                    continue
+
+                self.display_event(ev_id)
+
+                # Set the idx to the input event
+                for idx in range(len(event_ids)):
+                    if self.current_ev_id == event_ids[idx]:
+                        ev_idx = idx
+                        break
+                
+            if ev_idx >= len(event_ids):
+                print("End of file")
+                sys.exit()
     
 
     def _clear_axes(self):
@@ -1099,12 +1109,6 @@ class LArEventDisplayFSD:
         # Set the current event subrun number (Note that it include the run nunber)
         self.current_ev_subrun = event_subrun
 
-        # Check whether event is a beam trigger event
-        if self.is_beam_event:
-            print("Event " + str(self.current_ev_id) + " is a beam trigger event")
-        else:
-            print("Event " + str(self.current_ev_id) + " is NOT a beam trigger event")
-
         # Reset hits if charge threshold is set
         if self.charge_threshold is not None:
             hits = hits[hits['Q'] > self.charge_threshold]
@@ -1188,24 +1192,33 @@ class LArEventDisplayFSD:
         '''
         Save the currently ploted event
 
-        Args: which_plot: See save_plots() for the details (default: None)
+        Args: 
+            which_plot: See save_plots() for the details (default: None)
+
+        Return:
+            None
         '''
         # Save the plots
+        file_name= f'FSDDisplay_Run{self.current_ev_subrun}_Ev{self.current_ev_id}'
+        ext = '.png'
         if which_plot == None:
-            self.fig.savefig(os.path.join(self.output_path, f'FSDDisplay_Run{self.current_ev_subrun}_Ev{self.current_ev_id}.png'), bbox_inches='tight')
+            self.fig.savefig(os.path.join(self.output_path, file_name+ext), bbox_inches='tight')
             if self.show_fig_wfms:
-                self.fig_wfms.savefig(os.path.join(self.output_path, f'FSDDisplay_Run{self.current_ev_subrun}_Ev{self.current_ev_id}_wvfms.png'), bbox_inches='tight')
+                self.fig_wfms.savefig(os.path.join(self.output_path, file_name+'_wvfms'+ext), bbox_inches='tight')
+        
         elif which_plot == 'display':
-            self.fig.savefig(os.path.join(self.output_path, f'FSDDisplay_Run{self.current_ev_subrun}_Ev{self.current_ev_id}.png'), bbox_inches='tight')
+            self.fig.savefig(os.path.join(self.output_path, file_name+ext), bbox_inches='tight')
 
         elif which_plot == 'wvfms':
             if self.show_fig_wfms:
-                self.fig_wfms.savefig(os.path.join(self.output_path, f'FSDDisplay_Run{self.current_ev_subrun}_Ev{ev_id}_wvfms.png'), bbox_inches='tight')
+                self.fig_wfms.savefig(os.path.join(self.output_path, file_name+'_wvfms'+ext), bbox_inches='tight')
             else:
                 raise TypeError("The waveforms plot was not initialzed. Set 'show_fig_wfms=True' to enable it.")
 
         else :
             raise ValueError("The argument passed to 'which_plot' is not supported. The expected values are None, 'display' or 'wvfms'")
+        
+        return None
     
     def display_event(self, ev_id):
         '''
@@ -1219,6 +1232,8 @@ class LArEventDisplayFSD:
         '''
 
         self._plot_event(ev_id)
+
+        
 
         display(self.fig)
         
@@ -1245,15 +1260,17 @@ class LArEventDisplayFSD:
         # Create the output directories if necessary
         os.makedirs(self.output_path, exist_ok=True)
 
+        print(events_id)
+
         # Check the event ID argument
-        if events_id == None:
+        if events_id is None:
             if (self.current_ev_id != -1):
                 self._save_plot(which_plot)
                 return None
             else:
                 raise TypeError("Missing required 'event_id'. Please run 'display_event()' first or provide 'event_id' explicitly.")
         
-        if isinstance(events_id, int):
+        if isinstance(events_id, int) or isinstance(events_id, np.uint64):
             events_id = [events_id]
 
         for ev_id in events_id:
