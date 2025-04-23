@@ -1,3 +1,4 @@
+# Based on Elise Hinkle 2x2 Event display
 # Contact: nicolas.sallin@unibe.ch, @Nicolas Sallin on DUNE Slack
 # INSTALLING AND IMPORTANT PYTHON MODULES
 # Import packages to check for and install missing packages
@@ -64,22 +65,22 @@ class LArEventDisplayFSD:
 
         Inputs to this class are as follows:
 
-            - filedir          (str):   path to input file (minus filename)
-            - filename         (str):   name of flow file
+            - filedir          (str):   Path to input file (minus filename)
+            - filename         (str):   Name of flow file
             - runsdb           (str):   Optional, run database (default = None)
-            - nhits_min        (int):   minimum number of hits (threshold) for events to be made available (default: 1)
-            - nhits_max        (int):   maximum number of hits allowed in event for events to be made available (default: 1e10)
-            - ntrigs           (int):   number of external triggers threshold for events to be made available (default: 0)
-            - show_light       (bool):  show light information in display (default: True)
-            - light_event_only (bool):  only the events containing light information are displayed (default: False)
-            - show_colorbars   (bool):  display the color bars (default: True)
-            - hist_projection  (bool):  if True, hits are binned in a 2D histogram for the 2D charge hit projections. Bins with 0 charge are not displayed.
+            - nhits_min        (int):   Minimum number of hits (threshold) for events to be made available (default: 1)
+            - nhits_max        (int):   Maximum number of hits allowed in event for events to be made available (default: 1e10)
+            - ntrigs           (int):   Number of external triggers threshold for events to be made available (default: 0)
+            - show_light       (bool):  Show light information in display (default: True)
+            - light_event_only (bool):  Only the events containing light information are displayed (default: False)
+            - show_colorbars   (bool):  Display the color bars (default: True)
+            - hist_projection  (bool):  If True, hits are binned in a 2D histogram for the 2D charge hit projections. Bins with 0 charge are not displayed.
                                         If False, hits are plotted as scatter points for the 2D charge hit projections. (default: True)
-            - charge_threshold (float): threshold for charge hits to be shown (default: None)
-            - light_threshold  (float): threshold for light to be shown (default: 1000 ADC counts)
-            - beam_only        (bool):  only show beam events (default: False)
-            - show_fig_wfms    (bool):  show a second figure with the light waveforms and SiPM coordinates (default: False)
-            - ouput_path        (str):  Path where to save the figures, if None: save in LAr_evd/FSD_eventDisplay/ (default: None)
+            - charge_threshold (float): Threshold for charge hits to be shown (default: None)
+            - light_threshold  (float): Threshold for light to be shown (default: 1000 ADC counts)
+            - beam_only        (bool):  Only show beam events (default: False)
+            - show_fig_wfms    (bool):  Show a second figure with the light waveforms and SiPM coordinates (default: False)
+            - ouput_path       (str):   Path where to save the figures, if None: save in LAr_evd/FSD_eventDisplay/ (default: None)
 
         Class methods:
 
@@ -99,7 +100,7 @@ class LArEventDisplayFSD:
         evd = LArEventDisplay(filedir=d, filename=f, nhits=1, ntrigs=1)
         evd.run()
 
-        Alternatively, you can a display for a specific event by calling the display_event() method with the event ID as an argument, e.g.:
+        Alternatively, you can display a specific event by calling the display_event() method with the event ID as an argument, e.g.:
         evd.display_event(123). 
 
             
