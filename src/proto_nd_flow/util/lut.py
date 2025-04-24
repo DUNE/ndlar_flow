@@ -185,7 +185,6 @@ class LUT(object):
             val += ((np.array(key).astype('i8') - self.min_max_keys[i + 1][0])
                     * np.prod(self.lengths[:i + 1]))
             
-        # print(val)
         return val.astype(int).ravel()
 
     def hash(self, *keys):
