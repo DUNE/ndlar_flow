@@ -143,6 +143,7 @@ class WaveformHitFinder(H5FlowStage):
         dynamic_threshold = rolling_average + n_sqrt_rt_factor*sqrt_rolling_average
         # find bins over dynamic threshold and noise floor
         bins_over_dynamic_threshold = (wvfm > dynamic_threshold) & (wvfm > height)
+
         # Find first bins over threshold (rising edge)
         first_bins_over = bins_over_dynamic_threshold.copy()
         first_bins_over[..., 1:] &= ~bins_over_dynamic_threshold[..., :-1]
@@ -151,14 +152,14 @@ class WaveformHitFinder(H5FlowStage):
 
         # Peak finding
         elif use_local_maxima:
-        # check 5 bins after first_bins_over and add argmax
-        peak_bins = np.zeros_like(wvfm, dtype=bool)
-        first_bins_indices = np.where(first_bins_over)
-        for idx in zip(*first_bins_indices):
-            start_idx = idx[-1]
-            end_idx = min(start_idx + 5, wvfm.shape[-1])
-            peak_bin = np.argmax(wvfm[idx[:-1] + (slice(start_idx, end_idx),)])
-            peak_bins[idx[:-1] + (start_idx + peak_bin,)] = True
+            # check 5 bins after first_bins_over and add argmax
+            peak_bins = np.zeros_like(wvfm, dtype=bool)
+            first_bins_indices = np.where(first_bins_over)
+            for idx in zip(*first_bins_indices):
+                start_idx = idx[-1]
+                end_idx = min(start_idx + 5, wvfm.shape[-1])
+                peak_bin = np.argmax(wvfm[idx[:-1] + (slice(start_idx, end_idx),)])
+                peak_bins[idx[:-1] + (start_idx + peak_bin,)] = True
         else:
             # Derivative-based peak detection
             wvfm_d1 = np.gradient(wvfm, axis=-1)
@@ -169,6 +170,7 @@ class WaveformHitFinder(H5FlowStage):
 
             # Keep only the first peak in consecutive runs
             peak_bins[..., 1:] &= ~peak_bins[..., :-1]
+
         return peak_bins, hit_config
 
 
