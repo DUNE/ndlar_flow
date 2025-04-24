@@ -184,6 +184,8 @@ class LUT(object):
         for i, key in enumerate(keys[1:]):
             val += ((np.array(key).astype('i8') - self.min_max_keys[i + 1][0])
                     * np.prod(self.lengths[:i + 1]))
+            
+        # print(val)
         return val.astype(int).ravel()
 
     def hash(self, *keys):
@@ -198,6 +200,34 @@ class LUT(object):
         val[val < 0] = 0
         val[val > self.max_hash] = 0
         return val
+    
+    
+    def _reverse_hash(self, hashed_id):
+        val = np.array(hashed_id).astype('i8').ravel()
+        val -= 1 
+        keys = []
+
+        for i in reversed(range(len(self.lengths))):
+            stride = np.prod(self.lengths[:i]) if i > 0 else 1
+            key_offset = val // stride
+            keys.insert(0, (key_offset + self.min_max_keys[i][0]))
+            val = val % stride
+
+        return tuple(np.array(k, dtype='i8') for k in keys)
+
+    def reverse_hash(self, hashed_id):
+        '''
+            Reverses a hashed index back into the original key tuple.
+
+            :param hashed_id: hashed index to reverse, ``int``
+
+            :returns: tuple of keys, ``shape: (N,)``
+
+        '''
+        hashed_id = int(hashed_id)
+
+        return self._reverse_hash(hashed_id)
+
 
     @property
     def default(self):
@@ -258,3 +288,26 @@ class LUT(object):
         if self._filled[0]:
             i = np.where(idx == 0)[0]
             raise RuntimeError(f'invalid key tried to overwrite default: {[np.array(key)[i] for key in keys]}, value={np.array(val)[i]}')
+
+    def get_keys_from_val(self, val):
+        '''
+            Retrieves the first key tuples that map to the given value.
+
+            :param val: tuple of value, ``shape: (N,)``
+
+            :returns: tuple of key corresponding to the parameter value, ``shape: (N,)``
+        '''
+        if (self.default[0] in val):
+            raise KeyError(f"A default value was given (given: {val}, default: {self.default[0]}), no matching key exist.")
+
+        val = np.asarray(val)
+        matching_keys = []
+
+        if val.shape != self._data[0].shape:
+            raise ValueError(f"Invalid value format. Expected shape: {self._data[0].shape}, but got: {val.shape}.")
+
+        for idx, stored_val in enumerate(self._data):
+            if np.array_equal(stored_val, val):
+                return np.ravel(self.reverse_hash(idx))
+
+        raise KeyError(f"No matching key found for the given value: {val}")
