@@ -45,9 +45,9 @@ class WaveformSum(H5FlowStage):
         return np.dtype([('samples', 'f4', (ntpc, 2, nsamples))])
 
     def swvfm_align_dtype(self, ntpc, ndet):
-        return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (ntpc,ndet))])
+        return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (ntpc, ndet))])
 
-    def stpc_wvfm_align_dtype(self, ntpc):
+    def stpc_wvfm_align_dtype(self, ntpc, ntrap):
         return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (ntpc, 2))])
 
     def __init__(self, **params):
@@ -60,7 +60,7 @@ class WaveformSum(H5FlowStage):
         self.swvfm_align_dset_name = f'{self.swvfm_dset_name}/alignment'
 
         self.stpc_wvfm_dset_name = params.get('stpc_wvfm_dset_name')
-        self.stpc_wvfm_align_tpc_dset_name = f'{self.stpc_wvfm_dset_name}/alignment'
+        self.stpc_wvfm_align_dset_name = f'{self.stpc_wvfm_dset_name}/alignment'
 
 
     def init(self, source_name):
@@ -116,14 +116,24 @@ class WaveformSum(H5FlowStage):
             for chan in range(wvfm_data['samples'].shape[2]):
                 tpc_id = resources['Geometry'].sipm_rel_pos[(adc,chan)][0][0]
                 det_id = resources['Geometry'].det_id[(adc,chan)]
+                # skip negative indices
+                if tpc_id < 0 or det_id < 0:
+                    continue
                 # check number of channels with same det_id
-                n_ch_per_det = (resources['Geometry']['det_id'] == det_id).sum()
+                n_ch_per_det = 0
+                for adc_ in range(wvfm_data['samples'].shape[1]):
+                    for chan_ in range(wvfm_data['samples'].shape[2]):
+                        tpc_id_ = resources['Geometry'].sipm_rel_pos[(adc_,chan_)][0][0]
+                        det_id_ = resources['Geometry'].det_id[(adc_,chan_)]
+                        if det_id_ == det_id and tpc_id_ == tpc_id:
+                            n_ch_per_det += 1
                 # if 6 channels, det type is 0 (ACL), if 2 channels, det type is 1 (LCM)
                 det_type = 0
                 if n_ch_per_det == 2:
                     det_type = 1
                 elif n_ch_per_det != 6:
                     raise ValueError(f"Invalid number of channels for det_id {det_id}: {n_ch_per_det}")
+                # skip negative indices
                 if tpc_id < 0 or det_id < 0:
                     continue
                 mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
@@ -139,16 +149,23 @@ class WaveformSum(H5FlowStage):
             for chan in range(wvfm_data['samples'].shape[2]):
                 tpc_id = resources['Geometry'].sipm_rel_pos[(adc,chan)][0][0]
                 det_id = resources['Geometry'].det_id[(adc,chan)]
+                # skip negative indices
+                if tpc_id < 0 or det_id < 0:
+                    continue
                 # check number of channels with same det_id
-                n_ch_per_det = (resources['Geometry']['det_id'] == det_id).sum()
+                n_ch_per_det = 0
+                for adc_ in range(wvfm_data['samples'].shape[1]):
+                    for chan_ in range(wvfm_data['samples'].shape[2]):
+                        tpc_id_ = resources['Geometry'].sipm_rel_pos[(adc_,chan_)][0][0]
+                        det_id_ = resources['Geometry'].det_id[(adc_,chan_)]
+                        if det_id_ == det_id and tpc_id_ == tpc_id:
+                            n_ch_per_det += 1
                 # if 6 channels, det type is 0 (ACL), if 2 channels, det type is 1 (LCM)
                 det_type = 0
                 if n_ch_per_det == 2:
                     det_type = 1
                 elif n_ch_per_det != 6:
                     raise ValueError(f"Invalid number of channels for det_id {det_id}: {n_ch_per_det}")
-                if tpc_id < 0 or det_id < 0:
-                    continue
                 # WARNING: does not handle case where different channels on same detector are not aligned (not relevant for Module 0 data)
                 mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
                 # det summed wvfm
@@ -170,9 +187,9 @@ class WaveformSum(H5FlowStage):
         # tpc summed wvfm
         stpc_wvfm_slice = self.data_manager.reserve_data(self.stpc_wvfm_dset_name, source_slice)
         self.data_manager.write_data(self.stpc_wvfm_dset_name, source_slice, stpc_wvfm_data)
-        if(self.data_manager.dset_exists(self.stpc_wvfm_align_tpc_dset_name)):
-            stpc_wvfm_align_slice = self.data_manager.reserve_data(self.stpc_wvfm_align_tpc_dset_name, source_slice)
-            self.data_manager.write_data(self.stpc_wvfm_align_tpc_dset_name, stpc_wvfm_align_slice, stpc_wvfm_align_data)
+        if(self.data_manager.dset_exists(self.stpc_wvfm_align_dset_name)):
+            stpc_wvfm_align_slice = self.data_manager.reserve_data(self.stpc_wvfm_align_dset_name, source_slice)
+            self.data_manager.write_data(self.stpc_wvfm_align_dset_name, stpc_wvfm_align_slice, stpc_wvfm_align_data)
 
         # save references:
 
@@ -186,6 +203,6 @@ class WaveformSum(H5FlowStage):
         # tpc summed wvfm
         stpc_wvfm_ref = np.c_[source_slice, stpc_wvfm_slice]
         self.data_manager.write_ref(source_name, self.stpc_wvfm_dset_name, stpc_wvfm_ref)
-        if(self.data_manager.dset_exists(self.stpc_wvfm_align_tpc_dset_name)):
+        if(self.data_manager.dset_exists(self.stpc_wvfm_align_dset_name)):
             stpc_wvfm_ref = np.c_[source_slice, stpc_wvfm_align_slice]
-            self.data_manager.write_ref(source_name, self.stpc_wvfm_align_tpc_dset_name, stpc_wvfm_ref)
+            self.data_manager.write_ref(source_name, self.stpc_wvfm_align_dset_name, stpc_wvfm_ref)
