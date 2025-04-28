@@ -24,10 +24,17 @@ class WaveformHitFinder(H5FlowStage):
          - ``wvfm_dset_name``: ``str``, path to input waveforms
          - ``t_ns_dset_name``: ``str``, path to corrected light PPS timestamps
          - ``hits_dset_name``: ``str``, path to output hits dataset
-         - ``near_samples``: ``int``, number of neighboring samples to keep
-         - ``hit_level``: ``str``, "sipm" or "sum" hit finder (defines variable names)
-         - ``threshold``: ``dict`` of ``dict`` containing sets of ``tpc_index: {channel_index: threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
-         - ``mask``: ``list`` of ``int``, detectors to ignore when finding hits
+         - ``near_samples``:   ``int``, number of neighboring samples to keep
+         - ``hit_level``:      ``str``, "sipm" or "sum" hit finder (defines variable names)
+         - ``mad_factor``:     ``float``, factor of median abs dev used to define threshold under which noise width is taken  
+         - ``noise_factor``:   ``float``, factor of noise width used to define threshold over which hit finder is run
+         - ``n_bins_rolled``:  ``int``, number of bins over which the rolling threshold of the hit finder is defined
+         - ``rt_sqrt_factor``: ``float``, factor used to scale the statistical contribution to the rolling threshold
+         - ``pe_weight``:      ``float``, weight applied to the PEs in rolling threshold statistical component
+         - ``rising_edge``:    ``bool``, True => hit finder tags first bin over rolling threshold as the hit
+         - ``local_maxima``:   ``bool``, True => uses 5 sample window after rising edge, tags hits as argmax of those samples (otherwise uses derivative based method) 
+         - ``threshold``:      ``dict`` of ``dict`` containing sets of ``tpc_index: {channel_index: threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
+         - ``mask``:           ``list`` of ``int``, detectors to ignore when finding hits
 
          Both ``wvfm_dset_name``, ``{wvfm_dset_name}/alignment``, and ``t_ns_dset_name`` are required in the cache.
 
@@ -106,7 +113,7 @@ class WaveformHitFinder(H5FlowStage):
         else:
             raise RuntimeError(f'Invalid hit level {self.hit_level}')
 
-    def get_noise_threshold(self, wvfms, n_mad_factor=5.0):
+    def get_noise_threshold(self, wvfms, n_mad_factor):
         # Initialize median and MAD
         median = np.ma.median(wvfms, axis=-1)
         mad = np.ma.median(np.abs(wvfms - median[..., np.newaxis]), axis=-1)
@@ -121,17 +128,12 @@ class WaveformHitFinder(H5FlowStage):
 
         
     def interaction_finder(self, wvfm, noise,
-                           n_noise_factor = 5.0,
-                           n_bins_rolled = 5,
-                           n_sqrt_rt_factor = 5.0,
-                           pe_weight = 1.0,
+                           n_noise_factor,
+                           n_bins_rolled,
+                           n_sqrt_rt_factor,
+                           pe_weight,
                            use_rising_edge=False,
                            use_local_maxima=True):
-        # save hitfinder settings to config
-        hit_config = {'n_noise_factor': n_noise_factor,
-                      'n_bins_rolled': n_bins_rolled,
-                      'n_sqrt_rt_factor': n_sqrt_rt_factor,
-                      'pe_weight': pe_weight}
 
         # height = flat threshold over noise (n*sigma)
         height = n_noise_factor * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
@@ -148,7 +150,7 @@ class WaveformHitFinder(H5FlowStage):
         first_bins_over = bins_over_dynamic_threshold.copy()
         first_bins_over[..., 1:] &= ~bins_over_dynamic_threshold[..., :-1]
         if use_rising_edge:
-            return first_bins_over, hit_config
+            return first_bins_over
 
         # Peak finding
         elif use_local_maxima:
@@ -171,7 +173,7 @@ class WaveformHitFinder(H5FlowStage):
             # Keep only the first peak in consecutive runs
             peak_bins[..., 1:] &= ~peak_bins[..., :-1]
 
-        return peak_bins, hit_config
+        return peak_bins
 
 
     def __init__(self, **params):
@@ -184,6 +186,13 @@ class WaveformHitFinder(H5FlowStage):
         self.near_samples = params.get('near_samples',
                                        self.default_near_samples)
         self.hit_level = params.get('hit_level')
+        self.mad_factor = params.get('mad_factor')
+        self.noise_factor = params.get('noise_factor')
+        self.n_bins_rolled = params.get('n_bins_rolled')
+        self.rt_sqrt_factor = params.get('rt_sqrt_factor')
+        self.pe_weight = params.get('pe_weight')
+        self.rising_edge = params.get('rising_edge')
+        self.local_maxima = params.get('local_maxima')
         self.mask = np.array(params.get('mask',
                                                 self.default_mask))
         self.interpolation = params.get('interpolation',
@@ -261,8 +270,14 @@ class WaveformHitFinder(H5FlowStage):
         wvfm_det = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
         # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
-        noise = self.get_noise_threshold(wvfms)
-        peaks = self.interaction_finder(wvfms,noise)
+        noise = self.get_noise_threshold(wvfms, self.mad_factor)
+        peaks = self.interaction_finder(wvfms, noise,
+                                        self.noise_factor,
+                                        self.n_bins_rolled,
+                                        self.rt_sqrt_factor,
+                                        self.pe_weight,
+                                        self.rising_edge,
+                                        self.local_maxima)
         peaks = np.where(peaks)
 
         peak_max = wvfms[..., :][peaks]  # waveform value at each peak
