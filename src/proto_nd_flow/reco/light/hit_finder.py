@@ -65,6 +65,27 @@ class WaveformHitFinder(H5FlowStage):
         return defaultdict(lambda: defaultdict(lambda: global_threshold))
 
     def hits_dtype(self, near_samples):
+        if self.hit_level=="sum_tpc":
+            return np.dtype([
+                ('id', 'u4'),
+                ('tpc', 'u1'),
+                ('trap_type', 'u1'),
+                #('boundary', 'f4', (2,3)),
+                ('sample_idx', 'u2'),
+                ('ns', 'f8'),
+                ('busy_ns', 'f8'),
+                ('samples', 'f4', (2 * near_samples + 1,)),
+                ('sum', 'f4'),
+                ('max', 'f4'),
+                ('sum_spline', 'f4'),
+                ('max_spline', 'f4'),
+                ('ns_spline', 'f4'),
+                ('rising_spline', 'f4'),
+                ('rising_err_spline', 'f4'),
+                ('fwhm_spline', 'f4'),
+                ('integral', 'f4'),
+                ('fprompt', 'f4')
+            ])
         if self.hit_level=="sum":
             return np.dtype([
                 ('id', 'u4'),
@@ -234,7 +255,20 @@ class WaveformHitFinder(H5FlowStage):
         # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
         noise = self.get_noise_threshold(wvfms)
-        peaks = self.interaction_finder(wvfms,noise)
+        # get settings for sipm vs sum, vs sum_tpc
+        if self.hit_level == "sum_tpc":
+            noise_factor = 5.0
+            bins_rolled = 5
+            sqrt_rt_factor = 5.0
+        elif self.hit_level == "sum":
+            noise_factor = 5.0
+            bins_rolled = 5
+            sqrt_rt_factor = 5.0
+        elif self.hit_level == "sipm":
+            noise_factor = 5.0
+            bins_rolled = 5
+            sqrt_rt_factor = 5.0
+        peaks = self.interaction_finder(wvfms, noise, noise_factor, bins_rolled, sqrt_rt_factor) 
         peaks = np.where(peaks)
 
         peak_max = wvfms[..., :][peaks]  # waveform value at each peak
@@ -302,7 +336,12 @@ class WaveformHitFinder(H5FlowStage):
                 - peak_lhm_spline_samples.mean(axis=-1))
             
             hit_data = np.empty((len(peaks[-1])), dtype=self.hits_dtype)
-            if self.hit_level=="sum":
+            elif self.hit_level=="sum_tpc":
+                hit_data['tpc'] = peaks[1].ravel()
+                hit_data['trap_type'] = wvfm_det[peaks[:3]].ravel()
+               # hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[tpc][0]) for tpc in peaks[1].ravel()]
+                hit_data['integral'], hit_data['fprompt'] = calculate_fprompt(wvfm_det, peaks) 
+            elif self.hit_level=="sum":
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['det'] = wvfm_det[peaks[:3]].ravel()
                 hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[(tpc,det)][0]) for tpc, det in zip(peaks[1].ravel(),wvfm_det[peaks[:3]].ravel())]
@@ -383,3 +422,25 @@ class WaveformHitFinder(H5FlowStage):
         med = ma.median(arr, axis=-1, keepdims=True)
         mad = ma.median(np.abs(arr - med), axis=-1, keepdims=True)
         return np.abs(arr - med) > mad
+
+    
+    def calculate_fprompt(summed_wvfm, t0_bin, prompt_window_ns=200.0, long_window_ns=3200.0, tick_duration_ns=16.0):
+        #Define regions
+        prompt_bins = int(np.ceil(prompt_window_ns / tick_duration_ns))
+        total_bins  = int(np.ceil(long_window_ns / tick_duration_ns))
+        end_prompt  = t0_bin + prompt_bins
+        end_total   = t0_bin + total_bins
+
+        #No out of bounds wvfms
+        if end_total > len(summed_wvfm):
+            return 0.0, 0.0, 0.0
+
+        #Sum the prompt and total regions
+        prompt_int = np.sum(summed_wvfm[t0_bin:end_prompt])
+        total_int  = np.sum(summed_wvfm[t0_bin:end_total])
+
+        #Calculate fprompt
+        with np.errstate(divide='ignore', invalid='ignore'):
+            fprompt = np.divide(prompt_int, total_int, where=(total_int > 0))
+
+        return total_int, fprompt
