@@ -21,6 +21,7 @@ params:
   raw_hits_dset_name: 'charge/raw_hits'
   t0_dset_name: 'combined/t0'
   max_contrib_segments: 10
+  hit_ref: True
 
   # output
   calib_hits_dset_name: 'charge/calib_prompt_hits'
