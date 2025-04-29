@@ -11,16 +11,24 @@ from proto_nd_flow.reco.charge.calib_prompt_hits import CalibHitBuilder
 
 ## Some useful functions for the filter classes
 ##
-def unique_to_io_group(unique):
-    return ((unique // (100*1000*1000)) % 1000)
-
 def unique_channel_id(d):
     return ((d['io_group'].astype(int)*1000+d['io_channel'].astype(int))*1000 \
             + d['chip_id'].astype(int))*100 + d['channel_id'].astype(int)
 
+
+def unique_to_io_group(unique):
+    return ((unique // (100*1000*1000)) % 1000)
+
+def unique_to_io_channel(unique):
+    return (unique//(100*1000)) % 1000
+
+def unique_to_chip_id(unique):
+    return (unique // 100) % 1000
+
 def unique_to_channel_id(unique):
     return (unique % 100)
 
+    
 ## Filter classes
 ##
 class low_current_filter:
@@ -33,26 +41,40 @@ class low_current_filter:
         print('using threshold:', self.threshold)
         self.channel_thresholds = {}
         self.channel_threshold_file=channel_threshold_file
+        _input_channel_thresholds = {}
         if not self.channel_threshold_file:
             print('No channel threshold file provided. Proceeding with default threshold for all channels.')
         else:
             try:
                 with open(self.channel_threshold_file, 'r') as fi:
-                    self.channel_thresholds=json.load(fi)
+                    _input_channel_thresholds=json.load(fi)
             except:
                 print('Unable to open channel threshold file! {}\nProceeding with default threshold for all channels.'.format(self.channel_threshold_file))
 
+        for uid in _input_channel_thresholds.keys():
+            # Convert each key (io_group, io_channel, chip_id, channel_id)
+            # to (io_group, tile_id, chip_id, channel_id)
+            uid_network_agnostic = self.unique_channel_id_(unique_to_io_group(int(uid)), 
+                                                           (unique_to_io_channel(int(uid)) - 1) // 4 + 1, 
+                                                           unique_to_chip_id(int(uid)), 
+                                                           unique_to_channel_id(int(uid))
+                                                           )
+            
         self.reported_channels = set()
     
-    def unique_channel_id(self, d):
-        return ((d['io_group'].astype(int)*1000+d['io_channel'].astype(int))*1000 \
+    def unique_channel_id_network_agnostic(self, d):
+        # network agnostic by changing io_channel field to tile_id
+        return ((d['io_group'].astype(int)*1000+((d['io_channel'].astype(int)-1)//4+1))*1000 \
             + d['chip_id'].astype(int))*100 + d['channel_id'].astype(int)
 
+    def unique_channel_id_(self, io_group, tile_id, chip_id, channel_id):
+        return ((io_group*1000+tile_id)*1000 + chip_id)*100 + channel_id
+        
     def filter(self, hits, default_threshold=5.0):
         
         #Get channel by channel thresholds
         tile_id = resources['Geometry'].tile_id[hits['io_group'],hits['io_channel']]
-        hit_uniqueid = self.unique_channel_id(hits)
+        hit_uniqueid = self.unique_channel_id_network_agnostic(hits)
 
         charge_above_threshold = np.ones(hits.shape)*99.
 
