@@ -212,7 +212,7 @@ class WaveformHitFinder(H5FlowStage):
                                     wvfm_dset=self.wvfm_dset_name,
                                     t_ns_dset=self.t_ns_dset_name,
                                     near_samples=self.near_samples,
-                                    thresholds=self.threshold,
+                                    # thresholds=self.threshold,
                                     mask=self.mask,
                                     ntpc=self.ntpc,
                                     ndet=self.ndet,
