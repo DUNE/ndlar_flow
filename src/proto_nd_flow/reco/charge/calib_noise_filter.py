@@ -48,6 +48,7 @@ class low_current_filter:
             try:
                 with open(self.channel_threshold_file, 'r') as fi:
                     _input_channel_thresholds=json.load(fi)
+                print(len(_input_channel_thresholds.keys()), ' channels in threshold file.')
             except:
                 print('Unable to open channel threshold file! {}\nProceeding with default threshold for all channels.'.format(self.channel_threshold_file))
 
@@ -59,6 +60,7 @@ class low_current_filter:
                                                            unique_to_chip_id(int(uid)), 
                                                            unique_to_channel_id(int(uid))
                                                            )
+            self.channel_thresholds[str(uid_network_agnostic)] = _input_channel_thresholds[uid]
             
         self.reported_channels = set()
     
@@ -80,16 +82,18 @@ class low_current_filter:
 
         unique_ids, counts = np.unique(hit_uniqueid, return_counts=True)
         threshold=default_threshold
+        n = 0
         for u in unique_ids:
             if not str(u) in self.channel_thresholds.keys():
                 if self.channel_thresholds and (str(u) not in self.reported_channels):
-                    print('No threshold found for channel {}! Using default threshold of {} ke-!'.format(u, default_threshold))
+                    # print('No threshold found for channel {}! Using default threshold of {} ke-!'.format(u, default_threshold))
+                    n+=1
                     self.reported_channels.add(str(u))
             else:
                 threshold = self.channel_thresholds[str(u)] 
             m = hit_uniqueid==u
             charge_above_threshold[m] = hits[m]['Q']-threshold
-
+        print(n, ' out of ', len(unique_ids), ' channels used default threshold.')
         return charge_above_threshold<self.threshold
         
 class correlated_post_trigger_filter:
