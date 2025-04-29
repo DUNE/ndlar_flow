@@ -43,7 +43,7 @@ class WaveformHitFinder(H5FlowStage):
          ``hits`` datatype::
 
             id          u4,             unique identifier
-            tpc/adc     u1,             tpc/adc index (for sum_hit/sipm_hit)
+            tpc/adc     u1,             tpc/adc index (for sum_tpc_hit/sum_hit/sipm_hit)
             det/chan    u1,             detector/channel index (for sum_hit/sipm_hit)
             pos         f4(3),          (x,y,z) center of det/sipm 
             sample_idx  u2,             sample index of peak within waveform
@@ -58,6 +58,8 @@ class WaveformHitFinder(H5FlowStage):
             rising_spline f4,           projection of spline to rising edge zero-crossing (offset from center sample) [ns]
             rising_err_spline f4,       an estimate of the error on the rising edge zero-crossing [ns]
             fwhm_spline f4,             spline FWHM [ns]
+            fprompt     f4,             prompt light fraction as proxy for singlet fraction in LAr scintillation 
+            integral    f4,             integral of a pulse
 
     '''
     class_version = '2.0.0'
@@ -133,6 +135,29 @@ class WaveformHitFinder(H5FlowStage):
             ])
         else:
             raise RuntimeError(f'Invalid hit level {self.hit_level}')
+
+
+    def calculate_fprompt(summed_wvfm, t0_bin, prompt_window_ns=200.0, long_window_ns=3200.0, tick_duration_ns=16.0):
+        #Define regions
+        prompt_bins = int(np.ceil(prompt_window_ns / tick_duration_ns))
+        total_bins  = int(np.ceil(long_window_ns / tick_duration_ns))
+        end_prompt  = t0_bin + prompt_bins
+        end_total   = t0_bin + total_bins
+
+        #No out of bounds wvfms
+        if end_total > len(summed_wvfm):
+            return 0.0, 0.0, 0.0
+
+        #Sum the prompt and total regions
+        prompt_int = np.sum(summed_wvfm[t0_bin:end_prompt])
+        total_int  = np.sum(summed_wvfm[t0_bin:end_total])
+
+        #Calculate fprompt
+        with np.errstate(divide='ignore', invalid='ignore'):
+            fprompt = np.divide(prompt_int, total_int, where=(total_int > 0))
+
+        return total_int, fprompt
+        
 
     def get_noise_threshold(self, wvfms, n_mad_factor):
         # Initialize median and MAD
@@ -273,6 +298,7 @@ class WaveformHitFinder(H5FlowStage):
                                     nsamples=self.nsamples,
                                     hit_level=self.hit_level
                                     )
+    
 
     def run(self, source_name, source_slice, cache):
         super(WaveformHitFinder, self).run(source_name, source_slice, cache)
@@ -361,11 +387,11 @@ class WaveformHitFinder(H5FlowStage):
                 - peak_lhm_spline_samples.mean(axis=-1))
             
             hit_data = np.empty((len(peaks[-1])), dtype=self.hits_dtype)
-            elif self.hit_level=="sum_tpc":
+            if self.hit_level=="sum_tpc":
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['trap_type'] = wvfm_det[peaks[:3]].ravel()
-               # hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[tpc][0]) for tpc in peaks[1].ravel()]
-                hit_data['integral'], hit_data['fprompt'] = calculate_fprompt(wvfm_det, peaks) 
+                # hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[tpc][0]) for tpc in peaks[1].ravel()]
+                hit_data['integral'], hit_data['fprompt'] = self.calculate_fprompt(wvfms, peaks) 
             elif self.hit_level=="sum":
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['det'] = wvfm_det[peaks[:3]].ravel()
@@ -447,25 +473,3 @@ class WaveformHitFinder(H5FlowStage):
         med = ma.median(arr, axis=-1, keepdims=True)
         mad = ma.median(np.abs(arr - med), axis=-1, keepdims=True)
         return np.abs(arr - med) > mad
-
-    
-    def calculate_fprompt(summed_wvfm, t0_bin, prompt_window_ns=200.0, long_window_ns=3200.0, tick_duration_ns=16.0):
-        #Define regions
-        prompt_bins = int(np.ceil(prompt_window_ns / tick_duration_ns))
-        total_bins  = int(np.ceil(long_window_ns / tick_duration_ns))
-        end_prompt  = t0_bin + prompt_bins
-        end_total   = t0_bin + total_bins
-
-        #No out of bounds wvfms
-        if end_total > len(summed_wvfm):
-            return 0.0, 0.0, 0.0
-
-        #Sum the prompt and total regions
-        prompt_int = np.sum(summed_wvfm[t0_bin:end_prompt])
-        total_int  = np.sum(summed_wvfm[t0_bin:end_total])
-
-        #Calculate fprompt
-        with np.errstate(divide='ignore', invalid='ignore'):
-            fprompt = np.divide(prompt_int, total_int, where=(total_int > 0))
-
-        return total_int, fprompt
