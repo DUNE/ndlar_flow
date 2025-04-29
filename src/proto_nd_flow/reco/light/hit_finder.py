@@ -256,19 +256,13 @@ class WaveformHitFinder(H5FlowStage):
         wvfm_d = np.diff(wvfms, axis=-1)
         noise = self.get_noise_threshold(wvfms)
         # get settings for sipm vs sum, vs sum_tpc
-        if self.hit_level == "sum_tpc":
-            noise_factor = 5.0
-            bins_rolled = 5
-            sqrt_rt_factor = 5.0
-        elif self.hit_level == "sum":
-            noise_factor = 5.0
-            bins_rolled = 5
-            sqrt_rt_factor = 5.0
-        elif self.hit_level == "sipm":
-            noise_factor = 5.0
-            bins_rolled = 5
-            sqrt_rt_factor = 5.0
-        peaks = self.interaction_finder(wvfms, noise, noise_factor, bins_rolled, sqrt_rt_factor) 
+        peaks = self.interaction_finder(wvfms, noise,
+                                        noise_factor,
+                                        n_bins_rolled,
+                                        rt_sqrt_factor,
+                                        pe_weight,
+                                        rising_edge,
+                                        local_maxmima) 
         peaks = np.where(peaks)
 
         peak_max = wvfms[..., :][peaks]  # waveform value at each peak
