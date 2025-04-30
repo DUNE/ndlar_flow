@@ -12,9 +12,16 @@ params:
   # output
   hits_dset_name: 'light/sipm_hits' # new dataset to produce
 
+  #threshold: !include yamls/ndlar_flow/reco/light/sipm_threshold.yaml
+  threshold: 2
+
   # configuration parameters
   near_samples: 4
   hit_level: 'sipm'
-
-  #threshold: !include yamls/ndlar_flow/reco/light/sipm_threshold.yaml
-  threshold: 2
+  mad_factor: 5.0
+  noise_factor: 5.0
+  n_bins_rolled: 5
+  rt_sqrt_factor: 5.0
+  pe_weight: 1.0
+  rising_edge: False
+  local_maxima: True
