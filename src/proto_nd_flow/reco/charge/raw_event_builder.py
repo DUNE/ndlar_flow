@@ -682,7 +682,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
                 & ((ts - ts[start_idx]) <= self.upper_window) \
                 & ~used_mask \
                 & hotfix_mask
-            if np.count_nonzero(mask) > self.nhit_limit:
+            if np.count_nonzero(mask) < self.nhit_limit:
                 t0s_arr[mask] = ts[start_idx]
                 used_mask = np.logical_or( used_mask, mask )
         
@@ -742,7 +742,10 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         
         # get coordinates for packets and run dbscan clustering
         zy = resources['Geometry'].pixel_coordinates_2D[pkts['io_group'],pkts['io_channel'],pkts['chip_id'],pkts['channel_id']]
-        x_pix = resources['Geometry'].anode_drift_coordinate[(resources['Geometry'].tile_id[pkts['io_group'], pkts['io_channel']],)]
+        tile_id = resources['Geometry'].tile_id[pkts['io_group'],pkts['io_channel']]
+        drift_dir = resources['Geometry'].drift_dir[(tile_id,)]
+        
+        x_pix = resources['Geometry'].anode_drift_coordinate[(tile_id,)]
         y_pix, z_pix = zy[:,1], zy[:,0]
         nan_hits_mask = ~np.isnan(z_pix) & ~np.isnan(y_pix)
         x_pix = x_pix[nan_hits_mask]
@@ -751,6 +754,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         ts = ts[nan_hits_mask]
         pkts = pkts[nan_hits_mask]
         unix = unix[nan_hits_mask]
+        drift_dir = drift_dir[nan_hits_mask]
         if t0 is not None:
             t0_arr = t0_arr[nan_hits_mask]
         if mc_assn is not None:
@@ -776,6 +780,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         x_pix = x_pix[labels_mask][indices_sorted]
         y_pix = y_pix[labels_mask][indices_sorted]
         z_pix = z_pix[labels_mask][indices_sorted]
+        drift_dir = drift_dir[labels_mask][indices_sorted]
         #ts = ts[labels_mask][indices_sorted]
         
         Q_pix = resources['Calibrate'].charge_from_dataword(pkts)
@@ -785,7 +790,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         q_clusters = np.bincount(labels, weights=Q_pix)[n_vals_mask]
         if t0 is not None:
             t_drift = ts - t0_arr
-            drift_coordinate = t_drift * (resources['LArData'].v_drift * resources['RunData'].crs_ticks) / units.cm
+            drift_coordinate = x_pix + drift_dir * t_drift * resources['LArData'].v_drift / units.cm
             is_matched = np.ones(len(ts), dtype=bool)
         else:
             t_drift = np.zeros(len(ts))
@@ -797,6 +802,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         clusters_hits_data['x_pix'] = x_pix
         clusters_hits_data['y_pix'] = y_pix
         clusters_hits_data['z_pix'] = z_pix
+        clusters_hits_data['Q'] = Q_pix
         clusters_hits_data['ts'] = ts
         clusters_hits_data['t_drift'] = t_drift
         clusters_hits_data['io_group'] = pkts['io_group']
