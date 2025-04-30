@@ -33,6 +33,9 @@ class WaveformHitFinder(H5FlowStage):
          - ``pe_weight``:      ``float``, weight applied to the PEs in rolling threshold statistical component
          - ``rising_edge``:    ``bool``, True => hit finder tags first bin over rolling threshold as the hit
          - ``local_maxima``:   ``bool``, True => uses 5 sample window after rising edge, tags hits as argmax of those samples (otherwise uses derivative based method) 
+         - ``prompt_window``:  ``float``, Prompt light window in ns (fprompt caluclation input for PSD) 
+         - ``long_window``:    ``float``, Long light window in ns (fprompt caluclation input for PSD) 
+         - ``tick_duration``:  ``float``, Duration of ticks in ADC sampling 
          - ``threshold``:      ``dict`` of ``dict`` containing sets of ``tpc_index: {channel_index: threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
          - ``mask``: ``list`` of ``int``, detectors to ignore when finding hits
 
@@ -137,7 +140,10 @@ class WaveformHitFinder(H5FlowStage):
             raise RuntimeError(f'Invalid hit level {self.hit_level}')
 
 
-    def calculate_fprompt(summed_wvfm, t0_bin, prompt_window_ns=200.0, long_window_ns=3200.0, tick_duration_ns=16.0):
+    def calculate_fprompt(summed_wvfm, t0_bin, prompt_window_ns, long_window_ns, tick_duration_ns):
+        if t0_bin.size() != 1:
+            return -999, -999
+        
         #Define regions
         prompt_bins = int(np.ceil(prompt_window_ns / tick_duration_ns))
         total_bins  = int(np.ceil(long_window_ns / tick_duration_ns))
@@ -214,7 +220,7 @@ class WaveformHitFinder(H5FlowStage):
                 (wvfm_d1 < 0) & (wvfm_d2 < 0)            
             # Keep only the first peak in consecutive runs
             peak_bins[..., 1:] &= ~peak_bins[..., :-1]
- 
+
         return peak_bins
 
 
@@ -235,6 +241,9 @@ class WaveformHitFinder(H5FlowStage):
         self.pe_weight = params.get('pe_weight')
         self.rising_edge = params.get('rising_edge')
         self.local_maxima = params.get('local_maxima')
+        self.prompt_window = params.get('prompt_window')
+        self.long_window = params.get('long_window')
+        self.tick_duration = params.get('tick_duration')
         self.mask = np.array(params.get('mask',
                                                 self.default_mask))
         self.interpolation = params.get('interpolation',
@@ -314,14 +323,14 @@ class WaveformHitFinder(H5FlowStage):
         # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
         noise = self.get_noise_threshold(wvfms, self.mad_factor)
-        peaks = self.interaction_finder(wvfms, noise,
+        interactions = self.interaction_finder(wvfms, noise,
                                         self.noise_factor,
                                         self.n_bins_rolled,
                                         self.rt_sqrt_factor,
                                         self.pe_weight,
                                         self.rising_edge,
                                         self.local_maxima)
-        peaks = np.where(peaks)
+        peaks = np.where(interactions)
         peak_max = wvfms[..., :][peaks]  # waveform value at each peak
         threshold_mask = peak_max >=self.threshold[peaks[1:-1]].ravel()
 
@@ -391,7 +400,9 @@ class WaveformHitFinder(H5FlowStage):
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['trap_type'] = wvfm_det[peaks[:3]].ravel()
                 # hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[tpc][0]) for tpc in peaks[1].ravel()]
-                hit_data['integral'], hit_data['fprompt'] = self.calculate_fprompt(wvfms, peaks) 
+                print(type(wvfms), wvfms.shape)
+                print(type(interactions), interactions.shape)
+                hit_data['integral'], hit_data['fprompt'] = self.calculate_fprompt(wvfms, interactions, self.prompt_window, self.long_window, self.tick_duration) 
             elif self.hit_level=="sum":
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['det'] = wvfm_det[peaks[:3]].ravel()
