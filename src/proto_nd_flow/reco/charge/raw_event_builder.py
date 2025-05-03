@@ -684,7 +684,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
                 & hotfix_mask
             if np.count_nonzero(mask) < self.nhit_limit:
                 t0s_arr[mask] = ts[start_idx]
-                used_mask = np.logical_or( used_mask, mask )
+            used_mask = np.logical_or( used_mask, mask )
         
         if np.any(used_mask):
             if mc_assn is not None:
