@@ -6,7 +6,6 @@ import logging
 import warnings
 from math import ceil
 from tqdm import tqdm
-from sklearn.cluster import DBSCAN
 
 from h5flow.core import H5FlowGenerator, resources
 from h5flow.data import dereference
@@ -509,14 +508,12 @@ class RawEventGenerator(H5FlowGenerator):
                     event = x[0]
                     mask_disabled_channels = np.isin(event[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
                     mask_disabled_chips = np.isin(event[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
-                    mask_sum = (~(mask_disabled_channels | mask_disabled_chips)).sum()
-                    return (mask_sum >= self.nhit_cut) and (mask_sum <= self.nhit_limit)
+                    return (~(mask_disabled_channels | mask_disabled_chips)).sum() >= self.nhit_cut
                     
-                    nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts, event_mc_assn)))
+                nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts, event_mc_assn)))
             else:
-                    nhit_filtered = list(filter(lambda x: (len(x[0]) >= self.nhit_cut) & (len(x[0]) <= self.nhit_limit), zip(events, event_unix_ts)))
+                nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
 
-        if self.event_builder_class != 'LowEnergyRawEventBuilder':
             if len(nhit_filtered):
                 if self.is_mc:
                     events, event_unix_ts, event_mc_assn = zip(*nhit_filtered)
