@@ -570,7 +570,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
                         continue # Scan over new window starting from last trig
                     break # Or, if we broke out of "for", break out of "while"
 
-            mask = ((ts - this_trig_time) > 0) \
+            mask = ((ts - this_trig_time) >= 0) \
                 & ((ts - last_trig_time) <= self.window[last_io_group]) \
                 & ~used_mask \
                 & hotfix_mask
