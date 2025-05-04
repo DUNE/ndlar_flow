@@ -146,6 +146,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
 
         # skip to start position
         self.input_file.stream.seek(self.nbytes_runinfo, 0)
+        self.input_file.skip(self.start_position)
 
     def __len__(self):
         return (self.end_position - self.start_position) // (self.batch_size)
