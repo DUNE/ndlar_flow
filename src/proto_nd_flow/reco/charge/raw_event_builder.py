@@ -8,7 +8,7 @@ if H5FLOW_MPI:
 
 from h5flow.core import resources
 
-from proto_nd_flow.util.array import fill_with_last
+from proto_nd_flow.util.array import fill_with_last, fill_with_next
 
 
 class RawEventBuilder(object):
@@ -147,11 +147,11 @@ class RawEventBuilder(object):
         ts = (packets['timestamp'].astype('i8') % rollover_ticks) + offsets
 
         # Timestamp packets require special treatment, since their timestamp
-        # field is actually a unix timestamp. For these, we just subtract this
-        # unix timestamp back out, so that their "ts" is the corresponding entry
-        # of "offsets".
+        # field is actually a unix timestamp. For these, we just assign the same
+        # unrolled timestamp as the one in the next non-timestamp packet
         unix_mask = packets['packet_type'] == 4
-        ts[unix_mask] -= packets[unix_mask]['timestamp'].astype('i8')
+        ts[unix_mask] = -1
+        ts = fill_with_next(ts, marker=-1)
 
         return ts
 
