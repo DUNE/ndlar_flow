@@ -413,11 +413,6 @@ class WaveformHitFinder(H5FlowStage):
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['trap_type'] = wvfm_det[peaks[:3]].ravel()
                 # hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[tpc][0]) for tpc in peaks[1].ravel()]
-                print("wvfms", type(wvfms), wvfms.shape)
-                print("interactions", type(t0_bin), t0_bin.shape)
-                print("prompt_window", type(self.prompt_window))
-                print("long_window", type(self.long_window))
-                print("tick_duration", type(self.tick_duration))
                 hit_data['integral'], hit_data['fprompt'] = self.calculate_fprompt(wvfms, t0_bin,
                                                                                    self.prompt_window,
                                                                                    self.long_window,
