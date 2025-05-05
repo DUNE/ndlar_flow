@@ -12,8 +12,8 @@ geom: # [ width, height, thickness] NEEDS TO BE CORRECTED
   1: { min: [-24.00 ,  -5.17, 0], max: [+24.00, +5.17,  0] }
 
 tpc_center_offset: # NEEDS TO BE CORRECTED
-  0: [+24.30, 0, 0]
-  1: [-24.30, 0, 0]
+  0: [-24.30, 0, 0]
+  1: [+24.30, 0, 0]
 
 det_center:
   0:  [0, -149.93, -49]
