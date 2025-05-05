@@ -67,7 +67,7 @@ def get_voxel(pos, itpc, lut_vox_div):
     # Determines which voxel the event takes place in
     # based on the fractional dstance the event takes place in the volume
     # for the x, y, and z dimensions
-    if is_even:
+    if not is_even:
         i = int((pos[0] - x_min)/(x_max - x_min) * lut_vox_div[0])
     else:
         # if is_even, is false we measure i from the xMax side
