@@ -83,7 +83,7 @@ class WaveformSum(H5FlowStage):
         self.data_manager.create_ref(source_name, self.swvfm_dset_name)
 
         # tpc sum channels
-        self.stpc_wvfm_dtype = self.stpc_wvfm_dtype(2*len(np.unique(tpc_ids)),
+        self.stpc_wvfm_dtype = self.stpc_wvfm_dtype(len(np.unique(tpc_ids)),
                                                     wvfm_dset.dtype['samples'].shape[2])
         self.data_manager.create_dset(self.stpc_wvfm_dset_name, dtype=self.stpc_wvfm_dtype)
         self.data_manager.create_ref(source_name, self.stpc_wvfm_dset_name)
