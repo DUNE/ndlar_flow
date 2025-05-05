@@ -12,6 +12,10 @@ params:
   # output
   hits_dset_name: 'light/sum_tpc_hits' # new dataset to produce
 
+  #threshold: !include yamls/proto_nd_flow/reco/light/sipm_threshold.yaml
+  # threshold:
+  threshold: 4
+
   # configuration parameters
   near_samples: 4
   hit_level: 'sum_tpc'
