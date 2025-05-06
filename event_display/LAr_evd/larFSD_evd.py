@@ -55,7 +55,8 @@ import matplotlib.image as mpimg
 from matplotlib.patches import Rectangle
 from matplotlib.colors import Normalize
 from PIL import Image
-from math import fabs
+# from math import fabs
+from time import sleep
 # import uproot
 
 
@@ -683,6 +684,7 @@ class LArEventDisplayFSD:
         # - quit display (q)
         while True:
 
+            sleep(0.5) # needed to run on nersc, otherwise sometime the output is cleared after the input box is displayed
             user_input = input(
                 "Next event (Enter: go to next event/'ev_id' + Enter: skip to event 'ev_id'/ l + Enter: list the events ID in the selection/ s + Enter: save the current plot as png/ q + Enter: exit/)?\n")
             if not user_input:
@@ -692,6 +694,7 @@ class LArEventDisplayFSD:
             elif user_input[0].lower() == 'q':
                 sys.exit()
             elif user_input[0].lower() == 's':
+                clear_output(wait=True)
                 self.save_plots(events_id = event_ids[ev_idx])
 
             elif user_input[0].lower() == 'l':
@@ -1267,6 +1270,7 @@ class LArEventDisplayFSD:
         if events_id is None:
             if (self.current_ev_id != -1):
                 self._save_plot(which_plot)
+                print(f'Event {self.current_ev_id} was saved under {self.output_path}')
                 return None
             else:
                 raise TypeError("Missing required 'event_id'. Please run 'display_event()' first or provide 'event_id' explicitly.")
@@ -1277,6 +1281,11 @@ class LArEventDisplayFSD:
         for ev_id in events_id:
             self._plot_event(ev_id)
             self._save_plot(which_plot) 
+
+        if (len(events_id)==1):
+            print(f'The event {events_id[0]} was saved under {self.output_path}')
+        else:
+            print(f'The {len(events_id)} events  were saved under {self.output_path}')
 
         return None
     
