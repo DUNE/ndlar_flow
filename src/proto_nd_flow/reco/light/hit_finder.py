@@ -142,36 +142,32 @@ class WaveformHitFinder(H5FlowStage):
 
     # function to calculate the prompt light fraction in a vectorized way
     def calculate_fprompt(self, summed_wvfm, interactions, prompt_window_ns, long_window_ns, tick_duration_ns):
-
         # Define regions
         prompt_bins = int(np.ceil(prompt_window_ns / tick_duration_ns))
         total_bins = int(np.ceil(long_window_ns / tick_duration_ns))
-
-        # Calculate the end indices for prompt and total regions
-        t0_bin = interactions  # Ensure t0_bin has the same shape as interactions
-        end_prompt = t0_bin + prompt_bins
-        end_total = t0_bin + total_bins
-
-        # Take integrals
-        prompt_int = np.zeros_like(interactions)
-        total_int = np.zeros_like(interactions)
+        # Take integrals (first 3 dims of interactions)
+        prompt_int = np.zeros(interactions.shape[:-1])
+        total_int = np.zeros(interactions.shape[:-1])
         # Loop over each event
         for i in range(interactions.shape[0]):
+            # Loop over each TPC
             for j in range(interactions.shape[1]):
+                # Loop over each trap type
                 for k in range(interactions.shape[2]):
-                    # Check if the interaction is valid
-                    if interactions[i, j, k] > 0:
+                    # Check if the the number of interactions is greater than 0
+                    if np.sum(interactions[i, j, k]) == 1:
                         # Calculate the prompt and total integrals
-                        prompt_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin[i, j, k]:end_prompt[i, j, k]])
-                        total_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin[i, j, k]:end_total[i, j, k]])
+                        t0_bin = np.argmax(interactions[i, j, k])
+                        end_prompt = t0_bin + prompt_bins
+                        end_total = t0_bin + total_bins
+                        prompt_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_prompt])
+                        total_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_total])
                     else:
-                        return np.nan, np.nan
-
+                        prompt_int[i, j, k] = np.nan
+                        total_int[i, j, k] = np.nan
         # Calculate fprompt
         with np.errstate(divide='ignore', invalid='ignore'):
             fprompt = np.divide(prompt_int, total_int, where=(total_int > 0))
-
-        # Reshape the outputs to match the expected dimensions
         return total_int, fprompt
 
 
@@ -332,7 +328,9 @@ class WaveformHitFinder(H5FlowStage):
         wvfm_det = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
         # find all peaks
         wvfm_d = np.diff(wvfms, axis=-1)
+
         noise = self.get_noise_threshold(wvfms, self.mad_factor)
+
         interactions = self.interaction_finder(wvfms, noise,
                                         self.noise_factor,
                                         self.n_bins_rolled,
@@ -340,12 +338,22 @@ class WaveformHitFinder(H5FlowStage):
                                         self.pe_weight,
                                         self.rising_edge,
                                         self.local_maxima)
+
         t0_bin = np.argmax(interactions, axis=-1)
         t0_mask = np.any(interactions, axis=-1)
         t0_bin[~t0_mask] = -1
         peaks = np.where(interactions)
         peak_max = wvfms[..., :][peaks]  # waveform value at each peak
         threshold_mask = peak_max >=self.threshold[peaks[1:-1]].ravel()
+
+        if self.hit_level=="sum_tpc":
+            integrals, fprompts = self.calculate_fprompt(wvfms, interactions,
+                                                         self.prompt_window,
+                                                         self.long_window,
+                                                         self.tick_duration)
+            # match integrals and fprompts to peaks
+            integrals = integrals[peaks[:-1]]
+            fprompts = fprompts[peaks[:-1]]
 
         if np.count_nonzero(threshold_mask):
             # hits are present in event, extract parameters
@@ -413,10 +421,8 @@ class WaveformHitFinder(H5FlowStage):
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['trap_type'] = wvfm_det[peaks[:3]].ravel()
                 # hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[tpc][0]) for tpc in peaks[1].ravel()]
-                hit_data['integral'], hit_data['fprompt'] = self.calculate_fprompt(wvfms, t0_bin,
-                                                                                   self.prompt_window,
-                                                                                   self.long_window,
-                                                                                   self.tick_duration)
+                hit_data['integral'] = integrals.ravel()
+                hit_data['fprompt'] = fprompts.ravel()
             elif self.hit_level=="sum":
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['det'] = wvfm_det[peaks[:3]].ravel()
