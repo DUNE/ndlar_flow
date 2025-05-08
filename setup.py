@@ -23,6 +23,6 @@ setuptools.setup(name='ndlar_flow',
                      'scikit-learn>=1.3.0',
                      'h5flow>=0.2.0',
                      'pylandau @ git+https://github.com/cuddandr/pylandau.git#egg=pylandau',
-                     'adc64format @ git+https://github.com/larpix/adc64format.git@v0.1.2#egg=adc64format',
+                     'adc64format @ git+https://github.com/larpix/adc64format.git@v0.1.3#egg=adc64format',
                  ]
                  )
