@@ -100,11 +100,11 @@ class RawEventGenerator(H5FlowGenerator):
 
     clusters_dtype = np.dtype([('id', 'u4'), ('nhit', 'u4'), ('Q', 'f8'), 
                     ('io_group', 'u8'), ('unix_ts', 'u8'), ('x', 'f8', (3,)), ('x_pix', 'f8', (3,)), ('y_pix', 'f8', (3,)), \
-                    ('z_pix', 'f8', (3,)), ('ts', 'u8', (3,)), ('t_drift', 'f8', (3,)), ('is_matched', 'u4')])
+                    ('z_pix', 'f8', (3,)), ('ts', 'f8', (3,)), ('t0', 'f8'), ('t_drift', 'f8', (3,)), ('is_matched', 'u4')])
 
     clusters_hits_dtype = np.dtype([('id', 'u4'),('x_pix', 'f8'),('y_pix', 'f8'),('z_pix', 'f8'),('x', 'f8'),('t_drift', 'f8'),\
-        ('ts', 'u8'),('io_group', 'u8'),('io_channel', 'u8'),('chip_id', 'u8'),('channel_id', 'u8'),('Q', 'f8'),('is_matched', 'u4')])
-    
+        ('ts', 'f8'), ('t0', 'f8'),('io_group', 'u8'),('io_channel', 'u8'),('chip_id', 'u8'),('channel_id', 'u8'),('Q', 'f8'),('is_matched', 'u4')])
+
     # mc_event_dtype = np.dtype([
         # ('id', 'u8'),
     # ])
@@ -547,6 +547,7 @@ class RawEventGenerator(H5FlowGenerator):
             clusters_slice = self.data_manager.reserve_data(self.clusters_dset_name, len(clusters_array))
             clusters_array['id'] = clusters_slice.start + np.arange(len(clusters_array), dtype=int)
             self.data_manager.write_data(self.clusters_dset_name, clusters_slice, clusters_array)
+
             # clusters -> packet refs
             cluster_idcs = np.repeat(clusters_array['id'], clusters_array['nhit'])
             ref = np.c_[cluster_idcs, packets_idcs]
@@ -575,7 +576,6 @@ class RawEventGenerator(H5FlowGenerator):
         self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, ref)
 
         if self.is_mc:
-
             # packet -> mc_packet_assn
             ref = np.c_[packets_idcs.ravel(), packets_idcs.ravel()]
             sl = self.data_manager.reserve_data(self.mc_packet_fraction_dset_name, len(ref))

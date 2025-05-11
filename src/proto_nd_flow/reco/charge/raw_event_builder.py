@@ -629,7 +629,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
     default_clusters_eps = 2
     default_clusters_min_samples = 1
     default_nhit_limit = 50
-    
+    default_do_timestamp_unroll = True
     def __init__(self, **params):
         super(LowEnergyRawEventBuilder, self).__init__(**params)
         self.upper_window = params.get('upper_window', self.default_upper_window)
@@ -638,6 +638,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         self.clusters_eps = params.get('clusters_eps', self.default_clusters_eps)
         self.clusters_min_samples = params.get('clusters_min_samples', self.default_clusters_min_samples)
         self.nhit_limit = params.get('nhit_limit', self.default_nhit_limit)
+        self.do_timestamp_unroll = params.get('do_timestamp_unroll', self.default_do_timestamp_unroll)
         self.dbscan = DBSCAN(eps=self.clusters_eps, min_samples=self.clusters_min_samples)
         self.clusters_dtype = r.RawEventGenerator.clusters_dtype
         self.clusters_hits_dtype = r.RawEventGenerator.clusters_hits_dtype
@@ -654,15 +655,16 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
     def build_events(self, packets, unix_ts, mc_assn=None):
         if not len(packets):
             return ([], [], []) if mc_assn is None else ([], [], [], [])
-
-        ts = self.unroll_timestamps(packets)
-        sorted_idcs = np.argsort(ts)
-        ts = ts[sorted_idcs]
-
-        packets = packets[sorted_idcs]
-        unix_ts = unix_ts[sorted_idcs]
-        if mc_assn is not None:
-            mc_assn = mc_assn[sorted_idcs]
+        if self.do_timestamp_unroll
+            ts = self.unroll_timestamps(packets)
+            sorted_idcs = np.argsort(ts)
+            ts = ts[sorted_idcs]
+            packets = packets[sorted_idcs]
+            unix_ts = unix_ts[sorted_idcs]
+            if mc_assn is not None:
+                mc_assn = mc_assn[sorted_idcs]
+        else:
+            ts = packets['timestamp'].astype('i8')
         
         trig_mask = (packets['packet_type'] == 7) & (packets['io_group'] == self.trig_io_grp)
         trigger_idcs = np.where(trig_mask)[0]
@@ -674,25 +676,46 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         event_mc_assn = [] if mc_assn is not None else None
 
         used_mask = np.zeros(len(unix_ts), dtype=bool)
+        matched_mask = np.zeros(len(unix_ts), dtype=bool)
         t0s_arr = np.zeros(len(unix_ts), dtype='float')
+
+        data_packet_mask = packets['packet_type'] == 0
         for i, start_idx in enumerate(trigger_idcs):
             # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
             hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & trig_mask)
-            mask = ((ts - ts[start_idx]) >= self.lower_window) \
-                & ((ts - ts[start_idx]) <= self.upper_window) \
+            unix_mask = unix_ts['timestamp'][start_idx] == unix_ts['timestamp']
+            
+            mask = (ts >= ts[start_idx] - abs(self.lower_window)) \
+                & (ts <= ts[start_idx] + self.upper_window) \
                 & ~used_mask \
-                & hotfix_mask
-            if np.count_nonzero(mask) < self.nhit_limit:
+                & hotfix_mask \
+                & unix_mask \
+                & data_packet_mask
+            
+            if start_idx+1 < len(ts):
+                mask_next = (ts >= ts[start_idx+1] - abs(self.lower_window)) \
+                    & (ts <= ts[start_idx+1] + self.upper_window) \
+                    & ~used_mask \
+                    & hotfix_mask \
+                    & unix_mask \
+                    & data_packet_mask
+            else:
+                mask_next = np.zeros(len(ts), dtype=bool)
+
+            total_matches = np.count_nonzero(mask)
+            if not np.any(mask & mask_next) and total_matches > 0 and total_matches < self.nhit_limit:
                 t0s_arr[mask] = ts[start_idx]
+                matched_mask = np.logical_or( matched_mask, mask )
+                
             used_mask = np.logical_or( used_mask, mask )
         
-        if np.any(used_mask):
+        if np.any(matched_mask):
             if mc_assn is not None:
                 events_temp, event_unix_ts_temp, event_clusters_temp, event_clusters_hits_temp, event_mc_assn_temp = \
-                    self.make_clusters(packets[used_mask], unix_ts[used_mask], mc_assn[used_mask], ts[used_mask], t0=t0s_arr[used_mask])
+                    self.make_clusters(packets[matched_mask], unix_ts[matched_mask], mc_assn[matched_mask], ts[matched_mask], t0=t0s_arr[matched_mask])
             else:
                 events_temp, event_unix_ts_temp, event_clusters_temp, event_clusters_hits_temp, event_mc_assn_temp = \
-                    self.make_clusters(packets[used_mask], unix_ts[used_mask], mc_assn, ts[used_mask], t0=t0s_arr[used_mask])
+                    self.make_clusters(packets[matched_mask], unix_ts[matched_mask], mc_assn, ts[matched_mask], t0=t0s_arr[matched_mask])
             if len(events_temp):
                 events = events + events_temp
                 event_unix_ts = event_unix_ts + event_unix_ts_temp
@@ -731,7 +754,6 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         mask_disabled_channels = np.isin(packets[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
         mask_disabled_chips = np.isin(packets[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
         combined_mask = ~(mask_disabled_channels | mask_disabled_chips) & data_packets_mask
-        
         pkts = packets[combined_mask]
         unix = unix_ts[combined_mask]
         ts = timestamps[combined_mask] * resources['RunData'].crs_ticks
@@ -804,6 +826,8 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         clusters_hits_data['z_pix'] = z_pix
         clusters_hits_data['Q'] = Q_pix
         clusters_hits_data['ts'] = ts
+        if t0 is not None:
+            clusters_hits_data['t0'] = t0_arr
         clusters_hits_data['t_drift'] = t_drift
         clusters_hits_data['io_group'] = pkts['io_group']
         clusters_hits_data['io_channel'] = pkts['io_channel']
@@ -817,6 +841,8 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         label_indices = np.concatenate(([0], np.flatnonzero(labels[:-1] != labels[1:])+1, [len(labels)]))[1:-1]
         label_timestamps = np.split(ts, label_indices)
         label_t_drift = np.split(t_drift, label_indices)
+        if t0 is not None:
+            label_t0 = np.split(t0_arr, label_indices)
         label_is_matched = np.split(is_matched, label_indices)
         label_x_pix = np.split(x_pix[labels_mask][indices_sorted], label_indices)
         label_x = np.split(drift_coordinate, label_indices)
@@ -839,6 +865,8 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         clusters_data['y_pix'][:, :3] = np.stack([y_pix_min, y_pix_mid, y_pix_max], axis=1)
         clusters_data['z_pix'][:, :3] = np.stack([z_pix_min, z_pix_mid, z_pix_max], axis=1)
         clusters_data['t_drift'][:, :3] = np.stack([t_drift_min, t_drift_mid, t_drift_max], axis=1)
+        if t0 is not None:
+            clusters_data['t0'] = np.array(list(map(np.max, label_t0)))
         clusters_data['io_group'] = np.array(list(map(np.min, np.split(pkts['io_group'], label_indices))))
         clusters_data['unix_ts'] = np.array(list(map(np.min, label_unix)))
         clusters_data['is_matched'] = np.array(list(map(np.min, label_is_matched)), dtype='u8')
