@@ -655,7 +655,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
     def build_events(self, packets, unix_ts, mc_assn=None):
         if not len(packets):
             return ([], [], []) if mc_assn is None else ([], [], [], [])
-        if self.do_timestamp_unroll
+        if self.do_timestamp_unroll:
             ts = self.unroll_timestamps(packets)
             sorted_idcs = np.argsort(ts)
             ts = ts[sorted_idcs]
