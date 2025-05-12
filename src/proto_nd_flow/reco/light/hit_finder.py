@@ -157,7 +157,7 @@ class WaveformHitFinder(H5FlowStage):
                     # Check if the the number of interactions is greater than 0
                     if np.sum(interactions[i, j, k]) == 1:
                         # Calculate the prompt and total integrals
-                        t0_bin = np.argmax(interactions[i, j, k])
+                        t0_bin = np.argmax(interactions[i, j, k])-5
                         end_prompt = t0_bin + prompt_bins
                         end_total = t0_bin + total_bins
                         prompt_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_prompt])
