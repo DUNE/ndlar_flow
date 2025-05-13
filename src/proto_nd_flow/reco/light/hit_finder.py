@@ -26,7 +26,7 @@ class WaveformHitFinder(H5FlowStage):
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``near_samples``:   ``int``, number of neighboring samples to keep
          - ``hit_level``:      ``str``, "sipm" or "sum" hit finder (defines variable names)
-         - ``mad_factor``:     ``float``, factor of median abs dev used to define threshold under which noise width is taken  
+         - ``mad_factor``:     ``float``, factor of median abs dev used to define threshold under which noise width is taken
          - ``noise_factor``:   ``float``, factor of noise width used to define threshold over which hit finder is run
          - ``n_bins_rolled``:  ``int``, number of bins over which the rolling threshold of the hit finder is defined
          - ``rt_sqrt_factor``: ``float``, factor used to scale the statistical contribution to the rolling threshold
@@ -154,23 +154,22 @@ class WaveformHitFinder(H5FlowStage):
             for j in range(interactions.shape[1]):
                 # Loop over each trap type
                 for k in range(interactions.shape[2]):
-                    # Check if the the number of interactions is greater than 0
-                    if np.sum(interactions[i, j, k]) == 1:
-                        # Calculate the prompt and total integrals
-                        t0_bin = np.argmax(interactions[i, j, k]) - 5
-                        end_prompt = t0_bin + prompt_bins
-                        end_total = t0_bin + total_bins
-                        prompt_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_prompt])
-                        total_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_total])
-                    else:
-                        prompt_int[i, j, k] = np.nan
-                        total_int[i, j, k] = np.nan
+                    # Calculate the prompt and total integrals
+                    t0_bin = np.argmax(interactions[i, j, k]) - 5
+                    end_prompt = t0_bin + prompt_bins
+                    end_total = t0_bin + total_bins
+                    prompt_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_prompt])
+                    total_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_total])
         # Calculate fprompt
         with np.errstate(divide='ignore', invalid='ignore'):
-            fprompt = np.divide(prompt_int, total_int, where=(total_int > 0))
+            fprompt = np.where(
+            (total_int > 0) & (prompt_int > 0) & ~np.isnan(prompt_int) & ~np.isnan(total_int),
+            np.divide(prompt_int, total_int),
+            np.nan
+            )
         return total_int, fprompt
 
-      
+
     def get_noise_threshold(self, wvfms, n_mad_factor):
         # Initialize median and MAD
         median = np.ma.median(wvfms, axis=-1)
