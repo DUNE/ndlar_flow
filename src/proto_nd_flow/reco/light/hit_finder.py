@@ -24,9 +24,9 @@ class WaveformHitFinder(H5FlowStage):
          - ``wvfm_dset_name``: ``str``, path to input waveforms
          - ``t_ns_dset_name``: ``str``, path to corrected light PPS timestamps
          - ``hits_dset_name``: ``str``, path to output hits dataset
-         - ``near_samples``: ``int``, number of neighboring samples to keep
+         - ``near_samples``:   ``int``, number of neighboring samples to keep
          - ``hit_level``:      ``str``, "sipm" or "sum" hit finder (defines variable names)
-         - ``mad_factor``:     ``float``, factor of median abs dev used to define threshold under which noise width is taken
+         - ``mad_factor``:     ``float``, factor of median abs dev used to define threshold under which noise width is taken  
          - ``noise_factor``:   ``float``, factor of noise width used to define threshold over which hit finder is run
          - ``n_bins_rolled``:  ``int``, number of bins over which the rolling threshold of the hit finder is defined
          - ``rt_sqrt_factor``: ``float``, factor used to scale the statistical contribution to the rolling threshold
@@ -170,7 +170,7 @@ class WaveformHitFinder(H5FlowStage):
             fprompt = np.divide(prompt_int, total_int, where=(total_int > 0))
         return total_int, fprompt
 
-
+      
     def get_noise_threshold(self, wvfms, n_mad_factor):
         # Initialize median and MAD
         median = np.ma.median(wvfms, axis=-1)

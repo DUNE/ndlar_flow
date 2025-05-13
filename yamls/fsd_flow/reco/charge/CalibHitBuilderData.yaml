@@ -22,6 +22,10 @@ params:
   calib_hits_dset_name: 'charge/calib_prompt_hits'
 
   # configuration parameters
+  vref_mv: 1504.2
+  vcm_mv: 573.3
+  adc_counts: 256
+  gain: 4.522
 
   pedestal_file: '/global/common/software/dune/inputs/FSD/pedestals/packet-pedestal-2024_11_12_03_29_26_CET.pedestal.json'
   #pedestal_file: 'data/module0_flow/datalog_2021_04_02_19_00_46_CESTevd_ped.json'
