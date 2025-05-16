@@ -55,7 +55,11 @@ import matplotlib.image as mpimg
 from matplotlib.patches import Rectangle
 from matplotlib.colors import Normalize
 from PIL import Image
+<<<<<<< HEAD
 # from math import fabs
+=======
+from math import fabs
+>>>>>>> ae84fee (update)
 from time import sleep
 # import uproot
 
@@ -684,7 +688,11 @@ class LArEventDisplayFSD:
         # - quit display (q)
         while True:
 
+<<<<<<< HEAD
             sleep(0.5) # needed to run on nersc, otherwise sometime the output is cleared after the input box is displayed
+=======
+            sleep(0.1)
+>>>>>>> ae84fee (update)
             user_input = input(
                 "Next event (Enter: go to next event/'ev_id' + Enter: skip to event 'ev_id'/ l + Enter: list the events ID in the selection/ s + Enter: save the current plot as png/ q + Enter: exit/)?\n")
             if not user_input:
