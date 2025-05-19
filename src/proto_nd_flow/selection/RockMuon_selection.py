@@ -52,6 +52,7 @@ class RockMuonSelection(H5FlowStage):
     #Datasets
     events_dset_name = 'charge/events'
     PromptHits_dset_name = 'charge/calib_prompt_hits'
+    FinalHits_dset_name = 'charge/calib_final_hits'
     
     #Datatype wanted
     
@@ -538,7 +539,8 @@ class RockMuonSelection(H5FlowStage):
         event_id = np.r_[source_slice]
         
         Min_max_detector_bounds = resources['Geometry'].lar_detector_bounds 
-        PromptHits_ev = cache[self.PromptHits_dset_name][0]
+        #PromptHits_ev = cache[self.PromptHits_dset_name][0]
+        PromptHits_ev = cache[self.FinalHits_dset_name][0]
 
         PromptHits_ev_positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
         
