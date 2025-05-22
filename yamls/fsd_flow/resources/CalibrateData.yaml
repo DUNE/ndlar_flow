@@ -1,0 +1,11 @@
+classname: Calibrate # resources/calibrate.py
+path: proto_nd_flow.resources.calibrate
+params:
+  path: 'calibrate_info'
+  pedestal_file: '/global/common/software/dune/inputs/FSD/pedestals/packet-pedestal-2024_11_12_03_29_26_CET.pedestal.json'  
+  configuration_file: ''
+  pedestal_mv: 580.0
+  vref_mv: 1504.2
+  vcm_mv: 573.3
+  adc_counts: 256
+  gain: 4.522
