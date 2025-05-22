@@ -2,6 +2,7 @@ import numpy as np
 import yaml
 import json
 from collections import defaultdict
+import logging
 
 from h5flow.core import H5FlowResource
 from h5flow.core import resources
@@ -59,12 +60,21 @@ class Calibrate(H5FlowResource):
 
         self.path = params.get('path', self.default_path)
         self._pedestal_file = params.get('pedestal_file', self.default_pedestal_file)
+        if self._pedestal_file == '':
+            logging.warning(f"No pedestal file specified, using default pedestal of {self.default_pedestal_mv} mV")
+        else:
+            logging.warning(f"Loaded channel-by-channel pedestal file: {self._pedestal_file}")
         self._configuration_file = params.get('configuration_file', self.default_configuration_file)
+        if self._configuration_file == '':
+            logging.warning(f"No configuration file specified, using default config of Vref = {self.default_vref_mv} mV and Vcm = {self.default_vcm_mv} mV")
+        else:
+            logging.warning(f"Loaded channel-by-channel configuration file: {self._configuration_file}")
         self._pedestal_mv = params.get('pedestal_mv', self.default_pedestal_mv)
         self._vref_mv = params.get('vref_mv', self.default_vref_mv)
         self._vcm_mv = params.get('vcm_mv', self.default_vcm_mv)
         self._adc_counts = params.get('adc_counts', self.default_adc_counts)
         self._gain = params.get('gain', self.default_gain)
+        logging.warning(f"Using LArPix gain of {self._gain} mV/ke-")
 
         #: ASIC ADC configuration lookup table
         self._configuration = defaultdict(lambda: dict(
@@ -83,7 +93,7 @@ class Calibrate(H5FlowResource):
         self.data_manager.set_attrs(self.path)
         # load data (if present)
         self.data = dict(self.data_manager.get_attrs(self.path))
-
+        
         if not self.data:
             self._load_pedestals()
             self._load_configurations()
