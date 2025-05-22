@@ -65,25 +65,25 @@ class Calibrate(H5FlowResource):
         else:
             logging.warning(f"Loaded channel-by-channel pedestal file: {self._pedestal_file}")
         self._configuration_file = params.get('configuration_file', self.default_configuration_file)
+        self._default_vref_mv = params.get('vref_mv', self.default_vref_mv)
+        self._default_vcm_mv = params.get('vcm_mv', self.default_vcm_mv)
         if self._configuration_file == '':
-            logging.warning(f"No configuration file specified, using default config of Vref = {self.default_vref_mv} mV and Vcm = {self.default_vcm_mv} mV")
+            logging.warning(f"No configuration file specified, using default config of Vref = {self._default_vref_mv} mV and Vcm = {self._default_vcm_mv} mV")
         else:
             logging.warning(f"Loaded channel-by-channel configuration file: {self._configuration_file}")
-        self._pedestal_mv = params.get('pedestal_mv', self.default_pedestal_mv)
-        self._vref_mv = params.get('vref_mv', self.default_vref_mv)
-        self._vcm_mv = params.get('vcm_mv', self.default_vcm_mv)
+        self._default_pedestal_mv = params.get('pedestal_mv', self.default_pedestal_mv)
         self._adc_counts = params.get('adc_counts', self.default_adc_counts)
         self._gain = params.get('gain', self.default_gain)
         logging.warning(f"Using LArPix gain of {self._gain} mV/ke-")
 
         #: ASIC ADC configuration lookup table
         self._configuration = defaultdict(lambda: dict(
-            vref_mv=self.default_vref_mv,
-            vcm_mv=self.default_vcm_mv
+            vref_mv=self._default_vref_mv,
+            vcm_mv=self._default_vcm_mv
         ))
         #: pixel pedestal value
         self._pedestal = defaultdict(lambda: dict(
-            pedestal_mv=self.default_pedestal_mv
+            pedestal_mv=self._default_pedestal_mv
         ))
         
     def init(self, source_name):
@@ -103,9 +103,9 @@ class Calibrate(H5FlowResource):
                                         class_version=self.class_version,
                                         pedestal_file=self._pedestal_file,
                                         configuration_file=self._configuration_file,
-                                        pedestal_mv=self._pedestal_mv,
-                                        vref_mv=self._vref_mv,
-                                        vcm_mv=self._vcm_mv,
+                                        default_pedestal_mv=self._default_pedestal_mv,
+                                        default_vref_mv=self._default_vref_mv,
+                                        default_vcm_mv=self._default_vcm_mv,
                                         adc_counts=self._adc_counts,
                                         gain=self._gain
                                         )
@@ -114,9 +114,9 @@ class Calibrate(H5FlowResource):
 
             self._pedestal_file = self.data['pedestal_file']
             self._configuration_file = self.data['configuration_file']
-            self._pedestal_mv = self.data['pedestal_mv']
-            self._vref_mv = self.data['vref_mv']
-            self._vcm_mv = self.data['vcm_mv']
+            self._pedestal_mv = self.data['default_pedestal_mv']
+            self._default_vref_mv = self.data['default_vref_mv']
+            self._default_vcm_mv = self.data['default_vcm_mv']
             self._adc_counts = self.data['adc_counts']
             self._gain = self.data['gain']
 
@@ -161,12 +161,12 @@ class Calibrate(H5FlowResource):
             vcm = np.array(
                     [self._configuration[unique_id]['vcm_mv'] for unique_id in uid_arr.astype('str')])
         else:
-            vref = np.full(len(uid_arr), self._vref_mv)
-            vcm = np.full(len(uid_arr), self._vcm_mv)
+            vref = np.full(len(uid_arr), self._default_vref_mv)
+            vcm = np.full(len(uid_arr), self._default_vcm_mv)
         if self._pedestal_file != '':
             ped = np.array([self._pedestal[unique_id]['pedestal_mv'] for unique_id in uid_arr.astype('str')])
         else:
-            ped = np.full(len(uid_arr), self._pedestal_mv)
+            ped = np.full(len(uid_arr), self._default_pedestal_mv)
         return (dw / self._adc_counts * (vref - vcm) + vcm - ped) / self._gain
 
     def charge_from_dataword_corrected(self, packets):
