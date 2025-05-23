@@ -10,7 +10,7 @@ if H5FLOW_MPI:
 from h5flow.core import resources
 
 import proto_nd_flow.reco.charge.raw_event_generator as r
-from proto_nd_flow.util.array import fill_with_last
+from proto_nd_flow.util.array import fill_with_last, fill_with_next
 import proto_nd_flow.util.units as units
 
 
@@ -154,8 +154,8 @@ class RawEventBuilder(object):
         # unix timestamp back out, so that their "ts" is the corresponding entry
         # of "offsets".
         unix_mask = packets['packet_type'] == 4
-        ts[unix_mask] -= packets[unix_mask]['timestamp'].astype('i8')
-
+        ts[unix_mask] = -1
+        ts = fill_with_next(ts, marker=-1)
         return ts
 
 
