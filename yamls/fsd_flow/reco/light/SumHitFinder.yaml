@@ -17,5 +17,15 @@ params:
   hit_level: 'sum'
 
   #threshold: !include yamls/fsd_flow/reco/light/sipm_threshold.yaml
+  threshold: 1
 
-  threshold: 4 
+  # configuration parameters
+  near_samples: 4
+  hit_level: 'sum'
+  mad_factor: 5.0
+  noise_factor: 5.0
+  n_bins_rolled: 5
+  rt_sqrt_factor: 5.0
+  pe_weight: 1.0
+  rising_edge: False
+  local_maxima: True

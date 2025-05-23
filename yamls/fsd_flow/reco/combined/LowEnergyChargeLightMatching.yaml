@@ -1,0 +1,25 @@
+# Copied from yamls/proto_nd_flow/reco/combined/T0Reconstruction.yaml
+
+classname: LowEnergyChargeLightMatching
+path: proto_nd_flow.reco.combined.low_energy_charge_light_matching
+requires:
+  - 'light/events'
+  - 'light/sum_hits'
+params:
+  # input
+  clusters_dset_name: 'charge/clusters'
+  clusters_hits_dset_name: 'charge/clusters_hits'
+  clusters_matched_dset_name: 'charge/clusters'
+  clusters_hits_matched_dset_name: 'charge/clusters_hits'
+  light_hits_dset_name: 'light/light_hits'
+  charge_filelist: '/Users/samuelfogarty/Documents/ndlar_analysis/ndlar_flow/scripts/charge_file_list_FSD.txt'
+  light_filelist: '/Users/samuelfogarty/Documents/ndlar_analysis/ndlar_flow/scripts/light_file_list_FSD.txt'
+  charge_data_dir: '/Users/samuelfogarty/Documents/ndlar_analysis/FSD_data/charge'
+  light_data_dir: '/Users/samuelfogarty/Documents/ndlar_analysis/FSD_data/light'
+  proximity_distance_z: 15
+  proximity_distance_y: 15
+
+  # output
+  clusters_matched_dset_name: 'clusters_matched'
+  clusters_hits_matched_dset_name: 'clusters_hits_matched'
+
