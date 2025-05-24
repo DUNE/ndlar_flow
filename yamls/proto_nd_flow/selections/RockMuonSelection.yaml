@@ -1,0 +1,37 @@
+
+classname: RockMuonSelection #path
+
+path: proto_nd_flow.selection.RockMuon_selection
+requires:
+  - 'charge/events'
+
+  - name: 'charge/calib_prompt_hits'
+    path: ["charge/events", "charge/calib_prompt_hits"]
+  
+  - name: 'charge/calib_final_hits'
+    path: ["charge/events","charge/calib_final_hits"]
+   
+params:
+    #Inputs
+    events_dset_name: 'charge/events'
+    PromptHits_dset_name: 'charge/calib_prompt_hits'
+    FinalHits_dset_name: 'charge/calib_final_hits'
+       
+    #Outputs
+    rock_muon_hits_dset_name: 'analysis/rock_muon_tracks'
+    rock_muon_segments_dset_name: 'analysis/rock_muon_segments'
+
+    #configuration parameters
+    x_boundaries: [-63.931, -3.069, 3.069, 63.931] #cm
+    y_boundaries: [-42-19.8543, -42+103.8543] #cm
+    z_boundaries: [-64.3163,  -2.6837, 2.6837, 64.3163] #cm
+
+    length_cut: 100 #cm
+    MEVR: 0.974 #Minimum explained variance ratio
+    
+    track_counts: -1    
+    segment_counts: -1    
+        
+        
+        
+    

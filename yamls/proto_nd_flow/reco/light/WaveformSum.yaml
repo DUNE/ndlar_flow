@@ -10,3 +10,4 @@ params:
 
   # output
   swvfm_dset_name: 'light/swvfm'
+  stpc_wvfm_dset_name: 'light/stpc_wvfm'

@@ -151,9 +151,8 @@ class RawEventBuilder(object):
         ts = (packets['timestamp'].astype('i8') % rollover_ticks) + offsets
 
         # Timestamp packets require special treatment, since their timestamp
-        # field is actually a unix timestamp. For these, we just subtract this
-        # unix timestamp back out, so that their "ts" is the corresponding entry
-        # of "offsets".
+        # field is actually a unix timestamp. For these, we just assign the same
+        # unrolled timestamp as the one in the next non-timestamp packet
         unix_mask = packets['packet_type'] == 4
         ts[unix_mask] = -1
         ts = fill_with_next(ts, marker=-1)
@@ -453,7 +452,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     An external trigger based event builder. Events are sliced such that they always follow an external trigger and the readout window is configurable. The default is set to 182 x 1.1 units (10% grace period). Note the event builder may contain more than one trigger if they are within a readout window time.
     '''
     default_window = 1820 * 1.1
-    default_shifted_event_dt = -70 #This is for accounting the fact that the trigger packet can potentially arrive 7 microseconds later than the beam spill
+    default_shifted_event_dt = 0 # This is to account for any offset between timing of trigger marker and corresponding event
     default_trig_io_grp = 1     # -1 -> all io groups
     default_extendable = False
     
