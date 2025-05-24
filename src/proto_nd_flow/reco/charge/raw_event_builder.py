@@ -1,7 +1,6 @@
 from collections import defaultdict
 import numpy as np
 import logging
-from sklearn.cluster import DBSCAN
 
 from h5flow import H5FLOW_MPI
 if H5FLOW_MPI:
@@ -13,6 +12,7 @@ from proto_nd_flow.util.array import fill_with_last, fill_with_next
 
 import proto_nd_flow.reco.charge.raw_event_generator as r
 import proto_nd_flow.util.units as units
+from sklearn.cluster import DBSCAN
 
 
 class RawEventBuilder(object):
@@ -157,6 +157,7 @@ class RawEventBuilder(object):
         unix_mask = packets['packet_type'] == 4
         ts[unix_mask] = -1
         ts = fill_with_next(ts, marker=-1)
+        
         return ts
 
 
