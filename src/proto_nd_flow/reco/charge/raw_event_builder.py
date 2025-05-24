@@ -9,8 +9,9 @@ if H5FLOW_MPI:
 
 from h5flow.core import resources
 
-import proto_nd_flow.reco.charge.raw_event_generator as r
 from proto_nd_flow.util.array import fill_with_last, fill_with_next
+
+import proto_nd_flow.reco.charge.raw_event_generator as r
 import proto_nd_flow.util.units as units
 
 

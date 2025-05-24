@@ -15,6 +15,7 @@ def fill_with_last(arr: np.ndarray, marker=0) -> np.ndarray:
               for group in groups if len(group)]
     return np.concatenate(groups, axis=0)
 
+
 def fill_with_next(arr: np.ndarray, marker=0) -> np.ndarray:
     '''
         Given an array ARR, copy it and replace all elements equal to MARKER

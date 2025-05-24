@@ -12,12 +12,8 @@ params:
   # output
   hits_dset_name: 'light/sum_hits' # new dataset to produce
 
-  # configuration parameters
-  near_samples: 4
-  hit_level: 'sum'
-
   #threshold: !include yamls/fsd_flow/reco/light/sipm_threshold.yaml
-  threshold: 1
+  threshold: 4
 
   # configuration parameters
   near_samples: 4
