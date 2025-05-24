@@ -157,7 +157,6 @@ class RawEventBuilder(object):
         unix_mask = packets['packet_type'] == 4
         ts[unix_mask] = -1
         ts = fill_with_next(ts, marker=-1)
-        
         return ts
 
 
