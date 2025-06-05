@@ -76,38 +76,42 @@ class WaveformHitFinder(H5FlowStage):
         
         hits_data = np.zeros((0,), dtype=self.hits_dtype)
         hits_event_id = []
+
+        events_tai_ns = []
+        events_utime_ms = []
         for i in range(len(events)):
             event = events[i]
+            tai_ns = event['tai_ns'][event['tai_ns'] != 0][0]*1e-3
+            utime_ms = int(event['utime_ms'][event['utime_ms'] != 0][0]*1e-3)
+            events_tai_ns.append(tai_ns)
+            events_utime_ms.append(utime_ms)
             
-            tai_ns = np.unique(event['tai_ns'])
-            tai_ns = tai_ns[tai_ns != 0][0]*1e-3
-            utime_ms = np.unique(event['utime_ms'])
-            utime_ms = int(utime_ms[utime_ms != 0][0]*1e-3)
+        max_of_wvfms = np.max(wvfms, axis=3)
+        indices = np.where(max_of_wvfms > self.threshold)
 
-            wvfms_arr = wvfms[i]
-            max_of_wvfms = np.max(wvfms_arr, axis=2)
-            indices = np.where(max_of_wvfms > self.threshold)
+        for i, (event_index, tpc, sum_chan) in enumerate(zip(indices[0], indices[1], indices[2])):
+            hit_data = np.zeros((1,), dtype=self.hits_dtype)
+            hit_data['tpc'] = tpc
+            hit_data['sum_chan'] = sum_chan
+            hit_data['trap_type'] = resources['Geometry'].sum_chan_to_trap_type[(tpc, sum_chan)]
+            hit_data['boundary'] = resources['Geometry'].sum_chan_bounds[(tpc, sum_chan)]
+            #hit_data['samples'] = wvfms_arr[tpc, sum_chan, :]
+            hit_data['amplitude'] = max_of_wvfms[event_index, tpc, sum_chan]
+            hit_data['ts_pps'] = events_tai_ns[event_index]
+            hit_data['unix'] = events_utime_ms[event_index]
+            hits_data = np.concatenate((hits_data, hit_data))
+            hits_event_id.append(event['id'])
 
-            for tpc, sum_chan in zip(indices[0], indices[1]):
-                hit_data = np.zeros((1,), dtype=self.hits_dtype)
-                hit_data['tpc'] = tpc
-                hit_data['sum_chan'] = sum_chan
-                hit_data['trap_type'] = resources['Geometry'].sum_chan_to_trap_type[(tpc, sum_chan)]
-                hit_data['boundary'] = resources['Geometry'].sum_chan_bounds[(tpc, sum_chan)]
-                #hit_data['samples'] = wvfms_arr[tpc, sum_chan, :]
-                hit_data['amplitude'] = max_of_wvfms[tpc, sum_chan]
-                hit_data['ts_pps'] = tai_ns
-                hit_data['unix'] = utime_ms
-                hits_data = np.concatenate((hits_data, hit_data))
-                hits_event_id.append(event['id'])
-                
-        hit_slice = self.data_manager.reserve_data(self.hits_dset_name, len(hits_data))
-        hits_data['id'] = hit_slice.start + np.arange(len(hits_data), dtype=int)
-        self.data_manager.write_data(self.hits_dset_name, hit_slice, hits_data)
-
-        hits_event_id = np.array(hits_event_id)
-        if len(hits_data):
-            ref = np.c_[hits_event_id, hits_data['id']]
-        else:
-            ref = np.empty((0, 2))
-        self.data_manager.write_ref(source_name, self.hits_dset_name, ref)
+            if (len(hits_data) > 1 or i == len(indices)) and len(hits_data):
+                hit_slice = self.data_manager.reserve_data(self.hits_dset_name, len(hits_data))
+                hits_data['id'] = hit_slice.start + np.arange(len(hits_data), dtype=int)
+                self.data_manager.write_data(self.hits_dset_name, hit_slice, hits_data)
+        
+                hits_event_id = np.array(hits_event_id)
+                if len(hits_data):
+                    ref = np.c_[hits_event_id, hits_data['id']]
+                else:
+                    ref = np.empty((0, 2))
+                self.data_manager.write_ref(source_name, self.hits_dset_name, ref)
+                hits_data = np.zeros((0,), dtype=self.hits_dtype)
+                hits_event_id = []
