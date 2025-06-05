@@ -1,0 +1,11 @@
+classname: Calibrate # resources/calibrate.py
+path: proto_nd_flow.resources.calibrate
+params:
+  path: 'calibrate_info'
+  pedestal_file: '/global/cfs/cdirs/dune/users/sfogarty/ndlar_flow_low_energy/ndlar_flow/data/module2_flow/pedestal_run2_tpc12_prc_6400_everything_on-packet-2022_12_02_16_57_CETevd_ped.json'
+  configuration_file: ''
+  pedestal_mv: 580.0
+  vref_mv: 1567.96875
+  vcm_mv: 478.125
+  adc_counts: 256
+  gain: 4.522

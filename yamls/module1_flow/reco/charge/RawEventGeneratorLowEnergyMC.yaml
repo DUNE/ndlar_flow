@@ -7,10 +7,10 @@ params:
 
   # configuration parameters
   mc_tracks_dset_name: 'mc_truth/segments'
-  buffer_size: 1000000
+  clusters_dset_name: 'charge/clusters'
+  buffer_size: 384000
   nhit_cut: 1
-  #skip_mc_truth: True
-  truth_ref: False # beware, huge memory usage if True
+  skip_mc_truth: True
   sync_noise_cut: [100, 11000000] 
   sync_noise_cut_enabled: True
   event_builder_class: 'LowEnergyRawEventBuilder' #'SymmetricWindowRawEventBuilder'
@@ -21,3 +21,4 @@ params:
     clusters_eps: 2
     clusters_min_samples: 1
     nhit_limit: 50
+    do_timestamp_unroll: False

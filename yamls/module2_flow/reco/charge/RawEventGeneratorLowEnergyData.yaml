@@ -4,20 +4,20 @@ dset_name: 'charge/raw_events'
 params:
   # secondary output
   packets_dset_name: 'charge/packets'
-
   # configuration parameters
   mc_tracks_dset_name: 'mc_truth/segments'
-  buffer_size: 1000000
+  clusters_dset_name: 'charge/clusters'
+  buffer_size: 384000
   nhit_cut: 1
-  #skip_mc_truth: True
-  truth_ref: False # beware, huge memory usage if True
+  skip_mc_truth: True
   sync_noise_cut: [100, 11000000] 
   sync_noise_cut_enabled: True
   event_builder_class: 'LowEnergyRawEventBuilder' #'SymmetricWindowRawEventBuilder'
   event_builder_config:
     upper_window: 3000 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
-    lower_window: -1000
+    lower_window: 1000
     trig_io_grp: 1
     clusters_eps: 2
     clusters_min_samples: 1
     nhit_limit: 50
+    do_timestamp_unroll: False

@@ -10,9 +10,9 @@ flow:
 
 
 resources:
-  - !include yamls/module1_flow/resources/RunData.yaml
+  - !include yamls/module1_flow/resources/RunDataData.yaml
   - !include yamls/module1_flow/resources/LArData.yaml
-  - !include yamls/module1_flow/resources/Geometry.yaml
+  - !include yamls/module1_flow/resources/GeometryData.yaml
 
 
 raw_events:

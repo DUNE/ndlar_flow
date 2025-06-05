@@ -8,8 +8,8 @@ flow:
 
 
 resources:
-  - !include yamls/module0_flow/resources/RunData.yaml
-  - !include yamls/module0_flow/resources/Geometry.yaml
+  - !include yamls/module0_flow/resources/RunDataMC.yaml
+  - !include yamls/module0_flow/resources/GeometryMC.yaml
 
 
 raw_events:
