@@ -350,7 +350,8 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         # calculate time distance between hits
         min_ts, max_ts = np.min(ts), np.max(ts)
         bin_edges = np.linspace(min_ts - 1, max_ts + 1, int((max_ts - min_ts + 2) // self.window))
-        hist, bin_edges = np.histogram(ts, bins=bin_edges)
+        ts_data = ts[packets['packet_type'] == 0]
+        hist, bin_edges = np.histogram(ts_data, bins=bin_edges)
 
         # find high correlation regions
         event_mask = (hist > self.threshold)
