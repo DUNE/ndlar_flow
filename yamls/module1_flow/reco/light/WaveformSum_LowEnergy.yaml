@@ -15,3 +15,7 @@ params:
   swvfm_dset_name: 'light/swvfm'
   schan_wvfm_dset_name: 'light/schan_wvfm'
   stpc_wvfm_dset_name: 'light/stpc_wvfm'
+
+  make_schan_wvfm_dset: True
+  make_stpc_wvfm_dset: False
+  make_swvfm_dset: False

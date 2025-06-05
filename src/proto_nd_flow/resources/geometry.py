@@ -509,6 +509,16 @@ class Geometry(H5FlowResource):
         return self._sum_chan_to_trap_type
 
     @property
+    def det_to_trap_type(self):
+        '''
+            Lookup table for trap type for det id, where LCM=1, ACL=0, usage::
+
+                resource['Geometry'].det_to_trap_type[(tpc_id, det_id)]
+
+        '''
+        return self._det_to_trap_type
+
+    @property
     def det_bounds(self):
         '''
             Lookup table for detector min and max xyz coordinate, usage::
@@ -690,7 +700,8 @@ class Geometry(H5FlowResource):
         i_sumchan = 0
         i_list, j_list = [], []
         channel_list = []
-        sum_chan_ids, sum_chan_tpc_ids, sum_chan_to_trap_type, sum_chan_adc_ids = [], [], {}, []
+        sum_chan_ids, sum_chan_tpc_ids, sum_chan_adc_ids = [], [], []
+        sum_chan_to_trap_type, det_to_trap_type = {}, {}
         
         for i, tpc in enumerate(tpc_ids):
             for j, det in enumerate(det_ids):
@@ -713,13 +724,15 @@ class Geometry(H5FlowResource):
                     j_list.append(j)
                     nchannels += 6
                     channel_list.extend(det_channels)
+                    det_to_trap_type[(tpc, det)] = 0
                 elif len(det_channels) == 2: # LCM
                     i_list.append(i)
                     j_list.append(j)
                     nchannels += 2
                     channel_list.extend(det_channels)
+                    det_to_trap_type[(tpc, det)] = 1
                 
-                if nchannels == 6: # find bounds for sum channels
+                if nchannels == 6: # find bounds for trigger-logic sum channels
                     det_bounds_sum_chan_min = np.array([det_bounds[n, m, 0] for n, m in zip(i_list, j_list)])
                     det_bounds_sum_chan_max = np.array([det_bounds[n, m, 1] for n, m in zip(i_list, j_list)])
                     
@@ -754,13 +767,16 @@ class Geometry(H5FlowResource):
                             (min(chan_ids), max(chan_ids))]
         self._sipm_abs_pos = LUT('f4', *adc_chan_min_max, shape=(3,))
         self._sipm_abs_pos.default = -1
-
+        
         self._sipm_rel_pos = LUT('i4', *adc_chan_min_max, shape=(3,))
         self._sipm_rel_pos.default = -1
 
         self._det_id = LUT('i4', *adc_chan_min_max)
-        self._det_id.default = -1        
+        self._det_id.default = -1
 
+        self._det_to_trap_type = LUT('f4', *det_min_max)
+        self._det_to_trap_type.default = -1
+        
         self._det_bounds = LUT('f4', *det_min_max, shape=(2,3))
         self._det_bounds.default = 0.
 
@@ -777,11 +793,13 @@ class Geometry(H5FlowResource):
                             (min(sum_chan_ids), max(sum_chan_ids))]
         self._sum_chan_bounds = LUT('f4', *sum_chan_min_max, shape=(2,3))
         self._sum_chan_bounds.default = 0.
+        
         self._sum_chan_to_trap_type = LUT('i4', *sum_chan_min_max)
         self._sum_chan_to_trap_type.default = -1
 
         for k, (scti, scci) in enumerate(zip(sum_chan_tpc_id, sum_chan_chan_id)):
             self._sum_chan_id[(scti, scci)] = list(tpc_chan_to_schan_dict.values())[k]
+            
         for k in range(len(sum_chan_ids)):
             self._sum_chan_bounds[(sum_chan_tpc_ids[k], sum_chan_ids[k])] = list(sum_chan_bounds.values())[k] 
             self._sum_chan_to_trap_type[(sum_chan_tpc_ids[k], sum_chan_ids[k])] = list(sum_chan_to_trap_type.values())[k]
@@ -790,7 +808,10 @@ class Geometry(H5FlowResource):
             for chan in chan_ids:
                 self._sipm_rel_pos[(adc,chan)] = np.array(self.get_sipm_rel_pos(adc,chan))
                 self._sipm_abs_pos[(adc,chan)] = np.array(self.get_sipm_abs_pos(adc,chan))
-
+                
+        for k, tpc_det in enumerate(list(det_to_trap_type.keys())):
+            self._det_to_trap_type[(tpc_det[0], tpc_det[1])] = list(det_to_trap_type.values())[k]
+            
         tpc_ids, det_ids, det_chan_mask = tpc_ids[...,0], det_ids[...,0], det_chan_mask[...,0]
         self._det_bounds[(tpc_ids[det_chan_mask], det_ids[det_chan_mask])] = det_bounds[det_chan_mask]
   
