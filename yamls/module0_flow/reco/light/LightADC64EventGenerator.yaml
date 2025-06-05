@@ -1,5 +1,5 @@
 classname: LightADC64EventGenerator
-path: module0_flow.reco.light.adc64_event_generator
+path: proto_nd_flow.reco.light.adc64_event_generator-single_module
 dset_name: 'light/events'
 params:
   # secondary output
