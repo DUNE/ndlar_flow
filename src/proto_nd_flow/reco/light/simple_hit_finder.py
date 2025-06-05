@@ -1,13 +1,9 @@
 import numpy as np
 import numpy.ma as ma
-from collections import defaultdict
-import scipy.interpolate
-from scipy.signal import butter, filtfilt
 
 from h5flow.core import H5FlowStage, resources
 
 import module0_flow.util.units as units
-import time
 
 class WaveformHitFinder(H5FlowStage):
     '''
@@ -17,8 +13,9 @@ class WaveformHitFinder(H5FlowStage):
          - ``sum_wvfm_dset_name``: ``str``, path to input filtered summed waveforms
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``threshold``: ``dict`` of ``dict`` containing sets of ``tpc_index: {channel_index: threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
+         - ``save_buffer_size``: ``int``, total number of hits to save in memory before saving to disk
 
-         ``sum_wvfm_dset_name`` and ``t_ns_dset_name`` are required in the cache.
+         ``sum_wvfm_dset_name`` is required in the cache.
 
          Requires RunData and Geometry resources in workflow.
 
@@ -27,22 +24,25 @@ class WaveformHitFinder(H5FlowStage):
             id                  u4,             unique identifier
             tpc                 u1,             tpc (for sum_hit)
             sum_chan            u1,             detector id
+            trap_type           u2,             light detector type (LCM = 1, ACL = 0)
             boundary            f4(3),          (x,y,z) boundaries of det
-            samples             f4(nsamples,),  waveform adc values
             amplitude           f4,             peak adc value
+            ts_pps              f4,             PPS timestamp of light event
+            unix                i8,             UNIX timestamp of light event with second-level precision
     '''
-    class_version = '2.0.0'
+    class_version = '0.0.0'
 
     default_hits_dset_name = 'light/simple_hits'
     default_threshold = 500
-    default_mask = []
-
+    default_save_buffer_size = 5000
+    
     def __init__(self, **params):
         super(WaveformHitFinder, self).__init__(**params)
         self.sum_wvfm_dset_name = params.get('sum_wvfm_dset_name')
         self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
         self.threshold = params.get('threshold', self.default_threshold)
-            
+        self.save_buffer_size = params.get('save_buffer_size', self.default_save_buffer_size)
+        
     def init(self, source_name):
         super(WaveformHitFinder, self).init(source_name)
 
@@ -52,7 +52,6 @@ class WaveformHitFinder(H5FlowStage):
                     ('sum_chan', 'u1'),
                     ('trap_type', 'u1'),
                     ('boundary', 'f4', (2,3)),
-                    #('samples', 'f4', (nsamples,)),
                     ('amplitude', 'f4'),
                     ('ts_pps', 'f8'),
                     ('unix', 'i8')
@@ -102,7 +101,7 @@ class WaveformHitFinder(H5FlowStage):
             hits_data = np.concatenate((hits_data, hit_data))
             hits_event_id.append(event['id'])
 
-            if (len(hits_data) > 1 or i == len(indices)) and len(hits_data):
+            if (len(hits_data) > self.save_buffer_size or i == len(indices)) and len(hits_data):
                 hit_slice = self.data_manager.reserve_data(self.hits_dset_name, len(hits_data))
                 hits_data['id'] = hit_slice.start + np.arange(len(hits_data), dtype=int)
                 self.data_manager.write_data(self.hits_dset_name, hit_slice, hits_data)
