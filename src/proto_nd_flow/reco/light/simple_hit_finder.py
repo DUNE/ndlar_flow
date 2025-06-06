@@ -34,14 +34,12 @@ class WaveformHitFinder(H5FlowStage):
 
     default_hits_dset_name = 'light/simple_hits'
     default_threshold = 500
-    default_save_buffer_size = 5000
     
     def __init__(self, **params):
         super(WaveformHitFinder, self).__init__(**params)
         self.sum_wvfm_dset_name = params.get('sum_wvfm_dset_name')
         self.hits_dset_name = params.get('hits_dset_name', self.default_hits_dset_name)
         self.threshold = params.get('threshold', self.default_threshold)
-        self.save_buffer_size = params.get('save_buffer_size', self.default_save_buffer_size)
         
     def init(self, source_name):
         super(WaveformHitFinder, self).init(source_name)
@@ -87,30 +85,25 @@ class WaveformHitFinder(H5FlowStage):
             
         max_of_wvfms = np.max(wvfms, axis=3)
         indices = np.where(max_of_wvfms > self.threshold)
-
         for i, (event_index, tpc, sum_chan) in enumerate(zip(indices[0], indices[1], indices[2])):
             hit_data = np.zeros((1,), dtype=self.hits_dtype)
             hit_data['tpc'] = tpc
             hit_data['sum_chan'] = sum_chan
             hit_data['trap_type'] = resources['Geometry'].sum_chan_to_trap_type[(tpc, sum_chan)]
             hit_data['boundary'] = resources['Geometry'].sum_chan_bounds[(tpc, sum_chan)]
-            #hit_data['samples'] = wvfms_arr[tpc, sum_chan, :]
             hit_data['amplitude'] = max_of_wvfms[event_index, tpc, sum_chan]
             hit_data['ts_pps'] = events_tai_ns[event_index]
             hit_data['unix'] = events_utime_ms[event_index]
             hits_data = np.concatenate((hits_data, hit_data))
-            hits_event_id.append(event['id'])
+            hits_event_id.append(events[event_index]['id'])
 
-            if (len(hits_data) > self.save_buffer_size or i == len(indices)) and len(hits_data):
-                hit_slice = self.data_manager.reserve_data(self.hits_dset_name, len(hits_data))
-                hits_data['id'] = hit_slice.start + np.arange(len(hits_data), dtype=int)
-                self.data_manager.write_data(self.hits_dset_name, hit_slice, hits_data)
-        
-                hits_event_id = np.array(hits_event_id)
-                if len(hits_data):
-                    ref = np.c_[hits_event_id, hits_data['id']]
-                else:
-                    ref = np.empty((0, 2))
-                self.data_manager.write_ref(source_name, self.hits_dset_name, ref)
-                hits_data = np.zeros((0,), dtype=self.hits_dtype)
-                hits_event_id = []
+        hit_slice = self.data_manager.reserve_data(self.hits_dset_name, len(hits_data))
+        hits_data['id'] = hit_slice.start + np.arange(len(hits_data), dtype=int)
+        self.data_manager.write_data(self.hits_dset_name, hit_slice, hits_data)
+
+        hits_event_id = np.array(hits_event_id)
+        if len(hits_data):
+            ref = np.c_[hits_event_id, hits_data['id']]
+        else:
+            ref = np.empty((0, 2))
+        self.data_manager.write_ref(source_name, self.hits_dset_name, ref)
