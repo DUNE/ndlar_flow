@@ -17,3 +17,4 @@ params:
     trig_io_grp: -1
     build_off_beam_events : True
     shifted_event_dt : -70
+  autocorrect_unix_ts: True
