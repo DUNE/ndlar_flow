@@ -200,7 +200,7 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
 
         # sort packets to fix 512 bug
         packets = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
-        sorted_idcs = np.argsort(packets, order='timestamp')
+        sorted_idcs = np.argsort(packets, order='timestamp', kind='stable')
         packets = packets[sorted_idcs]
         unix_ts = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
         if mc_assn is not None:
@@ -340,7 +340,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         if ts is None:
             ts = self.unroll_timestamps(packets)
 
-        sorted_idcs = np.argsort(ts)
+        sorted_idcs = np.argsort(ts, kind='stable')
         ts = ts[sorted_idcs]
         packets = packets[sorted_idcs]
         unix_ts = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
@@ -509,14 +509,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             return ([], []) if mc_assn is None else ([], [], [])
 
         ts = self.unroll_timestamps(packets)
-        sorted_idcs = np.argsort(ts)
-        ts = ts[sorted_idcs]
 
-        packets = packets[sorted_idcs]
-        unix_ts = unix_ts[sorted_idcs]
-        if mc_assn is not None:
-            mc_assn = mc_assn[sorted_idcs]
-        
         trig_mask = packets['packet_type'] == 7
         if self.trig_io_grp != [-1]:
             iog_masks = [packets['io_group'] == iog for iog in self.trig_io_grp]
