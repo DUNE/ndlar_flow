@@ -1,0 +1,24 @@
+# Performs combined reconstruction, generating t0s, tracklets, ...
+
+flow:
+  source: events
+  #stages: [t0_reco, drift_reco, electron_lifetime_corr, tracklet_reco, tracklet_merge]
+  stages: [CL_matching]
+  drop: []
+
+events:
+  classname: H5FlowDatasetLoopGenerator
+  path: h5flow.modules
+  dset_name: 'light/events'
+  params:
+    chunk_size: 32
+
+resources:
+  - !include yamls/module2_flow/resources/RunDataData.yaml
+  - !include yamls/module2_flow/resources/GeometryData.yaml
+  - !include yamls/module2_flow/resources/LArData.yaml
+#  - !include yamls/proto_nd_flow/resources/DisabledChannels.yaml
+
+CL_matching:
+  !include yamls/module2_flow/reco/combined/LowEnergyChargeLightMatching.yaml
+

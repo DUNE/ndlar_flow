@@ -13,12 +13,12 @@ events:
     chunk_size: 100
 
 resources:
-  - !include yamls/fsd_flow/resources/RunDataData.yaml
-  - !include yamls/fsd_flow/resources/GeometryData.yaml
-  - !include yamls/fsd_flow/resources/LArData.yaml
+  - !include yamls/module1_flow/resources/RunDataData.yaml
+  - !include yamls/module1_flow/resources/GeometryData.yaml
+  - !include yamls/module1_flow/resources/LArData.yaml
 #  - !include yamls/proto_nd_flow/resources/DisabledChannels.yaml
 
 CL_matching:
-  !include yamls/fsd_flow/reco/combined/LowEnergyChargeLightMatching.yaml
+  !include yamls/module1_flow/reco/combined/LowEnergyChargeLightMatching.yaml
 
 
