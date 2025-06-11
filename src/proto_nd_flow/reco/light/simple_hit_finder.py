@@ -13,7 +13,6 @@ class WaveformHitFinder(H5FlowStage):
          - ``sum_wvfm_dset_name``: ``str``, path to input filtered summed waveforms
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``threshold``: ``dict`` of ``dict`` containing sets of ``tpc_index: {channel_index: threshold, ...}`` used for hit finding. A fixed global value can also be specified with a single ``float`` value
-         - ``save_buffer_size``: ``int``, total number of hits to save in memory before saving to disk
 
          ``sum_wvfm_dset_name`` is required in the cache.
 
@@ -59,11 +58,11 @@ class WaveformHitFinder(H5FlowStage):
         self.data_manager.create_dset(self.hits_dset_name,
                                       dtype=self.hits_dtype)
         self.data_manager.create_ref(source_name, self.hits_dset_name)
-        self.data_manager.set_attrs(self.hits_dset_name,
-                                    classname=self.classname,
-                                    class_version=self.class_version,
-                                    wvfm_dset=self.sum_wvfm_dset_name
-                                    )
+        #self.data_manager.set_attrs(self.hits_dset_name,
+        #                            classname=self.classname,
+        #                            class_version=self.class_version,
+        #                            wvfm_dset=self.sum_wvfm_dset_name
+        #                            )
 
     def run(self, source_name, source_slice, cache):
         super(WaveformHitFinder, self).run(source_name, source_slice, cache)
@@ -100,7 +99,6 @@ class WaveformHitFinder(H5FlowStage):
         hit_slice = self.data_manager.reserve_data(self.hits_dset_name, len(hits_data))
         hits_data['id'] = hit_slice.start + np.arange(len(hits_data), dtype=int)
         self.data_manager.write_data(self.hits_dset_name, hit_slice, hits_data)
-
         hits_event_id = np.array(hits_event_id)
         if len(hits_data):
             ref = np.c_[hits_event_id, hits_data['id']]
