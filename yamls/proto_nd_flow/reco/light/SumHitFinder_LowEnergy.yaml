@@ -11,4 +11,4 @@ params:
   hits_dset_name: 'light/simple_hits' # new dataset to produce
 
   #threshold: !include yamls/fsd_flow/reco/light/sipm_threshold.yaml
-  threshold: 500.0
+  threshold: 2.5
