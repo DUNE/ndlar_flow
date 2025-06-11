@@ -26,7 +26,7 @@ jobs:
     - name: checkout h5flow
       run: |
         cd ..
-        git clone https://github.com/peter-madigan/h5flow.git
+        git clone https://github.com/DUNE/h5flow.git
 
     - name: setup conda (mpi)
       uses: conda-incubator/setup-miniconda@v2

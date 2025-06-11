@@ -185,7 +185,25 @@ class CalibHitBuilder(H5FlowStage):
                     hit_t0[first_index:last_index] = np.full(n_not_masked,t0)
                     first_index += n_not_masked
 
-            drift_t = raw_hits_arr['ts_pps'] - hit_t0 #ticks
+            drift_t = raw_hits_arr['ts_pps'].astype('f8') - hit_t0 #ticks
+
+            # If this event crosses a PPS reset, and if the t0 is post-reset,
+            # then correct the drift time for pre-reset hits. Identify those
+            # hits as those having an absurdly large (positive) drift_t.
+            before_sync_mask = drift_t > 1e5
+            # For those hits, subtract out the rollover period.
+            drift_t[before_sync_mask] -= resources['RunData'].rollover_ticks
+            # TODO: Instead of the nominal rollover_ticks, use the actual
+            # timestamps of the SYNC. Need to wire in those SYNC timestamps and
+            # the io group of each hit (or use the average SYNC timestamps; see
+            # ave_pps_ts in timestamp_corrector.py)
+
+            # Now handle the case where the t0 is pre-reset. The post-reset hits
+            # will have absurdly negative drift_t.
+            after_sync_mask = drift_t < -1e5
+            # This time we add the rollover period instead of subtracting.
+            drift_t[after_sync_mask] += resources['RunData'].rollover_ticks
+
             drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks) / units.cm # convert mm -> cm
             x = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
 

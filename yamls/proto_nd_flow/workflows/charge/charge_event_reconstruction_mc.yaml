@@ -32,5 +32,4 @@ raw_hit_builder:
 
 
 event_builder:
-  !include yamls/proto_nd_flow/reco/charge/EventBuilder.yaml
-
+  !include yamls/proto_nd_flow/reco/charge/EventBuilderMC.yaml
