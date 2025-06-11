@@ -163,7 +163,7 @@ class WaveformSum(H5FlowStage):
                 tpc_id = resources['Geometry'].sipm_rel_pos[(adc,chan)][0][0]
                 det_id = resources['Geometry'].det_id[(adc,chan)]
                 if self.make_schan_wvfm_dset:
-                    sum_chan_id = resources['Geometry'].sum_chan_id[(tpc_id, chan)]
+                    sum_chan_id = resources['Geometry'].sum_chan_id[(adc, chan)]
                     if sum_chan_id < 0:
                         continue
                 # skip negative indices

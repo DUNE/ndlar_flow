@@ -695,14 +695,13 @@ class Geometry(H5FlowResource):
         det_bounds = np.zeros(shape + (2,3), dtype=float)
         
         sum_chan_bounds = {} #np.zeros(tpc_ids.shape + det_ids.shape + (2,3), dtype=float)
-        tpc_chan_to_schan_dict = {}
+        adc_chan_to_schan_dict = {}
         nchannels = 0
         i_sumchan = 0
         i_list, j_list = [], []
         channel_list = []
         sum_chan_ids, sum_chan_tpc_ids, sum_chan_adc_ids = [], [], []
         sum_chan_to_trap_type, det_to_trap_type = {}, {}
-        
         for i, tpc in enumerate(tpc_ids):
             for j, det in enumerate(det_ids):
                 det_adc[i,j] = self.lrs_geometry_yaml['det_adc'][tpc][det]
@@ -743,7 +742,8 @@ class Geometry(H5FlowResource):
                     else:
                         sum_chan_to_trap_type[(tpc, i_sumchan)] = 0 #ACL
                     for channel in channel_list:
-                        tpc_chan_to_schan_dict[(tpc, channel)] = i_sumchan
+                        adc_chan_to_schan_dict[(det_adc[i,j], channel)] = i_sumchan
+                        
                     sum_chan_ids.append(i_sumchan)
                     sum_chan_tpc_ids.append(tpc)
                     sum_chan_adc_ids.append(det_adc[i,j])
@@ -781,29 +781,26 @@ class Geometry(H5FlowResource):
         self._det_bounds.default = 0.
 
         self._det_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = det_ids[det_chan_mask]
-
-        sum_chan_tpc_id = np.array([tpc_chan[0] for tpc_chan in tpc_chan_to_schan_dict.keys()])
-        sum_chan_chan_id = np.array([tpc_chan[1] for tpc_chan in tpc_chan_to_schan_dict.keys()])
-        tpc_chan_min_max = [(min(sum_chan_tpc_ids), max(sum_chan_tpc_ids)), 
-                            (min(sum_chan_chan_id), max(sum_chan_chan_id))]
-        self._sum_chan_id = LUT('i4', *tpc_chan_min_max)
+        chan_adc_ids = np.array([adc_chan[0] for adc_chan in adc_chan_to_schan_dict.keys()])
+        chan_ids = np.array([adc_chan[1] for adc_chan in adc_chan_to_schan_dict.keys()])
+        
+        adc_chan_min_max = [(min(chan_adc_ids), max(chan_adc_ids)), 
+                            (min(chan_ids), max(chan_ids))]
+        self._sum_chan_id = LUT('i4', *adc_chan_min_max)
         self._sum_chan_id.default = -1
-
+        for k, (scti, scci) in enumerate(zip(chan_adc_ids, chan_ids)):
+            self._sum_chan_id[(scti, scci)] = list(adc_chan_to_schan_dict.values())[k]
         sum_chan_min_max = [(min(sum_chan_tpc_ids), max(sum_chan_tpc_ids)), 
                             (min(sum_chan_ids), max(sum_chan_ids))]
         self._sum_chan_bounds = LUT('f4', *sum_chan_min_max, shape=(2,3))
         self._sum_chan_bounds.default = 0.
-        
         self._sum_chan_to_trap_type = LUT('i4', *sum_chan_min_max)
         self._sum_chan_to_trap_type.default = -1
 
-        for k, (scti, scci) in enumerate(zip(sum_chan_tpc_id, sum_chan_chan_id)):
-            self._sum_chan_id[(scti, scci)] = list(tpc_chan_to_schan_dict.values())[k]
-            
         for k in range(len(sum_chan_ids)):
             self._sum_chan_bounds[(sum_chan_tpc_ids[k], sum_chan_ids[k])] = list(sum_chan_bounds.values())[k] 
             self._sum_chan_to_trap_type[(sum_chan_tpc_ids[k], sum_chan_ids[k])] = list(sum_chan_to_trap_type.values())[k]
-                    
+        
         for adc in adc_ids:
             for chan in chan_ids:
                 self._sipm_rel_pos[(adc,chan)] = np.array(self.get_sipm_rel_pos(adc,chan))
@@ -814,7 +811,6 @@ class Geometry(H5FlowResource):
             
         tpc_ids, det_ids, det_chan_mask = tpc_ids[...,0], det_ids[...,0], det_chan_mask[...,0]
         self._det_bounds[(tpc_ids[det_chan_mask], det_ids[det_chan_mask])] = det_bounds[det_chan_mask]
-  
     def _load_charge_geometry(self):
         if self.rank == 0:
             logging.warning(f'Loading geometry from {self.crs_geometry_files}...')
