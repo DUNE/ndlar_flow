@@ -1,0 +1,10 @@
+flow:
+  source: gen_pedestals
+  stages: []
+  drop: []
+
+resources:
+  - !include yamls/proto_nd_flow/resources/GeometryData.yaml
+
+gen_pedestals:
+  !include yamls/proto_nd_flow/util/GeneratePedestals.yaml
