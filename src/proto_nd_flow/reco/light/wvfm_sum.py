@@ -96,6 +96,7 @@ class WaveformSum(H5FlowStage):
 
         # then set up new datasets
         tpc_ids, det_ids = resources['Geometry'].det_bounds.keys()
+        _, sum_chan_ids = resources['Geometry'].sum_chan_bounds.keys()
         wvfm_dset = self.data_manager.get_dset(self.wvfm_dset_name)
 
         if self.make_swvfm_dset:
@@ -108,7 +109,7 @@ class WaveformSum(H5FlowStage):
         if self.make_schan_wvfm_dset:
             # sum channels
             self.schan_wvfm_dtype = self.schan_wvfm_dtype(len(np.unique(tpc_ids)),
-                len(np.unique(det_ids)), wvfm_dset.dtype['samples'].shape[2])
+                len(np.unique(sum_chan_ids)), wvfm_dset.dtype['samples'].shape[2])
             self.data_manager.create_dset(self.schan_wvfm_dset_name, dtype=self.schan_wvfm_dtype)
             self.data_manager.create_ref(source_name, self.schan_wvfm_dset_name)
 
@@ -157,7 +158,7 @@ class WaveformSum(H5FlowStage):
                 schan_wvfm_align_data = np.zeros(event_data.shape, dtype=self.schan_wvfm_align_dtype)
             if self.make_stpc_wvfm_dset:
                 stpc_wvfm_align_data = np.zeros(event_data.shape, dtype=self.stpc_wvfm_align_dtype)
-
+        
         for adc in range(wvfm_data['samples'].shape[1]):
             for chan in range(wvfm_data['samples'].shape[2]):
                 tpc_id = resources['Geometry'].sipm_rel_pos[(adc,chan)][0][0]
