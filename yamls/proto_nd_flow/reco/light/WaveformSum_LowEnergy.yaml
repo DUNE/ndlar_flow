@@ -4,14 +4,17 @@ classname: WaveformSum
 path: proto_nd_flow.reco.light.wvfm_sum
 requires:
   - 'light/events'
-  - 'light/fwvfm'
-  #- 'light/cwvfm'
-  #- 'light/wvfm/alignment'
+  - 'light/cwvfm'
+  - 'light/cwvfm/alignment'
 params:
   # input
-  wvfm_dset_name: 'light/fwvfm'
+  wvfm_dset_name: 'light/cwvfm'
 
   # output
   swvfm_dset_name: 'light/swvfm'
   schan_wvfm_dset_name: 'light/schan_wvfm'
   stpc_wvfm_dset_name: 'light/stpc_wvfm'
+
+  make_schan_wvfm_dset: True
+  make_stpc_wvfm_dset: False
+  make_swvfm_dset: False
