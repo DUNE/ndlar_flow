@@ -18,3 +18,4 @@ params:
     build_off_beam_events : True
     off_beam_threshold : 20
     shifted_event_dt : -70
+  autocorrect_unix_ts: True

@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.ma as ma
 from numpy.lib import recfunctions as rfn
+import numpy.typing as npt
 import h5py
 import logging
 import warnings
@@ -43,6 +44,7 @@ class RawEventGenerator(H5FlowGenerator):
          - ``mc_tracks_dset_name`` : ``str``, optional, output dataset path for mc truth tracks (if present)
          - ``mc_trajectories_dset_name`` : ``str``, optional, output dataset path for mc truth trajectories (if present)
          - ``mc_packet_fraction_dset_name`` : ``str``, optional, output dataset path for packet charge fraction truth (if present)
+         - ``autocorrect_unix_ts`` : ``bool``, optional, take median unix_ts among io_groups instead of just first iog
 
         ``dset_name`` points to a lightweight array used to organize low-level
         event references.
@@ -87,6 +89,7 @@ class RawEventGenerator(H5FlowGenerator):
     default_mc_trajectories_dset_name = 'mc_truth/trajectories'
     default_mc_packet_fraction_dset_name = 'mc_truth/packet_fraction'
     default_truth_ref = True
+    default_autocorrect_unix_ts = False
 
     raw_event_dtype = np.dtype([
         ('id', 'u8'),
@@ -118,6 +121,8 @@ class RawEventGenerator(H5FlowGenerator):
         self.mc_packet_fraction_dset_name = params.get('mc_packet_fraction_dset_name', self.default_mc_packet_fraction_dset_name)
         # set up whether to store truth reference
         self.truth_ref = params.get('truth_ref', self.default_truth_ref)
+        self.autocorrect_unix_ts = params.get('autocorrect_unix_ts',
+                                              self.default_autocorrect_unix_ts)
 
         # create event builder
         self.event_builder = globals()[self.event_builder_class](**self.event_builder_config)
@@ -501,7 +506,12 @@ class RawEventGenerator(H5FlowGenerator):
         raw_event_slice = self.data_manager.reserve_data(self.raw_event_dset_name, nevents)
         raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop, dtype=int)
         if nevents:
-            raw_event_array['unix_ts'] = [p[0]['timestamp'] for p in event_unix_ts]
+            if self.autocorrect_unix_ts:
+                raw_event_array['unix_ts'] = [self.get_corrected_unix_ts(p)
+                                              for p in event_unix_ts]
+            else:
+                raw_event_array['unix_ts'] = [p[0]['timestamp']
+                                              for p in event_unix_ts]
             raw_event_array['id'] = raw_event_idcs
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
@@ -576,3 +586,13 @@ class RawEventGenerator(H5FlowGenerator):
         if self.rank != self.size - 1:
             self.comm.send(max_unix_ts, dest=self.rank + 1)
 
+    def get_corrected_unix_ts(self, ts_packets: npt.NDArray['packets_dtype']) \
+            -> np.uint64:
+        '''
+           Takes the median, across all IO groups, of the first unix_ts for each
+           IO group.
+        '''
+        _, idcs = np.unique(ts_packets['io_group'], return_index=True)
+        # first unix_ts in each io group:
+        unix_ts = ts_packets[idcs]['timestamp']
+        return np.median(unix_ts).astype('u8')
