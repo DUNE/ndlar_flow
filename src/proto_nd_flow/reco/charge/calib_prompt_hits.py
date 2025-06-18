@@ -5,7 +5,7 @@ import json
 
 from h5flow.core import H5FlowStage, resources
 import proto_nd_flow.util.units as units
-
+import proto_nd_flow.reco.charge.pixel_functions as pf
 
 class CalibHitBuilder(H5FlowStage):
     '''
@@ -250,7 +250,7 @@ class CalibHitBuilder(H5FlowStage):
             if resources['RunData'].is_mc and np.isnan(zy).any():
                 raise Exception("For simulation, all the channel keys should be valid. Please check your configuration.")
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
-            hit_uniqueid = resources['Geometry'].pixel_unique_id[(packets_arr['io_group'], tile_id, packets_arr['chip_id'], packets_arr['channel_id'])]
+            hit_uniqueid = pf.get_pixel_unique_ids(packets, tile_id)
             hit_uniqueid_str = hit_uniqueid.astype(str)
             if self.configuration_file != '':
                 vref = np.array(

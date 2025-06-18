@@ -9,6 +9,7 @@ import json
 
 from h5flow.core import H5FlowGenerator, resources
 from h5flow import H5FLOW_MPI
+import proto_nd_flow.reco.charge.pixel_functions as pf
 
 import proto_nd_flow.util.units as units
 
@@ -44,12 +45,6 @@ class GeneratePedestals(H5FlowGenerator):
         ('unique_id', 'u8'),
         ('pedestal_mv', 'f4')
     ])
-
-    def adc2mv(self, adc, ref, cm, adc_counts):
-        return (ref-cm) * adc/adc_counts + cm
-
-    def dac2mv(self, dac, vdda, adc_counts):
-        return vdda * dac/adc_counts
 
     def __init__(self, **params):
         super(GeneratePedestals, self).__init__(**params)
@@ -101,8 +96,8 @@ class GeneratePedestals(H5FlowGenerator):
         super(GeneratePedestals, self).finish()
         ### finish by finding mean pedestal for all channels
         
-        vref_mv = self.dac2mv(self.vref_dac, self.vdda, self.adc_counts)
-        vcm_mv = self.dac2mv(self.vcm_dac, self.vdda, self.adc_counts)
+        vref_mv = pf.dac2mv(self.vref_dac, self.vdda, self.adc_counts)
+        vcm_mv = pf.dac2mv(self.vcm_dac, self.vdda, self.adc_counts)
 
         unique_id_set = set(list(self.dataword_dict.keys()))
         channel_pedestal_mv = []
@@ -115,7 +110,7 @@ class GeneratePedestals(H5FlowGenerator):
             peak_bin = np.argmax(vals)
             min_idx,max_idx = max(peak_bin-self.mean_trunc,0), min(peak_bin+self.mean_trunc,len(vals))
             ped_adc = np.average(bins[min_idx:max_idx]+0.5, weights=vals[min_idx:max_idx])
-            pedestal_mv = self.adc2mv(ped_adc, vref_mv, vcm_mv, self.adc_counts)
+            pedestal_mv = pf.adc2mv(ped_adc, vref_mv, vcm_mv, self.adc_counts)
             channel_pedestal_mv.append(pedestal_mv)
             channel_unique_id.append(unique)
             pedestal_dict[str(unique)] = dict(
@@ -155,14 +150,12 @@ class GeneratePedestals(H5FlowGenerator):
         dataword = packet_buffer['dataword']
         
         tile_id = resources['Geometry'].tile_id[(packet_buffer['io_group'], packet_buffer['io_channel'])]
-        pixel_unique_id = resources['Geometry'].pixel_unique_id[(packet_buffer['io_group'], tile_id, packet_buffer['chip_id'], packet_buffer['channel_id'])]
+        pixel_unique_id = pf.get_pixel_unique_ids(packet_buffer, tile_id)
         unique_pixel_unique_id = np.unique(pixel_unique_id)
 
         for unique in unique_pixel_unique_id:
             if unique not in self.dataword_dict.keys():
                 self.dataword_dict[unique] = [] # Initialising the dictionary with arrays
-
-        for unique in unique_pixel_unique_id:
             mask = unique == pixel_unique_id
             self.dataword_dict[unique].extend(dataword[mask])
 

@@ -13,7 +13,6 @@ from proto_nd_flow.util.lut import LUT, write_lut, read_lut
 from proto_nd_flow.util.compat import assert_compat_version
 import proto_nd_flow.util.units as units
 
-
 class Geometry(H5FlowResource):
     '''
         Provides helper functions for looking up geometric properties. 
@@ -161,7 +160,6 @@ class Geometry(H5FlowResource):
             write_lut(self.data_manager, self.path, self.drift_dir, 'drift_dir')
             write_lut(self.data_manager, self.path, self.pixel_coordinates_2D, 'pixel_coordinates_2D')
             write_lut(self.data_manager, self.path, self.tile_id, 'tile_id')
-            write_lut(self.data_manager, self.path, self.pixel_unique_id, 'pixel_unique_id')
 
             self.data_manager.create_dset(self.path+'/disabled_channels', dtype=self.disabled_channels.dtype)
             disabled_channels_slice = self.data_manager.reserve_data(self.path+'/disabled_channels', len(self.disabled_channels))
@@ -194,7 +192,6 @@ class Geometry(H5FlowResource):
             self._drift_dir = read_lut(self.data_manager, self.path, 'drift_dir')
             self._pixel_coordinates_2D = read_lut(self.data_manager, self.path, 'pixel_coordinates_2D')
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
-            self._pixel_unique_id = read_lut(self.data_manager, self.path, 'pixel_unique_id')
 
             if not self.charge_only:
                 self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
@@ -303,15 +300,6 @@ class Geometry(H5FlowResource):
         '''
         return self._tile_id
 
-    @property
-    def pixel_unique_id(self):
-        '''
-            Lookup table for pixel unique id, usage::
-
-                resource['Geometry'].pixel_unique_id((io_group,tile_id,chip_id,channel_id))
-        '''
-        return self._pixel_unique_id
-    
     def get_drift_coordinate(self, io_group, io_channel, drift):
         '''
             Convert a drift distance on a set of ``(io group, io channel)`` to
@@ -386,13 +374,6 @@ class Geometry(H5FlowResource):
         in_any_negative_fid = ma.any(in_negative_fid, axis=-1)
         in_any_fid = in_any_positive_fid | in_any_negative_fid
         return in_any_fid
-
-    def _get_pixel_unique_id(self, io_group, tile_id, chip_id, channel_id):
-        unique_id = (int(io_group)*1000_000_000
-                     + int(tile_id)*100_000
-                     + int(chip_id)*100
-                     + int(channel_id))
-        return unique_id
 
     def _get_module_RO_bounds(self):
         '''
@@ -856,26 +837,6 @@ class Geometry(H5FlowResource):
                         except:
                             print(io_group, ioc, chip, channel)
 
-        pixel_unique_id_min_max = [(min(io_groups), max(io_groups)), (self._tile_id.min(), self._tile_id.max()), \
-                (min(chip_ids), max(chip_ids)), (min(channel_ids), max(channel_ids))]
-        self._pixel_unique_id = LUT('i8', *pixel_unique_id_min_max)
-        self._pixel_unique_id.default = -1
-        
-        for module_id in module_to_io_groups:
-            geometry_yaml = geometry_yamls[self.crs_geometry_to_module[module_id-1]]
-            tile_chip_to_io = geometry_yaml['tile_chip_to_io']
-            chip_channel_to_position = geometry_yaml['chip_channel_to_position']
-            for tile in tile_chip_to_io:
-                io_group_io_channel = tile_chip_to_io[tile][chip]
-                io_group = io_group_io_channel//1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
-                io_channel = io_group_io_channel % 1000
-                tile_id = self._tile_id[([io_group], [io_channel])]
-                for chip_channel in chip_channel_to_position:
-                    chip = chip_channel // 1000
-                    channel = chip_channel % 1000
-                    pixel_unique_id = self._get_pixel_unique_id(io_group, int(tile_id[0]), chip, channel)
-                    self._pixel_unique_id[(io_group, int(tile_id[0]), chip, channel)] = np.array([pixel_unique_id])
-        
         # Determine full drift length
         mod_anodes = np.array(list(tile_pos.values()))[:, 0] / units.cm  # convert mm -> cm
         d_anode2anode = max(mod_anodes) - min(mod_anodes)
