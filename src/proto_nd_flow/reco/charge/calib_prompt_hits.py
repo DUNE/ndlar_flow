@@ -376,7 +376,7 @@ class CalibHitBuilder(H5FlowStage):
         return (dw / adc_counts * (vref - vcm) + vcm - ped) / gain
 
     def load_pedestals(self):
-        if self.pedestal_file != '' and not resources['RunData'].is_mc:
+        if self.pedestal_file != '':
             with open(self.pedestal_file, 'r') as infile:
                 for key, value in json.load(infile).items():
                     self.pedestal[key] = value
