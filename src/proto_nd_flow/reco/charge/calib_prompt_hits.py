@@ -250,7 +250,7 @@ class CalibHitBuilder(H5FlowStage):
             if resources['RunData'].is_mc and np.isnan(zy).any():
                 raise Exception("For simulation, all the channel keys should be valid. Please check your configuration.")
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
-            hit_uniqueid = pf.get_pixel_unique_ids(packets, tile_id)
+            hit_uniqueid = pf.get_pixel_unique_ids(packets_arr, tile_id)
             hit_uniqueid_str = hit_uniqueid.astype(str)
             if self.configuration_file != '':
                 vref = np.array(

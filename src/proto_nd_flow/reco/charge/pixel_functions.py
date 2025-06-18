@@ -26,7 +26,7 @@ def adc2mv(adc, vref, vcm, adc_counts):
     :param adc_counts: nominally 2^N, where N is the total bits in the ADC (usually 8)
     :returns: array of pedestal-corrected datawords converted to mV units
     '''
-    return (vref-vcm) * adc/adc_counts + cm
+    return (vref-vcm) * adc/adc_counts + vcm
 
 def dac2mv(dac, vdda, adc_counts):
     '''
