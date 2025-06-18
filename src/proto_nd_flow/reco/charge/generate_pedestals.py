@@ -9,7 +9,7 @@ import json
 
 from h5flow.core import H5FlowGenerator, resources
 from h5flow import H5FLOW_MPI
-import proto_nd_flow.reco.charge.pixel_functions as pf
+import proto_nd_flow.util.pixel_functions as pf
 
 import proto_nd_flow.util.units as units
 
