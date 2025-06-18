@@ -6,6 +6,7 @@ import warnings
 from tqdm import tqdm
 import os
 import json
+from collections import defaultdict
 
 from h5flow.core import H5FlowGenerator, resources
 from h5flow import H5FLOW_MPI
@@ -90,7 +91,12 @@ class GeneratePedestals(H5FlowGenerator):
                                     input_filename=self.input_filename,
                                     packets_dset_name=self.packets_dset_name
                                     )
-        self.dataword_dict={} # Dictionary to be later used for storing arrays containing the datawords for each channel
+        self.dataword_dict = defaultdict(list)
+        
+        tile_ids = resources['Geometry'].tile_id[(self.packets['io_group'], self.packets['io_channel'])]
+        self.pixel_unique_ids = pf.get_pixel_unique_ids(self.packets, tile_ids)
+
+        self.mask = (self.packets['valid_parity'].astype(bool) & (self.packets['packet_type'] == 0))  # data packets
     
     def finish(self):
         super(GeneratePedestals, self).finish()
@@ -144,21 +150,21 @@ class GeneratePedestals(H5FlowGenerator):
         self.iteration += 1
 
         block = self.packets[sl]
-        mask = (block['valid_parity'].astype(bool) & (block['packet_type'] == 0))  # data packets
+        mask = self.mask[sl]
         packet_buffer = np.copy(block[mask])
 
         dataword = packet_buffer['dataword']
-        
-        tile_id = resources['Geometry'].tile_id[(packet_buffer['io_group'], packet_buffer['io_channel'])]
-        pixel_unique_id = pf.get_pixel_unique_ids(packet_buffer, tile_id)
+        pixel_unique_id = self.pixel_unique_ids[sl][mask]
         unique_pixel_unique_id = np.unique(pixel_unique_id)
-
-        for unique in unique_pixel_unique_id:
-            if unique not in self.dataword_dict.keys():
-                self.dataword_dict[unique] = [] # Initialising the dictionary with arrays
-            mask = unique == pixel_unique_id
-            self.dataword_dict[unique].extend(dataword[mask])
-
+        
+        indices = np.argsort(pixel_unique_id)
+        sorted_ids = pixel_unique_id[indices]
+        sorted_data = dataword[indices]
+        unique_ids, start_idx, counts = np.unique(sorted_ids, return_index=True, return_counts=True)
+        
+        for uid, start, count in zip(unique_ids, start_idx, counts):
+            self.dataword_dict[uid].extend(sorted_data[start:start + count])
+        
         return sl
         
      
