@@ -119,23 +119,7 @@ class WaveformSum(H5FlowStage):
                 # skip negative indices
                 if tpc_id < 0 or det_id < 0:
                     continue
-                # check number of channels with same det_id
-                n_ch_per_det = 0
-                for adc_ in range(wvfm_data['samples'].shape[1]):
-                    for chan_ in range(wvfm_data['samples'].shape[2]):
-                        tpc_id_ = resources['Geometry'].sipm_rel_pos[(adc_,chan_)][0][0]
-                        det_id_ = resources['Geometry'].det_id[(adc_,chan_)]
-                        if det_id_ == det_id and tpc_id_ == tpc_id:
-                            n_ch_per_det += 1
-                # if 6 channels, det type is 0 (ACL), if 2 channels, det type is 1 (LCM)
-                det_type = 0
-                if n_ch_per_det == 2:
-                    det_type = 1
-                elif n_ch_per_det != 6:
-                    raise ValueError(f"Invalid number of channels for det_id {det_id}: {n_ch_per_det}")
-                # skip negative indices
-                if tpc_id < 0 or det_id < 0:
-                    continue
+                det_type = resources['Geometry'].det_type[(tpc_id, det_id)]
                 mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
                 if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
                     # det summed wvfm alignment
@@ -152,20 +136,7 @@ class WaveformSum(H5FlowStage):
                 # skip negative indices
                 if tpc_id < 0 or det_id < 0:
                     continue
-                # check number of channels with same det_id
-                n_ch_per_det = 0
-                for adc_ in range(wvfm_data['samples'].shape[1]):
-                    for chan_ in range(wvfm_data['samples'].shape[2]):
-                        tpc_id_ = resources['Geometry'].sipm_rel_pos[(adc_,chan_)][0][0]
-                        det_id_ = resources['Geometry'].det_id[(adc_,chan_)]
-                        if det_id_ == det_id and tpc_id_ == tpc_id:
-                            n_ch_per_det += 1
-                # if 6 channels, det type is 0 (ACL), if 2 channels, det type is 1 (LCM)
-                det_type = 0
-                if n_ch_per_det == 2:
-                    det_type = 1
-                elif n_ch_per_det != 6:
-                    raise ValueError(f"Invalid number of channels for det_id {det_id}: {n_ch_per_det}")
+                det_type = resources['Geometry'].det_type[(tpc_id, det_id)]
                 # WARNING: does not handle case where different channels on same detector are not aligned (not relevant for Module 0 data)
                 mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
                 # det summed wvfm
