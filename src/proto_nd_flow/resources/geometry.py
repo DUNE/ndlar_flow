@@ -172,6 +172,7 @@ class Geometry(H5FlowResource):
 
             if not self.charge_only:
                 self.data_manager.set_attrs(self.path, lrs_geometry_file=self.lrs_geometry_file)
+                write_lut(self.data_manager, self.path, self.det_type, 'det_type')
                 write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
                 write_lut(self.data_manager, self.path, self.sipm_rel_pos, 'sipm_rel_pos')
                 write_lut(self.data_manager, self.path, self.det_id, 'det_id')
@@ -197,6 +198,7 @@ class Geometry(H5FlowResource):
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
 
             if not self.charge_only:
+                self._det_type = read_lut(self.data_manager, self.path, 'det_type')
                 self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
                 self._sipm_rel_pos = read_lut(self.data_manager, self.path, 'sipm_rel_pos')
                 self._det_id = read_lut(self.data_manager, self.path, 'det_id')
@@ -458,6 +460,16 @@ class Geometry(H5FlowResource):
 
     ## Light geometry methods ##
     @property
+    def det_type(self):
+        '''
+            Lookup table for detector type (0=ACL, 1=LCM), usage::
+
+                resource['Geometry'].det_type[(tpc_index, detector_index)]
+
+        '''
+        return self._det_type
+
+    @property
     def det_rel_pos(self):
         '''
             Lookup table for detector relative position, usage::
@@ -686,6 +698,8 @@ class Geometry(H5FlowResource):
         self._det_rel_pos = LUT('i4', *det_min_max, shape=(3,))
         self._det_rel_pos.default = -1
 
+        self._det_type = LUT('i1', *det_min_max)
+
         shape = tpc_ids.shape + det_ids.shape
         det_adc = np.full(shape, -1, dtype=int)
         det_side = np.full(shape, -1, dtype=int)
@@ -711,7 +725,9 @@ class Geometry(H5FlowResource):
                 det_chan[i,j,:len(det_channels)] = det_channels
                 tpc_center = (np.array(self.lrs_geometry_yaml['tpc_center_offset'][tpc])
                     + np.array(self.det_geometry_yaml["tpc_offsets"][tpc_mod[i]]))
-                det_geom = self.lrs_geometry_yaml['geom'][self.lrs_geometry_yaml['det_geom'][tpc][det]]
+                det_type = self.lrs_geometry_yaml['det_geom'][tpc][det]
+                self._det_type[i,j] = det_type
+                det_geom = self.lrs_geometry_yaml['geom'][det_type]
                 det_center = np.array(self.lrs_geometry_yaml['det_center'][det])
                 det_bounds[i,j,0] = tpc_center + det_center + np.array(det_geom['min'])
                 det_bounds[i,j,1] = tpc_center + det_center + np.array(det_geom['max'])

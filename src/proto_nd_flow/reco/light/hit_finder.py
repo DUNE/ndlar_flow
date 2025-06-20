@@ -353,8 +353,8 @@ class WaveformHitFinder(H5FlowStage):
                                                          self.long_window,
                                                          self.tick_duration)
             # match integrals and fprompts to peaks
-            integrals = integrals[peaks[:-1]]
-            fprompts = fprompts[peaks[:-1]]
+            integrals = integrals[peaks[:-1]][threshold_mask]
+            fprompts = fprompts[peaks[:-1]][threshold_mask]
 
         if np.count_nonzero(threshold_mask):
             # hits are present in event, extract parameters

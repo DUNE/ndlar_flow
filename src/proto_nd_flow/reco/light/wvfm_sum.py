@@ -170,9 +170,7 @@ class WaveformSum(H5FlowStage):
                 # skip negative indices
                 if tpc_id < 0 or det_id < 0:
                     continue
-
-                det_type = resources['Geometry'].det_to_trap_type[(tpc_id, det_id)]
-                    
+                
                 if self.make_schan_wvfm_dset and sum_chan_id < 0:
                     continue
                 
@@ -190,6 +188,33 @@ class WaveformSum(H5FlowStage):
                         # channel summed wvfm alignment
                         schan_wvfm_align_data['sample_idx'][mask,tpc_id,sum_chan_id] = wvfm_align_data['sample_idx'][mask,adc,chan]
                         schan_wvfm_align_data['ns'][mask] = wvfm_align_data['ns'][mask]
+
+                det_type = resources['Geometry'].det_type[(tpc_id, det_id)]
+                mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
+                if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
+                    # det summed wvfm alignment
+                    swvfm_align_data['sample_idx'][mask,tpc_id,det_id] = wvfm_align_data['sample_idx'][mask,adc,chan]
+                    swvfm_align_data['ns'][mask] = wvfm_align_data['ns'][mask]
+                    # tpc summed wvfm alignment
+                    stpc_wvfm_align_data['sample_idx'][mask,tpc_id,det_type] = wvfm_align_data['sample_idx'][mask,adc,chan]
+                    stpc_wvfm_align_data['ns'][mask] = wvfm_align_data['ns'][mask]
+
+        for adc in range(wvfm_data['samples'].shape[1]):
+            for chan in range(wvfm_data['samples'].shape[2]):
+                tpc_id = resources['Geometry'].sipm_rel_pos[(adc,chan)][0][0]
+                det_id = resources['Geometry'].det_id[(adc,chan)]
+                # skip negative indices
+                if tpc_id < 0 or det_id < 0:
+                    continue
+                det_type = resources['Geometry'].det_type[(tpc_id, det_id)]
+                # WARNING: does not handle case where different channels on same detector are not aligned (not relevant for Module 0 data)
+                mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
+                # det summed wvfm
+                swvfm_data['samples'][mask,tpc_id,det_id,:] += (
+                    wvfm_data['samples'][mask,adc,chan].filled(0))
+                # tpc summed wvfm
+                stpc_wvfm_data['samples'][mask,tpc_id,det_type,:] += (
+                    wvfm_data['samples'][mask,adc,chan].filled(0))
 
                 if self.make_swvfm_dset:
                     # det summed wvfm
