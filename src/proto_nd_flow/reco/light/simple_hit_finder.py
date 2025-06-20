@@ -43,12 +43,16 @@ class WaveformHitFinder(H5FlowStage):
     def init(self, source_name):
         super(WaveformHitFinder, self).init(source_name)
 
+        wvfm_dset = self.data_manager.get_dset(self.sum_wvfm_dset_name)
+        self.nsamples = wvfm_dset.dtype['samples'].shape[2]
+
         self.hits_dtype = np.dtype([
                     ('id', 'u4'),
                     ('tpc', 'u1'),
                     ('sum_chan', 'u1'),
                     ('trap_type', 'u1'),
                     ('boundary', 'f4', (2,3)),
+                    ('samples', 'f4', (self.nsamples,)),
                     ('amplitude', 'f4'),
                     ('ts_pps', 'f8'),
                     ('unix', 'i8')
@@ -90,6 +94,7 @@ class WaveformHitFinder(H5FlowStage):
             hit_data['sum_chan'] = sum_chan
             hit_data['trap_type'] = resources['Geometry'].sum_chan_to_trap_type[(tpc, sum_chan)]
             hit_data['boundary'] = resources['Geometry'].sum_chan_bounds[(tpc, sum_chan)]
+            hit_data['samples'] = wvfms[event_index, tpc, sum_chan, :]
             hit_data['amplitude'] = max_of_wvfms[event_index, tpc, sum_chan]
             hit_data['ts_pps'] = events_tai_ns[event_index]
             hit_data['unix'] = events_utime_ms[event_index]
