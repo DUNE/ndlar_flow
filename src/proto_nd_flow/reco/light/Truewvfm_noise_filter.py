@@ -1,6 +1,6 @@
 import numpy as np
 import logging
-from scipy.interpolate import interp1d
+
 from h5flow.core import H5FlowStage
 
 
@@ -91,6 +91,7 @@ class WaveformNoiseFilter(H5FlowStage):
 
     def run(self, source_name, source_slice, cache):
         super(WaveformNoiseFilter, self).run(source_name, source_slice, cache)
+
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape).data  # don't worry about masked data since 1:1 references
 
@@ -105,72 +106,27 @@ class WaveformNoiseFilter(H5FlowStage):
         # wrap subset of waveforms according to the modulo parameter
         subsamples = self.filter_samples[-1] - self.filter_samples[0]
         masked_wvfm = wvfm_samples[wvfm_mask, self.filter_samples[0]:self.filter_samples[-1]]
-        #interpolate the masked waveform 
-        interpolation_ticks = 4 #How many interpolation points is needed. The full interpolated array will be interpolation_ticks*1000 long
-        original_ticks = masked_wvfm.shape[1]
-        new_ticks = original_ticks*interpolation_ticks
-        # Create original and new tick indices
-        original_indices = np.linspace(0, original_ticks - 1, original_ticks) 
-        new_indices = np.linspace(0, original_ticks - 1, new_ticks) 
-        interp_func = interp1d(original_indices, masked_wvfm, kind='linear', axis=1, bounds_error=False, fill_value="extrapolate")
-        interpolated_masked_wvfm = interp_func(new_indices)  # (nevent*8*64, 300)
-        del interp_func
-        expanded_modulo = int(self.modulo_param*interpolation_ticks) #Translate the input modulo parameter into the modulo ticks needed in the interpolated waveform
-        expanded_subsamples = subsamples*interpolation_ticks #subsample value in the expanded regime 
-        interpolated_masked_wvfm = interpolated_masked_wvfm[:, :expanded_subsamples - expanded_subsamples % expanded_modulo].reshape(-1, expanded_subsamples // expanded_modulo, expanded_modulo)
+        masked_wvfm = masked_wvfm[:, :subsamples - subsamples % self.modulo_param].reshape(-1, subsamples // self.modulo_param, self.modulo_param)
+
         # take "floating" mean to combine wrapped waveforms
-        offsetted_interpolated_masked_wvfm =interpolated_masked_wvfm - np.mean(interpolated_masked_wvfm, axis=-1, keepdims=True)
-        sample_length,segment_number,segment_length =interpolated_masked_wvfm.shape
+        offset = np.mean(masked_wvfm, axis=-1, keepdims=True)
+        masked_wvfm = np.mean(masked_wvfm - offset, axis=1)
 
-
-        # Compute range for each segment (ptp across axis 2)
-        ranges = np.ptp(offsetted_interpolated_masked_wvfm, axis=2)  # Shape [60,12]
-
-        # Get the max range per segment per sample
-        max_ranges = np.max(ranges, axis=1)  # Shape [60]
-
-        # Compute the median excluding the largest value (per sample)
-        sorted_ranges = np.sort(ranges, axis=1) 
-        median_ranges = np.median(sorted_ranges[:, :-1], axis=1)  # Shape [60] (excluding max value)
-
-        # Determine which samples need removal of 2 segments
-        remove_two = max_ranges >= 2 * median_ranges  # (True/False per sample)
-
-        # Get indices of the two largest segments per sample (vectorized)
-        largest_two_idx = np.argpartition(ranges, -3, axis=1)[:, -3:]  
-
-        # Generate indices for all 12 segments
-        all_indices = np.arange(segment_number)
-
-        # Mask: For each sample, remove the two largest segments if condition is met
-        keep_mask = np.ones((sample_length,segment_number), dtype=bool)
-        keep_mask[np.arange(sample_length)[:, None], largest_two_idx] = ~remove_two[:, None]  # Only remove if condition is met
-
-        # Convert keep_mask into index arrays per batch sample
-        filtered_indices = [all_indices[keep_mask[i]] for i in range(sample_length)]  # List of arrays, each with either 12 or 10 elements
-
-        # Apply advanced indexing using `np.array` with different-sized rows (object array workaround)
-        filtered_wvfm = np.array([offsetted_interpolated_masked_wvfm[i, filtered_indices[i], :] for i in range(sample_length)], dtype=object)
-
-        # Compute mean across the kept segments
-        interpolated_masked_wvfm = np.array([np.mean(filtered_wvfm[i], axis=0) for i in range(sample_length)])
-
-        
-        
         # extrapolate noise template across waveform
         noise = np.zeros_like(wvfm_samples)
         idcs = np.indices(wvfm_samples[wvfm_mask].shape)
-        noise[wvfm_mask] = interpolated_masked_wvfm[idcs[0], (idcs[1]*interpolation_ticks) %(expanded_modulo)]
+        noise[wvfm_mask] = masked_wvfm[idcs[0], idcs[1] % self.modulo_param]
+
         # cast back into original shape
         noise = noise.reshape(wvfm_data['samples'].shape)
+
         # subtract noise from waveform
         fwvfm = np.empty(wvfm_data.shape, dtype=self.fwvfm_dtype)
-        #print(wvfm_samples.reshape(noise.shape)[0][0][5][0:10])
-        #print(noise[0][0][5][0:10])
         fwvfm['samples'] = wvfm_samples.reshape(noise.shape) - noise
-        
+
         # subtract pedestal value
         fwvfm['samples'] = fwvfm['samples'] - fwvfm['samples'][..., self.filter_samples[0]:self.filter_samples[-1]].mean(axis=-1, keepdims=True)
+
         # reserve new data
         fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
         self.data_manager.write_data(self.fwvfm_dset_name, source_slice, fwvfm)

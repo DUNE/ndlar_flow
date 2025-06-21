@@ -118,59 +118,72 @@ class WaveformNoiseFilter(H5FlowStage):
         expanded_modulo = int(self.modulo_param*interpolation_ticks) #Translate the input modulo parameter into the modulo ticks needed in the interpolated waveform
         expanded_subsamples = subsamples*interpolation_ticks #subsample value in the expanded regime 
         interpolated_masked_wvfm = interpolated_masked_wvfm[:, :expanded_subsamples - expanded_subsamples % expanded_modulo].reshape(-1, expanded_subsamples // expanded_modulo, expanded_modulo)
+        
+        
+        
+        '''
+        # Step 1: Compute the range for each group (max - min across 25 ticks)
+        group_ranges = np.ptp(interpolated_masked_wvfm, axis=-1)  # Shape: (6144, 12)
+
+        # Step 2: Find indices of the 2 largest and 2 smallest ranges per event
+        sorted_indices = np.argsort(group_ranges, axis=1)  # Sort group indices by range
+        to_remove = np.hstack((sorted_indices[:, :2], sorted_indices[:, -2:]))  # First 2 and last 2 indices
+
+        # Step 3: Create a mask to keep only the 8 middle-range groups
+        mask = np.ones_like(group_ranges, dtype=bool)
+        mask[np.arange(mask.shape[0])[:, None], to_remove] = False  # Mark groups to remove
+
+        # Step 4: Compute the mean across remaining 8 groups and all 25 ticks
+        filtered_wvfm = np.where(mask[:, :, None], interpolated_masked_wvfm, np.nan)  # Set removed groups to NaN
+        offset = np.nanmean(filtered_wvfm, axis=(1, 2), keepdims=True)  # Shape: (6144, 1, 1)
+
+        # Step 5: Subtract the computed offset from all values
+        interpolated_masked_wvfm -= offset
+        
+        
+        '''
+        # Step 1: Compute the range for each group (max - min across 25 ticks)
+        group_ranges = np.ptp(interpolated_masked_wvfm, axis=-1)  # Shape: (6144, 12)
+
+        # Step 2: Find indices of the 2 largest ranges per event (removing only the largest two)
+        sorted_indices = np.argsort(group_ranges, axis=1)  # Sort group indices by range
+        to_remove = sorted_indices[:, -2:]  # Select only the last two (largest range groups)
+
+        # Step 3: Create a mask to keep only the remaining 10 groups
+        mask = np.ones_like(group_ranges, dtype=bool)
+        mask[np.arange(mask.shape[0])[:, None], to_remove] = False  # Mark groups to remove
+
+        # Expand mask for broadcasting with (44, 12, 25)
+        masked_interpolated_wvfm = np.where(mask[:, :, None], interpolated_masked_wvfm, np.nan)
+
+        # Step 4: Compute mean across the remaining 10 groups and all 25 ticks
+        offset = np.nanmean(masked_interpolated_wvfm, axis=(1, 2), keepdims=True)  # Shape: (44, 1, 1)
+
+        # Step 5: Subtract offset from all values
+
+        filtered_wvfm = masked_interpolated_wvfm - offset
+        filtered_wvfm = np.nanmean(filtered_wvfm, axis=1)  # Mean over groups → (44, 25)
+        
+        '''
         # take "floating" mean to combine wrapped waveforms
-        offsetted_interpolated_masked_wvfm =interpolated_masked_wvfm - np.mean(interpolated_masked_wvfm, axis=-1, keepdims=True)
-        sample_length,segment_number,segment_length =interpolated_masked_wvfm.shape
-
-
-        # Compute range for each segment (ptp across axis 2)
-        ranges = np.ptp(offsetted_interpolated_masked_wvfm, axis=2)  # Shape [60,12]
-
-        # Get the max range per segment per sample
-        max_ranges = np.max(ranges, axis=1)  # Shape [60]
-
-        # Compute the median excluding the largest value (per sample)
-        sorted_ranges = np.sort(ranges, axis=1) 
-        median_ranges = np.median(sorted_ranges[:, :-1], axis=1)  # Shape [60] (excluding max value)
-
-        # Determine which samples need removal of 2 segments
-        remove_two = max_ranges >= 2 * median_ranges  # (True/False per sample)
-
-        # Get indices of the two largest segments per sample (vectorized)
-        largest_two_idx = np.argpartition(ranges, -3, axis=1)[:, -3:]  
-
-        # Generate indices for all 12 segments
-        all_indices = np.arange(segment_number)
-
-        # Mask: For each sample, remove the two largest segments if condition is met
-        keep_mask = np.ones((sample_length,segment_number), dtype=bool)
-        keep_mask[np.arange(sample_length)[:, None], largest_two_idx] = ~remove_two[:, None]  # Only remove if condition is met
-
-        # Convert keep_mask into index arrays per batch sample
-        filtered_indices = [all_indices[keep_mask[i]] for i in range(sample_length)]  # List of arrays, each with either 12 or 10 elements
-
-        # Apply advanced indexing using `np.array` with different-sized rows (object array workaround)
-        filtered_wvfm = np.array([offsetted_interpolated_masked_wvfm[i, filtered_indices[i], :] for i in range(sample_length)], dtype=object)
-
-        # Compute mean across the kept segments
-        interpolated_masked_wvfm = np.array([np.mean(filtered_wvfm[i], axis=0) for i in range(sample_length)])
-
+        offset = np.mean(interpolated_masked_wvfm, axis=-1, keepdims=True)
         
-        
+        interpolated_masked_wvfm = np.mean(interpolated_masked_wvfm - offset, axis=1) #(6144,25)
+        '''
         # extrapolate noise template across waveform
         noise = np.zeros_like(wvfm_samples)
         idcs = np.indices(wvfm_samples[wvfm_mask].shape)
-        noise[wvfm_mask] = interpolated_masked_wvfm[idcs[0], (idcs[1]*interpolation_ticks) %(expanded_modulo)]
+        noise[wvfm_mask] = filtered_wvfm[idcs[0], (idcs[1]*interpolation_ticks) %(expanded_modulo)]
         # cast back into original shape
         noise = noise.reshape(wvfm_data['samples'].shape)
-        # subtract noise from waveform
+        # subtract noise from waveformls
         fwvfm = np.empty(wvfm_data.shape, dtype=self.fwvfm_dtype)
-        #print(wvfm_samples.reshape(noise.shape)[0][0][5][0:10])
-        #print(noise[0][0][5][0:10])
+
         fwvfm['samples'] = wvfm_samples.reshape(noise.shape) - noise
         
         # subtract pedestal value
         fwvfm['samples'] = fwvfm['samples'] - fwvfm['samples'][..., self.filter_samples[0]:self.filter_samples[-1]].mean(axis=-1, keepdims=True)
+
         # reserve new data
         fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
         self.data_manager.write_data(self.fwvfm_dset_name, source_slice, fwvfm)

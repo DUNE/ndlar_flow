@@ -130,14 +130,14 @@ class WaveformNoiseFilter(H5FlowStage):
         max_ranges = np.max(ranges, axis=1)  # Shape [60]
 
         # Compute the median excluding the largest value (per sample)
-        sorted_ranges = np.sort(ranges, axis=1) 
+        sorted_ranges = np.sort(ranges, axis=1)  # Shape [60,12]
         median_ranges = np.median(sorted_ranges[:, :-1], axis=1)  # Shape [60] (excluding max value)
 
         # Determine which samples need removal of 2 segments
-        remove_two = max_ranges >= 2 * median_ranges  # (True/False per sample)
+        remove_two = max_ranges >= 2 * median_ranges  # Shape [60] (True/False per sample)
 
         # Get indices of the two largest segments per sample (vectorized)
-        largest_two_idx = np.argpartition(ranges, -3, axis=1)[:, -3:]  
+        largest_two_idx = np.argpartition(ranges, -2, axis=1)[:, -2:]  # Shape [60,2]
 
         # Generate indices for all 12 segments
         all_indices = np.arange(segment_number)
@@ -155,6 +155,7 @@ class WaveformNoiseFilter(H5FlowStage):
         # Compute mean across the kept segments
         interpolated_masked_wvfm = np.array([np.mean(filtered_wvfm[i], axis=0) for i in range(sample_length)])
 
+        #interpolated_masked_wvfm =  np.mean( offsetted_interpolated_masked_wvfm, axis=1) #(6144,25)
         
         
         # extrapolate noise template across waveform
