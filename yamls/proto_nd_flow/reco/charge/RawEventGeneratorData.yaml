@@ -19,3 +19,6 @@ params:
     off_beam_threshold : 20
     shifted_event_dt : -70
   autocorrect_unix_ts: True
+  pps_delay_extractor_enabled: True
+  pps_delay_extractor_config:
+    debug_mode: True

@@ -13,6 +13,7 @@ from h5flow.data import dereference
 from h5flow import H5FLOW_MPI
 
 from proto_nd_flow.reco.charge.raw_event_builder import *
+from proto_nd_flow.reco.charge.pps_delay_extractor import PPSDelayExtractor
 import proto_nd_flow.util.units as units
 
 
@@ -44,6 +45,8 @@ class RawEventGenerator(H5FlowGenerator):
          - ``mc_tracks_dset_name`` : ``str``, optional, output dataset path for mc truth tracks (if present)
          - ``mc_trajectories_dset_name`` : ``str``, optional, output dataset path for mc truth trajectories (if present)
          - ``mc_packet_fraction_dset_name`` : ``str``, optional, output dataset path for packet charge fraction truth (if present)
+         - ``pps_delay_extractor_enabled`` : ``bool``, optional, whether to extract the delay between GPS and PPS ticks
+         - ``pps_delay_extractor_config`` : ``dict``, optional, modify parameters of the PPS delay extractor
          - ``autocorrect_unix_ts`` : ``bool``, optional, take median unix_ts among io_groups instead of just first iog
 
         ``dset_name`` points to a lightweight array used to organize low-level
@@ -90,6 +93,7 @@ class RawEventGenerator(H5FlowGenerator):
     default_mc_packet_fraction_dset_name = 'mc_truth/packet_fraction'
     default_truth_ref = True
     default_autocorrect_unix_ts = False
+    default_pps_delay_extractor_enabled = False
 
     raw_event_dtype = np.dtype([
         ('id', 'u8'),
@@ -123,6 +127,8 @@ class RawEventGenerator(H5FlowGenerator):
         self.truth_ref = params.get('truth_ref', self.default_truth_ref)
         self.autocorrect_unix_ts = params.get('autocorrect_unix_ts',
                                               self.default_autocorrect_unix_ts)
+        self.pps_delay_extractor_enabled = params.get('pps_delay_extractor_enabled',
+                                                      self.default_pps_delay_extractor_enabled)
 
         # create event builder
         self.event_builder = globals()[self.event_builder_class](**self.event_builder_config)
@@ -142,11 +148,17 @@ class RawEventGenerator(H5FlowGenerator):
         self.slices = [slice(st, st + self.buffer_size) for st in range(self.start_position + self.rank * self.buffer_size, self.end_position, self.size * self.buffer_size)]
         self.iteration = 0
 
+        if self.pps_delay_extractor_enabled:
+            self.delay_extractor = PPSDelayExtractor(**params)
+
     def __len__(self):
         return len(self.slices)
 
     def init(self):
         super(RawEventGenerator, self).init()
+
+        if self.pps_delay_extractor_enabled:
+            self.delay_extractor.setup(self.data_manager)
 
         if self.data_manager.dset_exists(self.raw_event_dset_name):
             raise RuntimeError(f'{self.raw_event_dset_name} already exists, refusing to append!')
@@ -400,6 +412,9 @@ class RawEventGenerator(H5FlowGenerator):
         super(RawEventGenerator, self).finish()
         self.input_fh.close()
 
+        if self.pps_delay_extractor_enabled:
+            self.delay_extractor.finish()
+
     def next(self):
         '''
             Read in a new block of LArPix packet data from the input file and
@@ -568,6 +583,9 @@ class RawEventGenerator(H5FlowGenerator):
                 ref = np.c_[ev_idcs[~event_tracks.mask].ravel(), mc_evs.ravel()]
                 ref = np.unique(ref, axis=0) if len(ref) else ref
                 self.data_manager.write_ref(self.raw_event_dset_name, self.mc_events_dset_name, ref)
+
+        if self.pps_delay_extractor_enabled:
+            self.delay_extractor.update(packet_buffer)
 
         return raw_event_slice if nevents else H5FlowGenerator.EMPTY
 
