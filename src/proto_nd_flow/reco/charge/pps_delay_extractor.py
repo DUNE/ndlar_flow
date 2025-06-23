@@ -1,6 +1,7 @@
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 from dbscan1d import DBSCAN1D
 
 from h5flow.core import resources
@@ -23,7 +24,7 @@ class PPSDelayExtractor:
         self.window: int = params[k].get('window', self.default_window)
         self.dbscan_eps: int = params[k].get('dbscan_eps',
                                              self.default_dbscan_eps)
-        self.debug_mode = params[k].get('debug_mode', False)
+        self.debug_mode: bool = params[k].get('debug_mode', False)
 
         self.unix_ts: list[np.uint32] = []
         self.delay_ticks: list[np.float64] = []
@@ -32,12 +33,12 @@ class PPSDelayExtractor:
         self.data_manager: H5FlowDataManager | None = None
 
     def setup(self, data_manager: H5FlowDataManager):
-        self.data_manager: H5FlowDataManager = data_manager
+        self.data_manager = data_manager
         if self.debug_mode:
             self.data_manager.create_dset('charge/pps_delay',
                                           dtype=self.delay_dtype)
 
-    def update(self, packets: np.ndarray[Any, Any]):
+    def update(self, packets: npt.NDArray[Any]):
         for iog in np.unique(packets['io_group']):
             all_pkts = packets[packets['io_group'] == iog]
             ts2pkt = np.where(all_pkts['packet_type'] == 4)[0]
@@ -46,6 +47,7 @@ class PPSDelayExtractor:
             clusters = DBSCAN1D(eps=self.dbscan_eps, min_samples=1) \
                 .fit(jumps.reshape(-1, 1))
 
+            assert clusters.labels_ is not None
             for i in list(range(max(clusters.labels_))):
                 ts_idcs = jumps[clusters.labels_ == i]
                 pkt_idcs = ts2pkt[ts_idcs]  # indices of ts pkts in this cluster
@@ -81,6 +83,7 @@ class PPSDelayExtractor:
             delay = np.median(data[sel]['delay_ticks'])
             delays.append((int(iog), int(delay)))
 
+        assert self.data_manager is not None, "call setup plz"
         self.data_manager.set_attrs(self.packets_dset_name,
                                     pps_delays=delays)
 

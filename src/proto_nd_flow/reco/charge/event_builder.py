@@ -17,6 +17,9 @@ class EventBuilder(H5FlowStage):
          - ``events_dset_name`` : ``str``, required, output dataset path
          - ``hits_dset_name`` : ``str``, required, input dataset path for hits
          - ``ext_trigs_dset_name`` : ``str``, required, input dataset path for external triggers
+         - ``pps_delay_corrector_enabled`` : ``bool``, optional, whether to correct unix_ts_usec
+             for the GPS-to-PPS delay (see ``pps_delay_extractor_enabled'' in RawEventGenerator)
+         - ``pps_delay_corrector_config`` : ``dict``, optional, modify parameters of PPS corrector
 
         Both the ``hits_dset_name`` and ``ext_trigs_dset_name`` are required in
         the data cache.

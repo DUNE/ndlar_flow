@@ -45,6 +45,8 @@ class RawEventGenerator(H5FlowGenerator):
          - ``mc_tracks_dset_name`` : ``str``, optional, output dataset path for mc truth tracks (if present)
          - ``mc_trajectories_dset_name`` : ``str``, optional, output dataset path for mc truth trajectories (if present)
          - ``mc_packet_fraction_dset_name`` : ``str``, optional, output dataset path for packet charge fraction truth (if present)
+         - ``pps_delay_extractor_enabled`` : ``bool``, optional, whether to extract the delay between GPS and PPS ticks
+         - ``pps_delay_extractor_config`` : ``dict``, optional, modify parameters of the PPS delay extractor
          - ``autocorrect_unix_ts`` : ``bool``, optional, take median unix_ts among io_groups instead of just first iog
 
         ``dset_name`` points to a lightweight array used to organize low-level
