@@ -15,6 +15,7 @@ class PPSDelayExtractor:
 
     default_window: int = 100
     default_dbscan_eps: int = 100
+    default_min_packets: int = 50
 
     # The params are forwarded from the RawEventGenerator
     def __init__(self, **params: Any):
@@ -24,6 +25,8 @@ class PPSDelayExtractor:
         self.window: int = params[k].get('window', self.default_window)
         self.dbscan_eps: int = params[k].get('dbscan_eps',
                                              self.default_dbscan_eps)
+        self.min_packets: int = params[k].get('min_packets',
+                                              self.default_min_packets)
         self.debug_mode: bool = params[k].get('debug_mode', False)
 
         self.unix_ts: list[np.uint32] = []
@@ -61,7 +64,7 @@ class PPSDelayExtractor:
                                 :np.max(pkt_idcs) + self.window]
                 rollover = resources['RunData'].rollover_ticks
                 data_pkts = pkts[pkts['packet_type'] == 0]
-                if len(data_pkts) == 0:
+                if len(data_pkts) < self.min_packets:
                     continue
                 delay = np.float64(rollover) - np.median(data_pkts['timestamp'])
 
