@@ -41,7 +41,7 @@ import pandas as pd
 from io import BytesIO
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-from src.proto_nd_flow.util.lut import LUT
+from ndlar_flow.src.proto_nd_flow.util.lut import LUT
 # from h5flow.core import resources
 # import itertools
 import math
@@ -56,6 +56,8 @@ from matplotlib.patches import Rectangle
 from matplotlib.colors import Normalize
 from PIL import Image
 # from math import fabs
+
+
 from time import sleep
 # import uproot
 
@@ -685,6 +687,7 @@ class LArEventDisplayFSD:
         while True:
 
             sleep(0.5) # needed to run on nersc, otherwise sometime the output is cleared after the input box is displayed
+
             user_input = input(
                 "Next event (Enter: go to next event/'ev_id' + Enter: skip to event 'ev_id'/ l + Enter: list the events ID in the selection/ s + Enter: save the current plot as png/ q + Enter: exit/)?\n")
             if not user_input:
