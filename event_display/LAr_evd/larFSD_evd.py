@@ -20,7 +20,7 @@ except ImportError:
 
 # Ensure all non-standard packages are installed
 required_packages = [
-    'numpy', 'h5py', 'pandas', 'matplotlib'
+    'numpy', 'h5py', 'pandas', 'matplotlib', 'pymupdf', 'cmasher'
 ]    
 # , 'sqlalchemy', 'cmasher', 'IPython', 'PyMuPDF', 'pillow', 'uproot', 'h5flow', 'ipywidgets'
 # ]
