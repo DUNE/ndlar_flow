@@ -194,6 +194,17 @@ To generate T0s and tracks, run::
     h5flow -c yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml \
         -i <input file> -o <output file>
 
+pedestal generator
+---------------------------
+
+To generate channel-by-channel pedestals from a pedestal run .h5 file::
+    h5flow -c yamls/proto_nd_flow/workflows/charge/generate_pedestals_workflow.yaml \
+        -i <input file> -o <output file>
+
+Make sure to update yamls/proto_nd_flow/reco/charge/GeneratePedestals.yaml to use the correct configuration for the pedestal run input file.
+This workflow will generate both and hdf5 file and json file with the channel-by-channel pedestals. The json file is currently required
+by the other charge workflows. 
+
 minimal staging
 ---------------
 

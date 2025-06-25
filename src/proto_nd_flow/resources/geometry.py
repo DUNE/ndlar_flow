@@ -13,7 +13,6 @@ from proto_nd_flow.util.lut import LUT, write_lut, read_lut
 from proto_nd_flow.util.compat import assert_compat_version
 import proto_nd_flow.util.units as units
 
-
 class Geometry(H5FlowResource):
     '''
         Provides helper functions for looking up geometric properties. 
@@ -303,7 +302,6 @@ class Geometry(H5FlowResource):
         '''
         return self._tile_id
 
-
     def get_drift_coordinate(self, io_group, io_channel, drift):
         '''
             Convert a drift distance on a set of ``(io group, io channel)`` to
@@ -378,7 +376,6 @@ class Geometry(H5FlowResource):
         in_any_negative_fid = ma.any(in_negative_fid, axis=-1)
         in_any_fid = in_any_positive_fid | in_any_negative_fid
         return in_any_fid
-    
 
     def _get_module_RO_bounds(self):
         '''
@@ -757,11 +754,11 @@ class Geometry(H5FlowResource):
             for mod in module_to_io_groups
             for chip_channel in geometry_yamls[self.crs_geometry_to_module[mod-1]]['chip_channel_to_position']
         ]
- 
+
         pixel_coordinates_2D_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
         self._pixel_coordinates_2D = LUT('f4', *pixel_coordinates_2D_min_max, shape=(2,))
         self._pixel_coordinates_2D.default = np.nan
-    
+
         tile_min_max = [(min(v), len(module_to_io_groups)*max(v)) for v in (io_groups, io_channels)]
         self._tile_id = LUT('i4', *tile_min_max)
         self._tile_id.default = -1
@@ -808,7 +805,7 @@ class Geometry(H5FlowResource):
                     io_group = io_group_io_channel//1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
                     self._tile_id[([io_group], [io_channel])] = tile+(module_id-1)*len(tile_chip_to_io)
-
+                    
                     if self.network_agnostic == True:
                         # if we don't care about the network configuration, then we
                         # can just loop over every N io channels and add them to the LUT
@@ -819,7 +816,6 @@ class Geometry(H5FlowResource):
                 for chip_channel in chip_channel_to_position:
                     chip = chip_channel // 1000
                     channel = chip_channel % 1000
-
                     try:
                         io_group_io_channel = tile_chip_to_io[tile][chip]
                     except KeyError:
@@ -832,7 +828,7 @@ class Geometry(H5FlowResource):
 
                     io_group = io_group_io_channel // 1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
-
+                    
                     z = chip_channel_to_position[chip_channel][0] * \
                         pixel_pitch - z_size / 2 + pixel_pitch / 2
                     y = chip_channel_to_position[chip_channel][1] * \
