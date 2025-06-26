@@ -5,7 +5,7 @@ import json
 
 from h5flow.core import H5FlowStage, resources
 import proto_nd_flow.util.units as units
-import proto_nd_flow.reco.charge.pixel_functions as pf
+import proto_nd_flow.util.pixel_functions as pf
 
 class CalibHitBuilder(H5FlowStage):
     '''
