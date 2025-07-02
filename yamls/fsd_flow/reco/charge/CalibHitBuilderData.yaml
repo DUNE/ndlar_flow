@@ -27,7 +27,7 @@ params:
   adc_counts: 256
   gain: 4.522
 
-  pedestal_file: '/global/common/software/dune/inputs/FSD/pedestals/packet-pedestal-2024_11_12_03_08_18_CET_flowed_pedestals.json'
+  pedestal_file: '/global/common/software/dune/inputs/FSD/pedestals/packet-pedestal-2024_11_12_03_29_26_CET.pedestal.json'
   #pedestal_file: 'data/module0_flow/datalog_2021_04_02_19_00_46_CESTevd_ped.json'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/datalog_2021_04_02_19_00_46_CESTevd_ped.json
   #configuration_file: 'data/module0_flow/evd_config_21-03-31_12-36-13.json'
