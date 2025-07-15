@@ -14,7 +14,7 @@ import proto_nd_flow.util.pixel_functions as pf
 
 import proto_nd_flow.util.units as units
 
-class GeneratePedestals(H5FlowGenerator):
+class MakePedestalHist(H5FlowGenerator):
     '''
     Calculate channel by channel pedestals from data packets.
 
@@ -33,32 +33,24 @@ class GeneratePedestals(H5FlowGenerator):
     class_version = '0.0.0'
 
     default_buffer_size = 10000
-    default_vref_dac = 223
-    default_vcm_dac = 68
     default_adc_counts = 256
-    default_vdda = 1800
-    default_mean_trunc = 3
     default_packets_dset_name = 'charge/packets'
-    default_pedestal_dset_name = 'charge/channel_pedestals'
-
-    pedestal_dtype = np.dtype([
-        ('id', 'u8'),
-        ('unique_id', 'u8'),
-        ('pedestal_mv', 'f4')
-    ])
-
+    default_hist_dset_name = 'charge/hist_data'
+    
     def __init__(self, **params):
-        super(GeneratePedestals, self).__init__(**params)
+        super(MakePedestalHist, self).__init__(**params)
     
         self.buffer_size = params.get('buffer_size', self.default_buffer_size)
-        self.vref_dac = params.get('vref_dac', self.default_vref_dac)
-        self.vcm_dac = params.get('vcm_dac', self.default_vcm_dac)
         self.adc_counts = params.get('adc_counts', self.default_adc_counts)
-        self.vdda = params.get('vdda', self.default_vdda)
-        self.mean_trunc = params.get('mean_trunc', self.default_mean_trunc)
         self.packets_dset_name = params.get('packets_dset_name', self.default_packets_dset_name)
-        self.pedestal_dset_name = params.get('pedestal_dset_name', self.default_pedestal_dset_name)
+        self.hist_dset_name = params.get('hist_dset_name', self.default_hist_dset_name)
 
+        self.hist_dtype = np.dtype([
+            ('id', 'i2'),
+            ('unique_id', 'u8'),
+            ('bins', ('i2', self.adc_counts)),
+            ('hist', ('i2', self.adc_counts))
+        ])
         # set up input file
         if H5FLOW_MPI:
             self.input_fh = h5py.File(self.input_filename, 'r', driver='mpio', comm=self.comm)
@@ -78,11 +70,12 @@ class GeneratePedestals(H5FlowGenerator):
         return len(self.slices)
 
     def init(self):
-        super(GeneratePedestals, self).init()
+        super(MakePedestalHist, self).init()
 
         # initialize data objects
-        self.data_manager.create_dset(self.pedestal_dset_name, dtype=self.pedestal_dtype)
-        self.data_manager.set_attrs(self.pedestal_dset_name,
+        if not self.data_manager.dset_exists(self.hist_dset_name):
+            self.data_manager.create_dset(self.hist_dset_name, dtype=self.hist_dtype)
+        self.data_manager.set_attrs(self.hist_dset_name,
                                     classname=self.classname,
                                     class_version=self.class_version,
                                     buffer_size=self.buffer_size,
@@ -99,43 +92,36 @@ class GeneratePedestals(H5FlowGenerator):
         self.mask = (self.packets['valid_parity'].astype(bool) & (self.packets['packet_type'] == 0))  # data packets
     
     def finish(self):
-        super(GeneratePedestals, self).finish()
+        super(MakePedestalHist, self).finish()
         ### finish by finding mean pedestal for all channels
         
-        vref_mv = pf.dac2mv(self.vref_dac, self.vdda, self.adc_counts)
-        vcm_mv = pf.dac2mv(self.vcm_dac, self.vdda, self.adc_counts)
-
         unique_id_set = set(list(self.dataword_dict.keys()))
         channel_pedestal_mv = []
         channel_unique_id = []
         pedestal_dict = {}
+
+        vals_all = []
+        bins_all = []
+        unique_all = []
         for unique in sorted(unique_id_set):
             if unique == -1:
                 continue
-            vals, bins = np.histogram(self.dataword_dict[unique], bins = np.arange(257))
-            peak_bin = np.argmax(vals)
-            min_idx,max_idx = max(peak_bin-self.mean_trunc,0), min(peak_bin+self.mean_trunc,len(vals))
-            ped_adc = np.average(bins[min_idx:max_idx]+0.5, weights=vals[min_idx:max_idx])
-            pedestal_mv = pf.adc2mv(ped_adc, vref_mv, vcm_mv, self.adc_counts)
-            channel_pedestal_mv.append(pedestal_mv)
-            channel_unique_id.append(unique)
-            pedestal_dict[str(unique)] = dict(
-                pedestal_mv = pedestal_mv
-            )
+            vals, bins = np.histogram(self.dataword_dict[unique], bins = np.arange(self.adc_counts+1))
+            vals_all.append(vals)
+            bins_all.append(bins[:-1])
+            unique_all.append(unique)
+            
         self.input_fh.close()
         
-        ### results output to two different files, json and hdf5
-        json_path = self.data_manager.filepath.removesuffix(".FLOW.hdf5").removesuffix(".hdf5").removesuffix(".h5") + '.json'
-        with open(json_path,'w') as fo:
-            json.dump(pedestal_dict, fo, sort_keys=True, indent=4)
-        
-        pedestal_data = np.zeros((len(channel_unique_id),), dtype=self.pedestal_dtype)
-        pedestal_data['id'] = np.arange(len(channel_pedestal_mv))
-        pedestal_data['unique_id'] = np.array(channel_unique_id)
-        pedestal_data['pedestal_mv'] = np.array(channel_pedestal_mv)
-        
-        sl = self.data_manager.reserve_data(self.pedestal_dset_name, len(channel_pedestal_mv))
-        self.data_manager.write_data(self.pedestal_dset_name, sl, pedestal_data)
+        if len(unique_all):
+            hist_data = np.zeros((len(unique_all)), dtype=self.hist_dtype)
+            sl = self.data_manager.reserve_data(self.hist_dset_name, len(unique_all))
+            hist_data['id'] = sl.start + np.arange(len(unique_all))
+            hist_data['unique_id'] = np.array(unique_all)
+            hist_data['bins'] = np.array(bins_all)
+            hist_data['hist'] = np.array(vals_all)
+            
+            self.data_manager.write_data(self.hist_dset_name, sl, hist_data)
     
     def next(self):
         '''
