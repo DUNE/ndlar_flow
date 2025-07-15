@@ -21,13 +21,12 @@ class GeneratePedestalJson(H5FlowGenerator):
     Produces a json file as well as an hdf5 file with the channel pedestals.
 
     Parameters:
-     - ``buffer_size`` : ``int``, optional, number of packets to load per iteration
      - ``vref_dac`` : ``int``, optional, vref_dac value for larpix configuration
      - ``vcm_dac`` : ``int``, optional, vcm_dac value for larpix configuration
      - ``adc_counts`` : ``int``, optional, total adc counts for vref/vcm calculation (normally 2^8)
      - ``vdda`` : ``int``, optional, vdda [mV]
      - ``mean_trunc`` : ``int``, adc counts around peak ADC to consider in pedestal mean
-     - ``packets_dset_name`` : ``str``, required, input dataset path for packets
+     - ``hist_dset_name`` : ``str``, required, input dataset path for pedestal histograms
      - ``pedestal_dset_name`` : ``str``, required, output dataset for pedestal values in hdf5 file
     '''
     class_version = '0.0.0'

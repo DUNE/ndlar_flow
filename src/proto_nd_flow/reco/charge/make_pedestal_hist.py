@@ -16,19 +16,16 @@ import proto_nd_flow.util.units as units
 
 class MakePedestalHist(H5FlowGenerator):
     '''
-    Calculate channel by channel pedestals from data packets.
+    Make histograms of pedestal datawords for all channels from data packets. 
+    These are used in the GeneratePedestalJson workflow to generate the mean pedestals for all channels.
 
     Produces a json file as well as an hdf5 file with the channel pedestals.
 
     Parameters:
      - ``buffer_size`` : ``int``, optional, number of packets to load per iteration
-     - ``vref_dac`` : ``int``, optional, vref_dac value for larpix configuration
-     - ``vcm_dac`` : ``int``, optional, vcm_dac value for larpix configuration
      - ``adc_counts`` : ``int``, optional, total adc counts for vref/vcm calculation (normally 2^8)
-     - ``vdda`` : ``int``, optional, vdda [mV]
-     - ``mean_trunc`` : ``int``, adc counts around peak ADC to consider in pedestal mean
      - ``packets_dset_name`` : ``str``, required, input dataset path for packets
-     - ``pedestal_dset_name`` : ``str``, required, output dataset for pedestal values in hdf5 file
+     - ``hist_dset_name`` : ``str``, required, output dataset for pedestal histograms
     '''
     class_version = '0.0.0'
 
