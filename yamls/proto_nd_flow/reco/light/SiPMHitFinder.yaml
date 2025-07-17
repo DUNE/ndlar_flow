@@ -19,9 +19,9 @@ params:
   near_samples: 4
   hit_level: 'sipm'
   mad_factor: 5.0
-  noise_factor: 5.0
-  n_bins_rolled: 5
-  rt_sqrt_factor: 5.0
+  noise_factor: 100.0
+  n_bins_rolled: 100
+  rt_sqrt_factor: 100.0
   pe_weight: 1.0
   rising_edge: False
   local_maxima: True
