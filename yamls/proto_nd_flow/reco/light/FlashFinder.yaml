@@ -4,15 +4,14 @@ requires:
   - 'light/cwvfm'
   - 'light/sipm_hits'
   - 'light/sum_hits'
-  - 'light/stpc_wvfm'
+
 params:
   # inputs
   cwvfm_dset_name: 'light/cwvfm'
   sipm_hits_dset_name: 'light/sipm_hits'
   sum_hits_dset_name: 'light/sum_hits'
-  stpc_wvfm_dset_name: 'light/stpc_wvfm'
   
-  eps: 10
+  eps: 5
   min_samples: 1  # >1 not supported in current implemenation
   nchantpc: 48
 
