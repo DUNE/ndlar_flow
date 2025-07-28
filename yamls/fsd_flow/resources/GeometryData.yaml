@@ -8,7 +8,7 @@ params:
   # crs_geometry_to_module: [0,0,1,0]
   crs_geometry_files: ['data/fsd_flow/multi_tile_layout-3.0.40_fsd_v3.yaml']
   crs_geometry_to_module: [0]
-  lrs_geometry_file: 'data/fsd_flow/light_module_desc-6.0.0.yaml'
+  lrs_geometry_file: 'data/fsd_flow/light_module_desc-6.0.1.yaml'
   beam_direction: 'z'
   drift_direction: 'x'
   network_agnostic: true

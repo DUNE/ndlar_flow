@@ -21,8 +21,9 @@ setuptools.setup(name='ndlar_flow',
                      'scipy',
                      'scikit-image',
                      'scikit-learn>=1.3.0',
+                     'dbscan1d==0.2.3',
                      'h5flow>=0.2.0',
-                     'pylandau @ git+https://github.com/cuddandr/pylandau.git#egg=pylandau',
-                     'adc64format @ git+https://github.com/larpix/adc64format.git@v0.1.2#egg=adc64format',
+                     'pylandau @ git+https://github.com/cuddandr/pylandau.git@npy_owndata_fix#egg=pylandau',
+                     'adc64format @ git+https://github.com/larpix/adc64format.git@v0.1.3#egg=adc64format',
                  ]
                  )

@@ -5,7 +5,7 @@ import json
 
 from h5flow.core import H5FlowStage, resources
 import proto_nd_flow.util.units as units
-
+import proto_nd_flow.util.pixel_functions as pf
 
 class CalibHitBuilder(H5FlowStage):
     '''
@@ -69,17 +69,6 @@ class CalibHitBuilder(H5FlowStage):
     '''
     class_version = '1.0.0'
 
-    #: ASIC ADC configuration lookup table
-    configuration = defaultdict(lambda: dict(
-        vref_mv=1568.0,
-        vcm_mv=478.1
-    ))
-
-    #: pixel pedestal value
-    pedestal = defaultdict(lambda: dict(
-        pedestal_mv=580
-    ))
-
     calib_hits_dtype = np.dtype([
         ('id', 'u4'),
         ('x', 'f8'),
@@ -97,6 +86,12 @@ class CalibHitBuilder(H5FlowStage):
         ('is_disabled', '?')
     ])
 
+    default_pedestal_mv = 580
+    default_vref_mv = 1568.0
+    default_vcm_mv = 478.1
+    default_adc_counts = 256
+    default_gain = 4.522
+    
     def __init__(self, **params):
         super(CalibHitBuilder, self).__init__(**params)
 
@@ -109,13 +104,24 @@ class CalibHitBuilder(H5FlowStage):
         self.t0_dset_name = params.get('t0_dset_name')
         self.pedestal_file = params.get('pedestal_file', '')
         self.configuration_file = params.get('configuration_file', '')
-        self.pedestal_mv = params.get('pedestal_mv', 580.0)
-        self.vref_mv = params.get('vref_mv', 1568.0)
-        self.vcm_mv = params.get('vcm_mv', 478.1)
-        self.adc_counts = params.get('adc_counts', 256)
-        self.gain = params.get('gain', 4.522)
+        self.pedestal_mv = params.get('pedestal_mv', self.default_pedestal_mv)
+        self.vref_mv = params.get('vref_mv', self.default_vref_mv)
+        self.vcm_mv = params.get('vcm_mv', self.default_vcm_mv)
+        self.adc_counts = params.get('adc_counts', self.default_adc_counts)
+        self.gain = params.get('gain', self.default_gain)
         self.adc_droop_calibration = params.get('adc_droop_calibration', False)
         self.hit_ref = params.get('hit_ref', True)
+
+        #: ASIC ADC configuration lookup table
+        self.configuration = defaultdict(lambda: dict(
+            vref_mv = self.vref_mv,
+            vcm_mv = self.vcm_mv
+        ))
+    
+        #: pixel pedestal value
+        self.pedestal = defaultdict(lambda: dict(
+            pedestal_mv=self.pedestal_mv
+        ))
 
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
@@ -211,7 +217,25 @@ class CalibHitBuilder(H5FlowStage):
                     hit_t0[first_index:last_index] = np.full(n_not_masked,t0)
                     first_index += n_not_masked
 
-            drift_t = raw_hits_arr['ts_pps'] - hit_t0 #ticks
+            drift_t = raw_hits_arr['ts_pps'].astype('f8') - hit_t0 #ticks
+
+            # If this event crosses a PPS reset, and if the t0 is post-reset,
+            # then correct the drift time for pre-reset hits. Identify those
+            # hits as those having an absurdly large (positive) drift_t.
+            before_sync_mask = drift_t > 1e5
+            # For those hits, subtract out the rollover period.
+            drift_t[before_sync_mask] -= resources['RunData'].rollover_ticks
+            # TODO: Instead of the nominal rollover_ticks, use the actual
+            # timestamps of the SYNC. Need to wire in those SYNC timestamps and
+            # the io group of each hit (or use the average SYNC timestamps; see
+            # ave_pps_ts in timestamp_corrector.py)
+
+            # Now handle the case where the t0 is pre-reset. The post-reset hits
+            # will have absurdly negative drift_t.
+            after_sync_mask = drift_t < -1e5
+            # This time we add the rollover period instead of subtracting.
+            drift_t[after_sync_mask] += resources['RunData'].rollover_ticks
+
             drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks) / units.cm # convert mm -> cm
             x = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
 
@@ -226,10 +250,7 @@ class CalibHitBuilder(H5FlowStage):
             if resources['RunData'].is_mc and np.isnan(zy).any():
                 raise Exception("For simulation, all the channel keys should be valid. Please check your configuration.")
             tile_id = resources['Geometry'].tile_id[packets_arr['io_group'],packets_arr['io_channel']]
-            hit_uniqueid = (packets_arr['io_group'].astype(int)*1000_000_000
-                            + tile_id.astype(int)*100_000
-                            + packets_arr['chip_id'].astype(int)*100
-                            + packets_arr['channel_id'].astype(int))
+            hit_uniqueid = pf.get_pixel_unique_ids(packets_arr, tile_id)
             hit_uniqueid_str = hit_uniqueid.astype(str)
             if self.configuration_file != '':
                 vref = np.array(
@@ -358,7 +379,7 @@ class CalibHitBuilder(H5FlowStage):
         return (dw / adc_counts * (vref - vcm) + vcm - ped) / gain
 
     def load_pedestals(self):
-        if self.pedestal_file != '' and not resources['RunData'].is_mc:
+        if self.pedestal_file != '':
             with open(self.pedestal_file, 'r') as infile:
                 for key, value in json.load(infile).items():
                     self.pedestal[key] = value
