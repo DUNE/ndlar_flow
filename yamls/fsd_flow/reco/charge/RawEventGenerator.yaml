@@ -17,3 +17,4 @@ params:
     trig_io_grp: 4
     extendable: True
     build_off_beam_events : True
+    shifted_event_dt : -5
