@@ -116,7 +116,6 @@ class WaveformHitFinder(H5FlowStage):
                 ('rising_spline', 'f4'),
                 ('rising_err_spline', 'f4'),
                 ('fwhm_spline', 'f4'),
-                ('fwhm_spline', 'f4'),
                 ('integral', 'f4'),
                 ('fprompt', 'f4')
             ])
