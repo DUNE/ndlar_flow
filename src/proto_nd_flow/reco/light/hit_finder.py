@@ -115,7 +115,10 @@ class WaveformHitFinder(H5FlowStage):
                 ('ns_spline', 'f4'),
                 ('rising_spline', 'f4'),
                 ('rising_err_spline', 'f4'),
-                ('fwhm_spline', 'f4')
+                ('fwhm_spline', 'f4'),
+                ('fwhm_spline', 'f4'),
+                ('integral', 'f4'),
+                ('fprompt', 'f4')
             ])
         elif self.hit_level=="sipm":
             return np.dtype([
@@ -347,7 +350,7 @@ class WaveformHitFinder(H5FlowStage):
 
         threshold_mask = peak_max >=self.threshold[peaks[1:-1]].ravel()
 
-        if self.hit_level=="sum_tpc":
+        if self.hit_level=="sum_tpc" or self.hit_level=="sum":
             integrals, fprompts = self.calculate_fprompt(wvfms, peaks_found,
                                                          self.prompt_window,
                                                          self.long_window,
@@ -429,7 +432,9 @@ class WaveformHitFinder(H5FlowStage):
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['det'] = wvfm_det[peaks[:3]].ravel()
                 hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[(tpc,det)][0]) for tpc, det in zip(peaks[1].ravel(),wvfm_det[peaks[:3]].ravel())]
-
+                hit_data['integral'] = integrals.ravel()
+                hit_data['fprompt'] = fprompts.ravel()
+                
             elif self.hit_level=="sipm":
                 hit_data['adc'] = peaks[1].ravel()
                 hit_data['chan'] = wvfm_det[peaks[:3]].ravel()
