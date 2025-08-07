@@ -41,7 +41,7 @@ class FlashFinder(H5FlowStage):
             ('deconv_max', 'f4', (2, nchantpc//2))
         ])
 
-    def flash_sipm_dtype(self, nchan):
+    def flash_sipm_dtype(self, nchantpc):
         return np.dtype([
             ('id', 'u4'),
             ('tpc', 'u1'),
@@ -53,8 +53,8 @@ class FlashFinder(H5FlowStage):
             ('tot_max', 'f4'),
             ('tot_sum_spline', 'f4'),
             ('tot_max_spline', 'f4'),
-            ('sum_pe_ch', 'f4', nchan),
-            ('max_pe_ch', 'f4', nchan)
+            ('sum_pe_ch', 'f4',  (2, nchantpc//2)),
+            ('max_pe_ch', 'f4',  (2, nchantpc//2))
         ])
 
     def __init__(self, **params):
@@ -128,7 +128,7 @@ class FlashFinder(H5FlowStage):
                 adc_arr = sipm_hit_block['adc'].astype(int)
                 chan_arr = sipm_hit_block['chan'].astype(int)
                 sipm_mask = (self.rel_pos_map[adc_arr, chan_arr, 0] == itpc)
-                self._process_sipm_flash(i, itpc, sipm_mask, sipm_hits, sipm_hits_idx, source_slice, sipm_flash_list, sipm_ev_ref_list, sipm_hit_ref_list)
+                self._process_sipm_flash(i, itpc, sipm_mask, sipm_hits, sipm_hits_idx, cwvfms, source_slice, sipm_flash_list, sipm_ev_ref_list, sipm_hit_ref_list)
 
         self._finalize_flash(self.flash_dset_name, sum_flash_list, sum_ev_ref_list, sum_hit_ref_list, source_name, self.sum_hits_dset_name)
         self._finalize_flash(self.flash_sipm_dset_name, sipm_flash_list, sipm_ev_ref_list, sipm_hit_ref_list, source_name, self.sipm_hits_dset_name)
@@ -177,7 +177,7 @@ class FlashFinder(H5FlowStage):
         ev_ref_list.append(ev_ref)
         hit_ref_list.append(sum_ref)
 
-    def _process_sipm_flash(self, i, itpc, mask, sipm_hits, sipm_hits_idx, source_slice, flash_list, ev_ref_list, hit_ref_list):
+    def _process_sipm_flash(self, i, itpc, mask, sipm_hits, sipm_hits_idx, cwvfms, source_slice, flash_list, ev_ref_list, hit_ref_list):
         tpc_hits = sipm_hits[i][mask]
         tpc_hits_idx = sipm_hits_idx[i][mask]
         if not len(tpc_hits): return
@@ -189,18 +189,18 @@ class FlashFinder(H5FlowStage):
         flashes = np.empty(n_clusters, dtype=self.flash_sipm_dtype)
         ev_ref = np.full(n_clusters, np.r_[source_slice][i], dtype='u4')
         hit_ref = np.empty((len(tpc_hits_idx), 2), dtype='u4')
-        
         self.tpc_chan_to_local = dict()
-        chan_counter = defaultdict(int)
-        
+        chan_counter = defaultdict(lambda: [0, 0])  # [side0_count, side1_count]
+
         for adc in range(self.rel_pos_map.shape[0]):
             for chan in range(self.rel_pos_map.shape[1]):
                 tpc = int(self.rel_pos_map[adc, chan, 0])
-                if tpc >= 0:
-                    local_idx = chan_counter[tpc]
-                    self.tpc_chan_to_local[(tpc, adc, chan)] = local_idx
-                    chan_counter[tpc] += 1
-                    
+                side = int(self.rel_pos_map[adc, chan, 1])
+                if tpc >= 0 and side in [0, 1]:
+                    local_idx = chan_counter[tpc][side]
+                    self.tpc_chan_to_local[(tpc, side, adc, chan)] = (side, local_idx)
+                    chan_counter[tpc][side] += 1
+
         for cl in range(n_clusters):
             cl_hits = tpc_hits[labels == cl]
             flashes[cl]['id'] = 0
@@ -212,23 +212,36 @@ class FlashFinder(H5FlowStage):
             flashes[cl]['tot_sum'] = cl_hits['sum'].sum()
             flashes[cl]['tot_max'] = cl_hits['max'].sum()
             flashes[cl]['tot_sum_spline'] = cl_hits['sum_spline'].sum()
-            flashes[cl]['tot_max_spline'] = cl_hits['max_spline'].sum()
-
-            sum_pe = np.zeros(self.nchantpc)
-            max_pe = np.zeros(self.nchantpc)
-
-            for h in cl_hits:
-                adc = h['adc']
-                chan = h['chan']
-                tpc = int(self.rel_pos_map[adc, chan, 0])
+            flashes[cl]['tot_max_spline'] = cl_hits['max_spline'].sum
+            
+            #use sipm_hits directly to get pe
+            
+            # sum_pe = np.zeros((2, self.nchantpc // 2))
+            # max_pe = np.zeros((2, self.nchantpc // 2))
+            
+            # for h in cl_hits:
+            #     adc = h['adc']
+            #     chan = h['chan']
+            #     tpc = int(self.rel_pos_map[adc, chan, 0])
+            #     side = int(self.rel_pos_map[adc, chan, 1])
                 
-                local_idx = self.tpc_chan_to_local.get((tpc, adc, chan), -1)
-                if local_idx == -1:
-                    continue
-                sum_pe[local_idx] += h['sum']
-                max_pe[local_idx] += h['max']
-            flashes[cl]['sum_pe_ch'] = sum_pe
-            flashes[cl]['max_pe_ch'] = max_pe
+            #     key = (tpc, side, adc, chan)
+            #     if key not in self.tpc_chan_to_local:
+            #         continue
+                
+            #     side_idx, local_idx = self.tpc_chan_to_local[key]
+
+            #     sum_pe[side_idx, local_idx] += h['sum']
+            #     max_pe[side_idx, local_idx] += h['max']
+            
+            # flashes[cl]['sum_pe_ch'] = sum_pe
+            # flashes[cl]['max_pe_ch'] = max_pe
+
+            #use the same method as sum hits to get pe
+            ch_idx = self.get_tpc_channels(itpc)
+            flash_slice = slice(flashes[cl]['sample_range'][0], flashes[cl]['sample_range'][1] + 1)
+            flashes[cl]['sum_pe_ch'] = np.sum(cwvfms[i, ch_idx[..., 0], ch_idx[..., 1], flash_slice], axis=-1)
+            flashes[cl]['max_pe_ch'] = np.max(cwvfms[i, ch_idx[..., 0], ch_idx[..., 1], flash_slice], axis=-1)
 
         hit_ref[:, 0] = tpc_hits_idx[labels >= 0]
         hit_ref[:, 1] = labels[labels >= 0]
