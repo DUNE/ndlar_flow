@@ -5,7 +5,7 @@ import json
 
 from h5flow.core import H5FlowStage, resources
 import proto_nd_flow.util.units as units
-
+import proto_nd_flow.util.pixel_functions as pf
 
 class CalibHitBuilder(H5FlowStage):
     '''
@@ -82,6 +82,12 @@ class CalibHitBuilder(H5FlowStage):
         ('is_disabled', '?')
     ])
 
+    default_pedestal_mv = 580
+    default_vref_mv = 1568.0
+    default_vcm_mv = 478.1
+    default_adc_counts = 256
+    default_gain = 4.522
+    
     def __init__(self, **params):
         super(CalibHitBuilder, self).__init__(**params)
 
@@ -94,6 +100,17 @@ class CalibHitBuilder(H5FlowStage):
         self.t0_dset_name = params.get('t0_dset_name')
         self.adc_droop_calibration = params.get('adc_droop_calibration', False)
         self.hit_ref = params.get('hit_ref', True)
+
+        #: ASIC ADC configuration lookup table
+        self.configuration = defaultdict(lambda: dict(
+            vref_mv = self.vref_mv,
+            vcm_mv = self.vcm_mv
+        ))
+    
+        #: pixel pedestal value
+        self.pedestal = defaultdict(lambda: dict(
+            pedestal_mv=self.pedestal_mv
+        ))
 
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
@@ -217,7 +234,6 @@ class CalibHitBuilder(H5FlowStage):
                                                 packets_arr['io_channel'], packets_arr['chip_id'], packets_arr['channel_id']]
             if resources['RunData'].is_mc and np.isnan(zy).any():
                 raise Exception("For simulation, all the channel keys should be valid. Please check your configuration.")
-
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             calib_hits_arr['x'] = x
             #if has_mc_truth:
