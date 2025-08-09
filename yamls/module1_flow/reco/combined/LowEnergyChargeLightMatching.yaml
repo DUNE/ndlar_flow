@@ -12,8 +12,10 @@ params:
   light_events_dset_name: 'light/events'
   sum_hits_dset_name: 'light/simple_hits'
   charge_data_dir: '/global/cfs/cdirs/dune/users/sfogarty/flow_LowEnergy/Module1/NEW/'
-  proximity_distance_z: 20
-  proximity_distance_y: 15
+  proximity_distance_z_ACL: 20
+  proximity_distance_y_ACL: 15
+  proximity_distance_z_LCM: 20
+  proximity_distance_y_LCM: 15
 
   # output
   clusters_matched_dset_name: 'charge/clusters_matched'

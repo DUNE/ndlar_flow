@@ -672,9 +672,20 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         used_mask = np.zeros(len(unix_ts), dtype=bool)
         matched_mask = np.zeros(len(unix_ts), dtype=bool)
         t0s_arr = np.zeros(len(unix_ts), dtype='float')
-
+        ext_trig_index_arr = np.zeros(len(unix_ts), dtype='int')
         data_packet_mask = packets['packet_type'] == 0
+
+        last_ts = -1
+        current_ts = -1
+        ext_trig_index = 0
         for i, start_idx in enumerate(trigger_idcs):
+            # skip duplicate triggers... maybe only needed for MC? 
+            current_ts = ts[start_idx]
+            if current_ts == last_ts:
+                last_ts = current_ts
+                continue
+            last_ts = current_ts
+                
             # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
             hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & trig_mask)
             unix_mask = unix_ts['timestamp'][start_idx] == unix_ts['timestamp']
@@ -686,30 +697,23 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
                 & unix_mask \
                 & data_packet_mask
             
-            if start_idx+1 < len(ts):
-                mask_next = (ts >= ts[start_idx+1] - abs(self.lower_window)) \
-                    & (ts <= ts[start_idx+1] + self.upper_window) \
-                    & ~used_mask \
-                    & hotfix_mask \
-                    & unix_mask \
-                    & data_packet_mask
-            else:
-                mask_next = np.zeros(len(ts), dtype=bool)
-
             total_matches = np.count_nonzero(mask)
-            if not np.any(mask & mask_next) and total_matches > 0 and total_matches < self.nhit_limit:
+            #print(f"{total_matches=}")
+            if total_matches > 0 and total_matches < self.nhit_limit:
                 t0s_arr[mask] = ts[start_idx]
+                ext_trig_index_arr[mask] = ext_trig_index
                 matched_mask = np.logical_or( matched_mask, mask )
                 
             used_mask = np.logical_or( used_mask, mask )
-        
+            ext_trig_index += 1
+
         if np.any(matched_mask):
             if mc_assn is not None:
                 events_temp, event_unix_ts_temp, event_clusters_temp, event_clusters_hits_temp, event_mc_assn_temp = \
-                    self.make_clusters(packets[matched_mask], unix_ts[matched_mask], mc_assn[matched_mask], ts[matched_mask], t0=t0s_arr[matched_mask])
+                    self.make_clusters(packets[matched_mask], unix_ts[matched_mask], mc_assn[matched_mask], ts[matched_mask], t0=t0s_arr[matched_mask], ext_trig=ext_trig_index_arr[matched_mask])
             else:
                 events_temp, event_unix_ts_temp, event_clusters_temp, event_clusters_hits_temp, event_mc_assn_temp = \
-                    self.make_clusters(packets[matched_mask], unix_ts[matched_mask], mc_assn, ts[matched_mask], t0=t0s_arr[matched_mask])
+                    self.make_clusters(packets[matched_mask], unix_ts[matched_mask], mc_assn, ts[matched_mask], t0=t0s_arr[matched_mask], ext_trig=ext_trig_index_arr[matched_mask])
             if len(events_temp):
                 events = events + events_temp
                 event_unix_ts = event_unix_ts + event_unix_ts_temp
@@ -740,7 +744,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         return zip(*[v for v in zip(events, event_unix_ts, event_clusters, event_clusters_hits)]) if mc_assn is None \
             else zip(*[v for v in zip(events, event_unix_ts, event_clusters, event_clusters_hits, event_mc_assn)])
 
-    def make_clusters(self, packets, unix_ts, mc_assn, timestamps, t0=None):
+    def make_clusters(self, packets, unix_ts, mc_assn, timestamps, t0=None, ext_trig=None):
         '''
             Use DBSCAN to form packets into clusters.
         '''
@@ -748,6 +752,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         mask_disabled_channels = np.isin(packets[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
         mask_disabled_chips = np.isin(packets[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
         combined_mask = ~(mask_disabled_channels | mask_disabled_chips) & data_packets_mask
+        #combined_mask = data_packets_mask
         pkts = packets[combined_mask]
         unix = unix_ts[combined_mask]
         ts = timestamps[combined_mask] * resources['RunData'].crs_ticks
@@ -755,6 +760,8 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
             mc_assn = mc_assn[combined_mask]
         if t0 is not None:
             t0_arr = t0[combined_mask] * resources['RunData'].crs_ticks
+        if ext_trig is not None:
+            ext_trig_arr = ext_trig[combined_mask]
         
         # get coordinates for packets and run dbscan clustering
         zy = resources['Geometry'].pixel_coordinates_2D[pkts['io_group'],pkts['io_channel'],pkts['chip_id'],pkts['channel_id']]
@@ -763,6 +770,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         
         x_pix = resources['Geometry'].anode_drift_coordinate[(tile_id,)]
         y_pix, z_pix = zy[:,1], zy[:,0]
+            
         nan_hits_mask = ~np.isnan(z_pix) & ~np.isnan(y_pix)
         x_pix = x_pix[nan_hits_mask]
         y_pix = y_pix[nan_hits_mask]
@@ -773,6 +781,8 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         drift_dir = drift_dir[nan_hits_mask]
         if t0 is not None:
             t0_arr = t0_arr[nan_hits_mask]
+        if ext_trig is not None:
+            ext_trig_arr = ext_trig_arr[nan_hits_mask]
         if mc_assn is not None:
             mc_assn = mc_assn[nan_hits_mask]
         
@@ -791,13 +801,14 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         labels = labels[indices_sorted]
         if t0 is not None:
             t0_arr = t0_arr[labels_mask][indices_sorted]
+        if ext_trig is not None:
+            ext_trig_arr = ext_trig_arr[labels_mask][indices_sorted]
         if mc_assn is not None:
             mc_assn = mc_assn[labels_mask][indices_sorted]
         x_pix = x_pix[labels_mask][indices_sorted]
         y_pix = y_pix[labels_mask][indices_sorted]
         z_pix = z_pix[labels_mask][indices_sorted]
         drift_dir = drift_dir[labels_mask][indices_sorted]
-        #ts = ts[labels_mask][indices_sorted]
         
         Q_pix = resources['Calibrate'].charge_from_dataword(pkts)
         n_vals = np.bincount(labels)
@@ -830,18 +841,22 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         clusters_hits_data['Q'] = Q_pix
         clusters_hits_data['is_matched'] = is_matched
         clusters_hits_data['x'] = drift_coordinate
-            
+        if ext_trig is not None:
+            clusters_hits_data['ext_trig_index'] = ext_trig_arr
+        
         # organize cluster data to prepare for putting it into clusters dataset
         label_indices = np.concatenate(([0], np.flatnonzero(labels[:-1] != labels[1:])+1, [len(labels)]))[1:-1]
         label_timestamps = np.split(ts, label_indices)
         label_t_drift = np.split(t_drift, label_indices)
         if t0 is not None:
             label_t0 = np.split(t0_arr, label_indices)
+        if ext_trig is not None:
+            label_ext_trig = np.split(ext_trig_arr, label_indices)
         label_is_matched = np.split(is_matched, label_indices)
-        label_x_pix = np.split(x_pix[labels_mask][indices_sorted], label_indices)
+        label_x_pix = np.split(x_pix, label_indices)
         label_x = np.split(drift_coordinate, label_indices)
-        label_y_pix = np.split(y_pix[labels_mask][indices_sorted], label_indices)
-        label_z_pix = np.split(z_pix[labels_mask][indices_sorted], label_indices)
+        label_y_pix = np.split(y_pix, label_indices)
+        label_z_pix = np.split(z_pix, label_indices)
         label_unix = np.split(unix['timestamp'], label_indices)
         
         t_min, t_mid, t_max = np.array(list(zip(*[(min(t), (max(t)+min(t))/2, max(t)) for t in label_timestamps]))).astype('f8')
@@ -864,7 +879,8 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         clusters_data['io_group'] = np.array(list(map(np.min, np.split(pkts['io_group'], label_indices))))
         clusters_data['unix_ts'] = np.array(list(map(np.min, label_unix)))
         clusters_data['is_matched'] = np.array(list(map(np.min, label_is_matched)), dtype='u8')
-        
+        if ext_trig is not None:
+            clusters_data['ext_trig_index'] = np.array(list(map(np.max, label_ext_trig)))
         if t0 is not None:
             # clusters matched to the same trigger are considered in the same event
             event_indices = np.concatenate(([0], np.flatnonzero(t0_arr[:-1] != t0_arr[1:])+1, [len(t0_arr)]))[1:-1]

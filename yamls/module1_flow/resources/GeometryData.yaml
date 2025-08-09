@@ -3,9 +3,6 @@ path: proto_nd_flow.resources.geometry
 params:
   path: 'geometry_info'
   det_geometry_file: 'data/module1_flow/module1.yaml'
-  # crs_geometry_files: ['data/proto_nd_flow/multi_tile_layout-2.4.16.yaml',
-  #                      'data/proto_nd_flow/multi_tile_layout-2.5.16.yaml']
-  # crs_geometry_to_module: [0,0,1,0]
   crs_geometry_files: ['data/module1_flow/module1_multi_tile_layout-2.3.16.yaml']
   crs_geometry_to_module: [0]
   lrs_geometry_file: 'data/module1_flow/light_module_desc-0.2.0.yaml' #'data/module1_flow/light_module_desc-0.2.0.yaml'
