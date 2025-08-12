@@ -1,5 +1,5 @@
 classname: WaveformNoiseFilter
-path: module0_flow.reco.light.wvfm_noise_filter
+path: proto_nd_flow.reco.light.wvfm_noise_filter
 requires:
   - 'light/wvfm'
 params:
@@ -17,4 +17,6 @@ params:
     54, 55, 56, 57, 58, 59, 60, 61, 62, 63 ]
   filter_samples: [ 0, 80 ]
   modulo_param: 10 # template length
-  keep_noise: False # flag to save extracted noise
+  segment_size: 32
+  num_segment: 8
+  #keep_noise: False # flag to save extracted noise
