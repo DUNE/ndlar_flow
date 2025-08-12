@@ -105,12 +105,9 @@ class RawEventGenerator(H5FlowGenerator):
         ('unix_ts', 'u8')
     ])
 
-    clusters_dtype = np.dtype([('id', 'u4'), ('nhit', 'u4'), ('Q', 'f8'), 
-                    ('io_group', 'u8'), ('unix_ts', 'u8'), ('x', 'f8', (3,)), ('x_pix', 'f8', (3,)), ('y_pix', 'f8', (3,)), \
-                    ('z_pix', 'f8', (3,)), ('ts', 'f8', (3,)), ('t0', 'f8'), ('t_drift', 'f8', (3,)), ('is_matched', 'u4')])
+    clusters_dtype = np.dtype([('id', 'u4'), ('nhit', 'u4'), ('Q', 'f8'), ('io_group', 'u8'), ('unix_ts', 'u8'), ('x', 'f8', (3,)), ('x_pix', 'f8', (3,)), ('y_pix', 'f8', (3,)), ('z_pix', 'f8', (3,)), ('ts', 'f8', (3,)), ('t0', 'f8'), ('t_drift', 'f8', (3,)), ('is_matched', 'u4'), ('ext_trig_index', 'i4')])
 
-    clusters_hits_dtype = np.dtype([('id', 'u4'),('x_pix', 'f8'),('y_pix', 'f8'),('z_pix', 'f8'),('x', 'f8'),('t_drift', 'f8'),\
-        ('ts', 'f8'), ('t0', 'f8'),('io_group', 'u8'),('io_channel', 'u8'),('chip_id', 'u8'),('channel_id', 'u8'),('Q', 'f8'),('is_matched', 'u4')])
+    clusters_hits_dtype = np.dtype([('id', 'u4'),('x_pix', 'f8'),('y_pix', 'f8'),('z_pix', 'f8'),('x', 'f8'),('t_drift', 'f8'), ('ts', 'f8'), ('t0', 'f8'),('io_group', 'u8'),('io_channel', 'u8'),('chip_id', 'u8'),('channel_id', 'u8'),('Q', 'f8'),('is_matched', 'u4'), ('ext_trig_index', 'i4')])
 
     # mc_event_dtype = np.dtype([
         # ('id', 'u8'),
