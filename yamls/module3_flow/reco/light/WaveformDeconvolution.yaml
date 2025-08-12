@@ -1,5 +1,5 @@
 classname: WaveformDeconvolution 
-path: module0_flow.reco.light.wvfm_deconv
+path: proto_nd_flow.reco.light.wvfm_deconv
 requires:
   - 'light/fwvfm'
 params:
