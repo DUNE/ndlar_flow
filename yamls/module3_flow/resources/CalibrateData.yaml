@@ -1,0 +1,11 @@
+classname: Calibrate # resources/calibrate.py
+path: proto_nd_flow.resources.calibrate
+params:
+  path: 'calibrate_info'
+  pedestal_file: '/global/cfs/cdirs/dune/users/sfogarty/flow_LowEnergy/2x2/pedestal_tests/Mod3_pedestals_202303152216.json'  
+  configuration_file: ''
+  pedestal_mv: 600.0
+  vref_mv: 1567.96875
+  vcm_mv: 478.125
+  adc_counts: 256
+  gain: 4.522
