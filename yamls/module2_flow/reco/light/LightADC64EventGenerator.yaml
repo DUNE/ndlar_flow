@@ -9,8 +9,8 @@ params:
   n_adcs: 2
   n_channels: 64
   sn_table:
-   - 175780172
-   - 175854781
+   - 215553018
+   - 215537201
   sync_channel: 32
   sync_threshold: 10000
   batch_size: 128

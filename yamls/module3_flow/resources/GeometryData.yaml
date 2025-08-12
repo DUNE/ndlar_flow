@@ -8,5 +8,5 @@ params:
   lrs_geometry_file: 'data/module1_flow/light_module_desc-0.2.0.yaml' #'data/module1_flow/light_module_desc-0.2.0.yaml'
   beam_direction: 'z'
   drift_direction: 'x'
-  network_agnostic: false
+  network_agnostic: true
   charge_only: false
