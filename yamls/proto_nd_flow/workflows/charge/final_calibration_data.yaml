@@ -20,5 +20,5 @@ raw_events:
     chunk_size: 30
 
 calib_noise_filter:
-  !include yamls/proto_nd_flow/reco/charge/CalibNoiseFilter.yaml
+  !include yamls/proto_nd_flow/reco/charge/CalibNoiseFilterData.yaml
 
