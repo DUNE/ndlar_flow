@@ -6,7 +6,9 @@ from h5flow import H5FLOW_MPI
 if H5FLOW_MPI:
     from mpi4py import MPI
 
-from proto_nd_flow.util.array import fill_with_last
+from h5flow.core import resources
+
+from proto_nd_flow.util.array import fill_with_last, fill_with_next
 
 
 class RawEventBuilder(object):
@@ -17,22 +19,19 @@ class RawEventBuilder(object):
     '''
     version = '0.0.0'
 
-    default_rollover_ticks = 1E7
-
     def __init__(self, **params):
         '''
             Initialize given parameters for the class, each parameter is
             optional with a default provided by the implemented class
         '''
-        self.rollover_ticks = params.get('rollover_ticks',
-                                         self.default_rollover_ticks)
+        pass
 
     def get_config(self):
         '''
             :returns: a `dict` of the instance configuration parameters
         '''
         return dict(
-            rollover_ticks=self.rollover_ticks,
+            rollover_ticks=resources['RunData'].rollover_ticks,
         )
 
     def build_events(self, packets, unix_ts, mc_assn=None):
@@ -110,12 +109,13 @@ class RawEventBuilder(object):
             Calculates "unrolled" timestamps for an array of packets. The
             unrolled timestamps increase monotonically, rather than rolling over
             every ~second. Each SYNC packet introduces an additional cumulative
-            offset (of self.rollover_ticks, e.g. 1E7) that gets added to each
+            offset (of rollover_ticks, e.g. 1E7) that gets added to each
             subsequent raw timestamp, giving the unrolled timestamps. We round
-            the LArPix timestamp of the SYNC to the nearest self.rollover_ticks,
+            the LArPix timestamp of the SYNC to the nearest rollover_ticks,
             which takes care of the case when a SYNC is missed by the PACMAN.
             Each IO group is treated independently here.
         '''
+        rollover_ticks = resources['RunData'].rollover_ticks
         offsets = np.zeros((len(packets),), dtype='i8')
         for io_group in np.unique(packets['io_group']):
             mask = packets['io_group'] == io_group
@@ -124,11 +124,11 @@ class RawEventBuilder(object):
                          (packets['trigger_type'] == 83))
             sync_ts = np.zeros_like(offsets)
             # Replace 0 with ~1E7 at each SYNC; ~2E7 if PACMAN missed prev SYNC
-            # (assuming self.rollover_ticks is 1E7)
+            # (assuming rollover_ticks is 1E7)
             sync_ts[sync_mask] = packets[sync_mask]['timestamp']
             # And round to the nearest 1E7 to prevent clock drift
-            sync_ts[sync_mask] = (np.round(sync_ts[sync_mask] / self.rollover_ticks)
-                                  * self.rollover_ticks)
+            sync_ts[sync_mask] = (np.round(sync_ts[sync_mask] / rollover_ticks)
+                                  * rollover_ticks)
             # Now get the cumulative sum of all _preceding_ increments
             # (subtracting sync_ts[mask] => "preceding")
             offsets[mask] = np.cumsum(sync_ts[mask]) - sync_ts[mask]
@@ -141,14 +141,17 @@ class RawEventBuilder(object):
             last_sync_ts = fill_with_last(sync_ts)
             offsets[oops_mask] -= last_sync_ts[oops_mask]
 
-        ts = packets['timestamp'].astype('i8') + offsets
+        # The offsets are already corrected for the cases when the SYNC was
+        # missed by the PACMAN. Now the "% rollover_ticks" takes care of
+        # LArPix ASICs (as opposed to PACMEN) that missed one or more SYNCs.
+        ts = (packets['timestamp'].astype('i8') % rollover_ticks) + offsets
 
         # Timestamp packets require special treatment, since their timestamp
-        # field is actually a unix timestamp. For these, we just subtract this
-        # unix timestamp back out, so that their "ts" is the corresponding entry
-        # of "offsets".
+        # field is actually a unix timestamp. For these, we just assign the same
+        # unrolled timestamp as the one in the next non-timestamp packet
         unix_mask = packets['packet_type'] == 4
-        ts[unix_mask] -= packets[unix_mask]['timestamp'].astype('i8')
+        ts[unix_mask] = -1
+        ts = fill_with_next(ts, marker=-1)
 
         return ts
 
@@ -197,7 +200,7 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
 
         # sort packets to fix 512 bug
         packets = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
-        sorted_idcs = np.argsort(packets, order='timestamp')
+        sorted_idcs = np.argsort(packets, order='timestamp', kind='stable')
         packets = packets[sorted_idcs]
         unix_ts = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
         if mc_assn is not None:
@@ -337,7 +340,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         if ts is None:
             ts = self.unroll_timestamps(packets)
 
-        sorted_idcs = np.argsort(ts)
+        sorted_idcs = np.argsort(ts, kind='stable')
         ts = ts[sorted_idcs]
         packets = packets[sorted_idcs]
         unix_ts = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
@@ -347,7 +350,8 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         # calculate time distance between hits
         min_ts, max_ts = np.min(ts), np.max(ts)
         bin_edges = np.linspace(min_ts - 1, max_ts + 1, int((max_ts - min_ts + 2) // self.window))
-        hist, bin_edges = np.histogram(ts, bins=bin_edges)
+        ts_data = ts[packets['packet_type'] == 0]
+        hist, bin_edges = np.histogram(ts_data, bins=bin_edges)
 
         # find high correlation regions
         event_mask = (hist > self.threshold)
@@ -446,7 +450,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
     An external trigger based event builder. Events are sliced such that they always follow an external trigger and the readout window is configurable. The default is set to 182 x 1.1 units (10% grace period). Note the event builder may contain more than one trigger if they are within a readout window time.
     '''
     default_window = 1820 * 1.1
-    default_shifted_event_dt = -70 #This is for accounting the fact that the trigger packet can potentially arrive 7 microseconds later than the beam spill
+    default_shifted_event_dt = 0 # This is to account for any offset between timing of trigger marker and corresponding event
     default_trig_io_grp = 1     # -1 -> all io groups
     default_extendable = False
     
@@ -505,14 +509,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             return ([], []) if mc_assn is None else ([], [], [])
 
         ts = self.unroll_timestamps(packets)
-        sorted_idcs = np.argsort(ts)
-        ts = ts[sorted_idcs]
 
-        packets = packets[sorted_idcs]
-        unix_ts = unix_ts[sorted_idcs]
-        if mc_assn is not None:
-            mc_assn = mc_assn[sorted_idcs]
-        
         trig_mask = packets['packet_type'] == 7
         if self.trig_io_grp != [-1]:
             iog_masks = [packets['io_group'] == iog for iog in self.trig_io_grp]

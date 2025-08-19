@@ -9,7 +9,7 @@ params:
   mc_tracks_dset_name: 'mc_truth/segments'
   truth_ref: True
   buffer_size: 100000
-  nhit_cut: 20
+  nhit_cut: 5
   sync_noise_cut: [100, 11000000] # Stephen says no need to cut > first 10 usec
   sync_noise_cut_enabled: True
   event_builder_class: 'ExtTrigRawEventBuilder' #'SymmetricWindowRawEventBuilder'
@@ -17,5 +17,4 @@ params:
     window: 3300 # 0.1 usec ticks; 10% buffer added to previous 3000
     trig_io_grp: 4
     extendable: True
-    rollover_ticks: 10000000 # PPS = 1e7 ticks
     build_off_beam_events : True

@@ -16,5 +16,4 @@ params:
   event_builder_config:
     window: 3300 # ExtTrigRawEventBuilder (50 cm * 0.1648 cm / us). with 10% buffer
     trig_io_grp: 1
-    rollover_ticks: 10000000 # PPS = 1e7 ticks
     build_off_beam_events : False

@@ -33,7 +33,6 @@ def init_evd(filedir, filename, show_light, beam_only, runsdb):
 
 # Function to process a single event
 def process_event(ev_id):
-    global evd
     hits_ini, cmap_ini, charge_norm_ini = evd.display_event(ev_id)
 
     # Save to in-memory buffer 

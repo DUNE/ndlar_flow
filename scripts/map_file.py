@@ -18,8 +18,6 @@ def format_bytes(nbytes):
 nodes = []
 edges = []
 def add_node_or_edge(name, obj):
-    global nodes
-    global edges
     name = name.strip('/')
     if name[-4:] == '/ref':
         if isinstance(obj, h5py.Dataset):

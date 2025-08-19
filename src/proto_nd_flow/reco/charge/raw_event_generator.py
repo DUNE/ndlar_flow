@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.ma as ma
 from numpy.lib import recfunctions as rfn
+import numpy.typing as npt
 import h5py
 import logging
 import warnings
@@ -12,6 +13,7 @@ from h5flow.data import dereference
 from h5flow import H5FLOW_MPI
 
 from proto_nd_flow.reco.charge.raw_event_builder import *
+from proto_nd_flow.reco.charge.pps_delay_extractor import PPSDelayExtractor
 import proto_nd_flow.util.units as units
 
 
@@ -43,6 +45,9 @@ class RawEventGenerator(H5FlowGenerator):
          - ``mc_tracks_dset_name`` : ``str``, optional, output dataset path for mc truth tracks (if present)
          - ``mc_trajectories_dset_name`` : ``str``, optional, output dataset path for mc truth trajectories (if present)
          - ``mc_packet_fraction_dset_name`` : ``str``, optional, output dataset path for packet charge fraction truth (if present)
+         - ``pps_delay_extractor_enabled`` : ``bool``, optional, whether to extract the delay between GPS and PPS ticks
+         - ``pps_delay_extractor_config`` : ``dict``, optional, modify parameters of the PPS delay extractor
+         - ``autocorrect_unix_ts`` : ``bool``, optional, take median unix_ts among io_groups instead of just first iog
 
         ``dset_name`` points to a lightweight array used to organize low-level
         event references.
@@ -86,7 +91,9 @@ class RawEventGenerator(H5FlowGenerator):
     default_mc_tracks_dset_name = 'mc_truth/segments'
     default_mc_trajectories_dset_name = 'mc_truth/trajectories'
     default_mc_packet_fraction_dset_name = 'mc_truth/packet_fraction'
-    default_truth_ref = False
+    default_truth_ref = True
+    default_autocorrect_unix_ts = False
+    default_pps_delay_extractor_enabled = False
 
     raw_event_dtype = np.dtype([
         ('id', 'u8'),
@@ -118,6 +125,10 @@ class RawEventGenerator(H5FlowGenerator):
         self.mc_packet_fraction_dset_name = params.get('mc_packet_fraction_dset_name', self.default_mc_packet_fraction_dset_name)
         # set up whether to store truth reference
         self.truth_ref = params.get('truth_ref', self.default_truth_ref)
+        self.autocorrect_unix_ts = params.get('autocorrect_unix_ts',
+                                              self.default_autocorrect_unix_ts)
+        self.pps_delay_extractor_enabled = params.get('pps_delay_extractor_enabled',
+                                                      self.default_pps_delay_extractor_enabled)
 
         # create event builder
         self.event_builder = globals()[self.event_builder_class](**self.event_builder_config)
@@ -137,11 +148,17 @@ class RawEventGenerator(H5FlowGenerator):
         self.slices = [slice(st, st + self.buffer_size) for st in range(self.start_position + self.rank * self.buffer_size, self.end_position, self.size * self.buffer_size)]
         self.iteration = 0
 
+        if self.pps_delay_extractor_enabled:
+            self.delay_extractor = PPSDelayExtractor(**params)
+
     def __len__(self):
         return len(self.slices)
 
     def init(self):
         super(RawEventGenerator, self).init()
+
+        if self.pps_delay_extractor_enabled:
+            self.delay_extractor.setup(self.data_manager)
 
         if self.data_manager.dset_exists(self.raw_event_dset_name):
             raise RuntimeError(f'{self.raw_event_dset_name} already exists, refusing to append!')
@@ -395,6 +412,9 @@ class RawEventGenerator(H5FlowGenerator):
         super(RawEventGenerator, self).finish()
         self.input_fh.close()
 
+        if self.pps_delay_extractor_enabled:
+            self.delay_extractor.finish()
+
     def next(self):
         '''
             Read in a new block of LArPix packet data from the input file and
@@ -444,8 +464,14 @@ class RawEventGenerator(H5FlowGenerator):
 
         if self.sync_noise_cut_enabled and not self.is_mc:
             # remove all packets that occur before the cut
-            sync_noise_mask = ((packet_buffer['timestamp'] > self.sync_noise_cut[0]) &
-                               (packet_buffer['timestamp'] < self.sync_noise_cut[1]))
+
+            # We % rollover_ticks in the second sub-condition to avoid vetoing
+            # everything after a chip misses a SYNC. (Should we just get rid of
+            # the sync noise upper cut? Current default of 1.1E7 is effectively
+            # null now.)
+            R = resources['RunData'].rollover_ticks
+            sync_noise_mask = ((packet_buffer['timestamp']   > self.sync_noise_cut[0]) &
+                               (packet_buffer['timestamp']%R < self.sync_noise_cut[1]))
             # don't apply cut to timestamp packets
             sync_noise_mask |= packet_buffer['packet_type'] == 4
             packet_buffer = packet_buffer[sync_noise_mask]
@@ -465,15 +491,24 @@ class RawEventGenerator(H5FlowGenerator):
         if not events:
             return H5FlowGenerator.EMPTY
 
-        # apply nhit cut
-        nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
         if self.is_mc:
-            mc_assn_filtered = list(filter(lambda x: len(x) >= self.nhit_cut, event_mc_assn))
+            # apply disable channel mask
+            def nhit_filter(x):
+                event = x[0]
+                mask_disabled_channels = np.isin(event[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
+                mask_disabled_chips = np.isin(event[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
+                return (~(mask_disabled_channels | mask_disabled_chips)).sum() >= self.nhit_cut
+
+            nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts, event_mc_assn)))
+        else:
+            nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
 
         if len(nhit_filtered):
-            events, event_unix_ts = zip(*nhit_filtered)
             if self.is_mc:
-                event_mc_assn = mc_assn_filtered
+                events, event_unix_ts, event_mc_assn = zip(*nhit_filtered)
+            else:
+                events, event_unix_ts = zip(*nhit_filtered)
+                
         else:
             events, event_unix_ts = list(), list()
             if self.is_mc:
@@ -486,7 +521,12 @@ class RawEventGenerator(H5FlowGenerator):
         raw_event_slice = self.data_manager.reserve_data(self.raw_event_dset_name, nevents)
         raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop, dtype=int)
         if nevents:
-            raw_event_array['unix_ts'] = [p[0]['timestamp'] for p in event_unix_ts]
+            if self.autocorrect_unix_ts:
+                raw_event_array['unix_ts'] = [self.get_corrected_unix_ts(p)
+                                              for p in event_unix_ts]
+            else:
+                raw_event_array['unix_ts'] = [p[0]['timestamp']
+                                              for p in event_unix_ts]
             raw_event_array['id'] = raw_event_idcs
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
@@ -544,6 +584,9 @@ class RawEventGenerator(H5FlowGenerator):
                 ref = np.unique(ref, axis=0) if len(ref) else ref
                 self.data_manager.write_ref(self.raw_event_dset_name, self.mc_events_dset_name, ref)
 
+        if self.pps_delay_extractor_enabled:
+            self.delay_extractor.update(packet_buffer)
+
         return raw_event_slice if nevents else H5FlowGenerator.EMPTY
 
     def pass_last_unix_ts(self, packets):
@@ -561,3 +604,13 @@ class RawEventGenerator(H5FlowGenerator):
         if self.rank != self.size - 1:
             self.comm.send(max_unix_ts, dest=self.rank + 1)
 
+    def get_corrected_unix_ts(self, ts_packets: npt.NDArray['packets_dtype']) \
+            -> np.uint64:
+        '''
+           Takes the median, across all IO groups, of the first unix_ts for each
+           IO group.
+        '''
+        _, idcs = np.unique(ts_packets['io_group'], return_index=True)
+        # first unix_ts in each io group:
+        unix_ts = ts_packets[idcs]['timestamp']
+        return np.median(unix_ts).astype('u8')

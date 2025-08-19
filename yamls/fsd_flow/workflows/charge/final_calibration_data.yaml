@@ -10,7 +10,7 @@ flow:
 
 
 resources:
-  - !include yamls/fsd_flow/resources/RunDataMC.yaml
+  - !include yamls/fsd_flow/resources/RunDataData.yaml
   - !include yamls/fsd_flow/resources/LArData.yaml
   - !include yamls/fsd_flow/resources/GeometryData.yaml
 
