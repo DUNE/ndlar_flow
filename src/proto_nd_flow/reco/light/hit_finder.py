@@ -261,7 +261,8 @@ class WaveformHitFinder(H5FlowStage):
         # TODO: Move to separate dataset? For now retain attribute for 2x2/FSD
         # analyzers.
         if self.ntpc * self.ndet <= 512:
-            self.data_manager.set_attrs(thresholds=self.thresholds)
+            self.data_manager.set_attrs(self.hits_dset_name,
+                                        thresholds=self.thresholds)
 
     def run(self, source_name, source_slice, cache):
         super(WaveformHitFinder, self).run(source_name, source_slice, cache)
