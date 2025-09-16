@@ -23,7 +23,7 @@ params:
 
   # configuration parameters
   vref_mv: 1504.2
-  vcm_mv: 519.8
+  vcm_mv: 458.7
   adc_counts: 256
   gain: 4.522
 
