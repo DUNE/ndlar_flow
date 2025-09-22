@@ -8,7 +8,7 @@ if H5FLOW_MPI:
 
 from h5flow.core import resources
 
-from proto_nd_flow.util.array import fill_with_last
+from proto_nd_flow.util.array import fill_with_last, fill_with_next
 
 
 class RawEventBuilder(object):
@@ -147,11 +147,11 @@ class RawEventBuilder(object):
         ts = (packets['timestamp'].astype('i8') % rollover_ticks) + offsets
 
         # Timestamp packets require special treatment, since their timestamp
-        # field is actually a unix timestamp. For these, we just subtract this
-        # unix timestamp back out, so that their "ts" is the corresponding entry
-        # of "offsets".
+        # field is actually a unix timestamp. For these, we just assign the same
+        # unrolled timestamp as the one in the next non-timestamp packet
         unix_mask = packets['packet_type'] == 4
-        ts[unix_mask] -= packets[unix_mask]['timestamp'].astype('i8')
+        ts[unix_mask] = -1
+        ts = fill_with_next(ts, marker=-1)
 
         return ts
 
@@ -200,7 +200,7 @@ class TimeDeltaRawEventBuilder(RawEventBuilder):
 
         # sort packets to fix 512 bug
         packets = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
-        sorted_idcs = np.argsort(packets, order='timestamp')
+        sorted_idcs = np.argsort(packets, order='timestamp', kind='stable')
         packets = packets[sorted_idcs]
         unix_ts = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
         if mc_assn is not None:
@@ -340,7 +340,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         if ts is None:
             ts = self.unroll_timestamps(packets)
 
-        sorted_idcs = np.argsort(ts)
+        sorted_idcs = np.argsort(ts, kind='stable')
         ts = ts[sorted_idcs]
         packets = packets[sorted_idcs]
         unix_ts = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
@@ -350,7 +350,8 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         # calculate time distance between hits
         min_ts, max_ts = np.min(ts), np.max(ts)
         bin_edges = np.linspace(min_ts - 1, max_ts + 1, int((max_ts - min_ts + 2) // self.window))
-        hist, bin_edges = np.histogram(ts, bins=bin_edges)
+        ts_data = ts[packets['packet_type'] == 0]
+        hist, bin_edges = np.histogram(ts_data, bins=bin_edges)
 
         # find high correlation regions
         event_mask = (hist > self.threshold)
@@ -508,14 +509,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             return ([], []) if mc_assn is None else ([], [], [])
 
         ts = self.unroll_timestamps(packets)
-        sorted_idcs = np.argsort(ts)
-        ts = ts[sorted_idcs]
 
-        packets = packets[sorted_idcs]
-        unix_ts = unix_ts[sorted_idcs]
-        if mc_assn is not None:
-            mc_assn = mc_assn[sorted_idcs]
-        
         trig_mask = packets['packet_type'] == 7
         if self.trig_io_grp != [-1]:
             iog_masks = [packets['io_group'] == iog for iog in self.trig_io_grp]

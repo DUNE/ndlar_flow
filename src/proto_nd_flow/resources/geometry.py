@@ -13,7 +13,6 @@ from proto_nd_flow.util.lut import LUT, write_lut, read_lut
 from proto_nd_flow.util.compat import assert_compat_version
 import proto_nd_flow.util.units as units
 
-
 class Geometry(H5FlowResource):
     '''
         Provides helper functions for looking up geometric properties. 
@@ -172,6 +171,7 @@ class Geometry(H5FlowResource):
 
             if not self.charge_only:
                 self.data_manager.set_attrs(self.path, lrs_geometry_file=self.lrs_geometry_file)
+                write_lut(self.data_manager, self.path, self.det_type, 'det_type')
                 write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
                 write_lut(self.data_manager, self.path, self.sipm_rel_pos, 'sipm_rel_pos')
                 write_lut(self.data_manager, self.path, self.det_id, 'det_id')
@@ -195,6 +195,7 @@ class Geometry(H5FlowResource):
             self._tile_id = read_lut(self.data_manager, self.path, 'tile_id')
 
             if not self.charge_only:
+                self._det_type = read_lut(self.data_manager, self.path, 'det_type')
                 self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
                 self._sipm_rel_pos = read_lut(self.data_manager, self.path, 'sipm_rel_pos')
                 self._det_id = read_lut(self.data_manager, self.path, 'det_id')
@@ -301,7 +302,6 @@ class Geometry(H5FlowResource):
         '''
         return self._tile_id
 
-
     def get_drift_coordinate(self, io_group, io_channel, drift):
         '''
             Convert a drift distance on a set of ``(io group, io channel)`` to
@@ -376,7 +376,6 @@ class Geometry(H5FlowResource):
         in_any_negative_fid = ma.any(in_negative_fid, axis=-1)
         in_any_fid = in_any_positive_fid | in_any_negative_fid
         return in_any_fid
-    
 
     def _get_module_RO_bounds(self):
         '''
@@ -453,6 +452,16 @@ class Geometry(H5FlowResource):
 
 
     ## Light geometry methods ##
+    @property
+    def det_type(self):
+        '''
+            Lookup table for detector type (0=ACL, 1=LCM), usage::
+
+                resource['Geometry'].det_type[(tpc_index, detector_index)]
+
+        '''
+        return self._det_type
+
     @property
     def det_rel_pos(self):
         '''
@@ -646,6 +655,8 @@ class Geometry(H5FlowResource):
         self._det_rel_pos = LUT('i4', *det_min_max, shape=(3,))
         self._det_rel_pos.default = -1
 
+        self._det_type = LUT('i1', *det_min_max)
+
         shape = tpc_ids.shape + det_ids.shape
         det_adc = np.full(shape, -1, dtype=int)
         det_side = np.full(shape, -1, dtype=int)
@@ -661,7 +672,9 @@ class Geometry(H5FlowResource):
                 det_chan[i,j,:len(self.lrs_geometry_yaml['det_chan'][tpc][det])] = self.lrs_geometry_yaml['det_chan'][tpc][det]
                 tpc_center = (np.array(self.lrs_geometry_yaml['tpc_center_offset'][tpc])
                     + np.array(self.det_geometry_yaml["tpc_offsets"][tpc_mod[i]]))
-                det_geom = self.lrs_geometry_yaml['geom'][self.lrs_geometry_yaml['det_geom'][tpc][det]]
+                det_type = self.lrs_geometry_yaml['det_geom'][tpc][det]
+                self._det_type[i,j] = det_type
+                det_geom = self.lrs_geometry_yaml['geom'][det_type]
                 det_center = np.array(self.lrs_geometry_yaml['det_center'][det])
                 det_bounds[i,j,0] = tpc_center + det_center + np.array(det_geom['min'])
                 det_bounds[i,j,1] = tpc_center + det_center + np.array(det_geom['max'])
@@ -741,11 +754,11 @@ class Geometry(H5FlowResource):
             for mod in module_to_io_groups
             for chip_channel in geometry_yamls[self.crs_geometry_to_module[mod-1]]['chip_channel_to_position']
         ]
- 
+
         pixel_coordinates_2D_min_max = [(min(v), max(v)) for v in (io_groups, io_channels, chip_ids, channel_ids)]
         self._pixel_coordinates_2D = LUT('f4', *pixel_coordinates_2D_min_max, shape=(2,))
         self._pixel_coordinates_2D.default = np.nan
-    
+
         tile_min_max = [(min(v), len(module_to_io_groups)*max(v)) for v in (io_groups, io_channels)]
         self._tile_id = LUT('i4', *tile_min_max)
         self._tile_id.default = -1
@@ -792,7 +805,7 @@ class Geometry(H5FlowResource):
                     io_group = io_group_io_channel//1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
                     self._tile_id[([io_group], [io_channel])] = tile+(module_id-1)*len(tile_chip_to_io)
-
+                    
                     if self.network_agnostic == True:
                         # if we don't care about the network configuration, then we
                         # can just loop over every N io channels and add them to the LUT
@@ -803,7 +816,6 @@ class Geometry(H5FlowResource):
                 for chip_channel in chip_channel_to_position:
                     chip = chip_channel // 1000
                     channel = chip_channel % 1000
-
                     try:
                         io_group_io_channel = tile_chip_to_io[tile][chip]
                     except KeyError:
@@ -816,7 +828,7 @@ class Geometry(H5FlowResource):
 
                     io_group = io_group_io_channel // 1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
                     io_channel = io_group_io_channel % 1000
-
+                    
                     z = chip_channel_to_position[chip_channel][0] * \
                         pixel_pitch - z_size / 2 + pixel_pitch / 2
                     y = chip_channel_to_position[chip_channel][1] * \
