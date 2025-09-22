@@ -1,17 +1,10 @@
 import numpy as np
 import h5py
-from tqdm import tqdm
 
 from h5flow.core import H5FlowGenerator, resources
 
 from proto_nd_flow.reco.light.raw_event_generator import LightEventGenerator
 import proto_nd_flow.util.units as units
-
-
-# XXX make these configurables
-
-ADC_PER_MOD = 4
-SIPM_PER_TPC = 120
 
 
 class LightEventGeneratorMC(H5FlowGenerator):
@@ -127,7 +120,6 @@ class LightEventGeneratorMC(H5FlowGenerator):
     def __len__(self):
         return len(self.slices)
 
-    # XXX
     @staticmethod
     def _remap_array_local(channel_map, arr, offset, axis=0):
         '''
@@ -161,7 +153,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
             axis = arr.ndim + axis
         new_shape = tuple(np.r_[arr.shape[:axis], channel_map.shape, arr.shape[axis+1:]].astype(int))
         new_arr = np.zeros(new_shape, dtype=arr.dtype)
-        for i in tqdm(range(channel_map.shape[0])):
+        for i in range(channel_map.shape[0]):
             np.copyto(new_arr,
                 np.expand_dims(
                     np.take(arr, channel_map[i], axis=axis),
@@ -219,16 +211,17 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         assert isinstance(self.light_dat, h5py.Group)
         nmod = len(self.light_dat)
+        adc_per_mod = self.n_adcs / self.n_modules
         for imod in range(nmod):
             in_name = f'light_dat_module{imod}'
             this_light_dat = self.light_dat[in_name]
-            adc0 = imod // ADC_PER_MOD * ADC_PER_MOD
-            this_channel_map = self.channel_map[adc0:adc0+ADC_PER_MOD]
+            adc0 = imod // adc_per_mod * adc_per_mod
+            this_channel_map = self.channel_map[adc0:adc0+adc_per_mod]
             out_name = f'{self.mc_truth_dset_name}_module{imod}'
             self.data_manager.create_dset(out_name, dtype=this_light_dat.dtype,
                                           shape=this_channel_map.shape)
             this_remapped_light_dat = self._remap_array_local(this_channel_map, this_light_dat, axis=-1,
-                                                              offset=imod*2*SIPM_PER_TPC)
+                                                              offset=imod*self.n_sipms_per_module)
             this_slice = slice(0, this_remapped_light_dat.shape[0])
             self.data_manager.reserve_data(out_name, this_slice)
             self.data_manager.write_data(out_name, this_slice, this_remapped_light_dat)
