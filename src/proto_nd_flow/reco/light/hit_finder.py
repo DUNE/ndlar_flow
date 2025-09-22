@@ -320,7 +320,7 @@ class WaveformHitFinder(H5FlowStage):
         # analyzers.
         if self.ntpc * self.ndet <= 512:
             self.data_manager.set_attrs(self.hits_dset_name,
-                                        thresholds=self.thresholds)
+                                        thresholds=self.threshold)
 
 
     def run(self, source_name, source_slice, cache):
