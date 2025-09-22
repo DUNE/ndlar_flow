@@ -211,7 +211,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         assert isinstance(self.light_dat, h5py.Group)
         nmod = len(self.light_dat)
-        adc_per_mod = self.n_adcs / self.n_modules
+        adc_per_mod = self.n_adcs // self.n_modules
         for imod in range(nmod):
             in_name = f'light_dat_module{imod}'
             this_light_dat = self.light_dat[in_name]
