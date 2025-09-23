@@ -124,11 +124,14 @@ class LightEventGeneratorMC(H5FlowGenerator):
     def _remap_array_local(channel_map, arr, offset, axis=0):
         '''
             Remap an array of shape (..., Ni, ...) to (..., Nj, ...) using
-            an array of indices
+            an array of indices. This is essentially the 1D equivalent of _remap_array.
 
             :param channel_map: 1D array of indices into ``Ni`` to remap, shape: ``(Nj,)``
 
             :param arr: ND array to remap, shape ``(..., Ni, ...)``
+
+            :param offset: An offset to subtract from the channel IDs (in channel_map)
+            before using them as indices into ``arr``.
         '''
         if axis < 0:
             axis = arr.ndim + axis
