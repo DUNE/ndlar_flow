@@ -26,9 +26,12 @@ class WaveformCalib(H5FlowStage):
                 requires:
                     - 'light/events'
                     - 'light/deconv'
+                    - 'light/wvfm_rms'
                 params:
                     wvfm_dset_name: 'light/deconv'
+                    rms_dset_name: 'light/wvfm_rms'
                     wvfm_calib_dset_name: 'light/cwvfm'
+                    crms_dset_name: 'light/cwvfm_rms'
                     gain:
                         default: 1.0
 
@@ -37,8 +40,11 @@ class WaveformCalib(H5FlowStage):
 
     default_detector_channels = [list(range(64))]
 
-    def cwvfm_dtype(self, nadc, nchannels, nsamples): 
+    def cwvfm_dtype(self, nadc, nchannels, nsamples):
         return np.dtype([('samples', 'f4', (nadc, nchannels, nsamples))])
+
+    def crms_dtype(self, nadc, nchannels):
+        return np.dtype([('samples', 'f4', (nadc, nchannels))])
 
     def align_dtype(self, nadc, nchannels):
         return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (nadc, nchannels))])
@@ -50,6 +56,10 @@ class WaveformCalib(H5FlowStage):
         self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
         self.cwvfm_dset_name = params.get('cwvfm_dset_name')
         self.align_dset_name = f'{self.cwvfm_dset_name}/alignment'
+
+        self.rms_dset_name = f'{self.cwvfm_dset_name}/rms'
+        self.crms_dset_name = params.get('crms_dset_name')
+
         self.gain = params.get('gain',{'default': 1.0})
         self.gain_mc = params.get('gain_mc',{'default': 1.0})
 
@@ -62,7 +72,7 @@ class WaveformCalib(H5FlowStage):
             for chan in gain_data[adc]:
                 self.gain[adc][chan] = gain_data[adc][chan]
 
-                
+
     def init(self, source_name):
         super(WaveformCalib, self).init(source_name)
 
@@ -91,6 +101,10 @@ class WaveformCalib(H5FlowStage):
         self.data_manager.create_dset(self.cwvfm_dset_name, dtype=self.cwvfm_dtype)
         self.data_manager.create_ref(source_name, self.cwvfm_dset_name)
 
+        self.crms_dtype = self.crms_dtype(*wvfm_dset.dtype['samples'].shape)
+        self.data_manager.create_dset(self.crms_dset_name, dtype=self.crms_dtype)
+        self.data_manager.create_ref(source_name, self.crms_dset_name)
+
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             self.align_dtype = self.align_dtype(wvfm_dset.dtype['samples'].shape[-3], wvfm_dset.dtype['samples'].shape[-2])
             self.data_manager.create_dset(self.align_dset_name, dtype=self.align_dtype)
@@ -102,6 +116,8 @@ class WaveformCalib(H5FlowStage):
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape)
         cwvfm_data = np.zeros(event_data.shape, dtype=self.cwvfm_dtype)
+        rms_data = cache[self.rms_dset_name].reshape(event_data.shape)
+        crms_data = np.zeros(event_data.shape, dtype=self.crms_dtype)
 
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             wvfm_align_data = cache[self.wvfm_align_dset_name].reshape(event_data.shape)
@@ -121,6 +137,9 @@ class WaveformCalib(H5FlowStage):
                 cwvfm_data['samples'][mask,adc,chan,:] = (
                     wvfm_data['samples'][mask,adc,chan].filled(0)
                     * self.gain[adc][chan])
+                crms_data['samples'][mask,adc,chan] = (
+                    rms_data[mask,adc,chan].filled(0)
+                    * self.gain[adc][chan])
 
         # reserve new data
         cwvfm_slice = self.data_manager.reserve_data(self.cwvfm_dset_name, source_slice)
@@ -129,7 +148,10 @@ class WaveformCalib(H5FlowStage):
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             align_slice = self.data_manager.reserve_data(self.align_dset_name, source_slice)
             self.data_manager.write_data(self.align_dset_name, align_slice, align_data)
-            
+
+        crms_slice = self.data_manager.reserve_data(self.crms_dset_name, source_slice)
+        self.data_manager.write_data(self.crms_dset_name, source_slice, crms_data)
+
         # save references
         ref = np.c_[source_slice, cwvfm_slice]
         self.data_manager.write_ref(source_name, self.cwvfm_dset_name, ref)
@@ -137,4 +159,7 @@ class WaveformCalib(H5FlowStage):
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             ref = np.c_[source_slice, align_slice]
             self.data_manager.write_ref(source_name, self.align_dset_name, ref)
+
+        ref = np.c_[source_slice, crms_slice]
+        self.data_manager.write_ref(source_name, self.crms_dset_name, ref)
 

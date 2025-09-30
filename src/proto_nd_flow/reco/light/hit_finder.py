@@ -1,3 +1,4 @@
+from networkx import random_shell_graph
 import numpy as np
 import numpy.ma as ma
 from collections import defaultdict
@@ -22,11 +23,11 @@ class WaveformHitFinder(H5FlowStage):
 
         Parameters:
          - ``wvfm_dset_name``: ``str``, path to input waveforms
+         - ``rms_dset_name``:  ``str``, path to noise RMS dataset from baselining func in wvfm filtering stage
          - ``t_ns_dset_name``: ``str``, path to corrected light PPS timestamps
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``near_samples``:   ``int``, number of neighboring samples to keep
          - ``hit_level``:      ``str``, "sipm" or "sum" hit finder (defines variable names)
-         - ``mad_factor``:     ``float``, factor of median abs dev used to define threshold under which noise width is taken
          - ``noise_factor``:   ``float``, factor of noise width used to define threshold over which hit finder is run
          - ``n_bins_rolled``:  ``int``, number of bins over which the rolling threshold of the hit finder is defined
          - ``rt_sqrt_factor``: ``float``, factor used to scale the statistical contribution to the rolling threshold
@@ -68,6 +69,7 @@ class WaveformHitFinder(H5FlowStage):
     class_version = '2.0.0'
 
     default_hits_dset_name = 'light/hits'
+    default_rms_dset_name = 'light/rms'
     default_near_samples = 3
     default_interpolation = 256
     default_global_threshold = 2000
@@ -172,22 +174,6 @@ class WaveformHitFinder(H5FlowStage):
         return total_int, fprompt
 
 
-    def get_noise_threshold(self, wvfms, n_mad_factor):
-        # Initialize median and MAD
-        median = np.ma.median(wvfms, axis=-1)
-        mad = np.ma.median(np.abs(wvfms - median[..., np.newaxis]), axis=-1)
-        # identify outliers in the waveform
-        mad_factor = n_mad_factor * mad
-        noise_mask = np.abs(wvfms - median[..., np.newaxis]) < mad_factor[..., np.newaxis]
-        # set non mask values to nan
-        noise_samples = np.where(noise_mask, wvfms, np.nan)
-        # calculate noise as stddev of noise_samples
-        noise = np.where(np.nansum(noise_samples, axis=-1) != 0,
-                         np.nanstd(noise_samples, axis=-1),
-                         np.nan)
-        return  noise
-
-
     def peak_finder(self, wvfm, noise,
                     n_noise_factor,
                     n_bins_rolled,
@@ -237,13 +223,13 @@ class WaveformHitFinder(H5FlowStage):
         super(WaveformHitFinder, self).__init__(**params)
         self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
+        self.rms_dset_name = params.get('rms_dset_name')
         self.t_ns_dset_name = params.get('t_ns_dset_name')
         self.hits_dset_name = params.get('hits_dset_name',
                                          self.default_hits_dset_name)
         self.near_samples = params.get('near_samples',
                                        self.default_near_samples)
         self.hit_level = params.get('hit_level')
-        self.mad_factor = params.get('mad_factor')
         self.noise_factor = params.get('noise_factor')
         self.n_bins_rolled = params.get('n_bins_rolled')
         self.rt_sqrt_factor = params.get('rt_sqrt_factor')
@@ -327,7 +313,8 @@ class WaveformHitFinder(H5FlowStage):
 
         wvfm_det = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
 
-        noise = self.get_noise_threshold(wvfms, self.mad_factor)
+        noise = cache[self.rms_dset_name].reshape(cache[source_name].shape)[
+            'samples']
 
         peaks_found = self.peak_finder(wvfms, noise,
                                       self.noise_factor,

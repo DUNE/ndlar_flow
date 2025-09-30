@@ -55,10 +55,13 @@ class WaveformNoiseFilter(H5FlowStage):
     default_segment_size = 25
     default_num_segment = 40
     default_num_means = 4
+    default_rms_dset_name = 'light/wvfm_rms'
+    default_baseline_dset_name = 'light/wvfm_baseline'
     default_noise_dset_name = 'light/fwvfm_noise'
 
-
     def fwvfm_dtype(self, nadc, nchannels, nsamples): return np.dtype([('samples', 'f4', (nadc, nchannels, nsamples))])
+    def rms_dtype(self, nadc, nchannels): return np.dtype([('rms', 'f4', (nadc, nchannels))])
+    def baseline_dtype(self, nadc, nchannels): return np.dtype([('baseline', 'f4', (nadc, nchannels))])
 
     def __init__(self, **params):
         super(WaveformNoiseFilter, self).__init__(**params)
@@ -73,6 +76,8 @@ class WaveformNoiseFilter(H5FlowStage):
         self.segment_size = params.get("segment_size", self.default_segment_size)
         self.num_segment = params.get("num_segment", self.default_num_segment)
         self.num_means = params.get("num_means", self.default_num_means)
+        self.rms_dset_name = params.get('rms_dset_name', self.default_rms_dset_name)
+        self.baseline_dset_name = params.get('baseline_dset_name', self.default_baseline_dset_name)
 
     def init(self, source_name):
         super(WaveformNoiseFilter, self).init(source_name)
@@ -95,9 +100,17 @@ class WaveformNoiseFilter(H5FlowStage):
         if self.keep_noise:
             self.data_manager.create_dset(self.noise_dset_name, dtype=wvfm_dset.dtype)
             self.data_manager.create_ref(source_name, self.noise_dset_name)
+        # baselines and rms
+        self.baseline_dtype = self.baseline_dtype(*wvfm_dset.dtype['samples'])
+        self.data_manager.create_dset(f'{source_name}/baseline', dtype=self.baseline_dtype)
+        self.data_manager.create_ref(source_name, f'{source_name}/baseline')
+        self.rms_dtype = self.rms_dtype(*wvfm_dset.dtype['samples'])
+        self.data_manager.create_dset(f'{source_name}/rms', dtype=self.rms_dtype)
+        self.data_manager.create_ref(source_name, f'{source_name}/rms')
+
 
     def min_range_baseline(self, array, segment_size=25, num_segments=40, num_means=4):
-        
+
         # Define start and end indices for segments
         indices = np.arange(num_segments + 1) * segment_size  # (41,)
         start_indices, end_indices = indices[:-1], indices[1:]  # (40,)
@@ -139,6 +152,10 @@ class WaveformNoiseFilter(H5FlowStage):
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape).data  # don't worry about masked data since 1:1 references
 
+        event_shape = event_data.shape
+        nadc = wvfm_data['samples'].shape[1]
+        nchannels = wvfm_data['samples'].shape[2]
+
         # flatten into individual waveforms
         wvfm_samples = wvfm_data['samples'].reshape(-1, wvfm_data['samples'].shape[-1])
         # truncate lowest 2-bits and convert to float
@@ -150,6 +167,22 @@ class WaveformNoiseFilter(H5FlowStage):
         # subtract pedestal value
         pedestal, rms = self.min_range_baseline(wvfm_data['samples'], self.segment_size, self.num_segment, self.num_means)
         fwvfm['samples'] = wvfm_data['samples']  - pedestal[..., np.newaxis]
+
+        # save baselines as light/baseline (float) with dims [event, adc, channel]
+        baseline = pedestal.reshape(event_shape + (nadc, nchannels))
+        baseline_slice = self.data_manager.reserve_data(f'{source_name}/baseline', source_slice)
+        self.data_manager.write_data(f'{source_name}/baseline', baseline_slice, baseline)
+        # save references
+        ref = np.c_[baseline_slice, baseline_slice]
+        self.data_manager.write_ref(source_name, f'{source_name}/wvfm_baseline', ref)
+
+        # save RMS (noise widths) as light/rms (float) with dims [event, adc, channel]
+        rms = rms.reshape(event_shape + (nadc, nchannels))
+        rms_slice = self.data_manager.reserve_data(f'{source_name}/wvfm_rms', source_slice)
+        self.data_manager.write_data(f'{source_name}/rms', source_slice, rms)
+        # save references
+        ref = np.c_[rms_slice, rms_slice]
+        self.data_manager.write_ref(source_name, f'{source_name}/wvfm_rms', ref)
 
         # reserve new data
         fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)

@@ -9,6 +9,8 @@ params:
   # output(s)
   fwvfm_dset_name: 'light/fwvfm'
   noise_dset_name: 'light/fwvfm_noise'
+  rms_dset_name: 'light/wvfm_rms'
+  baseline_dset_name: 'light/wvfm_baseline'
 
   # configuration parameters
   filter_channels: [ 4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
@@ -20,3 +22,4 @@ params:
   keep_noise: False # flag to save extracted noise
   segment_size: 25
   num_segment: 40
+  num_means: 4

@@ -7,6 +7,7 @@ requires:
 params:
   # inputs
   wvfm_dset_name: 'light/swvfm'
+  rms_dset_name: 'light/swvfm_rms'
   t_ns_dset_name: 'light/t_ns'
 
   # output
