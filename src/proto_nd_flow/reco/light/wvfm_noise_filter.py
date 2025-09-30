@@ -54,8 +54,9 @@ class WaveformNoiseFilter(H5FlowStage):
     default_keep_noise = False
     default_segment_size = 25
     default_num_segment = 40
+    default_num_means = 4
     default_noise_dset_name = 'light/fwvfm_noise'
-    
+
 
     def fwvfm_dtype(self, nadc, nchannels, nsamples): return np.dtype([('samples', 'f4', (nadc, nchannels, nsamples))])
 
@@ -71,7 +72,8 @@ class WaveformNoiseFilter(H5FlowStage):
         self.noise_dset_name = params.get('noise_dset_name', self.default_noise_dset_name)
         self.segment_size = params.get("segment_size", self.default_segment_size)
         self.num_segment = params.get("num_segment", self.default_num_segment)
-        
+        self.num_means = params.get("num_means", self.default_num_means)
+
     def init(self, source_name):
         super(WaveformNoiseFilter, self).init(source_name)
 
@@ -94,33 +96,42 @@ class WaveformNoiseFilter(H5FlowStage):
             self.data_manager.create_dset(self.noise_dset_name, dtype=wvfm_dset.dtype)
             self.data_manager.create_ref(source_name, self.noise_dset_name)
 
-    def min_range_baseline(self, array, segment_size=25, num_segments=40):
-
+    def min_range_baseline(self, array, segment_size=25, num_segments=40, num_means=4):
+        
         # Define start and end indices for segments
         indices = np.arange(num_segments + 1) * segment_size  # (41,)
         start_indices, end_indices = indices[:-1], indices[1:]  # (40,)
-    
+
         # Generate index array for advanced indexing
         segment_range = np.arange(segment_size)  # (25,)
         index_array = start_indices[:, None] + segment_range  # Shape: (40, 25)
-    
+
         # Extract data from segments using indexing
         sliced_data = array[..., index_array]  # Shape (..., 40, 25)
-    
+
         # Compute range (peak-to-peak difference) and mean for each segment
-        ranges = np.ptp(sliced_data, axis=-1)  # Shape (..., 40)
+        ranges = np.abs(np.ptp(sliced_data, axis=-1))  # Shape (..., 40)
         means = np.mean(sliced_data, axis=-1)  # Shape (..., 40)
-    
+
+        # Mask zero ranges
+        mask_zero = (ranges != 0)
+        ranges = np.where(mask_zero, ranges, np.nan)
+        means = np.where(mask_zero, means, np.nan)
+
         # Find the ordering of the segments based on the smallest range
         smallest_ordering = np.argsort(ranges, axis=-1)  # Shape (..., 40)
-    
+
         # Sort means according to the ordering of smallest ranges
         sorted_means = np.take_along_axis(means, smallest_ordering, axis=-1)  # Shape (..., 40)
-    
+
         # Compute the average of the 2nd, 3rd, and 4th smallest means
-        average_mean = np.mean(sorted_means[..., 1:4], axis=-1)  # Shape (...)
-    
-        return average_mean
+        average_mean = np.mean(sorted_means[..., 1:num_means], axis=-1)  # Shape (...)
+
+        # calculate RMS for the ranges of the smallest range segments
+        rms = np.sqrt(np.mean(np.square(np.take_along_axis(ranges, smallest_ordering[..., :num_means], axis=-1)), axis=-1))
+
+        return average_mean, rms
+
 
     def run(self, source_name, source_slice, cache):
         super(WaveformNoiseFilter, self).run(source_name, source_slice, cache)
@@ -137,7 +148,7 @@ class WaveformNoiseFilter(H5FlowStage):
         fwvfm = np.empty(wvfm_data.shape, dtype=self.fwvfm_dtype)
 
         # subtract pedestal value
-        pedestal = self.min_range_baseline(wvfm_data['samples'], self.segment_size, self.num_segment)
+        pedestal, rms = self.min_range_baseline(wvfm_data['samples'], self.segment_size, self.num_segment, self.num_means)
         fwvfm['samples'] = wvfm_data['samples']  - pedestal[..., np.newaxis]
 
         # reserve new data
