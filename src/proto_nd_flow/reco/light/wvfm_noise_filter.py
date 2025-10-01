@@ -101,10 +101,10 @@ class WaveformNoiseFilter(H5FlowStage):
             self.data_manager.create_dset(self.noise_dset_name, dtype=wvfm_dset.dtype)
             self.data_manager.create_ref(source_name, self.noise_dset_name)
         # baselines and rms
-        self.baseline_dtype = self.baseline_dtype(*wvfm_dset.dtype['samples'])
+        self.baseline_dtype = self.baseline_dtype(*wvfm_dset.dtype['samples'].shape)
         self.data_manager.create_dset(f'{source_name}/baseline', dtype=self.baseline_dtype)
         self.data_manager.create_ref(source_name, f'{source_name}/baseline')
-        self.rms_dtype = self.rms_dtype(*wvfm_dset.dtype['samples'])
+        self.rms_dtype = self.rms_dtype(*wvfm_dset.dtype['samples'].shape)
         self.data_manager.create_dset(f'{source_name}/rms', dtype=self.rms_dtype)
         self.data_manager.create_ref(source_name, f'{source_name}/rms')
 
