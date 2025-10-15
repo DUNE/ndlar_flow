@@ -11,7 +11,7 @@ params:
   # output
   events_dset_name: 'charge/events'
 
-  pps_delay_corrector_enabled: True
+  pps_delay_corrector_enabled: False
   pps_delay_corrector_config:
     # The measured PPS delays (from the raw event generator) are stored as
     # attributes of the packets dataset

@@ -7,7 +7,7 @@ params:
 
   # configuration parameters
   mc_tracks_dset_name: 'mc_truth/segments'
-  buffer_size: 3000000 #38400
+  buffer_size: 600000 #38400
   nhit_cut: 1
   sync_noise_cut: [100, 11000000] # Stephen says no need to cut > first 10 usec
   sync_noise_cut_enabled: True
@@ -19,6 +19,6 @@ params:
     off_beam_threshold : 20
     shifted_event_dt : -70
   autocorrect_unix_ts: True
-  pps_delay_extractor_enabled: True
+  pps_delay_extractor_enabled: False
   pps_delay_extractor_config:
     debug_mode: True
