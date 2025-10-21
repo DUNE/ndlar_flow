@@ -96,22 +96,21 @@ class WaveformNoiseFilter(H5FlowStage):
             self.data_manager.create_dset(self.noise_dset_name, dtype=wvfm_dset.dtype)
             self.data_manager.create_ref(source_name, self.noise_dset_name)
 
-    def min_range_baseline(self, array, segment_size=25, num_segments=40, num_means=4):
-        
-        # Define start and end indices for segments
-        indices = np.arange(num_segments + 1) * segment_size  # (41,)
-        start_indices, end_indices = indices[:-1], indices[1:]  # (40,)
+    def min_range_baseline(self, array, segment_size, num_segments, num_means=4):
 
+        # Define start and end indices for segments
+        indices = np.arange(num_segments + 1) * segment_size
+        start_indices, end_indices = indices[:-1], indices[1:]
         # Generate index array for advanced indexing
-        segment_range = np.arange(segment_size)  # (25,)
-        index_array = start_indices[:, None] + segment_range  # Shape: (40, 25)
+        segment_range = np.arange(segment_size)
+        index_array = start_indices[:, None] + segment_range
 
         # Extract data from segments using indexing
-        sliced_data = array[..., index_array]  # Shape (..., 40, 25)
+        sliced_data = array[..., index_array]
 
         # Compute range (peak-to-peak difference) and mean for each segment
-        ranges = np.abs(np.ptp(sliced_data, axis=-1))  # Shape (..., 40)
-        means = np.mean(sliced_data, axis=-1)  # Shape (..., 40)
+        ranges = np.abs(np.ptp(sliced_data, axis=-1))
+        means = np.mean(sliced_data, axis=-1)
 
         # Mask zero ranges
         mask_zero = (ranges != 0)
@@ -119,13 +118,13 @@ class WaveformNoiseFilter(H5FlowStage):
         means = np.where(mask_zero, means, np.nan)
 
         # Find the ordering of the segments based on the smallest range
-        smallest_ordering = np.argsort(ranges, axis=-1)  # Shape (..., 40)
+        smallest_ordering = np.argsort(ranges, axis=-1)
 
         # Sort means according to the ordering of smallest ranges
-        sorted_means = np.take_along_axis(means, smallest_ordering, axis=-1)  # Shape (..., 40)
+        sorted_means = np.take_along_axis(means, smallest_ordering, axis=-1)
 
         # Compute the average of the 2nd, 3rd, and 4th smallest means
-        average_mean = np.mean(sorted_means[..., 1:num_means], axis=-1)  # Shape (...)
+        average_mean = np.mean(sorted_means[..., 1:num_means], axis=-1)
 
         # calculate RMS for the ranges of the smallest range segments
         rms = np.sqrt(np.mean(np.square(np.take_along_axis(ranges, smallest_ordering[..., :num_means], axis=-1)), axis=-1))
