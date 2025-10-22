@@ -624,6 +624,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
     default_clusters_min_samples = 1
     default_nhit_limit = 50
     default_do_timestamp_unroll = True
+    default_light_triggers_file = ''
     def __init__(self, **params):
         super(LowEnergyRawEventBuilder, self).__init__(**params)
         self.upper_window = params.get('upper_window', self.default_upper_window)
@@ -636,6 +637,16 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         self.dbscan = DBSCAN(eps=self.clusters_eps, min_samples=self.clusters_min_samples)
         self.clusters_dtype = r.RawEventGenerator.clusters_dtype
         self.clusters_hits_dtype = r.RawEventGenerator.clusters_hits_dtype
+        self.light_triggers_file = params.get('light_triggers_file', self.default_light_triggers_file)
+        if self.light_triggers_file != '':
+            self.light_triggers_data = np.load(self.light_triggers_file)
+            unique_unix_vals = self.light_triggers_data['unique_unix']
+            start_indices = self.light_triggers_data['start_indices']
+            stop_indices = self.light_triggers_data['stop_indices']
+            self.light_triggers_indices_dict = {int(unique_unix_vals[i]):(start_indices[i], stop_indices[i]) for i in range(len(unique_unix_vals))}
+            self.light_unix = self.light_triggers_data['unix']
+            self.light_pps = self.light_triggers_data['pps']
+            
         
     def get_config(self):
         return dict(
@@ -675,32 +686,56 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         ext_trig_index_arr = np.zeros(len(unix_ts), dtype='int')
         data_packet_mask = packets['packet_type'] == 0
 
+        unix_ts_range = np.arange(np.min(unix_ts['timestamp']), np.max(unix_ts['timestamp'])+1)
+        if self.light_triggers_file != '':
+            light_unix, light_pps = [], []
+            for u_ts in unix_ts_range:
+                try:
+                    light_trig_indices = self.light_triggers_indices_dict[int(u_ts)]
+                except:
+                    continue
+                light_unix += list(self.light_unix[light_trig_indices[0]:light_trig_indices[1]])
+                light_pps += list(self.light_pps[light_trig_indices[0]:light_trig_indices[1]])
+            if not len(light_unix):
+                print('No light triggers found that overlap with the events in this file.')
+
+            trigger_idcs = np.arange(len(light_unix))
+            
         last_ts = -1
         current_ts = -1
         ext_trig_index = 0
         for i, start_idx in enumerate(trigger_idcs):
             # skip duplicate triggers... maybe only needed for MC? 
-            current_ts = ts[start_idx]
+            if self.light_triggers_file == '':
+                current_ts = ts[start_idx]
+            else:
+                current_ts = light_pps[start_idx]
+                
             if current_ts == last_ts:
                 last_ts = current_ts
                 continue
             last_ts = current_ts
                 
             # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
-            hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & trig_mask)
-            unix_mask = unix_ts['timestamp'][start_idx] == unix_ts['timestamp']
+            #hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & trig_mask)
+            if self.light_triggers_file == '':
+                unix_mask = np.abs(unix_ts['timestamp'][start_idx] - unix_ts['timestamp']) == 0
+                trig_ts = ts[start_idx]
+            else:
+                unix_mask = light_unix[start_idx] == unix_ts['timestamp']
+                trig_ts = light_pps[start_idx]*1e-3 / resources['RunData'].crs_ticks
             
-            mask = (ts >= ts[start_idx] - abs(self.lower_window)) \
-                & (ts <= ts[start_idx] + self.upper_window) \
+            mask = (ts >= trig_ts - abs(self.lower_window)) \
+                & (ts <= trig_ts + self.upper_window) \
                 & ~used_mask \
-                & hotfix_mask \
                 & unix_mask \
                 & data_packet_mask
+                #& hotfix_mask \
             
             total_matches = np.count_nonzero(mask)
             #print(f"{total_matches=}")
             if total_matches > 0 and total_matches < self.nhit_limit:
-                t0s_arr[mask] = ts[start_idx]
+                t0s_arr[mask] = trig_ts
                 ext_trig_index_arr[mask] = ext_trig_index
                 matched_mask = np.logical_or( matched_mask, mask )
                 
@@ -889,9 +924,30 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
             event_clusters = np.split(clusters_data, event_indices)
             event_clusters_hits = np.split(clusters_hits_data, event_indices)
             if mc_assn is not None:
-                event_mc_assn = np.split(mc_assn, event_indices)
+                    event_mc_assn = np.split(mc_assn, event_indices)
             else:
-                event_mc_assn = None
+                    event_mc_assn = None
+            # Initialize empty lists outside the loop
+            #events = []
+            #event_unix = []
+            #event_clusters = []
+            #event_clusters_hits = []
+            #event_mc_assn = []
+            #cluster_nhit_limit = 10
+            # Loop over the pairs of indices defining each event range
+            #for start_idx, end_idx in zip(event_indices[:-1], event_indices[1:]):
+            #    if np.any(clusters_data[start_idx:end_idx]['nhit']) > cluster_nhit_limit:
+            #        continue
+            #    events.append(pkts[start_idx:end_idx])
+            #    event_unix.append(unix[start_idx:end_idx])
+            #    event_clusters.append(clusters_data[start_idx:end_idx])
+            #    event_clusters_hits.append(clusters_hits_data[start_idx:end_idx])
+            #    if mc_assn is not None:
+                    #event_mc_assn = np.split(mc_assn, event_indices)
+            #        event_mc_assn.append(mc_assn[start_idx:end_idx])
+            #    else:
+            #        event_mc_assn = None
+            
         else:
             # current saving each cluster as its own event, may change this in the future?
             events = np.split(pkts, label_indices)
