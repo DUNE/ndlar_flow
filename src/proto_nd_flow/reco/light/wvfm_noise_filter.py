@@ -57,7 +57,7 @@ class WaveformNoiseFilter(H5FlowStage):
     default_num_means = 4
     default_noise_dset_name = 'light/fwvfm_noise'
 
-
+    # dtype for filtered & baselined waveforms
     def fwvfm_dtype(self, nadc, nchannels, nsamples): return np.dtype([('samples', 'f4', (nadc, nchannels, nsamples))])
 
     def __init__(self, **params):
@@ -95,6 +95,7 @@ class WaveformNoiseFilter(H5FlowStage):
         if self.keep_noise:
             self.data_manager.create_dset(self.noise_dset_name, dtype=wvfm_dset.dtype)
             self.data_manager.create_ref(source_name, self.noise_dset_name)
+
 
     def min_range_baseline(self, array, segment_size, num_segments, num_means=4):
 
@@ -141,7 +142,7 @@ class WaveformNoiseFilter(H5FlowStage):
         # flatten into individual waveforms
         wvfm_samples = wvfm_data['samples'].reshape(-1, wvfm_data['samples'].shape[-1])
         # truncate lowest 2-bits and convert to float
-        wvfm_samples = (wvfm_samples - wvfm_samples % 4).astype(float)
+        wvfm_samples = (wvfm_samples >> 2).astype(float)
 
         # # subtract noise from waveform
         fwvfm = np.empty(wvfm_data.shape, dtype=self.fwvfm_dtype)

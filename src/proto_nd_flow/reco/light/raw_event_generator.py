@@ -54,9 +54,10 @@ class LightEventGenerator(H5FlowGenerator):
             wvfm_valid  u1(n_adcs,n_channels),  boolean indicator if channel is present in event
 
         ``wvfm`` datatype::
-
             samples     i2(n_adc,n_channels,n_samples), sample 10-bit ADC value (lowest 6 bits are not used)
+            clipped    ?(n_adc,n_channels),          boolean indicator if any samples are saturated
     '''
+
     default_n_adcs = 2
     default_n_channels = 64
     default_chunk_size = 128
@@ -71,6 +72,7 @@ class LightEventGenerator(H5FlowGenerator):
         ('utime_ms', 'u8'),  # unix time [ms since epoch]
         ('tai_ns', 'u8'),  # time since PPS [ns]
         ('wvfm', 'i2', self.n_samples)  # sample value
+        ('clipped', '?')
     ])
 
     def event_dtype(self): return np.dtype([
@@ -84,8 +86,10 @@ class LightEventGenerator(H5FlowGenerator):
     ])
 
     def wvfm_dtype(self): return np.dtype([
-        ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples))  # sample value
+        ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples)),  # sample value
+        ('clipped', '?', (self.n_adcs, self.n_channels))  # boolean indicator if any samples are saturated
     ])
+
 
     def __init__(self, **params):
         super(LightEventGenerator, self).__init__(**params)
@@ -248,6 +252,9 @@ class LightEventGenerator(H5FlowGenerator):
         arr['utime_ms'] = self.rwf.utime_ms
         arr['tai_ns'] = self.rwf.tai_ns
         arr['wvfm'] = -np.frombuffer(self.rwf.th1s_ptr.fArray, dtype='i2', count=self.n_samples)
+        # 14-bit signed ADC values stored in 16-bit int, so shift to proper range
+        clip_val = (2**14/2 - 1)*(2**2)
+        arr['clipped'] = np.any(arr['wvfm'] >= clip_val)
 
         self.data_buffer[self.rwf.sn].append(arr)
 
@@ -322,6 +329,7 @@ class LightEventGenerator(H5FlowGenerator):
 
             # fill waveform array
             self.wvfms['samples'][0, sn_hash, ch_hash] = data['wvfm']
+            self.wvfms['clipped'][0, sn_hash, ch_hash] = data['clipped']
 
             # remove from buffer
             self.data_buffer[sn[i]] = self.data_buffer[sn[i]][1:]
