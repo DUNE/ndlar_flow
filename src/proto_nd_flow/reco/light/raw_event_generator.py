@@ -71,8 +71,7 @@ class LightEventGenerator(H5FlowGenerator):
         ('ch', 'u1'),  # channel number
         ('utime_ms', 'u8'),  # unix time [ms since epoch]
         ('tai_ns', 'u8'),  # time since PPS [ns]
-        ('wvfm', 'i2', self.n_samples)  # sample value
-        ('clipped', '?')
+        ('wvfm', 'i2', self.n_samples),  # sample value
     ])
 
     def event_dtype(self): return np.dtype([
@@ -251,10 +250,7 @@ class LightEventGenerator(H5FlowGenerator):
         arr['ch'] = self.rwf.ch
         arr['utime_ms'] = self.rwf.utime_ms
         arr['tai_ns'] = self.rwf.tai_ns
-        arr['wvfm'] = -np.frombuffer(self.rwf.th1s_ptr.fArray, dtype='i2', count=self.n_samples)
-        # 14-bit signed ADC values stored in 16-bit int, so shift to proper range
-        clip_val = (2**14/2 - 1)*(2**2)
-        arr['clipped'] = np.any(arr['wvfm'] >= clip_val)
+        arr['wvfm'] = -np.frombuffer(self.rwf.th1s_ptr.fArray, dtype=np.int16, count=self.n_samples)
 
         self.data_buffer[self.rwf.sn].append(arr)
 
@@ -329,7 +325,7 @@ class LightEventGenerator(H5FlowGenerator):
 
             # fill waveform array
             self.wvfms['samples'][0, sn_hash, ch_hash] = data['wvfm']
-            self.wvfms['clipped'][0, sn_hash, ch_hash] = data['clipped']
+            self.wvfms['clipped'][0, sn_hash, ch_hash] = np.any(data['wvfm'] >= 32764)
 
             # remove from buffer
             self.data_buffer[sn[i]] = self.data_buffer[sn[i]][1:]
