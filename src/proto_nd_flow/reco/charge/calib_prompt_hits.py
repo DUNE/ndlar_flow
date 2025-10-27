@@ -123,9 +123,14 @@ class CalibHitBuilder(H5FlowStage):
             pedestal_mv=self.pedestal_mv
         ))
 
+        self.gains = defaultdict(lambda : dict(
+            gain=self.gain
+        ))
+
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
         self.load_pedestals()
+        self.load_gains()
         self.load_configurations()
 
     def run(self, source_name, source_slice, cache):
@@ -265,6 +270,11 @@ class CalibHitBuilder(H5FlowStage):
                                 for unique_id in hit_uniqueid_str])
             else:
                 ped = np.full(len(hit_uniqueid_str), self.pedestal_mv)
+            if self.gain_file != '':
+                gain = np.array([self.gains[unique_id]['gain'] for unique_id in hit_uniqueid_str])
+            else:
+                gain = np.full(len(hit_uniqueid_str), self.gain)
+
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             calib_hits_arr['x'] = x
             #if has_mc_truth:
@@ -277,16 +287,16 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['io_channel'] = packets_arr['io_channel']
             calib_hits_arr['chip_id'] = packets_arr['chip_id']
             calib_hits_arr['channel_id'] = packets_arr['channel_id']
-            hits_charge = self.charge_from_dataword(packets_arr['dataword'], vref, vcm, ped, self.adc_counts, self.gain) # ke-
+            hits_charge = self.charge_from_dataword(packets_arr['dataword'], vref, vcm, ped, self.adc_counts, gain) # ke-
             calib_hits_arr['Q_raw'] = hits_charge # ke-
             if self.adc_droop_calibration: 
-                hits_charge_calibrated = self.charge_from_dataword_corrected(packets_arr['dataword'], packets_arr['timestamp'], hit_uniqueid, vref, vcm, ped, self.adc_counts, self.gain) # ke- 
-                calib_hits_arr['Q'] = hits_charge_calibrated # ke-
+                hits_charge_calibrated = self.charge_from_dataword_corrected(packets_arr['dataword'], packets_arr['timestamp'], hit_uniqueid, vref, vcm, ped, self.adc_counts, gain) # ke- 
+                calib_hits_arr['Q'] = hits_charge_calibrated / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t) # ke-
             else:
-                calib_hits_arr['Q'] = hits_charge
+                calib_hits_arr['Q'] = hits_charge / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t)
 
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
-            calib_hits_arr['E'] = calib_hits_arr['Q'] * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV) # MeV
+            calib_hits_arr['E'] = calib_hits_arr['Q'] * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV)  # MeV
             #if has_mc_truth:
             #    true_recomb = resources['LArData'].ionization_recombination(mode=2,dEdx=packet_seg_bt_arr['dEdx'])
             #    calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
@@ -383,6 +393,12 @@ class CalibHitBuilder(H5FlowStage):
             with open(self.pedestal_file, 'r') as infile:
                 for key, value in json.load(infile).items():
                     self.pedestal[key] = value
+
+    def load_gains(self):
+        if self.gain_file != '':
+            with open(self.gain_file, 'r') as infile:
+                for key, value in json.load(infile).items():
+                    self.gains[key] = value
 
     def load_configurations(self):
         if self.configuration_file != '' and not resources['RunData'].is_mc:

@@ -2,6 +2,7 @@ import numpy as np
 import logging
 import scipy.interpolate as interpolate
 import os
+import json
 
 from h5flow.core import H5FlowResource, resources
 
@@ -69,6 +70,7 @@ class LArData(H5FlowResource):
         self.electron_mobility_params = np.array(params.get('electron_mobility_params', self.default_electron_mobility_params))
         self._electron_lifetime = params.get('electron_lifetime', self.default_electron_lifetime)
         self.electron_lifetime_file = params.get('electron_lifetime_file', self.default_electron_lifetime_file)
+        self.vdrift_file = params.get('vdrift_file', self.default_vdrift_file)
         self.box_alpha = params.get('box_alpha', self.default_box_alpha)
         self.box_beta = params.get('box_beta', self.default_box_beta)
         self.birks_Ab = params.get('birks_Ab', self.default_birks_Ab)
@@ -90,6 +92,7 @@ class LArData(H5FlowResource):
             self.data['classname'] = self.classname
             self.data['class_version'] = self.class_version
             self.data['electron_mobility_params'] = self.electron_mobility_params
+            self._init_vdrift()
             self.data_manager.set_attrs(self.path, **self.data)
         else:
             self.data = dict(self.data_manager.get_attrs(self.path))
@@ -138,6 +141,14 @@ class LArData(H5FlowResource):
             upper_bound_y = d['electron_lifetime_upper_bound']['lt_us']
             lower_bound_x = d['electron_lifetime_lower_bound']['unix_s']
             lower_bound_y = d['electron_lifetime_lower_bound']['lt_us']
+        elif (self.electron_lifetime_file is not None
+              and os.path.exists(self.electron_lifetime_file)
+              and self.electron_lifetime_file[-4:] == '.json'
+              and not resources['RunData'].is_mc):
+            # handle case when electron lifetime text file is specified --> Should be created from calibration with the direct value already available
+            with open(self.electron_lifetime_file, 'r') as f:
+                tmp_dict = json.load(f)
+                self.electron_lifetime = tmp_dict["elifetime_ms"] * units.ms       
         else:
             central_value_x = np.array([0, 1])
             central_value_y = np.array([self._electron_lifetime] * 2)
@@ -169,6 +180,16 @@ class LArData(H5FlowResource):
         self.data['electron_lifetime_upper_bound']['lt_us'] = upper_bound_y
         self.data['electron_lifetime_lower_bound']['unix_s'] = lower_bound_x
         self.data['electron_lifetime_lower_bound']['lt_us'] = lower_bound_y
+
+    def _init_vdrift_file(self):
+        if (self.vdrift_file is not None
+              and os.path.exists(self.vdrift_file)
+              and self.vdrift_file[-4:] == '.json'
+              and not resources['RunData'].is_mc):
+            # handle case when vdrift lifetime json file is specified 
+            with open(self.vdrift_file, 'r') as f:
+                tmp_dict = json.load(f)
+                self.data["v_drift"] = tmp_dict["v_drift"]
 
     def electron_lifetime(self, unix_ts):
         '''
