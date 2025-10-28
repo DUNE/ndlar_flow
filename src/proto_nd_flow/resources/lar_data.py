@@ -280,7 +280,7 @@ class LArData(H5FlowResource):
             return self.data['v_drift']
 
 
-        if (self._v_drift == 0): #no vdrift provided, will aproximate it with the field
+        if (self._v_drift == 0 or resources['RunData'].is_mc): #no vdrift provided or we are in MC, will compute with the field
             # get electric field from run data
             e_field = resources['RunData'].e_field
     
