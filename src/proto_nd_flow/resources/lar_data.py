@@ -51,6 +51,7 @@ class LArData(H5FlowResource):
     default_electron_mobility_params = np.array([551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053])
     default_electron_lifetime = 2.2e3  # us
     default_electron_lifetime_file = None
+    default_vdrift = 0.
     default_box_alpha = 0.93
     default_box_beta = 0.207 #0.3 (MeV/cm)^-1 * 1.383 (g/cm^3)* 0.5 (kV/cm), R. Acciarri et al JINST 8 (2013) P08005
     default_birks_Ab = 0.800
@@ -69,8 +70,8 @@ class LArData(H5FlowResource):
 
         self.electron_mobility_params = np.array(params.get('electron_mobility_params', self.default_electron_mobility_params))
         self._electron_lifetime = params.get('electron_lifetime', self.default_electron_lifetime)
+        self._v_drift = params.get('vdrift', self.default_vdrift)
         self.electron_lifetime_file = params.get('electron_lifetime_file', self.default_electron_lifetime_file)
-        self.vdrift_file = params.get('vdrift_file', self.default_vdrift_file)
         self.box_alpha = params.get('box_alpha', self.default_box_alpha)
         self.box_beta = params.get('box_beta', self.default_box_beta)
         self.birks_Ab = params.get('birks_Ab', self.default_birks_Ab)
@@ -92,12 +93,11 @@ class LArData(H5FlowResource):
             self.data['classname'] = self.classname
             self.data['class_version'] = self.class_version
             self.data['electron_mobility_params'] = self.electron_mobility_params
-            self._init_vdrift()
             self.data_manager.set_attrs(self.path, **self.data)
         else:
             self.data = dict(self.data_manager.get_attrs(self.path))
             assert_compat_version(self.class_version, self.data['class_version'])
-            self._init_electron_lifetime()            
+            self._init_electron_lifetime()      
 
         if self.rank == 0:
             logging.info(f'v_drift: {self.v_drift}')
@@ -141,14 +141,6 @@ class LArData(H5FlowResource):
             upper_bound_y = d['electron_lifetime_upper_bound']['lt_us']
             lower_bound_x = d['electron_lifetime_lower_bound']['unix_s']
             lower_bound_y = d['electron_lifetime_lower_bound']['lt_us']
-        elif (self.electron_lifetime_file is not None
-              and os.path.exists(self.electron_lifetime_file)
-              and self.electron_lifetime_file[-4:] == '.json'
-              and not resources['RunData'].is_mc):
-            # handle case when electron lifetime text file is specified --> Should be created from calibration with the direct value already available
-            with open(self.electron_lifetime_file, 'r') as f:
-                tmp_dict = json.load(f)
-                self.electron_lifetime = tmp_dict["elifetime_ms"] * units.ms       
         else:
             central_value_x = np.array([0, 1])
             central_value_y = np.array([self._electron_lifetime] * 2)
@@ -181,15 +173,6 @@ class LArData(H5FlowResource):
         self.data['electron_lifetime_lower_bound']['unix_s'] = lower_bound_x
         self.data['electron_lifetime_lower_bound']['lt_us'] = lower_bound_y
 
-    def _init_vdrift_file(self):
-        if (self.vdrift_file is not None
-              and os.path.exists(self.vdrift_file)
-              and self.vdrift_file[-4:] == '.json'
-              and not resources['RunData'].is_mc):
-            # handle case when vdrift lifetime json file is specified 
-            with open(self.vdrift_file, 'r') as f:
-                tmp_dict = json.load(f)
-                self.data["v_drift"] = tmp_dict["v_drift"]
 
     def electron_lifetime(self, unix_ts):
         '''
@@ -296,11 +279,15 @@ class LArData(H5FlowResource):
         if 'v_drift' in self.data:
             return self.data['v_drift']
 
-        # get electric field from run data
-        e_field = resources['RunData'].e_field
 
-        # calculate drift velocity
-        self.data['v_drift'] = self.electron_mobility(e_field) * e_field
+        if (self._v_drift == 0): #no vdrift provided, will aproximate it with the field
+            # get electric field from run data
+            e_field = resources['RunData'].e_field
+    
+            # calculate drift velocity
+            self.data['v_drift'] = self.electron_mobility(e_field) * e_field
+        else:
+            self.data['v_drift'] = self._v_drift
 
         return self.v_drift
 
