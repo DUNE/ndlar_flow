@@ -132,6 +132,8 @@ class LightEventGenerator(H5FlowGenerator):
         self.data_buffer = defaultdict(list)  # serial number : [<buffered wvfm data>]
         self.event = np.zeros((1,), dtype=self.event_dtype)
         self.wvfms = np.zeros((1,), dtype=self.wvfm_dtype)
+        # Ensure clipped is initialized to False
+        self.wvfms['clipped'].fill(False)
         self.event_buffer = list()
         self.curr_event = 0
 
@@ -181,10 +183,12 @@ class LightEventGenerator(H5FlowGenerator):
                 new_event = self.store_event(self.curr_event)
                 if new_event != self.curr_event:
                     # logging.debug(f'~~~ NEW EVENT ~~~ (ch {np.sum(self.event["wvfm_valid"])})')
-                    self.event_buffer.append((self.event.copy(), self.wvfms.copy()))
+                    self.event_buffer.append((np.copy(self.event), np.copy(self.wvfms)))
 
                     self.event = np.zeros((1,), dtype=self.event_dtype)
                     self.wvfms = np.zeros((1,), dtype=self.wvfm_dtype)
+                    # Ensure clipped is initialized to False (np.zeros should do this, but being explicit)
+                    self.wvfms['clipped'].fill(False)
 
                 # update position
                 self.curr_event = new_event
@@ -325,7 +329,12 @@ class LightEventGenerator(H5FlowGenerator):
 
             # fill waveform array
             self.wvfms['samples'][0, sn_hash, ch_hash] = data['wvfm']
-            self.wvfms['clipped'][0, sn_hash, ch_hash] = np.any(data['wvfm'] >= 32764)
+            is_clipped = bool(np.any(np.abs(data['wvfm']) >= 32764))
+            self.wvfms['clipped'][0, sn_hash, ch_hash] = is_clipped
+
+            # Debug: log if clipped
+            if is_clipped:
+                logging.debug(f'Clipped waveform detected: event={event_number}, sn={data["sn"]}, ch={data["ch"]}, sn_hash={sn_hash}, ch_hash={ch_hash}, max_val={np.max(np.abs(data["wvfm"]))}')
 
             # remove from buffer
             self.data_buffer[sn[i]] = self.data_buffer[sn[i]][1:]
