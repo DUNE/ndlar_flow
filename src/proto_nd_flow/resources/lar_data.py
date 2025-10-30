@@ -3,6 +3,9 @@ import logging
 import scipy.interpolate as interpolate
 import os
 import json
+import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from h5flow.core import H5FlowResource, resources
 
@@ -51,7 +54,7 @@ class LArData(H5FlowResource):
     default_electron_mobility_params = np.array([551.6, 7158.3, 4440.43, 4.29, 43.63, 0.2053])
     default_electron_lifetime = 2.2e3  # us
     default_electron_lifetime_file = None
-    default_vdrift = 0.
+    default_vdrift = []
     default_box_alpha = 0.93
     default_box_beta = 0.207 #0.3 (MeV/cm)^-1 * 1.383 (g/cm^3)* 0.5 (kV/cm), R. Acciarri et al JINST 8 (2013) P08005
     default_birks_Ab = 0.800
@@ -141,6 +144,45 @@ class LArData(H5FlowResource):
             upper_bound_y = d['electron_lifetime_upper_bound']['lt_us']
             lower_bound_x = d['electron_lifetime_lower_bound']['unix_s']
             lower_bound_y = d['electron_lifetime_lower_bound']['lt_us']
+        elif (self.electron_lifetime_file is not None
+              and os.path.exists(self.electron_lifetime_file)
+              and self.electron_lifetime_file[-5:] == '.json'
+              and not resources['RunData'].is_mc):
+            # handle case when electron lifetime text file is specified --> Should be created from calibration with the direct value already available
+            with open(self.electron_lifetime_file, 'r') as f:
+                lifetimes = json.load(f)
+            charge_name = resources['RunData'].charge_filename
+
+            #extract timestamp
+            match = re.search(r"(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})", charge_name)
+            if not match:
+                raise ValueError(f"No timestamp found in filename: {charge_name} cannot extract elifetime")
+            
+            ts_str = match.group(1)
+            if 'CET' in charge_name:
+                tz = ZoneInfo("Europe/Paris")
+            elif 'CDT' in charge_name:
+                tz = ZoneInfo("America/Chicago")
+            else:
+                tz = ZoneInfo("UTC")
+                
+            file_dt = datetime.strptime(ts_str, "%Y_%m_%d_%H_%M_%S").replace(tzinfo=tz).timestamp()
+
+            # Convert JSON keys to timestamps and values
+            lifetime_data = []
+            for ts_str, lifetime in lifetimes.items():
+                dt = datetime.strptime(ts_str, "%Y_%m_%d_%H_%M_%S").replace(tzinfo=ZoneInfo("Europe/Paris"))
+                lifetime_data.append((dt.timestamp(), lifetime[0]))
+        
+            # Sort by timestamp
+            lifetime_data = np.array(sorted(lifetime_data, key=lambda x: x[0]))
+            idx = (np.abs(lifetime_data[:, 0] - file_dt)).argmin()
+            lifetime_data[idx][1]
+
+            # Find the closest lifetime in time
+            idx = np.abs(lifetime_data[:, 0] - file_dt).argmin()
+            self._electron_lifetime = lifetime_data[idx][1] * 1000.0  # convert ms → µs or as needed
+            return
         else:
             central_value_x = np.array([0, 1])
             central_value_y = np.array([self._electron_lifetime] * 2)
@@ -279,15 +321,14 @@ class LArData(H5FlowResource):
         if 'v_drift' in self.data:
             return self.data['v_drift']
 
-
-        if (self._v_drift == 0 or resources['RunData'].is_mc): #no vdrift provided or we are in MC, will compute with the field
+        if (self._v_drift == [] or resources['RunData'].is_mc): #no vdrift provided or we are in MC, will compute with the field
             # get electric field from run data
             e_field = resources['RunData'].e_field
     
             # calculate drift velocity
-            self.data['v_drift'] = self.electron_mobility(e_field) * e_field
+            self.data['v_drift'] = np.array([self.electron_mobility(e_field) * e_field])
         else:
-            self.data['v_drift'] = self._v_drift
+            self.data['v_drift'] = np.array(self._v_drift)
 
         return self.v_drift
 
