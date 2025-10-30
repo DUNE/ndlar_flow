@@ -1,3 +1,4 @@
+from functools import total_ordering
 import numpy as np
 import numpy.ma as ma
 from collections import defaultdict
@@ -96,7 +97,9 @@ class WaveformHitFinder(H5FlowStage):
                 ('rising_err_spline', 'f4'),
                 ('fwhm_spline', 'f4'),
                 ('integral', 'f4'),
-                ('fprompt', 'f4')
+                ('fprompt', 'f4'),
+                ('tot', 'f4'),
+                ('tot_upper', 'f4'),
             ])
         if self.hit_level=="sum":
             return np.dtype([
@@ -117,7 +120,9 @@ class WaveformHitFinder(H5FlowStage):
                 ('rising_err_spline', 'f4'),
                 ('fwhm_spline', 'f4'),
                 ('integral', 'f4'),
-                ('fprompt', 'f4')
+                ('fprompt', 'f4'),
+                ('tot', 'f4'),
+                ('tot_upper', 'f4'),
             ])
         elif self.hit_level=="sipm":
             return np.dtype([
@@ -188,6 +193,24 @@ class WaveformHitFinder(H5FlowStage):
         return  noise
 
 
+    def compute_tot(self, bins_over_noise_threshold, first_bins_over_noise):
+        # Vectorized TOT: length of each True run, reported only at run starts
+        B = bins_over_noise_threshold
+        # forward run lengths
+        c = np.cumsum(B, axis=-1, dtype=np.int32)
+        reset = np.maximum.accumulate(np.where(B, 0, c), axis=-1)
+        fwd = c - reset
+        # reverse run lengths
+        Br = B[..., ::-1]
+        cr = np.cumsum(Br, axis=-1, dtype=np.int32)
+        resetr = np.maximum.accumulate(np.where(Br, 0, cr), axis=-1)
+        rev = (cr - resetr)[..., ::-1]
+        # total run length for each True element
+        run_len = np.where(B, fwd + rev - 1, 0).astype(np.int32)
+        # keep only at first bins over noise
+        tot = np.where(first_bins_over_noise, run_len, 0)
+        return tot
+
     def peak_finder(self, wvfm, noise,
                     n_noise_factor,
                     n_bins_rolled,
@@ -204,11 +227,22 @@ class WaveformHitFinder(H5FlowStage):
         sqrt_rolling_average = np.sqrt(np.abs(rolling_average) * pe_weight**2)
         sqrt_rolling_average[sqrt_rolling_average == 0] = 1
         dynamic_threshold = rolling_average + n_sqrt_rt_factor*sqrt_rolling_average
+        # find bins over noise floor and number of bins over noise floor
+        bins_over_noise_threshold = (wvfm > height)
+        first_bins_over_noise = bins_over_noise_threshold.copy()
+        first_bins_over_noise[..., 1:] &= ~bins_over_noise_threshold[..., :-1]
+        tot = self.compute_tot(bins_over_noise_threshold, first_bins_over_noise)
+        # get upper threshold tot
+        bins_over_upper_threshold = (wvfm > height * 4)
+        first_bins_over_upper = bins_over_upper_threshold.copy()
+        first_bins_over_upper[..., 1:] &= ~bins_over_upper_threshold[..., :-1]
+        tot_upper = self.compute_tot(bins_over_upper_threshold, first_bins_over_upper)
         # find bins over dynamic threshold and noise floor
-        bins_over_dynamic_threshold = (wvfm > dynamic_threshold) & (wvfm > height)
+        bins_over_dynamic_threshold = (wvfm > dynamic_threshold)
+        bins_over_thresholds = bins_over_noise_threshold & bins_over_dynamic_threshold
         # Find first bins over threshold (rising edge)
-        first_bins_over = bins_over_dynamic_threshold.copy()
-        first_bins_over[..., 1:] &= ~bins_over_dynamic_threshold[..., :-1]
+        first_bins_over = bins_over_thresholds.copy()
+        first_bins_over[..., 1:] &= ~bins_over_thresholds[..., :-1]
         if use_rising_edge:
             return first_bins_over
         # Peak finding
@@ -230,7 +264,14 @@ class WaveformHitFinder(H5FlowStage):
             # Keep only the first peak in consecutive runs
             peak_bins[..., 1:] &= ~peak_bins[..., :-1]
 
-        return peak_bins
+        # tot
+        # for each first_bins_over, if previous bin is over noise threshold, set tot to nan
+        # else, set tot to distance to next first_bins_over
+        prev_bins_over_noise = first_bins_over_noise[..., :-1]
+        next_bins_over_noise = first_bins_over_noise[..., 1:]
+        tot[prev_bins_over_noise] = np.nan
+
+        return peak_bins, tot, tot_upper
 
 
     def __init__(self, **params):
@@ -329,7 +370,7 @@ class WaveformHitFinder(H5FlowStage):
 
         noise = self.get_noise_threshold(wvfms, self.mad_factor)
 
-        peaks_found = self.peak_finder(wvfms, noise,
+        peaks_found, tot, tot_upper = self.peak_finder(wvfms, noise,
                                       self.noise_factor,
                                       self.n_bins_rolled,
                                       self.rt_sqrt_factor,
@@ -346,6 +387,8 @@ class WaveformHitFinder(H5FlowStage):
         peaks = np.where(peaks_found)
 
         peak_max = wvfms[..., :][peaks]  # waveform value at each peak
+        peak_tot = tot[peaks[1:-1]].ravel()
+        peak_tot_upper = tot_upper[peaks[1:-1]].ravel()
 
         threshold_mask = peak_max >=self.threshold[peaks[1:-1]].ravel()
 
@@ -426,6 +469,8 @@ class WaveformHitFinder(H5FlowStage):
                 hit_data['trap_type'] = wvfm_det[peaks[:3]].ravel()
                 hit_data['integral'] = integrals.ravel()
                 hit_data['fprompt'] = fprompts.ravel()
+                hit_data['tot'] = peak_tot.ravel()
+                hit_data['tot_upper'] = peak_tot_upper.ravel()
 
             elif self.hit_level=="sum":
                 hit_data['tpc'] = peaks[1].ravel()
@@ -433,6 +478,8 @@ class WaveformHitFinder(H5FlowStage):
                 hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[(tpc,det)][0]) for tpc, det in zip(peaks[1].ravel(),wvfm_det[peaks[:3]].ravel())]
                 hit_data['integral'] = integrals.ravel()
                 hit_data['fprompt'] = fprompts.ravel()
+                hit_data['tot'] = peak_tot.ravel()
+                hit_data['tot_upper'] = peak_tot_upper.ravel()
 
             elif self.hit_level=="sipm":
                 hit_data['adc'] = peaks[1].ravel()
