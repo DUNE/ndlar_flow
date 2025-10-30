@@ -228,6 +228,7 @@ class LArData(H5FlowResource):
         )
 
     def charge_reduction_lifetime(self, t_drift):
+         print(self._electron_lifetime)
          lifetime_red = np.exp(-t_drift / self._electron_lifetime)
          return lifetime_red
 
