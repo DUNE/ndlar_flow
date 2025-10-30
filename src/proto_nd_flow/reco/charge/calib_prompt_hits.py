@@ -249,7 +249,6 @@ class CalibHitBuilder(H5FlowStage):
                 v_drift = v_drift_arr[0] #Default vdrift
             else :
                 v_drift = v_drift_arr[(packets_arr['io_group']-1)//2]
-            print ((packets_arr['io_group']))
             drift_d = drift_t * (v_drift * resources['RunData'].crs_ticks) / units.cm # convert mm -> cm
             x = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
             ## true drift position pair
