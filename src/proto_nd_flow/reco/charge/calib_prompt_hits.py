@@ -103,6 +103,7 @@ class CalibHitBuilder(H5FlowStage):
         self.packets_index_name = params.get('packets_index_name', self.packets_dset_name + '_index')
         self.t0_dset_name = params.get('t0_dset_name')
         self.pedestal_file = params.get('pedestal_file', '')
+        self.gain_file = params.get('gain_file', '')
         self.configuration_file = params.get('configuration_file', '')
         self.pedestal_mv = params.get('pedestal_mv', self.default_pedestal_mv)
         self.vref_mv = params.get('vref_mv', self.default_vref_mv)
@@ -110,6 +111,7 @@ class CalibHitBuilder(H5FlowStage):
         self.adc_counts = params.get('adc_counts', self.default_adc_counts)
         self.gain = params.get('gain', self.default_gain)
         self.adc_droop_calibration = params.get('adc_droop_calibration', False)
+        self.elifetime_calibration = params.get('elifetime_calibration',False)
         self.hit_ref = params.get('hit_ref', True)
 
         #: ASIC ADC configuration lookup table
@@ -177,6 +179,7 @@ class CalibHitBuilder(H5FlowStage):
                                     packets_dset=self.packets_dset_name,
                                     t0_dset=self.t0_dset_name,
                                     pedestal_file=self.pedestal_file,
+                                    gain_file=self.gain_file,
                                     configuration_file=self.configuration_file,
                                     adc_droop_calibration=self.adc_droop_calibration
                                     )
@@ -241,9 +244,14 @@ class CalibHitBuilder(H5FlowStage):
             # This time we add the rollover period instead of subtracting.
             drift_t[after_sync_mask] += resources['RunData'].rollover_ticks
 
-            drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks) / units.cm # convert mm -> cm
+            v_drift_arr = resources['LArData'].v_drift
+            if len(v_drift_arr) == 1:
+                v_drift = v_drift_arr[0] #Default vdrift
+            else :
+                v_drift = v_drift_arr[(packets_arr['io_group']-1)//2]
+            print ((packets_arr['io_group']))
+            drift_d = drift_t * (v_drift * resources['RunData'].crs_ticks) / units.cm # convert mm -> cm
             x = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
-
             ## true drift position pair
             #if has_mc_truth:
             #    drift_t_true = packet_seg_bt_arr['t'] #us
@@ -291,12 +299,16 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['Q_raw'] = hits_charge # ke-
             if self.adc_droop_calibration: 
                 hits_charge_calibrated = self.charge_from_dataword_corrected(packets_arr['dataword'], packets_arr['timestamp'], hit_uniqueid, vref, vcm, ped, self.adc_counts, gain) # ke- 
-                calib_hits_arr['Q'] = hits_charge_calibrated / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t) # ke-
+                calib_hits_arr['Q'] = hits_charge_calibrated  # ke-
             else:
-                calib_hits_arr['Q'] = hits_charge / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t)
-
+                calib_hits_arr['Q'] = hits_charge # ke-
+                
+            
+                
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
             calib_hits_arr['E'] = calib_hits_arr['Q'] * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV)  # MeV
+            if self.elifetime_calibration:
+                calib_hits_arr['E'] /= resources['LArData'].charge_reduction_lifetime(t_drift=(drift_t/10.)) # ke- we change the drift_t to µs
             #if has_mc_truth:
             #    true_recomb = resources['LArData'].ionization_recombination(mode=2,dEdx=packet_seg_bt_arr['dEdx'])
             #    calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
