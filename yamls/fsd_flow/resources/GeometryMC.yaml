@@ -9,6 +9,8 @@ params:
   crs_geometry_files: ['data/fsd_flow/multi_tile_layout-3.0.40_fsd_v3.yaml']
   crs_geometry_to_module: [0]
   lrs_geometry_file: 'data/fsd_flow/light_module_desc-6.0.1.yaml'
+  disabled_channels_file: 'data/fsd_flow/disabled_channels_fsd.json'
+  disabled_chips_file: 'data/fsd_flow/disabled_chips_fsd.json'
   beam_direction: 'z'
   drift_direction: 'x'
   network_agnostic: true
