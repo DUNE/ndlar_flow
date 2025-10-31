@@ -72,7 +72,8 @@ class RockMuonSelection(H5FlowStage):
         ('y_mid','f8'),
         ('z_mid','f8'),
         ('t','f8'),
-        ('io_group', 'i4')
+        ('io_group', 'i4'),
+        ('nhits', 'i4'),
     ])
 
     
@@ -525,7 +526,7 @@ class RockMuonSelection(H5FlowStage):
                 segment_to_track_ref.append([self.track_count, self.segment_count])
                 dx = np.linalg.norm(segment_start-segment_end)
             
-                return [self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Q_of_segment, dx, x_mid, y_mid,z_mid, drift_time, io_group_of_segment]
+                return [self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Q_of_segment, dx, x_mid, y_mid,z_mid, drift_time, io_group_of_segment, len(hits_of_segment)]
             else:
                 #print(f'No hits found for segment: start={segment_start}, end={segment_end}')
                 return None
