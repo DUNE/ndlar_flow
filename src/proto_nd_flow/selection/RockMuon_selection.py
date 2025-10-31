@@ -18,6 +18,10 @@ from scipy.spatial.distance import cdist
 
 import statistics
 
+
+MIN_SAMPLES = 3
+
+
 class RockMuonSelection(H5FlowStage):
     '''
     This will perform a selection for rock muons. Rock muons are 
@@ -146,7 +150,7 @@ class RockMuonSelection(H5FlowStage):
         positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
     
         # Perform DBSCAN clustering
-        hit_cluster = DBSCAN(eps=1, min_samples=3).fit(positions)
+        hit_cluster = DBSCAN(eps=1, min_samples=MIN_SAMPLES).fit(positions)
     
         cluster_labels = hit_cluster.labels_
 
@@ -541,6 +545,9 @@ class RockMuonSelection(H5FlowStage):
         
         if len(nan_indices) >   0:
             PromptHits_ev = np.delete(PromptHits_ev,nan_indices, axis = 0)
+
+        if len(PromptHits_ev) < MIN_SAMPLES:
+            return
         
         hit_indices = self.cluster(PromptHits_ev)
         
