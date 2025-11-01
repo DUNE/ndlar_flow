@@ -4,6 +4,9 @@ import logging
 import os
 from tqdm import tqdm
 import time
+import re
+from zoneinfo import ZoneInfo
+from datetime import datetime
 
 from h5flow.core import H5FlowStage, resources
 from h5flow import H5FLOW_MPI
@@ -95,6 +98,7 @@ class LowEnergyChargeLightMatching(H5FlowStage):
         else:
             self.event_pps_time = (tai_ns*1e-9 - (tai_ns*1e-9).astype('int'))*1e9*1e-3
         light_unix_span = (min(self.event_unix_time), max(self.event_unix_time))
+        pattern = re.compile(r"(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})")
         
         # find charge files that overlap in time to light file
         self.matched_charge_files = []
@@ -104,6 +108,14 @@ class LowEnergyChargeLightMatching(H5FlowStage):
             charge_file = os.path.join(self.charge_data_dir, charge_file)
             if not charge_file.split('.')[-1] in ['hdf5', 'h5']:
                 continue
+            match = pattern.search(charge_file)
+            timestamp_str = match.group(1)
+            dt_naive = datetime.strptime(timestamp_str, "%Y_%m_%d_%H_%M_%S")
+            dt_central = dt_naive.replace(tzinfo=ZoneInfo("America/Chicago"))
+            unix_timestamp_file = dt_central.timestamp()
+            if abs(unix_timestamp_file - min(self.event_unix_time)) > 60*60:
+                continue
+
             loops = 0
             skip_current_file = False
             f = 0
@@ -122,12 +134,14 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                         break
                 except:
                     print(f'Could not read file, trying again ({loops}/{total_tries})')
-                    time.sleep(1)
+                    time.sleep(0.5)
                     continue
                 break # if successfully read file, continue to rest of script
             if skip_current_file:
                 continue
             with f:
+                if not len(f[self.clusters_dset_name+'/data']):
+                    continue
                 charge_unix_span = [f[self.clusters_dset_name+'/data'][0]['unix_ts'], f[self.clusters_dset_name+'/data'][-1]['unix_ts']]
                 if charge_unix_span[0] <= light_unix_span[1] and light_unix_span[0] <= charge_unix_span[1]:
                     self.matched_charge_files.append(charge_file)
