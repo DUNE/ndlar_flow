@@ -735,7 +735,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
                 #& hotfix_mask \
             
             total_matches = np.count_nonzero(mask)
-            #print(f"{total_matches=}")
+            
             if total_matches > 0 and total_matches < self.nhit_limit:
                 t0s_arr[mask] = trig_ts
                 ext_trig_index_arr[mask] = ext_trig_index
@@ -804,7 +804,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         mask_disabled_channels = np.isin(packets[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
         mask_disabled_chips = np.isin(packets[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
         combined_mask = ~(mask_disabled_channels | mask_disabled_chips) & data_packets_mask
-        #combined_mask = data_packets_mask
+        
         pkts = packets[combined_mask]
         unix = unix_ts[combined_mask]
         ts = timestamps[combined_mask] * resources['RunData'].crs_ticks
@@ -910,7 +910,8 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         label_y_pix = np.split(y_pix, label_indices)
         label_z_pix = np.split(z_pix, label_indices)
         label_unix = np.split(unix['timestamp'], label_indices)
-        
+
+        # find min, max, midpoint values for saving in clusters
         t_min, t_mid, t_max = np.array(list(zip(*[(min(t), (max(t)+min(t))/2, max(t)) for t in label_timestamps]))).astype('f8')
         t_drift_min, t_drift_mid, t_drift_max = np.array(list(zip(*[(min(t), (max(t)+min(t))/2, max(t)) for t in label_t_drift]))).astype('f8')
         x_pix_min, x_pix_mid, x_pix_max = np.array(list(zip(*[(min(x), (max(x)+min(x))/2, max(x)) for x in label_x_pix])))
@@ -944,29 +945,9 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
                     event_mc_assn = np.split(mc_assn, event_indices)
             else:
                     event_mc_assn = None
-            # Initialize empty lists outside the loop
-            #events = []
-            #event_unix = []
-            #event_clusters = []
-            #event_clusters_hits = []
-            #event_mc_assn = []
-            #cluster_nhit_limit = 10
-            # Loop over the pairs of indices defining each event range
-            #for start_idx, end_idx in zip(event_indices[:-1], event_indices[1:]):
-            #    if np.any(clusters_data[start_idx:end_idx]['nhit']) > cluster_nhit_limit:
-            #        continue
-            #    events.append(pkts[start_idx:end_idx])
-            #    event_unix.append(unix[start_idx:end_idx])
-            #    event_clusters.append(clusters_data[start_idx:end_idx])
-            #    event_clusters_hits.append(clusters_hits_data[start_idx:end_idx])
-            #    if mc_assn is not None:
-                    #event_mc_assn = np.split(mc_assn, event_indices)
-            #        event_mc_assn.append(mc_assn[start_idx:end_idx])
-            #    else:
-            #        event_mc_assn = None
             
         else:
-            # current saving each cluster as its own event, may change this in the future?
+            # current saving each cluster as its own event
             events = np.split(pkts, label_indices)
             event_unix = np.split(unix, label_indices)
             event_clusters = [[cluster] for cluster in clusters_data]
