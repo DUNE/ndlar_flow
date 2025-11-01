@@ -221,7 +221,6 @@ class RawEventGenerator(H5FlowGenerator):
         else:
             self.is_mc_neutrino = False
 
-
         # initialize data objects
         self.data_manager.create_dset(self.raw_event_dset_name, dtype=self.raw_event_dtype)
         self.data_manager.create_dset(self.packets_dset_name, dtype=self.packets_dtype)
@@ -514,7 +513,7 @@ class RawEventGenerator(H5FlowGenerator):
                 events, event_unix_ts = eb_rv[:2]
                 if self.is_mc:
                     event_mc_assn = eb_rv[2]
-
+        
         if not events:
             return H5FlowGenerator.EMPTY
 
@@ -563,7 +562,7 @@ class RawEventGenerator(H5FlowGenerator):
         packets_idcs = np.arange(packets_slice.start, packets_slice.stop)
         self.data_manager.write_data(self.packets_dset_name, packets_slice, packets_array)
 
-        if self.event_builder_class == 'LowEnergyRawEventBuilder':
+        if self.event_builder_class == 'LowEnergyRawEventBuilder' and nevents:
             # write clusters to file
             clusters_array = np.concatenate(event_clusters, axis=0)
             clusters_slice = self.data_manager.reserve_data(self.clusters_dset_name, len(clusters_array))
@@ -589,15 +588,16 @@ class RawEventGenerator(H5FlowGenerator):
             event_idcs = np.repeat(raw_event_idcs, [len(ev_cl) for ev_cl in event_clusters])
             ref = np.c_[event_idcs, clusters_array['id']]
             self.data_manager.write_ref(self.raw_event_dset_name, self.clusters_dset_name, ref)
-            
-        # set up references
-        #   event -> packet refs
-        ev_idcs = np.concatenate([np.full(len(ev), i_ev) for i_ev, ev in zip(raw_event_idcs, events)], axis=0) \
-            if len(events) else np.empty(0, dtype=raw_event_idcs.dtype)
-        ref = np.c_[ev_idcs, packets_idcs]
-        self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, ref)
 
-        if self.is_mc:
+        if nevents:
+            # set up references
+            #   event -> packet refs
+            ev_idcs = np.concatenate([np.full(len(ev), i_ev) for i_ev, ev in zip(raw_event_idcs, events)], axis=0) \
+                if len(events) else np.empty(0, dtype=raw_event_idcs.dtype)
+            ref = np.c_[ev_idcs, packets_idcs]
+            self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, ref)
+
+        if self.is_mc and nevents:
             # packet -> mc_packet_assn
             ref = np.c_[packets_idcs.ravel(), packets_idcs.ravel()]
             sl = self.data_manager.reserve_data(self.mc_packet_fraction_dset_name, len(ref))
