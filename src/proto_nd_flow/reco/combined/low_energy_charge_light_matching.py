@@ -57,7 +57,7 @@ class LowEnergyChargeLightMatching(H5FlowStage):
     default_charge_data_dir = ''
     default_is_FSD = False
     default_is_mc = False
-    default_single_module = -1
+    default_cluster_nhit_limit = 10
     def __init__(self, **params):
         super(LowEnergyChargeLightMatching, self).__init__(**params)
         self.clusters_dset_name = params.get('clusters_dset_name', self.default_clusters_dset_name)
@@ -74,10 +74,10 @@ class LowEnergyChargeLightMatching(H5FlowStage):
         self.proximity_distance_y_ACL = params.get('proximity_distance_y_ACL', self.default_proximity_distance_y_ACL)
         self.proximity_distance_z_LCM = params.get('proximity_distance_z_LCM', self.default_proximity_distance_z_LCM)
         self.proximity_distance_y_LCM = params.get('proximity_distance_y_LCM', self.default_proximity_distance_y_LCM)
+        self.cluster_nhit_limit = params.get('cluster_nhit_limit', self.default_cluster_nhit_limit)
         self.is_mc = params.get('is_mc', self.default_is_mc)
         self.charge_data_dir = params.get('charge_data_dir', self.default_charge_data_dir)
         self.is_FSD = params.get('is_FSD', self.default_is_FSD)
-        self.single_module = params.get('single_module', self.default_single_module)
         
     def init(self, source_name):
         super(LowEnergyChargeLightMatching, self).init(source_name)
@@ -127,7 +127,7 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                 try:
                     loops+=1
                     f = h5py.File(charge_file, 'r')
-                    #print(list(f.keys()))
+                    
                     if 'light' in f.keys():
                         print('skipping')
                         skip_current_file=True
@@ -176,19 +176,6 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                 clusters_hits_ref_region = clusters_hits_ref_region[is_matched_mask]
                 clusters_hits_dset = np.array(f[self.clusters_hits_dset_name+'/data'])
                 
-                # sorted by unix, find start and stop indices of each unix value
-                #sorted_indices = np.argsort(clusters_dset['unix_ts'])
-                #clusters_dset[:] = clusters_dset[sorted_indices]
-
-                #unique_unix, start_indices = np.unique(clusters_dset['unix_ts'], return_index=True)
-                #end_indices = np.roll(start_indices, shift=-1)
-                #end_indices[-1] = len(clusters_dset) - 1
-                
-                #unix_chunk_indices = {}
-                #for unix_val, start_idx, end_idx in zip(unique_unix, start_indices, end_indices):
-                #    unix_chunk_indices[int(unix_val)] = (start_idx, end_idx)
-                #self.clusters_dset_list.append(clusters_dset)
-                #self.unix_chunk_indices_list.append(unix_chunk_indices)
                 self.cluster_pps_list[ifile] = clusters_dset['ts'][:,1]
                 self.cluster_unix_list[ifile] = clusters_dset['unix_ts']
                 self.cluster_x_list[ifile] = clusters_dset['x_pix'][:,1]
@@ -198,24 +185,6 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                 self.clusters_dset_list[ifile] = clusters_dset
                 self.clusters_hits_dset_list[ifile] = clusters_hits_dset
                 self.clusters_hits_ref_region_list[ifile] = clusters_hits_ref_region
-                
-                """
-                unix_masks = {}
-                for unix in np.unique(clusters_dset['unix_ts']):
-                    unix_mask = clusters_dset['unix_ts'] == int(unix)
-
-                    #self.unix_masks_list.append(unix_masks)
-                    self.cluster_pps_list[ifile][int(unix)] = clusters_dset['ts'][:,1][unix_mask]
-                    self.cluster_unix_list[ifile][int(unix)] = clusters_dset['unix_ts'][unix_mask]
-                    self.cluster_x_list[ifile][int(unix)] = clusters_dset['x_pix'][:,1][unix_mask]
-                    self.cluster_z_list[ifile][int(unix)] = clusters_dset['z_pix'][:,1][unix_mask]
-                    self.cluster_y_list[ifile][int(unix)] = clusters_dset['y_pix'][:,1][unix_mask]
-                    self.cluster_io_list[ifile][int(unix)] = clusters_dset['io_group'][unix_mask]
-                    self.clusters_dset_list[ifile][int(unix)] = clusters_dset[unix_mask]
-                """
-                #self.clusters_hits_dset = self.data_manager.get_dset(self.clusters_hits_dset_name)
-            
-                #self.clusters_hits_ref = self.data_manager.get_ref(self.clusters_dset_name, self.clusters_hits_dset_name)
                 self.light_events_sum_hits_ref = self.data_manager.get_ref(self.light_events_dset_name, self.sum_hits_dset_name)
 
         self.data_manager.set_attrs(self.clusters_matched_dset_name,
@@ -248,65 +217,46 @@ class LowEnergyChargeLightMatching(H5FlowStage):
         self.total_matched_clusters = 0
         self.total_clusters = 0
         self.prox_masks_all = {}
+
+        # pre-make masks for improved speed
         for ifile, charge_file in enumerate(self.matched_charge_files):
-            prox_masks = {} #{int(unix):{} for unix in np.unique(list(self.cluster_unix_list[ifile].keys()))}
-            #for i, boundary in enumerate(self.sum_hits_dset['boundary']):
-            #for i, boundary in enumerate(np.unique(self.sum_hits_dset['boundary'], axis=0)):
+            prox_masks = {} 
+            
             for i, sum_chan in enumerate(np.unique(self.sum_hits_dset['sum_chan'])):
                 sum_chan_mask = self.sum_hits_dset['sum_chan'] == sum_chan
                 boundary = self.sum_hits_dset['boundary'][sum_chan_mask][0]
                 trap_type = self.sum_hits_dset['trap_type'][sum_chan_mask][0]
                 tpc = self.sum_hits_dset['tpc'][sum_chan_mask][0]
-                #if self.single_module == 2 and sum_chan in [1, 3, 5, 7]:
-                #    tpc = 1
-                #if self.single_module == 2 and sum_chan in [9, 11, 13, 15]:
-                #    tpc = 0
+                
                 if trap_type == 0:
                     prox_distance_z = self.proximity_distance_z_ACL
                     prox_distance_y = self.proximity_distance_y_ACL
                 else:
                     prox_distance_z = self.proximity_distance_z_LCM
                     prox_distance_y = self.proximity_distance_y_LCM
+                    
                 det_position = (boundary[1]+boundary[0])/2
                 min_x_boundary = min(boundary[0][0], boundary[1][0])
                 max_x_boundary = max(boundary[0][0], boundary[1][0])
-                #if not tuple(det_position) in det_pos_so_far:
-                #for unix in np.unique(list(self.cluster_unix_list[ifile].keys())):
+                
                 if self.is_FSD:
+                    # probably a better implementation out there
                     tpc_mask = (boundary[0][0] - 5 < self.cluster_x_list[ifile][int(unix)]) & \
                                (boundary[1][0] + 5 > self.cluster_x_list[ifile][int(unix)])
                 else:
-                    #if tpc == 0:
-                    #    tpc = 1
-                    #elif tpc == 1:
-                    #    tpc = 0
-                    #tpc_mask = self.cluster_io_list[ifile][int(unix)]-1 == tpc
+                    # warning: only valid for 2x2
                     tpc_mask = self.cluster_io_list[ifile]-1 == tpc
-                    #tpc_mask = self.cluster_io_list[ifile][int(unix)]-1 == self.sum_hits_dset[i]['tpc']
                 
-                #prox_masks[int(unix)][sum_chan] = (self.cluster_z_list[ifile][int(unix)] > det_position[2] - prox_distance_z) & \
-                #                    (self.cluster_z_list[ifile][int(unix)] < det_position[2] + prox_distance_z) & \
-                #                    (self.cluster_y_list[ifile][int(unix)] > det_position[1] - prox_distance_y) & \
-                #                    (self.cluster_y_list[ifile][int(unix)] < det_position[1] + prox_distance_y) & \
-                #                    tpc_mask 
-                if sum_chan in [0, 2, 4, 6, 8, 10, 12, 14, 9, 11, 13, 15]:
-                    det_position[2] = det_position[2]*-1
-                #if self.single_module == 2 and not ((sum_chan in [1,5]) or (sum_chan in [3, 7])):
-                #    det_position[2] = det_position[2]*-1  
-                if self.single_module == 2 and (sum_chan == 0):
-                    det_position[1] = 15.50975
-                    det_position[2] = abs(det_position[2])
-                elif self.single_module == 2 and (sum_chan == 5):
-                    det_position[1] = 46.52925
-                    det_position[2] = abs(det_position[2])
+                #if sum_chan in [0, 2, 4, 6, 8, 10, 12, 14, 9, 11, 13, 15]:
+                #    det_position[2] = det_position[2]*-1
+
                 prox_masks[sum_chan] = (self.cluster_z_list[ifile] > det_position[2] - prox_distance_z) & \
                                     (self.cluster_z_list[ifile] < det_position[2] + prox_distance_z) & \
                                     (self.cluster_y_list[ifile] > det_position[1] - prox_distance_y) & \
                                     (self.cluster_y_list[ifile] < det_position[1] + prox_distance_y) & \
                                     tpc_mask 
+                
             self.prox_masks_all[ifile] = prox_masks
-        #for i in range(len(self.cluster_pps_list)):
-        #    self.total_clusters += len(self.cluster_pps_list[i])
         
     def run(self, source_name, source_slice, cache):
         super(LowEnergyChargeLightMatching, self).run(source_name, source_slice, cache)
@@ -322,7 +272,6 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                 total_matches = 0
                 clusters_matched = []
                 hits_matched = []
-                #hits_matched_cluster_id = []
                 
                 clusters_matched_all = []
                 light_indices, event_indices = [], []
@@ -337,43 +286,31 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                 tai_ns = event_data[ievent]['tai_ns']
                 tai_ns = (tai_ns[tai_ns != 0]).astype('int')
                 light_pps = ((tai_ns*1e-9 - (tai_ns*1e-9).astype('int'))*1e9*1e-3)[0]
-                #try:
-                #    self.cluster_pps_list[ifile][light_unix]
-                #except:
-                #    continue
-                #time_mask = (self.cluster_pps_list[ifile][light_unix].astype('float') < light_pps + self.upper_pps_matching_window) \
-                #& (self.cluster_pps_list[ifile][light_unix].astype('float') > light_pps - self.lower_pps_matching_window) #\
-                #& (self.cluster_unix_list[ifile][light_unix] == int(light_unix))
+                
                 time_mask = (self.cluster_pps_list[ifile].astype('float') < light_pps + self.upper_pps_matching_window) \
-                & (self.cluster_pps_list[ifile].astype('float') > light_pps - self.lower_pps_matching_window) \
-                & (self.cluster_unix_list[ifile] == int(light_unix))
-                if np.any(self.clusters_dset_list[ifile][time_mask]['nhit'] > 10):
+                    & (self.cluster_pps_list[ifile].astype('float') > light_pps - self.lower_pps_matching_window) \
+                    & (self.cluster_unix_list[ifile] == int(light_unix))
+                if np.any(self.clusters_dset_list[ifile][time_mask]['nhit'] > self.cluster_nhit_limit):
                     continue
 
                 if not np.any(time_mask):
                     continue
-                if not len(sum_hits_in_event):
-                    print('no sum hits in event')
-                
-                #matching_mask = time_mask #[unix_indices[0]:unix_indices[1]]
-                
+                #if not len(sum_hits_in_event):
+                #    print('no sum hits in event')
+                                
                 for sum_hit in sum_hits_in_event:
                     boundary = sum_hit['boundary']
                     det_position = (boundary[1]+boundary[0])/2
                     light_tpc = sum_hit['tpc']
                     sum_chan = sum_hit['sum_chan']
                     
-                    if self.single_module == 1 and sum_hit['amplitude'] < 3000:
-                        continue
-                    #matching_mask = time_mask & self.prox_masks_all[ifile][light_unix][sum_chan]#[unix_indices[0]:unix_indices[1]]
-                    matching_mask = time_mask & self.prox_masks_all[ifile][sum_chan]#[unix_indices[0]:unix_indices[1]]
+                    matching_mask = time_mask & self.prox_masks_all[ifile][sum_chan]
                     self.total_matched_clusters += np.sum(matching_mask)
 
                     matched_indices = np.where(matching_mask)[0]
                     for cluster_index in matched_indices:
                         cluster = self.clusters_dset_list[ifile][cluster_index]
                         hits_region = self.clusters_hits_ref_region_list[ifile][cluster_index]
-                        #cluster = self.clusters_dset_list[ifile][light_unix][cluster_index]
                         cluster_matched = np.zeros((1,), dtype=self.clusters_dtype)
                         for name in self.clusters_dtype.names:
                             if name in cluster.dtype.names:
@@ -384,10 +321,8 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                             event_indices.append(event_data[ievent]['id'])
                             for hit in self.clusters_hits_dset_list[ifile][hits_region[0]:hits_region[1]]:
                                 hits_matched.append(hit)
-                                #hits_matched_cluster_id.append(rel_cluster_id)
                 
                 # write datasets and references
-                #print(f"{len(clusters_matched)=}")
                 if len(clusters_matched):
                     clusters_matched_dset = np.array(clusters_matched)
                     clusters_matched_slice = self.data_manager.reserve_data(self.clusters_matched_dset_name, len(clusters_matched_dset))
