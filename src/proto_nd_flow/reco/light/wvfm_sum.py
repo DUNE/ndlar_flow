@@ -45,7 +45,7 @@ class WaveformSum(H5FlowStage):
     default_wvfm_dset_name = 'light/wvfm'
     default_swvfm_dset_name = 'light/swvfm'
     default_stpc_wvfm_dset_name = 'light/stpc_wvfm'
-    default_single_module = -1
+
     def swvfm_dtype(self, ntpc, ndet, nsamples):
         return np.dtype([('samples', 'f4', (ntpc, ndet, nsamples))])
 
@@ -82,7 +82,6 @@ class WaveformSum(H5FlowStage):
         self.schan_wvfm_dset_name = params.get('schan_wvfm_dset_name', self.default_swvfm_dset_name)
         self.schan_wvfm_align_dset_name = f'{self.schan_wvfm_dset_name}/alignment'
 
-        self.single_module = params.get('single_module', self.default_single_module)
         if not self.make_swvfm_dset and not self.make_stpc_wvfm_dset and not self.make_schan_wvfm_dset:
             raise ValueError('All waveform sum types disabled, exiting.')
         
@@ -134,7 +133,7 @@ class WaveformSum(H5FlowStage):
                 self.data_manager.create_dset(self.stpc_wvfm_align_dset_name, dtype=self.stpc_wvfm_align_dtype)
                 self.data_manager.create_ref(source_name, self.stpc_wvfm_align_dset_name)
             #if self.make_schan_wvfm_dset:
-                # channel sum
+                # channel sum; needs fixing but not really needed right now
             #    self.schan_wvfm_align_dtype = self.schan_wvfm_align_dtype(len(np.unique(tpc_ids)), len(np.unique(det_ids)))
             #    self.data_manager.create_dset(self.schan_wvfm_align_dset_name, dtype=self.schan_wvfm_align_dtype)
             #    self.data_manager.create_ref(source_name, self.schan_wvfm_align_dset_name)
@@ -160,67 +159,12 @@ class WaveformSum(H5FlowStage):
             if self.make_stpc_wvfm_dset:
                 stpc_wvfm_align_data = np.zeros(event_data.shape, dtype=self.stpc_wvfm_align_dtype)
 
-        if self.single_module in [1,2,3]:
-            # plot index to list of (adc, channel) combos that correspond to a full PD tile
-            io0_left_y_plot_dict = {0: [(1, 15),(1, 14),(1, 13),(1, 12),(1, 11),(1, 10)], \
-                                   1: [(0, 15),(0, 14),(0, 13),(0, 12),(0, 11),(0, 10)], \
-                                   2: [(1, 9),(1, 8),(1, 7),(1, 6),(1, 5),(1, 4)], \
-                                   3: [(0, 9),(0, 8),(0, 7),(0, 6),(0, 5),(0, 4)]}
-    
-            io0_right_y_plot_dict = {0: [(1, 31),(1, 30),(1, 29),(1, 28),(1, 27),(1, 26)], \
-                                   1: [(0, 31),(0, 30),(0, 29),(0, 28),(0, 27),(0, 26)], \
-                                   2: [(1, 25),(1, 24),(1, 23),(1, 22),(1, 21),(1, 20)], \
-                                   3: [(0, 25),(0, 24),(0, 23),(0, 22),(0, 21),(0, 20)]}
-            
-            io1_left_y_plot_dict = {0: [(1, 63),(1, 62),(1, 61),(1, 60),(1, 59),(1, 58)], \
-                                   1: [(0, 63),(0, 62),(0, 61),(0, 60),(0, 59),(0, 58)], \
-                                   2: [(1, 57),(1, 56),(1, 55),(1, 54),(1, 53),(1, 52)], \
-                                   3: [(0, 57),(0, 56),(0, 55),(0, 54),(0, 53),(0, 52)]}
-    
-            io1_right_y_plot_dict = {0: [(1, 47),(1, 46),(1, 45),(1, 44),(1, 43),(1, 42)], \
-                                   1: [(0, 47),(0, 46),(0, 45),(0, 44),(0, 43),(0, 42)], \
-                                   2: [(1, 41),(1, 40),(1, 39),(1, 38),(1, 37),(1, 36)], \
-                                   3: [(0, 41),(0, 40),(0, 39),(0, 38),(0, 37),(0, 36)]}
-        elif self.single_module == 0:
-            io0_left_y_plot_dict = {0: [(0, 30),(0, 29),(0, 28),(0, 27),(0, 26),(0, 25)], \
-                               1: [(0, 23),(0, 22),(0, 21),(0, 20),(0, 19),(0, 18)], \
-                               2: [(0, 14),(0, 13),(0, 12),(0, 11),(0, 10),(0, 9)], \
-                               3: [(0, 7),(0, 6),(0, 5),(0, 4),(0, 3),(0, 2)]}
-
-            io0_right_y_plot_dict = {0: [(1, 62),(1, 61),(1, 60),(1, 59),(1, 58),(1, 57)], \
-                                   1: [(1, 55),(1, 54),(1, 53),(1, 52),(1, 51),(1, 50)], \
-                                   2: [(1, 46),(1, 45),(1, 44),(1, 43),(1, 42),(1, 41)], \
-                                   3: [(1, 39),(1, 38),(1, 37),(1, 36),(1, 35),(1, 34)]}
-    
-            io1_left_y_plot_dict = {0: [(1, 30),(1, 29),(1, 28),(1, 27),(1, 26),(1, 25)], \
-                                   1: [(1, 23),(1, 22),(1, 21),(1, 20),(1, 19),(1, 18)], \
-                                   2: [(1, 14),(1, 13),(1, 12),(1, 11),(1, 10),(1, 9)], \
-                                   3: [(1, 7),(1, 6),(1, 5),(1, 4),(1, 3),(1, 2)]}
-    
-            io1_right_y_plot_dict = {0: [(0, 62),(0, 61),(0, 60),(0, 59),(0, 58),(0, 57)], \
-                                   1: [(0, 55),(0, 54),(0, 53),(0, 52),(0, 51),(0, 50)], \
-                                   2: [(0, 46),(0, 45),(0, 44),(0, 43),(0, 42),(0, 41)], \
-                                   3: [(0, 39),(0, 38),(0, 37),(0, 36),(0, 35),(0, 34)]}
-        if self.single_module != -1:
-            sum_chan_lookup_dict = {}
-            sch_id = 0 
-            for Dict in [io0_left_y_plot_dict, io0_right_y_plot_dict, io1_left_y_plot_dict, io1_right_y_plot_dict]:
-                for tile in list(Dict.keys()):
-                    for adc_ch in Dict[tile]:
-                        sum_chan_lookup_dict[adc_ch] = sch_id
-                    sch_id+=1
         for adc in range(wvfm_data['samples'].shape[1]):
             for chan in range(wvfm_data['samples'].shape[2]):
                 tpc_id = resources['Geometry'].sipm_rel_pos[(adc,chan)][0][0]
                 det_id = resources['Geometry'].det_id[(adc,chan)]
                 if self.make_schan_wvfm_dset:
-                    if self.single_module != -1:
-                        try:
-                            sum_chan_id = sum_chan_lookup_dict[(adc, chan)]
-                        except:
-                            continue
-                    else:
-                        sum_chan_id = resources['Geometry'].sum_chan_id[(adc, chan)]
+                    sum_chan_id = resources['Geometry'].sum_chan_id[(adc, chan)]
                         
                     #if sum_chan_id < 0:
                     #    continue
@@ -230,9 +174,6 @@ class WaveformSum(H5FlowStage):
 
                 det_type = resources['Geometry'].det_to_trap_type[(tpc_id, det_id)]
                     
-                #if self.make_schan_wvfm_dset and sum_chan_id < 0:
-                #    continue
-                
                 mask = event_data['wvfm_valid'][:,adc,chan].astype(bool)
                 if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
                     if self.make_swvfm_dset:
@@ -258,12 +199,9 @@ class WaveformSum(H5FlowStage):
                         wvfm_data['samples'][mask,adc,chan].filled(0))
                 if self.make_schan_wvfm_dset:
                     # channel summed wvfm
-                    #sum_chan_id = sum_chan_lookup_dict[(adc, chan)]
                     wvfm = wvfm_data['samples'][mask,adc,chan]
-                    #if self.single_module == 0:
-                    #    wvfm = wvfm - np.mean(wvfm[0:80])
-                    schan_wvfm_data['samples'][mask,tpc_id,sum_chan_id,:] += (wvfm.filled(0))
-                    #schan_wvfm_data['samples'][mask,tpc_id,sum_chan_id,:] += -1*((wvfm - np.mean(wvfm[0:50])).filled(0))
+                    schan_wvfm_data['samples'][mask,tpc_id,sum_chan_id,:] += wvfm.filled(0)
+                    
         # reserve new data:
         if self.make_swvfm_dset:
             # det summed wvfm
