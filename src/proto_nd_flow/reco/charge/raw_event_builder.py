@@ -625,6 +625,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
     default_nhit_limit = 50
     default_do_timestamp_unroll = True
     default_light_triggers_file = ''
+    default_build_off_trig_clusters = True
     def __init__(self, **params):
         super(LowEnergyRawEventBuilder, self).__init__(**params)
         self.upper_window = params.get('upper_window', self.default_upper_window)
@@ -634,6 +635,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         self.clusters_min_samples = params.get('clusters_min_samples', self.default_clusters_min_samples)
         self.nhit_limit = params.get('nhit_limit', self.default_nhit_limit)
         self.do_timestamp_unroll = params.get('do_timestamp_unroll', self.default_do_timestamp_unroll)
+        self.build_off_trig_clusters = params.get('build_off_trig_clusters', self.default_build_off_trig_clusters)
         self.dbscan = DBSCAN(eps=self.clusters_eps, min_samples=self.clusters_min_samples)
         self.clusters_dtype = r.RawEventGenerator.clusters_dtype
         self.clusters_hits_dtype = r.RawEventGenerator.clusters_hits_dtype
@@ -760,14 +762,29 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         # cluster packets not built into events in previous step
         not_used_mask = ~used_mask
         if np.any(not_used_mask):
+            if not self.build_off_trig_clusters:
+                ### this is a hot fix! If a batch returns no events, which might happen if you don't build off trigger clusters,
+                ### h5flow finishes early (because H5FlowGenerator.EMPTY is returned somewhere).
+                ### so for now just grab some of the unmatched packets and make them into events. Assuming the user will ignore the unmatched events later.
+                sel_packets = packets[not_used_mask][:10]
+                sel_unix_ts = unix_ts[not_used_mask][:10]
+                if mc_assn is not None:
+                    sel_mc_assn = mc_assn[not_used_mask][:10]
+                sel_ts = ts[not_used_mask][:10]
+            else:
+                sel_packets = packets[not_used_mask]
+                sel_unix_ts = unix_ts[not_used_mask]
+                if mc_assn is not None:
+                    sel_mc_assn = mc_assn[not_used_mask]
+                sel_ts = ts[not_used_mask]
             if mc_assn is not None:
                 events_temp, event_unix_ts_temp, event_clusters_temp, event_clusters_hits_temp, event_mc_assn_temp = \
-                            self.make_clusters(packets[not_used_mask], unix_ts[not_used_mask], \
-                                               mc_assn[not_used_mask], ts[not_used_mask])
+                            self.make_clusters(sel_packets, sel_unix_ts, \
+                                               sel_mc_assn, sel_ts)
             else:
                 events_temp, event_unix_ts_temp, event_clusters_temp, event_clusters_hits_temp, event_mc_assn_temp = \
-                            self.make_clusters(packets[not_used_mask], unix_ts[not_used_mask], \
-                                                mc_assn, ts[not_used_mask])
+                            self.make_clusters(sel_packets, sel_unix_ts, \
+                                                mc_assn, sel_ts)
             if len(events_temp):
                 events = events + events_temp
                 event_unix_ts = event_unix_ts + event_unix_ts_temp
