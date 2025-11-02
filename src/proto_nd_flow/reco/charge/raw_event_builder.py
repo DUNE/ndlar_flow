@@ -676,6 +676,10 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
         trig_mask = (packets['packet_type'] == 7) & (packets['io_group'] == self.trig_io_grp)
         trigger_idcs = np.where(trig_mask)[0]
 
+        trig_ts = ts[trig_mask]
+        if np.any(np.diff(trig_ts) == 3):
+            trigger_idcs = np.concatenate(([0], np.where(np.diff(trig_ts) != 3)[0]+1))
+        
         events = []
         event_unix_ts = []
         event_clusters = []
@@ -731,11 +735,11 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
                 & (ts <= trig_ts + self.upper_window) \
                 & ~used_mask \
                 & unix_mask \
-                & data_packet_mask
+                & data_packet_mask 
                 #& hotfix_mask \
             
             total_matches = np.count_nonzero(mask)
-            
+            #print(f"{total_matches=}")
             if total_matches > 0 and total_matches < self.nhit_limit:
                 t0s_arr[mask] = trig_ts
                 ext_trig_index_arr[mask] = ext_trig_index
