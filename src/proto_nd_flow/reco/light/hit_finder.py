@@ -193,85 +193,145 @@ class WaveformHitFinder(H5FlowStage):
         return  noise
 
 
-    def compute_tot(self, bins_over_noise_threshold, first_bins_over_noise):
-        # Vectorized TOT: length of each True run, reported only at run starts
-        B = bins_over_noise_threshold
-        # forward run lengths
-        c = np.cumsum(B, axis=-1, dtype=np.int32)
-        reset = np.maximum.accumulate(np.where(B, 0, c), axis=-1)
-        fwd = c - reset
-        # reverse run lengths
-        Br = B[..., ::-1]
-        cr = np.cumsum(Br, axis=-1, dtype=np.int32)
-        resetr = np.maximum.accumulate(np.where(Br, 0, cr), axis=-1)
-        rev = (cr - resetr)[..., ::-1]
-        # total run length for each True element
-        run_len = np.where(B, fwd + rev - 1, 0).astype(np.int32)
-        # keep only at first bins over noise
-        tot = np.where(first_bins_over_noise, run_len, 0)
-        return tot
+    # gets ToT for threshold crossing pairs of samples (incl hysterisis)
+    def pair_runs_with_peaks(self, first_bins_over_noise: np.ndarray,
+                            first_bins_under_noise: np.ndarray,
+                            peak_bins: np.ndarray):
+
+        starts_raw = first_bins_over_noise
+        ends_raw   = first_bins_under_noise
+
+        # Arm 'end' events only after we have ever seen a start
+        seen_start = np.maximum.accumulate(starts_raw, axis=-1)
+        ends_armed = ends_raw & seen_start
+
+        # Cumsums over time
+        cs = np.cumsum(starts_raw, axis=-1, dtype=np.int32)
+        ce = np.cumsum(ends_armed, axis=-1, dtype=np.int32)
+
+        # 1) VALID STARTS: only the first start after the most recent armed end
+        max_ce = np.maximum.accumulate(ce, axis=-1)
+        starts_since_last_end = cs - max_ce
+        valid_starts = starts_raw & (starts_since_last_end == 1)
+
+        # 2) VALID ENDS: only the first armed end after the most recent VALID start
+        ce_at_valid_start = np.where(valid_starts, ce, -1)
+        ce_anchor = np.maximum.accumulate(ce_at_valid_start, axis=-1)
+        ends_since_last_valid_start = ce - ce_anchor
+        valid_ends = ends_armed & (ends_since_last_valid_start == 1)
+
+        # Shapes and index grid
+        T = starts_raw.shape[-1]
+        idx = np.arange(T, dtype=np.int32).reshape((1,) * (starts_raw.ndim - 1) + (-1,))
+
+        # Nearest future END index for every t
+        inf = T + 1
+        end_pos = np.where(valid_ends, idx, inf)
+        next_end_idx = np.minimum.accumulate(end_pos[..., ::-1], axis=-1)[..., ::-1]
+        has_future_end = next_end_idx < inf
+
+        # Count peaks between start and its matched end: (start, end]
+        peaks_cum = np.cumsum(peak_bins.astype(np.int32), axis=-1)
+        peaks_at_end   = np.take_along_axis(peaks_cum, np.minimum(next_end_idx, T - 1), axis=-1)
+        peaks_at_start = np.take_along_axis(peaks_cum, idx, axis=-1)
+        peaks_between = peaks_at_end - peaks_at_start
+
+        # Keep starts only if there is a future end and at least one peak in between
+        keep_start = valid_starts & has_future_end & (peaks_between > 0)
+
+        # Keep exactly the end that matches each kept start (optional mask you already had)
+        ends_kept = np.zeros_like(valid_ends, dtype=bool)
+        start_idxs = np.where(keep_start)
+        if start_idxs[0].size:
+            end_for_kept = next_end_idx[start_idxs]
+            sel_e = (end_for_kept >= 0) & (end_for_kept < T)
+            if np.any(sel_e):
+                idx_tuple_e = tuple(ax[sel_e] for ax in start_idxs[:-1]) + (end_for_kept[sel_e],)
+                ends_kept[idx_tuple_e] = True
+
+        # New bit: nearest future PEAK index for every t
+        peak_pos = np.where(peak_bins, idx, inf)
+        next_peak_idx = np.minimum.accumulate(peak_pos[..., ::-1], axis=-1)[..., ::-1]
+
+        # Duration values placed at the PEAK indices
+        duration_bins = np.zeros_like(valid_starts, dtype=np.int32)
+        if start_idxs[0].size:
+            # indices for each kept start
+            peak_for_kept = next_peak_idx[start_idxs]         # first peak after start
+            end_for_kept  = next_end_idx[start_idxs]          # matching end for that start
+            start_t       = start_idxs[-1]                    # start indices along time axis
+
+            # sanity selection
+            sel = (peak_for_kept >= 0) & (peak_for_kept < T) & (end_for_kept >= 0) & (end_for_kept < T)
+            if np.any(sel):
+                # duration = end - start, but write it at the peak index
+                dur_vals = (end_for_kept - start_t)[sel]
+                idx_tuple = tuple(ax[sel] for ax in start_idxs[:-1]) + (peak_for_kept[sel],)
+                duration_bins[idx_tuple] = dur_vals
+
+        return duration_bins
+
 
     def peak_finder(self, wvfm, noise,
                     n_noise_factor,
                     n_bins_rolled,
                     n_sqrt_rt_factor,
-                    pe_weight,
-                    use_rising_edge=False,
-                    use_local_maxima=True):
+                    pe_weight):
 
         # height = flat threshold over noise (n*sigma)
         height = n_noise_factor * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
+        height_below = (n_noise_factor-1) * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
+        uheight = 2*n_noise_factor * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
+        uheight_below = (2*n_noise_factor-1) * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
+
         # dynamic_threshold = rolling threshold of previous 5 bins + n*sqrt(rolling threshold)
-        wvfm_rolled = np.roll(wvfm, n_bins_rolled)
+        wvfm_rolled = np.roll(wvfm, n_bins_rolled)  # kept as in original
         rolling_average = uniform_filter1d(wvfm_rolled, size=n_bins_rolled)
         sqrt_rolling_average = np.sqrt(np.abs(rolling_average) * pe_weight**2)
         sqrt_rolling_average[sqrt_rolling_average == 0] = 1
-        dynamic_threshold = rolling_average + n_sqrt_rt_factor*sqrt_rolling_average
-        # find bins over noise floor and number of bins over noise floor
+        dynamic_threshold = rolling_average + n_sqrt_rt_factor * sqrt_rolling_average
+
+        # find bins over noise floor
         bins_over_noise_threshold = (wvfm > height)
         first_bins_over_noise = bins_over_noise_threshold.copy()
         first_bins_over_noise[..., 1:] &= ~bins_over_noise_threshold[..., :-1]
-        tot = self.compute_tot(bins_over_noise_threshold, first_bins_over_noise)
-        # get upper threshold tot
-        bins_over_upper_threshold = (wvfm > height * 4)
+        # find bins under noise floor - hysteresis
+        bins_under_noise_threshold = (wvfm <= height_below)
+        first_bins_under_noise = bins_under_noise_threshold.copy()
+        first_bins_under_noise[..., 1:] &= ~bins_under_noise_threshold[..., :-1]
+
+        # find bins over upper threshold
+        bins_over_upper_threshold = (wvfm > uheight)
         first_bins_over_upper = bins_over_upper_threshold.copy()
         first_bins_over_upper[..., 1:] &= ~bins_over_upper_threshold[..., :-1]
-        tot_upper = self.compute_tot(bins_over_upper_threshold, first_bins_over_upper)
-        # find bins over dynamic threshold and noise floor
+        # find bins under upper threshold - hysteresis
+        bins_under_upper_threshold = (wvfm <= uheight_below)
+        first_bins_under_upper = bins_under_upper_threshold.copy()
+        first_bins_under_upper[..., 1:] &= ~bins_under_upper_threshold[..., :-1]
+
+        # find bins over dynamic threshold AND noise floor
         bins_over_dynamic_threshold = (wvfm > dynamic_threshold)
         bins_over_thresholds = bins_over_noise_threshold & bins_over_dynamic_threshold
-        # Find first bins over threshold (rising edge)
+
+        # rising edge of the combined thresholds
         first_bins_over = bins_over_thresholds.copy()
         first_bins_over[..., 1:] &= ~bins_over_thresholds[..., :-1]
-        if use_rising_edge:
-            return first_bins_over
-        # Peak finding
-        elif use_local_maxima:
-            # check 5 bins after first_bins_over and add argmax
-            peak_bins = np.zeros_like(wvfm, dtype=bool)
-            first_bins_indices = np.where(first_bins_over)
-            for idx in zip(*first_bins_indices):
-                start_idx = idx[-1]
-                end_idx = min(start_idx + 5, wvfm.shape[-1])
-                peak_bin = np.argmax(wvfm[idx[:-1] + (slice(start_idx, end_idx),)])
-                peak_bins[idx[:-1] + (start_idx + peak_bin,)] = True
-        else:
-            # Derivative-based peak detection
-            wvfm_d1 = np.gradient(wvfm, axis=-1)
-            wvfm_d2 = np.gradient(wvfm_d1, axis=-1)
-            peak_bins = (wvfm > dynamic_threshold) & (wvfm > height) & \
-                (wvfm_d1 < 0) & (wvfm_d2 < 0)
-            # Keep only the first peak in consecutive runs
-            peak_bins[..., 1:] &= ~peak_bins[..., :-1]
 
-        # tot
-        # for each first_bins_over, if previous bin is over noise threshold, set tot to nan
-        # else, set tot to distance to next first_bins_over
-        prev_bins_over_noise = first_bins_over_noise[..., :-1]
-        next_bins_over_noise = first_bins_over_noise[..., 1:]
-        tot[prev_bins_over_noise] = np.nan
+        # check 5 bins after first_bins_over and add argmax
+        peak_bins = np.zeros_like(wvfm, dtype=bool)
+        first_bins_indices = np.where(first_bins_over)
+        for idx in zip(*first_bins_indices):
+            start_idx = idx[-1]
+            end_idx = min(start_idx + 5, wvfm.shape[-1])
+            peak_bin = np.argmax(wvfm[idx[:-1] + (slice(start_idx, end_idx),)])
+            peak_bins[idx[:-1] + (start_idx + peak_bin,)] = True
 
-        return peak_bins, tot, tot_upper
+        # noise threshold tot
+        tot = self.pair_runs_with_peaks(first_bins_over_noise, first_bins_under_noise, peak_bins)
+        # upper threshold tot
+        tout = self.pair_runs_with_peaks(first_bins_over_upper, first_bins_under_upper, peak_bins)
+
+        return peak_bins, tot, tout
 
 
     def __init__(self, **params):
@@ -374,9 +434,7 @@ class WaveformHitFinder(H5FlowStage):
                                       self.noise_factor,
                                       self.n_bins_rolled,
                                       self.rt_sqrt_factor,
-                                      self.pe_weight,
-                                      self.rising_edge,
-                                      self.local_maxima)
+                                      self.pe_weight)
 
         t0_bin = np.argmax(peaks_found, axis=-1)
 
@@ -386,11 +444,13 @@ class WaveformHitFinder(H5FlowStage):
 
         peaks = np.where(peaks_found)
 
-        peak_max = wvfms[..., :][peaks]  # waveform value at each peak
-        peak_tot = tot[peaks[1:-1]].ravel()
-        peak_tot_upper = tot_upper[peaks[1:-1]].ravel()
+        peak_max = wvfms[peaks]  # waveform value at each peak
+        peak_tot = tot[peaks]
+        peak_tot_upper = tot_upper[peaks]
 
-        threshold_mask = peak_max >=self.threshold[peaks[1:-1]].ravel()
+        # For threshold, we need adc and channel indices only (peaks[1] and peaks[2])
+        # self.threshold has shape (ntpc, ndet, 1)
+        threshold_mask = peak_max >= self.threshold[peaks[1], peaks[2], 0]
 
         if self.hit_level=="sum_tpc" or self.hit_level=="sum":
             integrals, fprompts = self.calculate_fprompt(wvfms, peaks_found,
@@ -405,6 +465,8 @@ class WaveformHitFinder(H5FlowStage):
             # hits are present in event, extract parameters
             peaks = tuple(p[threshold_mask].reshape(-1, 1) for p in peaks)
             peak_max = peak_max[threshold_mask]
+            peak_tot = peak_tot[threshold_mask]
+            peak_tot_upper = peak_tot_upper[threshold_mask]
             # get neighboring samples
             peak_sample_index = np.clip(peaks[-1].reshape(-1, 1)
                                         + np.arange(-self.near_samples + 1, self.near_samples + 2), 0, self.nsamples - 1)
