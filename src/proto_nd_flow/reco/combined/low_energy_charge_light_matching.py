@@ -239,13 +239,13 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                 min_x_boundary = min(boundary[0][0], boundary[1][0])
                 max_x_boundary = max(boundary[0][0], boundary[1][0])
                 
-                if self.is_FSD:
-                    # probably a better implementation out there
-                    tpc_mask = (boundary[0][0] - 5 < self.cluster_x_list[ifile][int(unix)]) & \
-                               (boundary[1][0] + 5 > self.cluster_x_list[ifile][int(unix)])
-                else:
-                    # warning: only valid for 2x2
-                    tpc_mask = self.cluster_io_list[ifile]-1 == tpc
+                #if self.is_FSD:
+                #    # probably a better implementation out there
+                #    tpc_mask = (boundary[0][0] - 5 < self.cluster_x_list[ifile][int(unix)]) & \
+                #               (boundary[1][0] + 5 > self.cluster_x_list[ifile][int(unix)])
+                #else:
+                #    # warning: only valid for 2x2
+                tpc_mask = self.cluster_io_list[ifile]-1 == tpc
                 
                 #if sum_chan in [0, 2, 4, 6, 8, 10, 12, 14, 9, 11, 13, 15]:
                 #    det_position[2] = det_position[2]*-1
