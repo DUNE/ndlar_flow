@@ -100,11 +100,12 @@ class WaveformNoiseFilter(H5FlowStage):
         if self.keep_noise:
             self.data_manager.create_dset(self.noise_dset_name, dtype=wvfm_dset.dtype)
             self.data_manager.create_ref(source_name, self.noise_dset_name)
-        # baselines and rms
-        self.baseline_dtype = self.baseline_dtype(*wvfm_dset.dtype['samples'].shape)
+        # baselines and rms (only need nadc, nchannels - not nsamples)
+        nadc, nchannels, nsamples = wvfm_dset.dtype['samples'].shape
+        self.baseline_dtype = self.baseline_dtype(nadc, nchannels)
         self.data_manager.create_dset(f'{source_name}/baseline', dtype=self.baseline_dtype)
         self.data_manager.create_ref(source_name, f'{source_name}/baseline')
-        self.rms_dtype = self.rms_dtype(*wvfm_dset.dtype['samples'].shape)
+        self.rms_dtype = self.rms_dtype(nadc, nchannels)
         self.data_manager.create_dset(f'{source_name}/rms', dtype=self.rms_dtype)
         self.data_manager.create_ref(source_name, f'{source_name}/rms')
 
@@ -168,21 +169,23 @@ class WaveformNoiseFilter(H5FlowStage):
         pedestal, rms = self.min_range_baseline(wvfm_data['samples'], self.segment_size, self.num_segment, self.num_means)
         fwvfm['samples'] = wvfm_data['samples']  - pedestal[..., np.newaxis]
 
-        # save baselines as light/baseline (float) with dims [event, adc, channel]
-        baseline = pedestal.reshape(event_shape + (nadc, nchannels))
+        # save baselines as light/events/baseline (structured array) with dims [event, adc, channel]
+        baseline_data = np.zeros(event_shape, dtype=self.baseline_dtype)
+        baseline_data['baseline'] = pedestal.reshape(event_shape + (nadc, nchannels))
         baseline_slice = self.data_manager.reserve_data(f'{source_name}/baseline', source_slice)
-        self.data_manager.write_data(f'{source_name}/baseline', baseline_slice, baseline)
+        self.data_manager.write_data(f'{source_name}/baseline', baseline_slice, baseline_data)
         # save references
         ref = np.c_[baseline_slice, baseline_slice]
-        self.data_manager.write_ref(source_name, f'{source_name}/wvfm_baseline', ref)
+        self.data_manager.write_ref(source_name, f'{source_name}/baseline', ref)
 
-        # save RMS (noise widths) as light/rms (float) with dims [event, adc, channel]
-        rms = rms.reshape(event_shape + (nadc, nchannels))
-        rms_slice = self.data_manager.reserve_data(f'{source_name}/wvfm_rms', source_slice)
-        self.data_manager.write_data(f'{source_name}/rms', source_slice, rms)
+        # save RMS (noise widths) as light/events/rms (structured array) with dims [event, adc, channel]
+        rms_data = np.zeros(event_shape, dtype=self.rms_dtype)
+        rms_data['rms'] = rms.reshape(event_shape + (nadc, nchannels))
+        rms_slice = self.data_manager.reserve_data(f'{source_name}/rms', source_slice)
+        self.data_manager.write_data(f'{source_name}/rms', rms_slice, rms_data)
         # save references
         ref = np.c_[rms_slice, rms_slice]
-        self.data_manager.write_ref(source_name, f'{source_name}/wvfm_rms', ref)
+        self.data_manager.write_ref(source_name, f'{source_name}/rms', ref)
 
         # reserve new data
         fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)

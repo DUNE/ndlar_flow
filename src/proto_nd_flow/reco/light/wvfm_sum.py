@@ -99,8 +99,8 @@ class WaveformSum(H5FlowStage):
         # rms for det sum channels
         self.srms_dtype = self.swvfm_rms_dtype(len(np.unique(tpc_ids)),
             len(np.unique(det_ids)))
-        self.data_manager.create_dset(f'{self.swvfm_rms_dset_name}', dtype=self.swvfm_rms_dtype)
-        self.data_manager.create_ref(source_name, f'{self.srms_dset_name}')
+        self.data_manager.create_dset(self.srms_dset_name, dtype=self.srms_dtype)
+        self.data_manager.create_ref(source_name, self.srms_dset_name)
 
         # tpc sum channels
         self.stpc_wvfm_dtype = self.stpc_wvfm_dtype(len(np.unique(tpc_ids)),
@@ -110,8 +110,8 @@ class WaveformSum(H5FlowStage):
 
         # rms for tpc sum channels
         self.stpc_rms_dtype = self.stpc_wvfm_rms_dtype(len(np.unique(tpc_ids)))
-        self.data_manager.create_dset(f'{self.stpc_rms_dset_name}', dtype=self.stpc_rms_dtype)
-        self.data_manager.create_ref(source_name, f'{self.stpc_rms_dset_name}')
+        self.data_manager.create_dset(self.stpc_rms_dset_name, dtype=self.stpc_rms_dtype)
+        self.data_manager.create_ref(source_name, self.stpc_rms_dset_name)
 
         # alignments
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
@@ -171,12 +171,16 @@ class WaveformSum(H5FlowStage):
                 swvfm_data['samples'][mask,tpc_id,det_id,:] += (
                     wvfm_data['samples'][mask,adc,chan].filled(0))
                 # add sum rms in quadrature
-                srms_data = np.sqrt(srms_data**2 + (rms_data[mask,adc,chan]**2).reshape(-1,1,1))
+                srms_data['rms'][mask,tpc_id,det_id] += rms_data['rms'][mask,adc,chan]**2
                 # tpc summed wvfm
                 stpc_wvfm_data['samples'][mask,tpc_id,det_type,:] += (
                     wvfm_data['samples'][mask,adc,chan].filled(0))
                 # add sum tpc rms in quadrature
-                stpc_rms_data = np.sqrt(stpc_rms_data**2 + (rms_data[mask,adc,chan]**2).reshape(-1,1))
+                stpc_rms_data['rms'][mask,tpc_id,det_type] += rms_data['rms'][mask,adc,chan]**2
+
+        # Take square root to complete RMS in quadrature calculation
+        srms_data['rms'] = np.sqrt(srms_data['rms'])
+        stpc_rms_data['rms'] = np.sqrt(stpc_rms_data['rms'])
 
         # reserve new data:
 

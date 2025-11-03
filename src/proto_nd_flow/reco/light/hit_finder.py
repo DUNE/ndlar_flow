@@ -314,7 +314,7 @@ class WaveformHitFinder(H5FlowStage):
         wvfm_det = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
 
         noise = cache[self.rms_dset_name].reshape(cache[source_name].shape)[
-            'samples']
+            'rms']
 
         peaks_found = self.peak_finder(wvfms, noise,
                                       self.noise_factor,

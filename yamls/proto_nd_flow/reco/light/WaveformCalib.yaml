@@ -2,13 +2,13 @@ classname: WaveformCalib
 path: proto_nd_flow.reco.light.wvfm_calib
 requires:
   - 'light/events'
+  - 'light/events/rms'
   - 'light/fwvfm'
   - 'light/fwvfm/alignment'
-  - 'light/wvfm_rms'
 params:
   # input
   wvfm_dset_name: 'light/fwvfm'
-  rms_dset_name: 'light/wvfm_rms'
+  # Note: rms_dset_name is automatically constructed as '<source_name>/rms' in code
   # output
   cwvfm_dset_name: 'light/cwvfm'
   crms_dset_name: 'light/cwvfm_rms'

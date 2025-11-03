@@ -12,24 +12,24 @@ class WaveformCalib(H5FlowStage):
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, input dataset path
          - ``wvfm_calib_dset_name`` : ``str``, required, output calibrated wvfm dataset path
+         - ``crms_dset_name`` : ``str``, required, output calibrated rms dataset path
          - ``gain``: ``dict`` of ``dict`` of ``<adc #>: <channel #>: <gain correction>`` where each gain correction converts the ADC value to visible energy
          - ``gain_mc``: same as ``gain``, but only applied if datafile is simulation
 
         ``wvfm_dset_name`` is required in the data cache.
+        RMS data is expected to be at ``<source_name>/rms`` (created by WaveformNoiseFilter).
 
         The Geometry resource is required in the workflow.
 
         Example config::
 
-            wvfm_sum:
+            wvfm_calib:
                 classname: WaveformCalib
                 requires:
                     - 'light/events'
                     - 'light/deconv'
-                    - 'light/wvfm_rms'
                 params:
                     wvfm_dset_name: 'light/deconv'
-                    rms_dset_name: 'light/wvfm_rms'
                     wvfm_calib_dset_name: 'light/cwvfm'
                     crms_dset_name: 'light/cwvfm_rms'
                     gain:
@@ -44,7 +44,7 @@ class WaveformCalib(H5FlowStage):
         return np.dtype([('samples', 'f4', (nadc, nchannels, nsamples))])
 
     def crms_dtype(self, nadc, nchannels):
-        return np.dtype([('samples', 'f4', (nadc, nchannels))])
+        return np.dtype([('rms', 'f4', (nadc, nchannels))])
 
     def align_dtype(self, nadc, nchannels):
         return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (nadc, nchannels))])
@@ -57,7 +57,8 @@ class WaveformCalib(H5FlowStage):
         self.cwvfm_dset_name = params.get('cwvfm_dset_name')
         self.align_dset_name = f'{self.cwvfm_dset_name}/alignment'
 
-        self.rms_dset_name = f'{self.cwvfm_dset_name}/rms'
+        # RMS data is a subdataset of the source, will be set in init()
+        self.rms_dset_name = None
         self.crms_dset_name = params.get('crms_dset_name')
 
         self.gain = params.get('gain',{'default': 1.0})
@@ -75,6 +76,9 @@ class WaveformCalib(H5FlowStage):
 
     def init(self, source_name):
         super(WaveformCalib, self).init(source_name)
+
+        # Set RMS dataset path to subdataset of source
+        self.rms_dset_name = f'{source_name}/rms'
 
         # use appropriate gain data
         if resources['RunData'].is_mc:
@@ -101,7 +105,9 @@ class WaveformCalib(H5FlowStage):
         self.data_manager.create_dset(self.cwvfm_dset_name, dtype=self.cwvfm_dtype)
         self.data_manager.create_ref(source_name, self.cwvfm_dset_name)
 
-        self.crms_dtype = self.crms_dtype(*wvfm_dset.dtype['samples'].shape)
+        # crms_dtype only needs nadc, nchannels - not nsamples
+        nadc, nchannels, nsamples = wvfm_dset.dtype['samples'].shape
+        self.crms_dtype = self.crms_dtype(nadc, nchannels)
         self.data_manager.create_dset(self.crms_dset_name, dtype=self.crms_dtype)
         self.data_manager.create_ref(source_name, self.crms_dset_name)
 
@@ -137,8 +143,8 @@ class WaveformCalib(H5FlowStage):
                 cwvfm_data['samples'][mask,adc,chan,:] = (
                     wvfm_data['samples'][mask,adc,chan].filled(0)
                     * self.gain[adc][chan])
-                crms_data['samples'][mask,adc,chan] = (
-                    rms_data[mask,adc,chan].filled(0)
+                crms_data['rms'][mask,adc,chan] = (
+                    rms_data['rms'][mask,adc,chan]
                     * self.gain[adc][chan])
 
         # reserve new data
