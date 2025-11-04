@@ -1,0 +1,22 @@
+# Copied from yamls/proto_nd_flow/reco/combined/T0Reconstruction.yaml
+
+classname: LowEnergyChargeLightMatching
+path: proto_nd_flow.reco.combined.low_energy_charge_light_matching
+requires:
+  - 'light/events'
+  #- 'light/sum_hits'
+params:
+  # input
+  clusters_dset_name: 'charge/clusters'
+  clusters_hits_dset_name: 'charge/clusters_hits'
+  light_events_dset_name: 'light/events'
+  sum_hits_dset_name: 'light/simple_hits'
+  charge_data_dir: '/global/cfs/cdirs/dune/users/sfogarty/flow_LowEnergy/2x2/nominal_runs/charge/50018/'
+  proximity_distance_z_ACL: 30
+  proximity_distance_y_ACL: 15
+  proximity_distance_z_LCM: 30
+  proximity_distance_y_LCM: 15
+
+  # output
+  clusters_matched_dset_name: 'charge/clusters_matched'
+  clusters_hits_matched_dset_name: 'charge/clusters_hits_matched'

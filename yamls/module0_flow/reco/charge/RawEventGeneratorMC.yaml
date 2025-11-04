@@ -1,0 +1,23 @@
+classname: RawEventGenerator
+path: module0_flow.reco.charge.raw_event_generator
+dset_name: 'charge/raw_events'
+params:
+  # secondary output
+  packets_dset_name: 'charge/packets'
+
+  # configuration parameters
+  buffer_size: 640000
+  nhit_cut: 5
+  sync_noise_cut: [1000000, 11000000] # 1e6 cut based on Brooke's study
+  sync_noise_cut_enabled: True
+  timestamp_bit_error_fix_enabled: True
+  timestamp_bit_error_window: 256
+  timestamp_bit_error_spec:
+    0x3800000:
+      1:
+        23: [80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110]
+  event_builder_class: 'SymmetricWindowRawEventBuilder'
+  event_builder_config:
+    window: 1000 # slightly more than 1/2 drift length at 500V/cm
+    threshold: 5
+    rollover_ticks: 10000000 # PPS = 1e7 ticks

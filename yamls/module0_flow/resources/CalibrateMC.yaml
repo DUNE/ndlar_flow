@@ -1,0 +1,11 @@
+classname: Calibrate # resources/calibrate.py
+path: proto_nd_flow.resources.calibrate
+params:
+  path: 'calibrate_info'
+  pedestal_file: ''
+  configuration_file: ''
+  pedestal_mv: 580.0
+  vref_mv: 1300.78125
+  vcm_mv: 288.28125
+  adc_counts: 256
+  gain: 4.522

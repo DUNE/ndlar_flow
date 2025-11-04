@@ -1,0 +1,14 @@
+# Copied from yamls/proto_nd_flow/reco/combined/T0Reconstruction.yaml
+
+classname: LowEnergyChargeLightMatching
+path: proto_nd_flow.reco.combined.low_energy_charge_light_matching
+requires:
+  - 'light/events'
+  - 'light/light_hits'
+params:
+  # input
+  clusters_dset_name: 'charge/clusters'
+  light_hits_dset_name: 'light/light_hits'
+
+  # output
+  clusters_matched_dset_name: 'c'

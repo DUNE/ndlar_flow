@@ -9,7 +9,8 @@ flow:
 
 resources:
   - !include yamls/proto_nd_flow/resources/RunDataData.yaml
-
+  - !include yamls/proto_nd_flow/resources/GeometryMC.yaml
+  - !include yamls/proto_nd_flow/resources/CalibrateData.yaml
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files
   !include yamls/proto_nd_flow/reco/charge/RawEventGeneratorData.yaml

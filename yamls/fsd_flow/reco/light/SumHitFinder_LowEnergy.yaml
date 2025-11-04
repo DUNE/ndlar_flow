@@ -1,0 +1,19 @@
+classname: WaveformHitFinder # light/hit_finder.py
+path: proto_nd_flow.reco.light.simple_hit_finder
+requires:
+  - 'light/schan_wvfm'
+  - 'light/schan_wvfm/alignment'
+  - 'light/t_ns'
+params:
+  # inputs
+  #wvfm_dset_name: 'light/swvfm'
+  sum_wvfm_dset_name: 'light/schan_wvfm'
+  t_ns_dset_name: 'light/t_ns'
+
+  # output
+  sum_hits_dset_name: 'light/simple_hits' # new dataset to produce
+
+  #threshold: !include yamls/fsd_flow/reco/light/sipm_threshold.yaml
+  threshold: 2.5
+
+  

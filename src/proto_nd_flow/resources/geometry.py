@@ -125,8 +125,8 @@ class Geometry(H5FlowResource):
         self.data_manager.set_attrs(self.path)
         # load data (if present)
         self.data = dict(self.data_manager.get_attrs(self.path))
-
-        if not self.data:
+        
+        if not self.data or True:
             # first time loading geometry, save to file
 
             with open(self.det_geometry_file) as dgf:
@@ -175,7 +175,9 @@ class Geometry(H5FlowResource):
                 write_lut(self.data_manager, self.path, self.det_rel_pos, 'det_rel_pos')
                 write_lut(self.data_manager, self.path, self.sipm_rel_pos, 'sipm_rel_pos')
                 write_lut(self.data_manager, self.path, self.det_id, 'det_id')
+                write_lut(self.data_manager, self.path, self.sum_chan_id, 'sum_chan_id')
                 write_lut(self.data_manager, self.path, self.det_bounds, 'det_bounds')
+                write_lut(self.data_manager, self.path, self.sum_chan_bounds, 'sum_chan_bounds')
                 write_lut(self.data_manager, self.path, self.sipm_abs_pos, 'sipm_abs_pos')
         else:
             assert_compat_version(self.class_version, self.data['class_version'])
@@ -199,15 +201,17 @@ class Geometry(H5FlowResource):
                 self._det_rel_pos = read_lut(self.data_manager, self.path, 'det_rel_pos')
                 self._sipm_rel_pos = read_lut(self.data_manager, self.path, 'sipm_rel_pos')
                 self._det_id = read_lut(self.data_manager, self.path, 'det_id')
+                self._sum_chan_id = read_lut(self.data_manager, self.path, 'sum_chan_id')
                 self._det_bounds = read_lut(self.data_manager, self.path, 'det_bounds')
+                self._sum_chan_bounds = read_lut(self.data_manager, self.path, 'sum_chan_bounds')
                 self._sipm_abs_pos = read_lut(self.data_manager, self.path, 'sipm_abs_pos')
 
         if not self.charge_only:
             lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
                         + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes
                         + self.det_rel_pos.nbytes + self.det_rel_pos.nbytes 
-                        + self.det_id.nbytes + self.det_bounds.nbytes
-                        + self.sipm_abs_pos.nbytes)
+                        + self.det_id.nbytes + + self.sum_chan_id.nbytes + self.det_bounds.nbytes
+                        + self.sum_chan_bounds.nbytes + self.sipm_abs_pos.nbytes + self.sum_chan_to_trap_type.nbytes)
         else:
             lut_size = (self.anode_drift_coordinate.nbytes + self.drift_dir.nbytes
                         + self.pixel_coordinates_2D.nbytes + self.tile_id.nbytes)
@@ -493,6 +497,35 @@ class Geometry(H5FlowResource):
         '''
         return self._det_id
 
+    @property
+    def sum_chan_id(self):
+        '''
+            Lookup table for TPC and detector id, usage::
+
+                resource['Geometry'].sum_chan_id[(adc_index, channel_index)]
+
+        '''
+        return self._sum_chan_id
+
+    @property
+    def sum_chan_to_trap_type(self):
+        '''
+            Lookup table for trap type for sum channel ID, where LCM=1, ACL=0, usage::
+
+                resource['Geometry'].sum_chan_to_trap_type[(tpc_id, sum_chan_index)]
+
+        '''
+        return self._sum_chan_to_trap_type
+
+    @property
+    def det_to_trap_type(self):
+        '''
+            Lookup table for trap type for det id, where LCM=1, ACL=0, usage::
+
+                resource['Geometry'].det_to_trap_type[(tpc_id, det_id)]
+
+        '''
+        return self._det_to_trap_type
 
     @property
     def det_bounds(self):
@@ -505,6 +538,16 @@ class Geometry(H5FlowResource):
         return self._det_bounds
 
     @property
+    def sum_chan_bounds(self):
+        '''
+            Lookup table for sum channel min and max xyz coordinate, usage::
+
+                resource['Geometry'].sum_chan_bounds[(tpc_id, sum_chan_id)]
+
+        '''
+        return self._sum_chan_bounds
+
+    @property
     def sipm_abs_pos(self):
         '''
             Lookup table for SiPM center xyz coordinate, usage::
@@ -513,8 +556,6 @@ class Geometry(H5FlowResource):
 
         '''
         return self._sipm_abs_pos
-
-
 
     @staticmethod
     def _rect_solid_angle_sign(coord, rect_min, rect_max):
@@ -623,7 +664,6 @@ class Geometry(H5FlowResource):
 
         return x_pos, y_pos, z_pos
 
-
     ## Load light and charge geometry ##
     def load_geometry(self):
         self._load_charge_geometry()
@@ -649,7 +689,7 @@ class Geometry(H5FlowResource):
         for i, mod in enumerate(self.det_geometry_yaml["module_to_tpcs"]):
             for j, tpc in enumerate(self.det_geometry_yaml["module_to_tpcs"][mod]):
                 tpc_mod[tpc] = i
-
+        
         det_min_max = [(min(tpc_ids), max(tpc_ids)),
                        (min(det_ids), max(det_ids))]
         self._det_rel_pos = LUT('i4', *det_min_max, shape=(3,))
@@ -664,12 +704,22 @@ class Geometry(H5FlowResource):
         det_chan = np.full(shape + (max_chan_per_det,), -1, dtype=int)
         det_chan_mask = np.zeros(shape + (max_chan_per_det,), dtype=bool)
         det_bounds = np.zeros(shape + (2,3), dtype=float)
+        
+        sum_chan_bounds = {} #np.zeros(tpc_ids.shape + det_ids.shape + (2,3), dtype=float)
+        adc_chan_to_schan_dict = {}
+        nchannels = 0
+        i_sumchan = 0
+        i_list, j_list = [], []
+        channel_list = []
+        sum_chan_ids, sum_chan_tpc_ids, sum_chan_adc_ids = [], [], []
+        sum_chan_to_trap_type, det_to_trap_type = {}, {}
         for i, tpc in enumerate(tpc_ids):
             for j, det in enumerate(det_ids):
                 det_adc[i,j] = self.lrs_geometry_yaml['det_adc'][tpc][det]
+                det_channels = self.lrs_geometry_yaml['det_chan'][tpc][det]
                 det_side[i,j] = self.lrs_geometry_yaml['det_side'][det]
                 det_vert_pos[i,j] = [key for key, value in self.lrs_geometry_yaml['det_side'].items() if value == det_side[i,j]].index(det)
-                det_chan[i,j,:len(self.lrs_geometry_yaml['det_chan'][tpc][det])] = self.lrs_geometry_yaml['det_chan'][tpc][det]
+                det_chan[i,j,:len(det_channels)] = det_channels
                 tpc_center = (np.array(self.lrs_geometry_yaml['tpc_center_offset'][tpc])
                     + np.array(self.det_geometry_yaml["tpc_offsets"][tpc_mod[i]]))
                 det_type = self.lrs_geometry_yaml['det_geom'][tpc][det]
@@ -679,38 +729,101 @@ class Geometry(H5FlowResource):
                 det_bounds[i,j,0] = tpc_center + det_center + np.array(det_geom['min'])
                 det_bounds[i,j,1] = tpc_center + det_center + np.array(det_geom['max'])
                 self._det_rel_pos[i,j] = np.array((tpc,det_side[i,j],det_vert_pos[i,j]))
-
+                
+                # warning: this assumes the same number of sum channels for ACLs and for LCMs
+                if len(det_channels) == 6: # ACL
+                    i_list.append(i)
+                    j_list.append(j)
+                    nchannels += 6
+                    channel_list.extend(det_channels)
+                    det_to_trap_type[(tpc, det)] = 0
+                elif len(det_channels) == 2: # LCM
+                    i_list.append(i)
+                    j_list.append(j)
+                    nchannels += 2
+                    channel_list.extend(det_channels)
+                    det_to_trap_type[(tpc, det)] = 1
+                
+                if nchannels == 6: # find bounds for trigger-logic sum channels
+                    det_bounds_sum_chan_min = np.array([det_bounds[n, m, 0] for n, m in zip(i_list, j_list)])
+                    det_bounds_sum_chan_max = np.array([det_bounds[n, m, 1] for n, m in zip(i_list, j_list)])
+                    
+                    sum_chan_bounds[(tpc, i_sumchan)] = np.array([list(det_bounds_sum_chan_min[np.argmin(det_bounds_sum_chan_min[:, 1])]), \
+                                                            list(det_bounds_sum_chan_max[np.argmax(det_bounds_sum_chan_max[:, 1])])])
+                    if len(i_list) > 1:
+                        sum_chan_to_trap_type[(tpc, i_sumchan)] = 1 #LCM
+                    else:
+                        sum_chan_to_trap_type[(tpc, i_sumchan)] = 0 #ACL
+                    for channel in channel_list:
+                        adc_chan_to_schan_dict[(det_adc[i,j], channel)] = i_sumchan
+                        
+                    sum_chan_ids.append(i_sumchan)
+                    sum_chan_tpc_ids.append(tpc)
+                    sum_chan_adc_ids.append(det_adc[i,j])
+                    i_sumchan += 1
+                    sum_channels = 0
+                    i_list, j_list = [], []
+                    channel_list = []
+                    nchannels = 0 
+                elif nchannels > 6:
+                    raise ValueError('ACL and 3xLCM are expected to alternate in det_chan, check LRO yaml')
+        
+        sum_chan_tpc_ids = np.array(sum_chan_tpc_ids)
+        sum_chan_ids = np.array(sum_chan_ids)
+        sum_chan_adc_ids = np.array(sum_chan_adc_ids)
+        
         det_chan_mask = det_chan != -1
-
         det_adc, det_chan, tpc_ids, det_ids = np.broadcast_arrays(
             det_adc[...,np.newaxis],
             det_chan, tpc_ids[...,np.newaxis,np.newaxis], det_ids[...,np.newaxis])
-
         adc_chan_min_max = [(min(adc_ids), max(adc_ids)), 
                             (min(chan_ids), max(chan_ids))]
         self._sipm_abs_pos = LUT('f4', *adc_chan_min_max, shape=(3,))
         self._sipm_abs_pos.default = -1
-
+        
         self._sipm_rel_pos = LUT('i4', *adc_chan_min_max, shape=(3,))
         self._sipm_rel_pos.default = -1
 
         self._det_id = LUT('i4', *adc_chan_min_max)
         self._det_id.default = -1
 
+        self._det_to_trap_type = LUT('f4', *det_min_max)
+        self._det_to_trap_type.default = -1
+        
         self._det_bounds = LUT('f4', *det_min_max, shape=(2,3))
         self._det_bounds.default = 0.
 
         self._det_id[(det_adc[det_chan_mask], det_chan[det_chan_mask])] = det_ids[det_chan_mask]
+        chan_adc_ids = np.array([adc_chan[0] for adc_chan in adc_chan_to_schan_dict.keys()])
+        chan_ids = np.array([adc_chan[1] for adc_chan in adc_chan_to_schan_dict.keys()])
+        
+        adc_chan_min_max = [(min(chan_adc_ids), max(chan_adc_ids)), 
+                            (min(chan_ids), max(chan_ids))]
+        self._sum_chan_id = LUT('i4', *adc_chan_min_max)
+        self._sum_chan_id.default = -1
+        for k, (scti, scci) in enumerate(zip(chan_adc_ids, chan_ids)):
+            self._sum_chan_id[(scti, scci)] = list(adc_chan_to_schan_dict.values())[k]
+        sum_chan_min_max = [(min(sum_chan_tpc_ids), max(sum_chan_tpc_ids)), 
+                            (min(sum_chan_ids), max(sum_chan_ids))]
+        self._sum_chan_bounds = LUT('f4', *sum_chan_min_max, shape=(2,3))
+        self._sum_chan_bounds.default = 0.
+        self._sum_chan_to_trap_type = LUT('i4', *sum_chan_min_max)
+        self._sum_chan_to_trap_type.default = -1
 
+        for k in range(len(sum_chan_ids)):
+            self._sum_chan_bounds[(sum_chan_tpc_ids[k], sum_chan_ids[k])] = list(sum_chan_bounds.values())[k] 
+            self._sum_chan_to_trap_type[(sum_chan_tpc_ids[k], sum_chan_ids[k])] = list(sum_chan_to_trap_type.values())[k]
+        
         for adc in adc_ids:
             for chan in chan_ids:
                 self._sipm_rel_pos[(adc,chan)] = np.array(self.get_sipm_rel_pos(adc,chan))
                 self._sipm_abs_pos[(adc,chan)] = np.array(self.get_sipm_abs_pos(adc,chan))
-
+                
+        for k, tpc_det in enumerate(list(det_to_trap_type.keys())):
+            self._det_to_trap_type[(tpc_det[0], tpc_det[1])] = list(det_to_trap_type.values())[k]
+            
         tpc_ids, det_ids, det_chan_mask = tpc_ids[...,0], det_ids[...,0], det_chan_mask[...,0]
         self._det_bounds[(tpc_ids[det_chan_mask], det_ids[det_chan_mask])] = det_bounds[det_chan_mask]
-
-
     def _load_charge_geometry(self):
         if self.rank == 0:
             logging.warning(f'Loading geometry from {self.crs_geometry_files}...')

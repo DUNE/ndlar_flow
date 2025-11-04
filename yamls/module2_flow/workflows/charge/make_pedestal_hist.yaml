@@ -1,0 +1,10 @@
+flow:
+  source: make_pedestal_hist
+  stages: []
+  drop: []
+
+resources:
+  - !include yamls/module2_flow/resources/GeometryData.yaml
+
+make_pedestal_hist:
+  !include yamls/module2_flow/reco/charge/MakePedestalHist.yaml

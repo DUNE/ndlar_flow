@@ -10,6 +10,10 @@ from h5flow.core import resources
 
 from proto_nd_flow.util.array import fill_with_last, fill_with_next
 
+import proto_nd_flow.reco.charge.raw_event_generator as r
+import proto_nd_flow.util.units as units
+from sklearn.cluster import DBSCAN
+
 
 class RawEventBuilder(object):
     '''
@@ -152,7 +156,6 @@ class RawEventBuilder(object):
         unix_mask = packets['packet_type'] == 4
         ts[unix_mask] = -1
         ts = fill_with_next(ts, marker=-1)
-
         return ts
 
 
@@ -572,7 +575,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
                 event_mc_assn.append(mc_assn[mask])
 
             used_mask = np.logical_or( used_mask, mask )
-
         
         if not self.build_off_beam_events:
             return zip(*[v for v in zip(events, event_unix_ts)]) if mc_assn is None \
@@ -607,3 +609,356 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
 
         return zip(*[v for v in zip(full_events, full_event_unix_ts)]) if mc_assn is None \
                 else zip(*[v for v in zip(full_events, full_event_unix_ts, full_event_mc_assn)])
+
+class LowEnergyRawEventBuilder(RawEventBuilder):
+    '''
+    A event builder to find low energy events. It is based largely on the ExtTrigEventBuilder but adapted for low energy events in mind.
+    It will try to build events around external triggers (i.e. light triggers) and build clusters out of packets in those events.
+    Subsequently, any packets not initially built into events around external triggers will be clustered, where (currently)
+    every cluster is considered its own event.
+    '''
+    default_upper_window = 3000
+    default_lower_window = -1000
+    default_trig_io_grp = 1     # -1 -> all io groups
+    default_clusters_eps = 2
+    default_clusters_min_samples = 1
+    default_nhit_limit = 50
+    default_do_timestamp_unroll = True
+    default_light_triggers_file = ''
+    default_build_off_trig_clusters = True
+    def __init__(self, **params):
+        super(LowEnergyRawEventBuilder, self).__init__(**params)
+        self.upper_window = params.get('upper_window', self.default_upper_window)
+        self.lower_window = params.get('lower_window', self.default_lower_window)
+        self.trig_io_grp = params.get('trig_io_grp', self.default_trig_io_grp)
+        self.clusters_eps = params.get('clusters_eps', self.default_clusters_eps)
+        self.clusters_min_samples = params.get('clusters_min_samples', self.default_clusters_min_samples)
+        self.nhit_limit = params.get('nhit_limit', self.default_nhit_limit)
+        self.do_timestamp_unroll = params.get('do_timestamp_unroll', self.default_do_timestamp_unroll)
+        self.build_off_trig_clusters = params.get('build_off_trig_clusters', self.default_build_off_trig_clusters)
+        self.dbscan = DBSCAN(eps=self.clusters_eps, min_samples=self.clusters_min_samples)
+        self.clusters_dtype = r.RawEventGenerator.clusters_dtype
+        self.clusters_hits_dtype = r.RawEventGenerator.clusters_hits_dtype
+        self.light_triggers_file = params.get('light_triggers_file', self.default_light_triggers_file)
+        if self.light_triggers_file != '':
+            self.light_triggers_data = np.load(self.light_triggers_file)
+            unique_unix_vals = self.light_triggers_data['unique_unix']
+            start_indices = self.light_triggers_data['start_indices']
+            stop_indices = self.light_triggers_data['stop_indices']
+            self.light_triggers_indices_dict = {int(unique_unix_vals[i]):(start_indices[i], stop_indices[i]) for i in range(len(unique_unix_vals))}
+            self.light_unix = self.light_triggers_data['unix']
+            self.light_pps = self.light_triggers_data['pps']
+            
+        
+    def get_config(self):
+        return dict(
+            trig_io_grp=self.trig_io_grp,
+            upper_window=self.upper_window,
+            lower_window=self.lower_window,
+            nhit_limit=self.nhit_limit,
+            **super().get_config(),
+        )
+
+    def build_events(self, packets, unix_ts, mc_assn=None):
+        if not len(packets):
+            return ([], [], []) if mc_assn is None else ([], [], [], [])
+        if self.do_timestamp_unroll:
+            ts = self.unroll_timestamps(packets)
+            sorted_idcs = np.argsort(ts)
+            ts = ts[sorted_idcs]
+            packets = packets[sorted_idcs]
+            unix_ts = unix_ts[sorted_idcs]
+            if mc_assn is not None:
+                mc_assn = mc_assn[sorted_idcs]
+        else:
+            ts = packets['timestamp'].astype('i8')
+        
+        trig_mask = (packets['packet_type'] == 7) & (packets['io_group'] == self.trig_io_grp)
+        trigger_idcs = np.where(trig_mask)[0]
+
+        trig_ts = ts[trig_mask]
+        if np.any(np.diff(trig_ts) == 3):
+            trigger_idcs = np.concatenate(([0], np.where(np.diff(trig_ts) != 3)[0]+1))
+        
+        events = []
+        event_unix_ts = []
+        event_clusters = []
+        event_clusters_hits = []
+        event_mc_assn = [] if mc_assn is not None else None
+
+        used_mask = np.zeros(len(unix_ts), dtype=bool)
+        matched_mask = np.zeros(len(unix_ts), dtype=bool)
+        t0s_arr = np.zeros(len(unix_ts), dtype='float')
+        ext_trig_index_arr = np.zeros(len(unix_ts), dtype='int')
+        data_packet_mask = packets['packet_type'] == 0
+
+        unix_ts_range = np.arange(np.min(unix_ts['timestamp']), np.max(unix_ts['timestamp'])+1)
+        if self.light_triggers_file != '':
+            light_unix, light_pps = [], []
+            for u_ts in unix_ts_range:
+                try:
+                    light_trig_indices = self.light_triggers_indices_dict[int(u_ts)]
+                except:
+                    continue
+                light_unix += list(self.light_unix[light_trig_indices[0]:light_trig_indices[1]])
+                light_pps += list(self.light_pps[light_trig_indices[0]:light_trig_indices[1]])
+            if not len(light_unix):
+                print('No light triggers found that overlap with the events in this file.')
+
+            trigger_idcs = np.arange(len(light_unix))
+            
+        last_ts = -1
+        current_ts = -1
+        ext_trig_index = 0
+        for i, start_idx in enumerate(trigger_idcs):
+            # skip duplicate triggers... maybe only needed for MC? 
+            if self.light_triggers_file == '':
+                current_ts = ts[start_idx]
+            else:
+                current_ts = light_pps[start_idx]
+                
+            if current_ts == last_ts:
+                last_ts = current_ts
+                continue
+            last_ts = current_ts
+                
+            # FIXME & (ts % 1E7 != 0) is a hot fix for PPS signal
+            #hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & trig_mask)
+            if self.light_triggers_file == '':
+                unix_mask = np.abs(unix_ts['timestamp'][start_idx] - unix_ts['timestamp']) == 0
+                trig_ts = ts[start_idx]
+            else:
+                unix_mask = light_unix[start_idx] == unix_ts['timestamp']
+                trig_ts = light_pps[start_idx]*1e-3 / resources['RunData'].crs_ticks
+            
+            mask = (ts >= trig_ts - abs(self.lower_window)) \
+                & (ts <= trig_ts + self.upper_window) \
+                & ~used_mask \
+                & unix_mask \
+                & data_packet_mask 
+                #& hotfix_mask \
+            
+            total_matches = np.count_nonzero(mask)
+            #print(f"{total_matches=}")
+            if total_matches > 0 and total_matches < self.nhit_limit:
+                t0s_arr[mask] = trig_ts
+                ext_trig_index_arr[mask] = ext_trig_index
+                matched_mask = np.logical_or( matched_mask, mask )
+                
+                used_mask = np.logical_or( used_mask, mask )
+            ext_trig_index += 1
+
+        if np.any(matched_mask):
+            if mc_assn is not None:
+                events_temp, event_unix_ts_temp, event_clusters_temp, event_clusters_hits_temp, event_mc_assn_temp = \
+                    self.make_clusters(packets[matched_mask], unix_ts[matched_mask], mc_assn[matched_mask], ts[matched_mask], t0=t0s_arr[matched_mask], ext_trig=ext_trig_index_arr[matched_mask])
+            else:
+                events_temp, event_unix_ts_temp, event_clusters_temp, event_clusters_hits_temp, event_mc_assn_temp = \
+                    self.make_clusters(packets[matched_mask], unix_ts[matched_mask], mc_assn, ts[matched_mask], t0=t0s_arr[matched_mask], ext_trig=ext_trig_index_arr[matched_mask])
+            if len(events_temp):
+                events = events + events_temp
+                event_unix_ts = event_unix_ts + event_unix_ts_temp
+                if mc_assn is not None:
+                    event_mc_assn = event_mc_assn + event_mc_assn_temp
+                event_clusters = event_clusters + event_clusters_temp
+                event_clusters_hits = event_clusters_hits + event_clusters_hits_temp
+        
+        # cluster packets not built into events in previous step
+        not_used_mask = ~used_mask
+        if np.any(not_used_mask):
+            if not self.build_off_trig_clusters:
+                ### this is a hot fix! If a batch returns no events, which might happen if you don't build off trigger clusters,
+                ### h5flow finishes early (because H5FlowGenerator.EMPTY is returned somewhere).
+                ### so for now just grab some of the unmatched packets and make them into events. Assuming the user will ignore the unmatched events later.
+                sel_packets = packets[not_used_mask][:10]
+                sel_unix_ts = unix_ts[not_used_mask][:10]
+                if mc_assn is not None:
+                    sel_mc_assn = mc_assn[not_used_mask][:10]
+                sel_ts = ts[not_used_mask][:10]
+            else:
+                sel_packets = packets[not_used_mask]
+                sel_unix_ts = unix_ts[not_used_mask]
+                if mc_assn is not None:
+                    sel_mc_assn = mc_assn[not_used_mask]
+                sel_ts = ts[not_used_mask]
+            if mc_assn is not None:
+                events_temp, event_unix_ts_temp, event_clusters_temp, event_clusters_hits_temp, event_mc_assn_temp = \
+                            self.make_clusters(sel_packets, sel_unix_ts, \
+                                               sel_mc_assn, sel_ts)
+            else:
+                events_temp, event_unix_ts_temp, event_clusters_temp, event_clusters_hits_temp, event_mc_assn_temp = \
+                            self.make_clusters(sel_packets, sel_unix_ts, \
+                                                mc_assn, sel_ts)
+            if len(events_temp):
+                events = events + events_temp
+                event_unix_ts = event_unix_ts + event_unix_ts_temp
+                if mc_assn is not None:
+                    event_mc_assn = event_mc_assn + event_mc_assn_temp
+                event_clusters = event_clusters + event_clusters_temp
+                event_clusters_hits = event_clusters_hits + event_clusters_hits_temp
+        
+        return zip(*[v for v in zip(events, event_unix_ts, event_clusters, event_clusters_hits)]) if mc_assn is None \
+            else zip(*[v for v in zip(events, event_unix_ts, event_clusters, event_clusters_hits, event_mc_assn)])
+
+    def make_clusters(self, packets, unix_ts, mc_assn, timestamps, t0=None, ext_trig=None):
+        '''
+            Use DBSCAN to form packets into clusters.
+        '''
+        data_packets_mask = packets['packet_type'] == 0
+        mask_disabled_channels = np.isin(packets[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
+        mask_disabled_chips = np.isin(packets[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
+        combined_mask = ~(mask_disabled_channels | mask_disabled_chips) & data_packets_mask
+        
+        pkts = packets[combined_mask]
+        unix = unix_ts[combined_mask]
+        ts = timestamps[combined_mask] * resources['RunData'].crs_ticks
+        if mc_assn is not None:
+            mc_assn = mc_assn[combined_mask]
+        if t0 is not None:
+            t0_arr = t0[combined_mask] * resources['RunData'].crs_ticks
+        if ext_trig is not None:
+            ext_trig_arr = ext_trig[combined_mask]
+        
+        # get coordinates for packets and run dbscan clustering
+        zy = resources['Geometry'].pixel_coordinates_2D[pkts['io_group'],pkts['io_channel'],pkts['chip_id'],pkts['channel_id']]
+        tile_id = resources['Geometry'].tile_id[pkts['io_group'],pkts['io_channel']]
+        drift_dir = resources['Geometry'].drift_dir[(tile_id,)]
+        
+        x_pix = resources['Geometry'].anode_drift_coordinate[(tile_id,)]
+        y_pix, z_pix = zy[:,1], zy[:,0]
+            
+        nan_hits_mask = ~np.isnan(z_pix) & ~np.isnan(y_pix)
+        x_pix = x_pix[nan_hits_mask]
+        y_pix = y_pix[nan_hits_mask]
+        z_pix = z_pix[nan_hits_mask]
+        ts = ts[nan_hits_mask]
+        pkts = pkts[nan_hits_mask]
+        unix = unix[nan_hits_mask]
+        drift_dir = drift_dir[nan_hits_mask]
+        if t0 is not None:
+            t0_arr = t0_arr[nan_hits_mask]
+        if ext_trig is not None:
+            ext_trig_arr = ext_trig_arr[nan_hits_mask]
+        if mc_assn is not None:
+            mc_assn = mc_assn[nan_hits_mask]
+        
+        ts_dbscan = ts * resources['LArData'].v_drift/units.cm
+        hit_coordinates = np.hstack((z_pix[:, np.newaxis], y_pix[:, np.newaxis], \
+                                     x_pix[:, np.newaxis], ts_dbscan[:, np.newaxis]))
+        if not len(hit_coordinates):
+            return [], [], np.zeros((0,), dtype=self.clusters_dtype), [], None
+        labels = np.array(self.dbscan.fit(hit_coordinates).labels_, dtype='int')
+        labels_mask = labels != -1
+        labels = labels[labels_mask]
+        indices_sorted = np.argsort(labels)
+        pkts = pkts[labels_mask][indices_sorted]
+        unix = unix[labels_mask][indices_sorted]
+        ts = ts[labels_mask][indices_sorted]
+        labels = labels[indices_sorted]
+        if t0 is not None:
+            t0_arr = t0_arr[labels_mask][indices_sorted]
+        if ext_trig is not None:
+            ext_trig_arr = ext_trig_arr[labels_mask][indices_sorted]
+        if mc_assn is not None:
+            mc_assn = mc_assn[labels_mask][indices_sorted]
+        x_pix = x_pix[labels_mask][indices_sorted]
+        y_pix = y_pix[labels_mask][indices_sorted]
+        z_pix = z_pix[labels_mask][indices_sorted]
+        drift_dir = drift_dir[labels_mask][indices_sorted]
+        
+        Q_pix = resources['Calibrate'].charge_from_dataword(pkts)
+        n_vals = np.bincount(labels)
+        n_vals_mask = n_vals != 0
+        n_vals = n_vals[n_vals_mask]
+        q_clusters = np.bincount(labels, weights=Q_pix)[n_vals_mask]
+        if t0 is not None:
+            t_drift = ts - t0_arr
+            drift_coordinate = x_pix + drift_dir * t_drift * resources['LArData'].v_drift / units.cm
+            is_matched = np.ones(len(ts), dtype=bool)
+        else:
+            t_drift = np.zeros(len(ts))
+            drift_coordinate = np.zeros(len(ts))
+            is_matched = np.zeros(len(ts), dtype=bool)
+        
+        # make hits array that corresponds to clusters dataset, same length as packets array
+        clusters_hits_data = np.zeros((len(pkts),), dtype=self.clusters_hits_dtype)
+        clusters_hits_data['x_pix'] = x_pix
+        clusters_hits_data['y_pix'] = y_pix
+        clusters_hits_data['z_pix'] = z_pix
+        clusters_hits_data['Q'] = Q_pix
+        clusters_hits_data['ts'] = ts
+        if t0 is not None:
+            clusters_hits_data['t0'] = t0_arr
+        clusters_hits_data['t_drift'] = t_drift
+        clusters_hits_data['io_group'] = pkts['io_group']
+        clusters_hits_data['io_channel'] = pkts['io_channel']
+        clusters_hits_data['chip_id'] = pkts['chip_id']
+        clusters_hits_data['channel_id'] = pkts['channel_id']
+        clusters_hits_data['Q'] = Q_pix
+        clusters_hits_data['is_matched'] = is_matched
+        clusters_hits_data['x'] = drift_coordinate
+        if ext_trig is not None:
+            clusters_hits_data['ext_trig_index'] = ext_trig_arr
+        
+        # organize cluster data to prepare for putting it into clusters dataset
+        label_indices = np.concatenate(([0], np.flatnonzero(labels[:-1] != labels[1:])+1, [len(labels)]))[1:-1]
+        label_timestamps = np.split(ts, label_indices)
+        label_t_drift = np.split(t_drift, label_indices)
+        if t0 is not None:
+            label_t0 = np.split(t0_arr, label_indices)
+        if ext_trig is not None:
+            label_ext_trig = np.split(ext_trig_arr, label_indices)
+        label_is_matched = np.split(is_matched, label_indices)
+        label_x_pix = np.split(x_pix, label_indices)
+        label_x = np.split(drift_coordinate, label_indices)
+        label_y_pix = np.split(y_pix, label_indices)
+        label_z_pix = np.split(z_pix, label_indices)
+        label_unix = np.split(unix['timestamp'], label_indices)
+
+        # find min, max, midpoint values for saving in clusters
+        t_min, t_mid, t_max = np.array(list(zip(*[(min(t), (max(t)+min(t))/2, max(t)) for t in label_timestamps]))).astype('f8')
+        t_drift_min, t_drift_mid, t_drift_max = np.array(list(zip(*[(min(t), (max(t)+min(t))/2, max(t)) for t in label_t_drift]))).astype('f8')
+        x_pix_min, x_pix_mid, x_pix_max = np.array(list(zip(*[(min(x), (max(x)+min(x))/2, max(x)) for x in label_x_pix])))
+        x_min, x_mid, x_max = np.array(list(zip(*[(min(x), (max(x)+min(x))/2, max(x)) for x in label_x])))
+        y_pix_min, y_pix_mid, y_pix_max = np.array(list(zip(*[(min(y), (max(y)+min(y))/2, max(y)) for y in label_y_pix])))
+        z_pix_min, z_pix_mid, z_pix_max = np.array(list(zip(*[(min(z), (max(z)+min(z))/2, max(z)) for z in label_z_pix])))
+        clusters_data = np.zeros((len(n_vals),), dtype=self.clusters_dtype)
+        clusters_data['nhit'] = n_vals
+        clusters_data['Q'] = q_clusters
+        clusters_data['ts'][:, :3] = np.stack([t_min, t_mid, t_max], axis=1)
+        clusters_data['x_pix'][:, :3] = np.stack([x_pix_min, x_pix_mid, x_pix_max], axis=1)
+        clusters_data['x'][:, :3] = np.stack([x_min, x_mid, x_max], axis=1)
+        clusters_data['y_pix'][:, :3] = np.stack([y_pix_min, y_pix_mid, y_pix_max], axis=1)
+        clusters_data['z_pix'][:, :3] = np.stack([z_pix_min, z_pix_mid, z_pix_max], axis=1)
+        clusters_data['t_drift'][:, :3] = np.stack([t_drift_min, t_drift_mid, t_drift_max], axis=1)
+        if t0 is not None:
+            clusters_data['t0'] = np.array(list(map(np.max, label_t0)))
+        clusters_data['io_group'] = np.array(list(map(np.min, np.split(pkts['io_group'], label_indices))))
+        clusters_data['unix_ts'] = np.array(list(map(np.min, label_unix)))
+        clusters_data['is_matched'] = np.array(list(map(np.min, label_is_matched)), dtype='u8')
+        if ext_trig is not None:
+            clusters_data['ext_trig_index'] = np.array(list(map(np.max, label_ext_trig)))
+        if t0 is not None:
+            # clusters matched to the same trigger are considered in the same event
+            event_indices = np.concatenate(([0], np.flatnonzero(t0_arr[:-1] != t0_arr[1:])+1, [len(t0_arr)]))[1:-1]
+            events = np.split(pkts, event_indices)
+            event_unix = np.split(unix, event_indices)
+            event_clusters = np.split(clusters_data, event_indices)
+            event_clusters_hits = np.split(clusters_hits_data, event_indices)
+            if mc_assn is not None:
+                    event_mc_assn = np.split(mc_assn, event_indices)
+            else:
+                    event_mc_assn = None
+            
+        else:
+            # current saving each cluster as its own event
+            events = np.split(pkts, label_indices)
+            event_unix = np.split(unix, label_indices)
+            event_clusters = [[cluster] for cluster in clusters_data]
+            event_clusters_hits = np.split(clusters_hits_data, label_indices)
+            if mc_assn is not None:
+                event_mc_assn = np.split(mc_assn, label_indices)
+            else:
+                event_mc_assn = None
+        
+        return events, event_unix, event_clusters, event_clusters_hits, event_mc_assn 
