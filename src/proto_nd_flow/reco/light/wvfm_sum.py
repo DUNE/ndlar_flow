@@ -31,7 +31,7 @@ class WaveformSum(H5FlowStage):
 
 
         Uses the same dtype as the input waveform dataset(s) except with
-        ``(nadc, nchannel)`` resized to be ``(ntpc, ndet)``. If the input 
+        ``(nadc, nchannel)`` resized to be ``(ntpc, ndet)``. If the input
         waveforms have a ``clipped`` field, it will be propagated to the summed
         waveforms: if any channel contributing to a sum is clipped, that sum
         channel will be marked as clipped.
@@ -115,7 +115,7 @@ class WaveformSum(H5FlowStage):
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape)
         swvfm_data = np.zeros(event_data.shape, dtype=self.swvfm_dtype)
         stpc_wvfm_data = np.zeros(event_data.shape, dtype=self.stpc_wvfm_dtype)
-        
+
         # Check if input waveforms have clipped field
         has_clipped = 'clipped' in wvfm_data.dtype.names
 
@@ -157,7 +157,7 @@ class WaveformSum(H5FlowStage):
                 # tpc summed wvfm
                 stpc_wvfm_data['samples'][mask,tpc_id,det_type,:] += (
                     wvfm_data['samples'][mask,adc,chan].filled(0))
-                
+
                 # propagate clipped flag: if any channel contributing to sum is clipped, mark sum as clipped
                 if has_clipped:
                     swvfm_data['clipped'][mask,tpc_id,det_id] |= wvfm_data['clipped'][mask,adc,chan]
