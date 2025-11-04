@@ -183,7 +183,7 @@ class LArData(H5FlowResource):
 
             # Find the closest lifetime in time
             idx = np.abs(lifetime_data[:, 0] - file_dt).argmin()
-            self._electron_lifetime = lifetime_data[idx][1] * 1000.0  # convert ms → µs or as needed
+            self._electron_lifetime = lifetime_data[idx][1] * units.ms  # convert ms → µs or as needed
             return
         else:
             central_value_x = np.array([0, 1])

@@ -307,7 +307,7 @@ class CalibHitBuilder(H5FlowStage):
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
             calib_hits_arr['E'] = calib_hits_arr['Q'] * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV)  # MeV
             if self.elifetime_calibration:
-                calib_hits_arr['E'] /= resources['LArData'].charge_reduction_lifetime(t_drift=(drift_t/10.)) # ke- we change the drift_t to µs
+                calib_hits_arr['E'] /= resources['LArData'].charge_reduction_lifetime(t_drift=(drift_t * resources['RunData'].crs_ticks )) # ke- we change the drift_t to µs
             #if has_mc_truth:
             #    true_recomb = resources['LArData'].ionization_recombination(mode=2,dEdx=packet_seg_bt_arr['dEdx'])
             #    calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
