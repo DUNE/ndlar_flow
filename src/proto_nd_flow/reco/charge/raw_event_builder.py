@@ -745,7 +745,7 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
                 ext_trig_index_arr[mask] = ext_trig_index
                 matched_mask = np.logical_or( matched_mask, mask )
                 
-            used_mask = np.logical_or( used_mask, mask )
+                used_mask = np.logical_or( used_mask, mask )
             ext_trig_index += 1
 
         if np.any(matched_mask):
