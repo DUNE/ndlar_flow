@@ -672,8 +672,11 @@ class LowEnergyRawEventBuilder(RawEventBuilder):
                 mc_assn = mc_assn[sorted_idcs]
         else:
             ts = packets['timestamp'].astype('i8')
-        
-        trig_mask = (packets['packet_type'] == 7) & (packets['io_group'] == self.trig_io_grp)
+
+        if self.trig_io_grp == -1:
+            trig_mask = (packets['packet_type'] == 7)
+        else:
+            trig_mask = (packets['packet_type'] == 7) & (packets['io_group'] == self.trig_io_grp)
         trigger_idcs = np.where(trig_mask)[0]
 
         trig_ts = ts[trig_mask]
