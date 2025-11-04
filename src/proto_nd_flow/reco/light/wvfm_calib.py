@@ -38,7 +38,10 @@ class WaveformCalib(H5FlowStage):
     default_detector_channels = [list(range(64))]
 
     def cwvfm_dtype(self, nadc, nchannels, nsamples): 
-        return np.dtype([('samples', 'f4', (nadc, nchannels, nsamples))])
+        return np.dtype([
+            ('samples', 'f4', (nadc, nchannels, nsamples)),
+            ('clipped', '?', (nadc, nchannels))  # Propagated from input waveforms
+        ])
 
     def align_dtype(self, nadc, nchannels):
         return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (nadc, nchannels))])
@@ -102,6 +105,9 @@ class WaveformCalib(H5FlowStage):
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape)
         cwvfm_data = np.zeros(event_data.shape, dtype=self.cwvfm_dtype)
+        
+        # Check if input waveforms have clipped field
+        has_clipped = 'clipped' in wvfm_data.dtype.names
 
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             wvfm_align_data = cache[self.wvfm_align_dset_name].reshape(event_data.shape)
@@ -121,6 +127,10 @@ class WaveformCalib(H5FlowStage):
                 cwvfm_data['samples'][mask,adc,chan,:] = (
                     wvfm_data['samples'][mask,adc,chan].filled(0)
                     * self.gain[adc][chan])
+                
+                # Propagate clipped flag from input waveforms
+                if has_clipped:
+                    cwvfm_data['clipped'][mask,adc,chan] = wvfm_data['clipped'][mask,adc,chan]
 
         # reserve new data
         cwvfm_slice = self.data_manager.reserve_data(self.cwvfm_dset_name, source_slice)
