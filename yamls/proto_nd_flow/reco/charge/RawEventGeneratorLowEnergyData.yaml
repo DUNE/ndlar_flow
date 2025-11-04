@@ -23,4 +23,4 @@ params:
     nhit_limit: 50
     do_timestamp_unroll: False
     light_triggers_file: ''
-    build_off_trig_clusters: False
+    build_off_trig_clusters: True
