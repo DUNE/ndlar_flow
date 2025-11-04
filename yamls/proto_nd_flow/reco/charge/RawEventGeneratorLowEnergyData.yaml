@@ -17,7 +17,7 @@ params:
   event_builder_config:
     upper_window: 4000 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
     lower_window: -1000
-    trig_io_grp: 6
+    trig_io_grp: -1
     clusters_eps: 2
     clusters_min_samples: 1
     nhit_limit: 50
