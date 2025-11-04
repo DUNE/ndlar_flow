@@ -163,6 +163,8 @@ class LArData(H5FlowResource):
                 tz = ZoneInfo("Europe/Paris")
             elif 'CDT' in charge_name:
                 tz = ZoneInfo("America/Chicago")
+            elif 'CST' in charge_name:
+                tz = ZoneInfo("America/Chicago")
             else:
                 tz = ZoneInfo("UTC")
                 
