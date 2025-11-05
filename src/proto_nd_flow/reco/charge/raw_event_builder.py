@@ -515,11 +515,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             iog_masks = [packets['io_group'] == iog for iog in self.trig_io_grp]
             trig_mask &= np.logical_or.reduce(iog_masks)
         
-        trig_ts = ts[trig_mask]
-        if np.any(np.diff(trig_ts) == 3): # account for repeated triggers caused by 2x2 run2 trigger issue per-10/28/25
-            trigger_idcs = np.concatenate(([0], np.where(np.diff(trig_ts) != 3)[0]+1))
-        else:
-            trigger_idcs = np.where(trig_mask)[0]
+        trigger_idcs = np.where(trig_mask)[0]
             
         events = []
         event_unix_ts = []

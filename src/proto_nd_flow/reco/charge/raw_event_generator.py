@@ -447,6 +447,16 @@ class RawEventGenerator(H5FlowGenerator):
         if self.is_mc:
             mc_assn = mc_assn[mask]
 
+        pkts_indices = np.arange(len(packet_buffer))
+        trig_mask = packet_buffer['packet_type'] == 7
+        trig_ts = packet_buffer['timestamp'][trig_mask]
+
+        # handle when there are duplicate triggers -- specifically designed to handle the 2x2 run2 problem where repeat pulses have precisely 3 ticks between them
+        ts_diff = np.diff(trig_ts)
+        if np.any(ts_diff == 3):
+            trigger_idcs = np.concatenate(([0], np.where(ts_diff != 3)[0]+1))
+            packet_buffer = packet_buffer[(packet_buffer['packet_type'] != 7) | np.isin(pkts_indices, pkts_indices[trig_mask][trigger_idcs])]
+            
         # find unix timestamp groups
         ts_mask = packet_buffer['packet_type'] == 4
         ts_grps = np.split(packet_buffer, np.argwhere(ts_mask).ravel())
