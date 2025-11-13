@@ -1,22 +1,10 @@
 #Imports
+import warnings
 import numpy as np
-import numpy.ma as ma
-
 from h5flow.core import H5FlowStage, resources
-from h5flow.core import resources
-
-from h5flow import H5FLOW_MPI
-import h5flow
-from h5flow.data import dereference
-
 from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-
-
 from scipy.spatial.distance import cdist
-
-import statistics
 
 class RockMuonSelection(H5FlowStage):
     '''
@@ -63,6 +51,7 @@ class RockMuonSelection(H5FlowStage):
         ('y_end','f8'),
         ('z_end', 'f8'),
         ('dQ','f8'),
+        ('nhits', 'i4'),
         ('dx','f8'),
         ('x_mid','f8'),
         ('y_mid','f8'),
@@ -83,16 +72,9 @@ class RockMuonSelection(H5FlowStage):
         for key,val in self.defaults.items():
             setattr(self, key, params.get(key, val))
             
-        #self.x_boundaries = params.get('x_boundaries',dict())
-        
-        #self.y_boundaries = params.get('y_boundaries', dict())
-        
-        #self.z_boundaries = params.get('z_boundaries', dict())
-        
         self.length_cut = params.get('length_cut', dict())
         
-        #self.MEVR = params.get('MEVR', dict())
-            
+
     def init(self, source_name):
         
         super(RockMuonSelection, self).init(source_name)
@@ -122,126 +104,152 @@ class RockMuonSelection(H5FlowStage):
         
         self.data_manager.create_ref(self.rock_muon_segments_dset_name, self.PromptHits_dset_name)
     
-    #@staticmethod
-    '''
-    def cluster(self, PromptHits_ev):
-        
-        index_of_track_hits = []
 
-        positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
+    def merge_test(self, main_cluster_direction:np.ndarray, main_cluster_mean:np.ndarray, test_clusters:np.ndarray, average_dist:float) -> bool:
+        """Merge test clusters to main cluster."""
         
-        hit_cluster = DBSCAN(eps = 8, min_samples = 1).fit(positions)
+        distances = [
+            self.average_distance(test_cluster,
+                            main_cluster_mean, 
+                            main_cluster_direction) 
+            for test_cluster in test_clusters]
         
-        unique_labels = np.unique(hit_cluster.labels_)
+        
+        indices = [index for index, dist in enumerate(distances) if dist <= average_dist]
 
-        for unique in unique_labels:
-            index = np.where(hit_cluster.labels_ == unique)[0]
-            index_of_track_hits.append(index)
-
-        return index_of_track_hits
-    '''
-    #@staticmethod
-    def cluster(self,PromptHits_ev):
-        index_of_track_hits = []
-        positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
+        return indices
     
-        # Perform DBSCAN clustering
-        hit_cluster = DBSCAN(eps=1, min_samples=3).fit(positions)
+    def cluster(self, PromptHits_ev:np.ndarray, average_dist:float):
+        """Cluster an event of hits, does not necessarily have to be prompt hits."""
+        positions = np.column_stack((
+            PromptHits_ev['x'],
+            PromptHits_ev['y'],
+            PromptHits_ev['z']
+        ))
+
+        dbscan = DBSCAN(min_samples=6, eps=4*.4434)
+        clusters = dbscan.fit(positions)
+        labels = clusters.labels_
+
+        remove_noise = (labels != -1)
+
+        non_noise_hits = PromptHits_ev[remove_noise]
+        non_noise_positions = positions[remove_noise]
+        non_noise_labels = labels[remove_noise]
+
+        indicies_of_clusters = []
+
+        for label in np.unique(non_noise_labels):
+
+            indicies_of_clusters.append(
+                np.where(non_noise_labels==label)[0]
+                )
+
+        direction_each_cluster = np.array([
+            self.PCAs(non_noise_positions[indices])[1]
+            for indices in indicies_of_clusters
+            ])
+        
+        sorted_indices_cluster_directions = sorted(
+        range(len(direction_each_cluster)),
+        key=lambda v: max(abs(x) for x in direction_each_cluster[v]),
+        reverse=True
+        )
+        
+        positions_per_cluster = [
+        non_noise_positions[indicies_of_clusters[i]].data
+        for i in sorted_indices_cluster_directions
+        ]
+
+        sorted_indices_of_cluster = [
+            indicies_of_clusters[index]
+            for index in sorted_indices_cluster_directions
+        ]
+        sorted_directions = [direction_each_cluster[index] for index in sorted_indices_cluster_directions]
+
+        mean_per_cluster = [
+            np.mean(cluster, axis=0)
+            for cluster in positions_per_cluster
+        ]
+        
+        new_cluster_indices = []
+
+        test = list(range(len(sorted_indices_of_cluster)))
+
+        merged_flags = [False] * len(sorted_indices_of_cluster)
+        
+        new_cluster_indices = []
     
-        cluster_labels = hit_cluster.labels_
-
-        unique_labels = np.unique(cluster_labels)
-
-        if len(unique_labels) < 150:
-
-            # Collect indices of hits for each cluster
-            for unique in unique_labels:
-                index = np.where(cluster_labels == unique)[0]
-                index_of_track_hits.append(index)
-
-            index = 0
-            while index < len(index_of_track_hits):
-                center_of_masses = [np.mean(positions[cluster], axis=0) for cluster in index_of_track_hits]
-                center_of_1 = np.mean(positions[index_of_track_hits[index]], axis=0)
-
-                # Compute distances and lengths
-                distances = np.linalg.norm(center_of_masses - center_of_1, axis=1)
-                lengths = [len(cluster) for cluster in index_of_track_hits]
+        for main_idx in test:
             
-                combined_dist_length = [[distances[k], lengths[k]] for k in range(len(distances))]
+            if merged_flags[main_idx]:
+                continue
 
-                # Create a list of indices
-                indices = list(range(len(combined_dist_length)))
+            main_cluster_mean = mean_per_cluster[main_idx]
+            main_cluster_direction = sorted_directions[main_idx]
 
-                # Sort indices based on length (descending) and distance (ascending)
-                sorted_indices = sorted(indices, key=lambda i: (-combined_dist_length[i][1], combined_dist_length[i][0]))
+            test_indices = [i for i in range(len(sorted_indices_of_cluster)) if i != main_idx and not merged_flags[i]]
+            test_clusters = [positions_per_cluster[i] for i in test_indices]
             
-                explained_var, direction, original_mean = self.PCAs(PromptHits_ev[index_of_track_hits[index]])
+            indices_merge = self.merge_test(main_cluster_direction, main_cluster_mean, test_clusters, average_dist)
 
-                # Try merging with sorted clusters
-                for j in sorted_indices:
-                    if (j == index) | (len(index_of_track_hits[j]) < 6) | (len(index_of_track_hits[index]) < 6) | (combined_dist_length[j][0] > 100) | (combined_dist_length[j][0] < 2):  # Skip merging with itself
-                        continue
-                    explained_var, direction2, original_mean = self.PCAs(PromptHits_ev[index_of_track_hits[j]])
-                    hits_of_testing_merge = np.concatenate((positions[index_of_track_hits[index]], positions[index_of_track_hits[j]]))
-                    center_of_merge = np.mean(hits_of_testing_merge, axis=0)
+            if indices_merge:
+                clusters_to_merge = [main_idx] + [test_indices[i] for i in indices_merge]
+                merge_indices_flattened = np.concatenate([sorted_indices_of_cluster[index] for index in clusters_to_merge])
+                
+                for index in clusters_to_merge:
+                    merged_flags[index] =True
 
-                    projections = np.dot(hits_of_testing_merge - center_of_merge, direction[:, np.newaxis]) * direction + center_of_merge
-                    distances = np.linalg.norm(hits_of_testing_merge - projections, axis=1)
-                    average_dist = np.mean(distances)
-                    sim_direction = np.rad2deg(np.arccos(np.abs(np.dot(direction, direction2))))
-
-                    if (average_dist <= 3) & (sim_direction <= 20):  # Adjust distance threshold as needed
-                        index_of_track_hits[index] = np.concatenate([index_of_track_hits[index], index_of_track_hits[j]])
-                        index_of_track_hits.pop(j)
-                        center_of_masses.pop(j)
-                        #print(f'Merging cluster {index} with cluster {j}')
-                        break  # Recompute centers and distances after merge
-                else:
-                    index += 1
+                new_cluster_indices.append(merge_indices_flattened)
+                
+            else:
+                new_cluster_indices.append(sorted_indices_of_cluster[main_idx])
+                merged_flags[main_idx] = True
+                continue
+        if new_cluster_indices:
+            for j in range(len(new_cluster_indices)):
+                new_c = non_noise_hits[new_cluster_indices[j]]
+                
+                indices = np.where(np.isin(PromptHits_ev,new_c))[0]
+                new_cluster_indices[j] = indices
+        
+            return new_cluster_indices
         else:
-            for unique in unique_labels:
-                index = np.where(hit_cluster.labels_ == unique)[0]
-                index_of_track_hits.append(index)
-
-        return index_of_track_hits 
-    #@staticmethod
-    
-    def PCAs(self,hits_of_track):
-        scaler = StandardScaler()
+            return indicies_of_clusters
         
-        positions = np.column_stack((hits_of_track['x'], hits_of_track['y'], hits_of_track['z']))
-         
-        X_train = positions
-        X_train = scaler.fit_transform(X_train.reshape(-1, X_train.shape[-1])).reshape(X_train.shape)
+    #@staticmethod
+    def PCAs(self, hit_positions:np.ndarray):
+        """Compute the PCA for a set of hit positions reutrning the direction and mean position."""
+        warnings.filterwarnings(action='ignore', category=RuntimeWarning)
+
+        #Scale data
+        mean = np.mean(hit_positions, axis=0)
+        std = np.std(hit_positions, axis=0)
+        std1 = np.array([s if s != 0 else 1e-9 for s in std])
+
+        X_train = (hit_positions - mean)/std1
 
         pca = PCA(1) # 1 component
 
         pca.fit(X_train)
 
         explained_var = pca.explained_variance_ratio_[0]
-        
-        scaled_vector = pca.components_[0]
-        
-        unscaled_vector = scaler.scale_ * scaled_vector
+        scaled_direction_vector = pca.components_[0]
+        unscaled_vector = std * scaled_direction_vector
 
         normalized_direction_vector = unscaled_vector/np.linalg.norm(unscaled_vector)
-        
-        scaled_mean = pca.mean_
 
-        original_mean = scaler.inverse_transform(scaled_mean.reshape(1, -1)).flatten()
-        
-        return  explained_var, normalized_direction_vector, original_mean
+        return  explained_var, normalized_direction_vector, mean
     
     #@staticmethod
-    def length(self,hits):
-        #Get Hit positions
+    def length(self, hits:np.ndarray):
+        """Get length of track."""
         hit_positions = np.column_stack((hits['x'], hits['y'], hits['z']))
         
         hdist = cdist(hit_positions, hit_positions)
          
         max_value_index = np.argmax(hdist)
-        # Convert flattened index to row and column indices
+
         max_value_row = max_value_index // hdist.shape[1]
         max_value_col = max_value_index % hdist.shape[1]
         
@@ -250,12 +258,9 @@ class RockMuonSelection(H5FlowStage):
         start_hit, end_hit = hit_positions[np.min(indices)], hit_positions[np.max(indices)]
         
         return np.max(hdist), start_hit, end_hit
-    
-    '''
-    Checks to see if start/end point of track are close to two different faces of detector. If they are this will return True. Note: >= -1 just in case if a hit is reconstructed outside of detector.
-    '''
-    def close_to_two_faces(self,boundaries, hits):
-        # Boundaries are in the order [xmin, ymin, zmin, xmax, ymax, zmax]
+
+    def close_to_two_faces(self, boundaries, hits):
+        """Test if a track goes through the detector."""
         penetrated = False
 
         test_face = [False] * len(boundaries)
@@ -263,7 +268,6 @@ class RockMuonSelection(H5FlowStage):
         for index, face in enumerate(boundaries):
             if (index == 0) or (index == 3):
                 distance = np.abs(face - hits['x'])
-                #print(f"Checking x boundaries at index {index}: face = {face}, distances = {distance}")
 
                 if np.any(distance <= threshold):
                     test_face[index] = True
@@ -277,125 +281,91 @@ class RockMuonSelection(H5FlowStage):
                 distance = np.abs(face - hits['z'])
                 if np.any(distance <= threshold):
                     test_face[index] = True
-        #print(test_face)
+
         if sum(test_face)>= 2:
             penetrated = True
     
         return penetrated
 
-    #@staticmethod
-    def clean_noise_hits(self, hits):
-        positions = np.column_stack((hits['x'], hits['y'], hits['z']))
-
-        # Perform PCA to find the principal component
-        pca = PCA(n_components=1)
-        pca.fit(positions)
-        track_direction = pca.components_[0]
-        hits_mean = pca.mean_
-
-        # Project points onto the principal component (the line)
+    def clean_noise_hits(self, positions, track_direction, hits_mean):
+        """Returns mask of positions that are more than 3.5 centimeter away from track."""
         projections = np.dot(positions - hits_mean, track_direction[:, np.newaxis]) * track_direction + hits_mean
 
         # Calculate the Euclidean distance between each point and its projection on the line
         distances = np.linalg.norm(positions - projections, axis=1)
         
         mask_good = distances <= 3.5
-
-        filtered_hits = hits[mask_good]
-
-        return filtered_hits
-    #@staticmethod
-    def average_distance(self, hits):
-        positions = np.column_stack((hits['x'], hits['y'], hits['z']))
-
-        # Perform PCA to find the principal component
-        pca = PCA(n_components=1)
-        pca.fit(positions)
-        track_direction = pca.components_[0]
-        hits_mean = pca.mean_
-
-
-
-        # Project points onto the principal component (the line)
+        return mask_good
+    
+    def average_distance(self, positions:np.ndarray, hits_mean:np.ndarray, track_direction:np.ndarray):
+        """Return average distance from track."""
         projections = np.dot(positions - hits_mean, track_direction[:, np.newaxis]) * track_direction + hits_mean
 
-        # Calculate the Euclidean distance between each point and its projection on the line
         distances = np.linalg.norm(positions - projections, axis=1)
-        #print(np.mean(distances))
+
         average_distances = np.mean(distances)
 
         return average_distances
     
     #@staticmethod
-    def select_muon_track(self,hits,Min_max_detector_bounds):
+    def select_muon_track(self, hits, Min_max_detector_bounds):
             muon_hits = []
 
-            min_boundaries = np.flip(Min_max_detector_bounds[0]) #bounds are z,y,x and hits x,y,z, so bounds must be flipped
+            min_boundaries = np.flip(Min_max_detector_bounds[0]) 
             max_boundaries = np.flip(Min_max_detector_bounds[1])
             
             faces_of_detector = np.concatenate((min_boundaries,max_boundaries))
-            MEVR = self.MEVR #Minimum explained variance ratio
 
-            L_cut = self.length_cut #minimum track length requirement
+            hit_positions = np.column_stack((
+                hits['x'], hits['y'], hits['z']
+            ))
+
+            L_cut = self.length_cut 
+
+            explained_var, direction_vector, hits_mean_position = self.PCAs(hit_positions)
             
-            filtered_hits = self.clean_noise_hits(hits)
+            mask = self.clean_noise_hits(hit_positions, direction_vector, hits_mean_position)
             
-            explained_var, direction_vector,mean_point = self.PCAs(filtered_hits)
-                
+            filtered_hits = hits[mask]
+            
+            avg_distance = self.average_distance(hit_positions[mask], hits_mean_position, direction_vector)
+            
             l_track, start_point, end_point = self.length(filtered_hits)
-            
-            avg_distance = self.average_distance(filtered_hits)
-
             if (avg_distance <= 1.5) & (l_track >= L_cut):
 
                 penetrated = self.close_to_two_faces(faces_of_detector, filtered_hits)
 
-                if penetrated == True:
-                    #filtered_hits = self.clean_noise_hits(hits)
+                if penetrated:
 
                     muon_hits.append(filtered_hits)
-
-                    #Get the new hits info
-                    #explained_var, direction_vector,mean_point = self.PCAs(filtered_hits)
-
-                    #l_track, start_point, end_point = self.length(filtered_hits)
 
             return np.array(muon_hits), l_track, start_point, end_point, explained_var, direction_vector
     
     #@staticmethod
-    def angle(self,direction_vector):
+    def angle(self, direction_vector):
+        """Get angles of muon."""
         magnitude = np.linalg.norm(direction_vector)
 
-        # Calculate the unit vector in the xz-plane
         normal_vector_xz = np.array([0, 1, 0])
         
-        # Calculate the dot product between the direction vector and the unit vector in the yz-plane
         dot_product = np.dot(direction_vector, normal_vector_xz)
 
-        # Calculate the angle between the direction vector and the yz-plane
         theta_xz = np.arccos(dot_product / magnitude)
 
-        # Convert the angle from radians to degrees
         theta_xz = np.degrees(theta_xz)
         
         normal_vector_yz = np.array([1, 0, 0])
 
-        # Calculate the dot product between the direction vector and the unit vector in the yz-plane
         dot_product = np.dot(direction_vector, normal_vector_yz)
 
-        # Calculate the angle between the direction vector and the yz-plane
         theta_yz = np.arccos(dot_product / magnitude)
 
-        # Convert the angle from radians to degrees
         theta_yz = np.degrees(theta_yz)
-        if direction_vector[2] > 0:
-            theta_z = np.degrees(np.arctan(np.sqrt(direction_vector[0]**2 + direction_vector[1]**2)/direction_vector[2]))
-        elif direction_vector[2] < 0:
-            theta_z = 180 + np.degrees(np.arctan(np.sqrt(direction_vector[0]**2 + direction_vector[1]**2)/direction_vector[2]))
-        else:
-            theta_z = 90
-        return theta_xz, theta_yz, theta_z
 
+        theta_z = np.degrees(np.arctan2(np.sqrt(direction_vector[0]**2 + direction_vector[1]**2), direction_vector[2]))
+        
+        return theta_xz, theta_yz, theta_z
+    
     #@staticmethod
     def TPC_separation(self, hits):
         hits_tpc = []
@@ -414,6 +384,7 @@ class RockMuonSelection(H5FlowStage):
     
     #@staticmethod
     def segments(self,muon_hits):
+        """Create rock muon segments."""
         segment_info = []
 
         hit_ref = []
@@ -427,32 +398,31 @@ class RockMuonSelection(H5FlowStage):
 
         for hits in tpc_hits:
             if len(hits) != 0:
-                io_group_of_tpc = np.unique(hits['io_group'])
-
-                tpc_var, principal_component, tpc_mean = self.PCAs(hits)
-       
-                points = np.array([[hit['x'], hit['y'], hit['z']] for hit in hits])
+                hit_positions = np.array([[hit['x'], hit['y'], hit['z']] for hit in hits])
             
-                centered_points = points - tpc_mean
+                tpc_var, principal_component, tpc_mean = self.PCAs(hit_positions)
+       
+                centered_points = hit_positions - tpc_mean
 
                 projections = np.dot(centered_points, principal_component)
                 projected_hits = tpc_mean + np.outer(projections, principal_component)
-            
-                # Step 7: Find the minimum and maximum projections
+
                 t_min = np.min(projections)
                 t_max = np.max(projections)
-            
-                # Step 8: Compute the endpoints of the finite line
-                # Line endpoint 1: mean + t_min * principal_component
-                line_point_1 = tpc_mean + t_min * principal_component
 
-                # Line endpoint 2: mean + t_max * principal_component
+                #End points
+                line_point_1 = tpc_mean + t_min * principal_component
                 line_point_2 = tpc_mean + t_max * principal_component
             
                 line_defined_points = [line_point_1,line_point_2]
 
-                line_start = line_defined_points[np.argmax([line_point_1[2], line_point_2[2]])]
-                line_end = line_defined_points[np.argmin([line_point_1[2], line_point_2[2]])]
+                line_start = line_defined_points[
+                    np.argmax([line_point_1[2], line_point_2[2]])
+                    ]
+                
+                line_end = line_defined_points[
+                    np.argmin([line_point_1[2], line_point_2[2]])
+                    ]
             
                 #lets make segments
                 if principal_component[2] < 0:
@@ -482,13 +452,14 @@ class RockMuonSelection(H5FlowStage):
                             segment_info.append(seg_info)  
                     
                     
-                    if break_out == True:
+                    if break_out:
                         break
 
 
         return segment_info, hit_ref, segment_to_track_ref
 
     def grab_segment_info(self,segment_end, segment_start, projected_hits, hits, hit_ref, segment_to_track_ref):
+            """Create wanted segment information"""
             min_bounds = [min([segment_end[i],segment_start[i]]) for i in range(0,3)]
             max_bounds = [max([segment_end[i],segment_start[i]]) for i in range(0,3)]
             condition = (projected_hits[:,2] >= min_bounds[2]) & (projected_hits[:,2] <= max_bounds[2])
@@ -502,8 +473,6 @@ class RockMuonSelection(H5FlowStage):
             hits_of_segment = hits[condition]
         
             if len(hits_of_segment) != 0:
-                hits_positions = np.column_stack((hits_of_segment['x'],hits_of_segment['y'],hits_of_segment['z']))
-     
                 x_start, y_start, z_start = segment_start[0], segment_start[1], segment_start[2]
                 x_end, y_end, z_end = segment_end[0], segment_end[1], segment_end[2]
                 x_mid, y_mid, z_mid = (x_start+x_end)/2, (y_start + y_end)/2, (z_start + z_end)/2
@@ -521,85 +490,93 @@ class RockMuonSelection(H5FlowStage):
                 segment_to_track_ref.append([self.track_count, self.segment_count])
                 dx = np.linalg.norm(segment_start-segment_end)
             
-                return [self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Q_of_segment, dx, x_mid, y_mid,z_mid, drift_time, io_group_of_segment]
+                return [self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Q_of_segment,len(hits_of_segment), dx, x_mid, y_mid,z_mid, drift_time, io_group_of_segment]
             else:
-                #print(f'No hits found for segment: start={segment_start}, end={segment_end}')
                 return None
 
     def run(self, source_name, source_slice, cache):
-        
-        super(RockMuonSelection, self).run(source_name, source_slice, cache)
-                    
-        event_id = np.r_[source_slice]
-        
-        Min_max_detector_bounds = resources['Geometry'].lar_detector_bounds 
-        PromptHits_ev = cache[self.PromptHits_dset_name][0]
-
-        PromptHits_ev_positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
-        
-        nan_indices = np.unique(np.argwhere(np.isnan(PromptHits_ev_positions))[:,0]) 
-        
-        if len(nan_indices) >   0:
-            PromptHits_ev = np.delete(PromptHits_ev,nan_indices, axis = 0)
-        
-        hit_indices = self.cluster(PromptHits_ev)
-        
-        for indices in hit_indices:
-            if len(indices) > 10:
-                hits = PromptHits_ev[indices]
-                hits = self.clean_noise_hits(hits)
-                if len(hits) < 1:
-                    continue
-                muon_track,length_of_track, start_point, end_point, explained_var, direction_vector = self.select_muon_track(hits,Min_max_detector_bounds)
-                 
-                if len(muon_track) != 0:
-                    #Loop through tracks and changes the DBSCAN cluster_id to a given track number
-                    self.track_count += 1 
-                    track_number = self.track_count
-                    
-                    #Get angle of track
-                    theta_xz, theta_yz,theta_z = self.angle(direction_vector)
-                    
-                    #Fill track info
-                    track_info = [event_id,track_number,length_of_track, start_point[0],start_point[1],start_point[2], end_point[0],end_point[1],end_point[2], explained_var, theta_xz, theta_yz, theta_z]
-                    
-                    track_info = np.array([tuple(track_info)], dtype = self.rock_muon_track_dtype)
-                    #Get segments
-                    segments_list, segment_hit_ref, segment_track_ref = self.segments(muon_track)
-                    
-                    #  1. reserve a new data region within the output dataset
-                    rock_muon_slice = self.data_manager.reserve_data(self.rock_muon_hits_dset_name, 1)
-
-
-                    #  2. write the data to the new data region
-                    self.data_manager.write_data(self.rock_muon_hits_dset_name, rock_muon_slice, track_info)
             
-                    segments_array = np.array([tuple(sub) for sub in segments_list], dtype = self.rock_muon_segments_dtype) #Converts array of list to array of tuples
+            super(RockMuonSelection, self).run(source_name, source_slice, cache)
+                        
+            event_id = np.r_[source_slice]
             
-                    nMuon_segments = len(segments_array)
-                    # 3. reserve a new data region within the rock muon segment dataset
-                    rock_muon_segments_slice = self.data_manager.reserve_data(self.rock_muon_segments_dset_name, nMuon_segments)
+            Min_max_detector_bounds = resources['Geometry'].lar_detector_bounds 
+            PromptHits_ev = cache[self.PromptHits_dset_name][0]
+            
 
-                    # 4. Write the data into the rock muon segments data region
-                    self.data_manager.write_data(self.rock_muon_segments_dset_name, rock_muon_segments_slice, segments_array)
-                    
-                    #Reference hits to their track
+            PromptHits_ev_positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
+            
+            nan_indices = np.unique(np.argwhere(np.isnan(PromptHits_ev_positions))[:,0]) 
+            
+            if len(nan_indices) >   0:
+                PromptHits_ev = np.delete(PromptHits_ev,nan_indices, axis = 0)
 
+            unique_points, counts = np.unique(PromptHits_ev_positions, axis=0, return_counts=True)
+
+            for unique_point, count in zip(unique_points, counts):
+
+                if count > 1000:
+                    mask = np.all(PromptHits_ev_positions != unique_point, axis =1)
+    
+                    PromptHits_ev = PromptHits_ev[mask]
                     
-                    track_ref = np.array([(track_number,x) for x in muon_track['id'][0]])
+            if len(PromptHits_ev) >= 100:
+                hit_indices = self.cluster(PromptHits_ev, 2)
+            
+            if 'hit_indices' in locals():
+                for indices in hit_indices:
+                    if len(indices) > 10:
+                        hits = PromptHits_ev[indices]
+
+                        if len(hits) < 1:
+                            continue
+                        muon_track,length_of_track, start_point, end_point, explained_var, direction_vector = self.select_muon_track(hits,Min_max_detector_bounds)
+                        
+                        if len(muon_track) != 0:
+                            #Loop through tracks and changes the DBSCAN cluster_id to a given track number
+                            self.track_count += 1 
+                            track_number = self.track_count
+                            
+                            #Get angle of track
+                            theta_xz, theta_yz,theta_z = self.angle(direction_vector)
+                            
+                            #Fill track info
+                            track_info = [event_id,track_number,length_of_track, start_point[0],start_point[1],start_point[2], end_point[0],end_point[1],end_point[2], explained_var, theta_xz, theta_yz, theta_z]
+                            
+                            track_info = np.array([tuple(track_info)], dtype = self.rock_muon_track_dtype)
+                            #Get segments
+                            segments_list, segment_hit_ref, segment_track_ref = self.segments(muon_track)
+                            
+                            #  1. reserve a new data region within the output dataset
+                            rock_muon_slice = self.data_manager.reserve_data(self.rock_muon_hits_dset_name, 1)
+
+
+                            #  2. write the data to the new data region
+                            self.data_manager.write_data(self.rock_muon_hits_dset_name, rock_muon_slice, track_info)
                     
-                    track_event_ref = np.array([(track_number, event_id[0])])
+                            segments_array = np.array([tuple(sub) for sub in segments_list], dtype = self.rock_muon_segments_dtype) #Converts array of list to array of tuples
                     
-                    #print(track_ref)            
-                    segment_track_ref = np.array([(x) for x in segment_track_ref])
-                     
-                    segment_hit_ref = np.array([(x) for x in segment_hit_ref])
-                    
-                    #Write References
-                    self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.PromptHits_dset_name, track_ref)
-                    self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.events_dset_name, track_event_ref) 
-                    self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.rock_muon_segments_dset_name, segment_track_ref)
-                    self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.PromptHits_dset_name, segment_hit_ref)
-                # event -> hit
-                #self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.rock_muon_hits_dset_name, ref)
-                
+                            nMuon_segments = len(segments_array)
+                            # 3. reserve a new data region within the rock muon segment dataset
+                            rock_muon_segments_slice = self.data_manager.reserve_data(self.rock_muon_segments_dset_name, nMuon_segments)
+
+                            # 4. Write the data into the rock muon segments data region
+                            self.data_manager.write_data(self.rock_muon_segments_dset_name, rock_muon_segments_slice, segments_array)
+                            
+                            #Reference hits to their track
+
+                            
+                            track_ref = np.array([(track_number,x) for x in muon_track['id'][0]])
+                            
+                            track_event_ref = np.array([(track_number, event_id[0])])
+                            
+                            #print(track_ref)            
+                            segment_track_ref = np.array([(x) for x in segment_track_ref])
+                            
+                            segment_hit_ref = np.array([(x) for x in segment_hit_ref])
+                            
+                            #Write References
+                            self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.PromptHits_dset_name, track_ref)
+                            self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.events_dset_name, track_event_ref) 
+                            self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.rock_muon_segments_dset_name, segment_track_ref)
+                            self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.PromptHits_dset_name, segment_hit_ref)
