@@ -114,11 +114,10 @@ class WaveformNoiseFilter(H5FlowStage):
 
         # Mask zero ranges
         mask_zero = (ranges != 0)
-        ranges = np.where(mask_zero, ranges, np.nan)
-        means = np.where(mask_zero, means, np.nan)
+        ranges_masked = np.where(mask_zero, ranges, np.nan)
 
         # Find the ordering of the segments based on the smallest range
-        smallest_ordering = np.argsort(ranges, axis=-1)
+        smallest_ordering = np.argsort(ranges_masked, axis=-1)
 
         # Sort means according to the ordering of smallest ranges
         sorted_means = np.take_along_axis(means, smallest_ordering, axis=-1)
@@ -127,7 +126,9 @@ class WaveformNoiseFilter(H5FlowStage):
         average_mean = np.mean(sorted_means[..., 1:num_means], axis=-1)
 
         # calculate RMS for the ranges of the smallest range segments
-        rms = np.sqrt(np.mean(np.square(np.take_along_axis(ranges, smallest_ordering[..., :num_means], axis=-1)), axis=-1))
+        range_samples = np.take_along_axis(ranges, smallest_ordering[..., :num_means], axis=-1)
+        range_samples = range_samples.astype('uint32') # avoid overflowing int16
+        rms = np.sqrt(np.mean(np.square(range_samples), axis=-1))
 
         return average_mean, rms
 
