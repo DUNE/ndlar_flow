@@ -1408,8 +1408,8 @@ def make_x_plane(y1, y2, z1, z2, x):
     return X, Y, Z
 
 def make_z_plane(x1, x2, y1, y2, z):
-    x = np.linspace(x1, x2, 100)
-    y = np.linspace(y1, y2, 100)
+    x = np.linspace(x1, x2, 2)
+    y = np.linspace(y1, y2, 2)
     X, Y = np.meshgrid(x, y)
     Z = np.full(X.shape, z)
     return X, Y, Z
