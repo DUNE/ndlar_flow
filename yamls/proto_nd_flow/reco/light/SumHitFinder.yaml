@@ -27,7 +27,6 @@ params:
   rt_sqrt_factor: 5.0
   pe_weight: 1.0
   rising_edge: False
-  local_maxima: True
   prompt_window: 200.0
   long_window: 3200.0
   tick_duration: 16.0
