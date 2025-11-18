@@ -295,13 +295,20 @@ class WaveformHitFinder(H5FlowStage):
                                     wvfm_dset=self.wvfm_dset_name,
                                     t_ns_dset=self.t_ns_dset_name,
                                     near_samples=self.near_samples,
-                                    thresholds=self.threshold,
                                     mask=self.mask,
                                     ntpc=self.ntpc,
                                     ndet=self.ndet,
                                     nsamples=self.nsamples,
                                     hit_level=self.hit_level
                                     )
+
+        # For high channel counts (e.g. ND-LAr) we can't store the thresholds as
+        # an attribute; it exceeds the max size that the hdf5 library allows.
+        # TODO: Move to separate dataset? For now retain attribute for 2x2/FSD
+        # analyzers.
+        if self.ntpc * self.ndet <= 512:
+            self.data_manager.set_attrs(self.hits_dset_name,
+                                        thresholds=self.threshold)
 
 
     def run(self, source_name, source_slice, cache):
