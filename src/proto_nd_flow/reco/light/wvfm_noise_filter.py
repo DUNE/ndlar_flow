@@ -112,22 +112,23 @@ class WaveformNoiseFilter(H5FlowStage):
         ranges = np.abs(np.ptp(sliced_data, axis=-1))
         means = np.mean(sliced_data, axis=-1)
 
-        # Mask zero ranges
-        mask_zero = (ranges != 0)
-        ranges_masked = np.where(mask_zero, ranges, np.nan)
-
         # Find the ordering of the segments based on the smallest range
-        smallest_ordering = np.argsort(ranges_masked, axis=-1)
+        smallest_ordering = np.argsort(ranges, axis=-1)
+        sorted_ranges = np.take_along_axis(ranges, smallest_ordering, axis=-1)
+        mask_zero = (sorted_ranges != 0)
 
         # Sort means according to the ordering of smallest ranges
         sorted_means = np.take_along_axis(means, smallest_ordering, axis=-1)
 
+        # remove entries with mask_zero==True from sorted means and ranges
+        masked_means = np.where(mask_zero, sorted_means, np.nan)
+        masked_ranges = np.where(mask_zero, sorted_ranges, np.nan)
+
         # Compute the average of the 2nd, 3rd, and 4th smallest means
-        average_mean = np.mean(sorted_means[..., 1:num_means], axis=-1)
+        average_mean = np.mean(masked_means[..., 1:num_means], axis=-1)
 
         # calculate RMS for the ranges of the smallest range segments
-        range_samples = np.take_along_axis(ranges, smallest_ordering[..., :num_means], axis=-1)
-        range_samples = range_samples.astype('uint32') # avoid overflowing int16
+        range_samples = masked_ranges[..., :num_means].astype('uint32') # avoid overflowing int16
         rms = np.sqrt(np.mean(np.square(range_samples), axis=-1))
 
         return average_mean, rms
