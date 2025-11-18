@@ -19,6 +19,9 @@ params:
   filter_samples: [ 0, 80 ]
   modulo_param: 10 # template length
   keep_noise: False # flag to save extracted noise
-  segment_size: 25
+
+  # baseline calculation parameters
+  segment_size: 15
   num_segment: 40
   num_means: 4
+
