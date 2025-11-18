@@ -223,7 +223,6 @@ class WaveformHitFinder(H5FlowStage):
         self.rt_sqrt_factor = params.get('rt_sqrt_factor')
         self.pe_weight = params.get('pe_weight')
         self.rising_edge = params.get('rising_edge')
-        self.local_maxima = params.get('local_maxima')
         self.prompt_window = params.get('prompt_window')
         self.long_window = params.get('long_window')
         self.tick_duration = params.get('tick_duration')
@@ -316,8 +315,7 @@ class WaveformHitFinder(H5FlowStage):
                                       self.n_bins_rolled,
                                       self.rt_sqrt_factor,
                                       self.pe_weight,
-                                      self.rising_edge,
-                                      self.local_maxima)
+                                      self.rising_edge)
 
         t0_bin = np.argmax(peaks_found, axis=-1)
 
