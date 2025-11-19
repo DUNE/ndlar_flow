@@ -161,15 +161,16 @@ class WaveformHitFinder(H5FlowStage):
                     t0_bin = np.argmax(interactions[i, j, k]) - 5
                     end_prompt = t0_bin + prompt_bins
                     end_total = t0_bin + total_bins
-                    prompt_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_prompt])
-                    total_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_total])
+                    if end_prompt > summed_wvfm.shape[-1] or end_total > summed_wvfm.shape[-1]:
+                        prompt_int[i, j, k] = np.nan
+                        total_int[i, j, k] = np.nan
+                    else:
+                        prompt_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_prompt])
+                        total_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_total])
         # Calculate fprompt
         with np.errstate(divide='ignore', invalid='ignore'):
-            fprompt = np.where(
-            (total_int > 0) & (prompt_int > 0) & ~np.isnan(prompt_int) & ~np.isnan(total_int),
-            np.divide(prompt_int, total_int),
-            np.nan
-            )
+            fprompt = np.divide(prompt_int, total_int)
+            fprompt[(total_int <= 0) | (prompt_int <= 0) | np.isnan(prompt_int) | np.isnan(total_int)] = np.nan
         return total_int, fprompt
 
 
