@@ -14,14 +14,12 @@ params:
   # output
   hits_dset_name: 'light/sum_hits' # new dataset to produce
 
-  #threshold: !include yamls/proto_nd_flow/reco/light/sipm_threshold.yaml
   # threshold:
   threshold: 4
 
   # configuration parameters
   near_samples: 4
   hit_level: 'sum'
-  mad_factor: 5.0
   noise_factor: 5.0
   n_bins_rolled: 5
   rt_sqrt_factor: 5.0

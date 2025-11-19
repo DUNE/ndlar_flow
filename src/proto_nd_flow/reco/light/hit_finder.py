@@ -157,20 +157,29 @@ class WaveformHitFinder(H5FlowStage):
             for j in range(interactions.shape[1]):
                 # Loop over each trap type
                 for k in range(interactions.shape[2]):
+                    # Skip if no peak found in this channel
+                    if not np.any(interactions[i, j, k]):
+                        prompt_int[i, j, k] = np.nan
+                        total_int[i, j, k] = np.nan
+                        continue
                     # Calculate the prompt and total integrals
                     t0_bin = np.argmax(interactions[i, j, k]) - 5
                     end_prompt = t0_bin + prompt_bins
                     end_total = t0_bin + total_bins
-                    if end_prompt > summed_wvfm.shape[-1] or end_total > summed_wvfm.shape[-1]:
+                    if end_prompt > summed_wvfm.shape[-1] or end_total > summed_wvfm.shape[-1] or t0_bin < 0:
                         prompt_int[i, j, k] = np.nan
                         total_int[i, j, k] = np.nan
                     else:
                         prompt_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_prompt])
                         total_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_total])
-        # Calculate fprompt
-        with np.errstate(divide='ignore', invalid='ignore'):
-            fprompt = np.divide(prompt_int, total_int)
-            fprompt[(total_int <= 0) | (prompt_int <= 0) | np.isnan(prompt_int) | np.isnan(total_int)] = np.nan
+        # create mask
+        invalid_mask = (total_int <= 0) | (prompt_int <= 0) | np.isnan(prompt_int) | np.isnan(total_int)
+        # Calculate fprompt using masked arrays
+        prompt_int_masked = ma.array(prompt_int, mask=invalid_mask)
+        total_int_masked = ma.array(total_int, mask=invalid_mask)
+        fprompt = ma.divide(prompt_int_masked, total_int_masked)
+        fprompt = fprompt.filled(np.nan)
+
         return total_int, fprompt
 
 
@@ -331,6 +340,7 @@ class WaveformHitFinder(H5FlowStage):
         threshold_mask = peak_max >=self.threshold[peaks[1:-1]].ravel()
 
         if self.hit_level=="sum_tpc" or self.hit_level=="sum":
+
             integrals, fprompts = self.calculate_fprompt(wvfms, peaks_found,
                                                          self.prompt_window,
                                                          self.long_window,

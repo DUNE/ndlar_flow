@@ -20,7 +20,6 @@ params:
   # configuration parameters
   near_samples: 4
   hit_level: 'sum_tpc'
-  mad_factor: 5.0
   noise_factor: 5.0
   n_bins_rolled: 5
   rt_sqrt_factor: 5.0
