@@ -21,7 +21,7 @@ params:
   keep_noise: False # flag to save extracted noise
 
   # baseline calculation parameters
-  segment_size: 15
-  num_segment: 40
+  segment_size: 25
+  num_segment: 24
   num_means: 4
 
