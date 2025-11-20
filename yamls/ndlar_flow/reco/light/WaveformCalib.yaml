@@ -1,0 +1,15 @@
+classname: WaveformCalib
+path: proto_nd_flow.reco.light.wvfm_calib
+requires:
+  - 'light/events'
+  - 'light/fwvfm'
+  - 'light/fwvfm/alignment'
+params:
+  # input
+  wvfm_dset_name: 'light/fwvfm'
+
+  # output
+  cwvfm_dset_name: 'light/cwvfm'
+
+  gain_mc:
+    default: 0.022857

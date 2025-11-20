@@ -17,7 +17,7 @@ raw_events:
   path: h5flow.modules
   dset_name: 'charge/raw_events'
   params:
-    chunk_size: 32
+    chunk_size: 1
 
 calib_noise_filter:
   !include yamls/ndlar_flow/reco/charge/CalibNoiseFilter.yaml
