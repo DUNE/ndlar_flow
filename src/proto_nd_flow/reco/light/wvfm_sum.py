@@ -10,8 +10,11 @@ class WaveformSum(H5FlowStage):
 
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, input dataset path
+         - ``rms_dset_name`` : ``str``, required, input dataset path
          - ``swvfm_dset_name`` : ``str``, required, output det sum channels dataset path
+         - ``srms_dset_name`` : ``str``, required, output det sum channels rms dataset path
          - ``stpc_wvfm_dset_name`` : ``str``, required, output tpc sum channels dataset path
+         - ``stpc_rms_dset_name`` : ``str``, required, output tpc sum channels rms dataset path
 
         ``wvfm_dset_name`` is required in the data cache.
 
@@ -23,11 +26,15 @@ class WaveformSum(H5FlowStage):
                 classname: WaveformSum
                 requires:
                     - 'light/events'
-                    - 'light/deconv'
+                    - 'light/cwvfm'
+                    - 'light/cwvfm_rms'
                 params:
-                    wvfm_dset_name: 'light/deconv'
+                    wvfm_dset_name: 'light/cwvfm'
+                    rms_dset_name: 'light/cwvfm_rms'
                     swvfm_dset_name: 'light/swvfm'
+                    srms_dset_name: 'light/swvfm_rms'
                     stpc_wvfm_dset_name: 'light/stpc_wvfm'
+                    stpc_rms_dset_name: 'light/stpc_wvfm_rms'
 
 
         Uses the same dtype as the input waveform dataset(s) except with
@@ -40,9 +47,13 @@ class WaveformSum(H5FlowStage):
 
     def swvfm_dtype(self, ntpc, ndet, nsamples):
         return np.dtype([('samples', 'f4', (ntpc, ndet, nsamples))])
+    def swvfm_rms_dtype(self, ntpc, ndet):
+        return np.dtype([('rms', 'f4', (ntpc, ndet))])
 
     def stpc_wvfm_dtype(self, ntpc, nsamples):
         return np.dtype([('samples', 'f4', (ntpc, 2, nsamples))])
+    def stpc_wvfm_rms_dtype(self, ntpc):
+        return np.dtype([('rms', 'f4', (ntpc, 2))])
 
     def swvfm_align_dtype(self, ntpc, ndet):
         return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (ntpc, ndet))])
@@ -55,12 +66,15 @@ class WaveformSum(H5FlowStage):
 
         self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
+        self.rms_dset_name = params.get('rms_dset_name')
 
         self.swvfm_dset_name = params.get('swvfm_dset_name')
         self.swvfm_align_dset_name = f'{self.swvfm_dset_name}/alignment'
+        self.srms_dset_name = params.get('srms_dset_name')
 
         self.stpc_wvfm_dset_name = params.get('stpc_wvfm_dset_name')
         self.stpc_wvfm_align_dset_name = f'{self.stpc_wvfm_dset_name}/alignment'
+        self.stpc_rms_dset_name = params.get('stpc_rms_dset_name')
 
 
     def init(self, source_name):
@@ -82,11 +96,22 @@ class WaveformSum(H5FlowStage):
         self.data_manager.create_dset(self.swvfm_dset_name, dtype=self.swvfm_dtype)
         self.data_manager.create_ref(source_name, self.swvfm_dset_name)
 
+        # rms for det sum channels
+        self.srms_dtype = self.swvfm_rms_dtype(len(np.unique(tpc_ids)),
+            len(np.unique(det_ids)))
+        self.data_manager.create_dset(self.srms_dset_name, dtype=self.srms_dtype)
+        self.data_manager.create_ref(source_name, self.srms_dset_name)
+
         # tpc sum channels
         self.stpc_wvfm_dtype = self.stpc_wvfm_dtype(len(np.unique(tpc_ids)),
                                                     wvfm_dset.dtype['samples'].shape[2])
         self.data_manager.create_dset(self.stpc_wvfm_dset_name, dtype=self.stpc_wvfm_dtype)
         self.data_manager.create_ref(source_name, self.stpc_wvfm_dset_name)
+
+        # rms for tpc sum channels
+        self.stpc_rms_dtype = self.stpc_wvfm_rms_dtype(len(np.unique(tpc_ids)))
+        self.data_manager.create_dset(self.stpc_rms_dset_name, dtype=self.stpc_rms_dtype)
+        self.data_manager.create_ref(source_name, self.stpc_rms_dset_name)
 
         # alignments
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
@@ -104,8 +129,11 @@ class WaveformSum(H5FlowStage):
 
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape)
+        rms_data = cache[self.rms_dset_name].reshape(event_data.shape)
         swvfm_data = np.zeros(event_data.shape, dtype=self.swvfm_dtype)
+        srms_data = np.zeros(event_data.shape, dtype=self.srms_dtype)
         stpc_wvfm_data = np.zeros(event_data.shape, dtype=self.stpc_wvfm_dtype)
+        stpc_rms_data = np.zeros(event_data.shape, dtype=self.stpc_rms_dtype)
 
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             wvfm_align_data = cache[self.wvfm_align_dset_name].reshape(event_data.shape)
@@ -142,9 +170,17 @@ class WaveformSum(H5FlowStage):
                 # det summed wvfm
                 swvfm_data['samples'][mask,tpc_id,det_id,:] += (
                     wvfm_data['samples'][mask,adc,chan].filled(0))
+                # add sum rms in quadrature
+                srms_data['rms'][mask,tpc_id,det_id] += rms_data['rms'][mask,adc,chan]**2
                 # tpc summed wvfm
                 stpc_wvfm_data['samples'][mask,tpc_id,det_type,:] += (
                     wvfm_data['samples'][mask,adc,chan].filled(0))
+                # add sum tpc rms in quadrature
+                stpc_rms_data['rms'][mask,tpc_id,det_type] += rms_data['rms'][mask,adc,chan]**2
+
+        # Take square root to complete RMS in quadrature calculation
+        srms_data['rms'] = np.sqrt(srms_data['rms'])
+        stpc_rms_data['rms'] = np.sqrt(stpc_rms_data['rms'])
 
         # reserve new data:
 
@@ -154,6 +190,9 @@ class WaveformSum(H5FlowStage):
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             swvfm_align_slice = self.data_manager.reserve_data(self.swvfm_align_dset_name, source_slice)
             self.data_manager.write_data(self.swvfm_align_dset_name, swvfm_align_slice, swvfm_align_data)
+        # det summed wvfm rms
+        swvfm_rms_slice = self.data_manager.reserve_data(self.srms_dset_name, source_slice)
+        self.data_manager.write_data(self.srms_dset_name, swvfm_rms_slice, srms_data)
 
         # tpc summed wvfm
         stpc_wvfm_slice = self.data_manager.reserve_data(self.stpc_wvfm_dset_name, source_slice)
@@ -161,6 +200,9 @@ class WaveformSum(H5FlowStage):
         if(self.data_manager.dset_exists(self.stpc_wvfm_align_dset_name)):
             stpc_wvfm_align_slice = self.data_manager.reserve_data(self.stpc_wvfm_align_dset_name, source_slice)
             self.data_manager.write_data(self.stpc_wvfm_align_dset_name, stpc_wvfm_align_slice, stpc_wvfm_align_data)
+        # tpc summed wvfm rms
+        stpc_wvfm_rms_slice = self.data_manager.reserve_data(self.stpc_rms_dset_name, source_slice)
+        self.data_manager.write_data(self.stpc_rms_dset_name, stpc_wvfm_rms_slice, stpc_rms_data)
 
         # save references:
 
@@ -170,6 +212,9 @@ class WaveformSum(H5FlowStage):
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             swvfm_ref = np.c_[source_slice, swvfm_align_slice]
             self.data_manager.write_ref(source_name, self.swvfm_align_dset_name, swvfm_ref)
+        # det summed wvfm rms
+        swvfm_rms_ref = np.c_[source_slice, swvfm_rms_slice]
+        self.data_manager.write_ref(source_name, self.srms_dset_name, swvfm_rms_ref)
 
         # tpc summed wvfm
         stpc_wvfm_ref = np.c_[source_slice, stpc_wvfm_slice]
@@ -177,3 +222,6 @@ class WaveformSum(H5FlowStage):
         if(self.data_manager.dset_exists(self.stpc_wvfm_align_dset_name)):
             stpc_wvfm_ref = np.c_[source_slice, stpc_wvfm_align_slice]
             self.data_manager.write_ref(source_name, self.stpc_wvfm_align_dset_name, stpc_wvfm_ref)
+        # tpc summed wvfm rms
+        stpc_wvfm_rms_ref = np.c_[source_slice, stpc_wvfm_rms_slice]
+        self.data_manager.write_ref(source_name, self.stpc_rms_dset_name, stpc_wvfm_rms_ref)

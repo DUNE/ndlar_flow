@@ -2,11 +2,13 @@ classname: WaveformHitFinder # light/hit_finder.py
 path: proto_nd_flow.reco.light.hit_finder
 requires:
   - 'light/stpc_wvfm'
+  - 'light/stpc_wvfm_rms'
   - 'light/stpc_wvfm/alignment'
   - 'light/t_ns'
 params:
   # inputs
   wvfm_dset_name: 'light/stpc_wvfm'
+  rms_dset_name: 'light/stpc_wvfm_rms'
   t_ns_dset_name: 'light/t_ns'
 
   # output
@@ -18,13 +20,11 @@ params:
   # configuration parameters
   near_samples: 4
   hit_level: 'sum_tpc'
-  mad_factor: 5.0
   noise_factor: 5.0
   n_bins_rolled: 5
   rt_sqrt_factor: 5.0
   pe_weight: 1.0
   rising_edge: False
-  local_maxima: True
   prompt_window: 200.0
   long_window: 3200.0
   tick_duration: 16.0

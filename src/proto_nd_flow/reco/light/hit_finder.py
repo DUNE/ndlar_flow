@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 from functools import total_ordering
+=======
+from networkx import random_shell_graph
+>>>>>>> feature/baseline_fix_rms_thresholding
 import numpy as np
 import numpy.ma as ma
 from collections import defaultdict
@@ -23,17 +27,16 @@ class WaveformHitFinder(H5FlowStage):
 
         Parameters:
          - ``wvfm_dset_name``: ``str``, path to input waveforms
+         - ``rms_dset_name``:  ``str``, path to noise RMS dataset from baselining func in wvfm filtering stage
          - ``t_ns_dset_name``: ``str``, path to corrected light PPS timestamps
          - ``hits_dset_name``: ``str``, path to output hits dataset
          - ``near_samples``:   ``int``, number of neighboring samples to keep
          - ``hit_level``:      ``str``, "sipm" or "sum" hit finder (defines variable names)
-         - ``mad_factor``:     ``float``, factor of median abs dev used to define threshold under which noise width is taken
          - ``noise_factor``:   ``float``, factor of noise width used to define threshold over which hit finder is run
          - ``n_bins_rolled``:  ``int``, number of bins over which the rolling threshold of the hit finder is defined
          - ``rt_sqrt_factor``: ``float``, factor used to scale the statistical contribution to the rolling threshold
          - ``pe_weight``:      ``float``, weight applied to the PEs in rolling threshold statistical component
          - ``rising_edge``:    ``bool``, True => hit finder tags first bin over rolling threshold as the hit
-         - ``local_maxima``:   ``bool``, True => uses 5 sample window after rising edge, tags hits as argmax of those samples (otherwise uses derivative based method)
          - ``prompt_window``:  ``float``, Prompt light window in ns (fprompt caluclation input for PSD)
          - ``long_window``:    ``float``, Long light window in ns (fprompt caluclation input for PSD)
          - ``tick_duration``:  ``float``, Duration of ticks in ADC sampling
@@ -69,6 +72,7 @@ class WaveformHitFinder(H5FlowStage):
     class_version = '2.0.0'
 
     default_hits_dset_name = 'light/hits'
+    default_rms_dset_name = 'light/rms'
     default_near_samples = 3
     default_interpolation = 256
     default_global_threshold = 2000
@@ -161,36 +165,30 @@ class WaveformHitFinder(H5FlowStage):
             for j in range(interactions.shape[1]):
                 # Loop over each trap type
                 for k in range(interactions.shape[2]):
+                    # Skip if no peak found in this channel
+                    if not np.any(interactions[i, j, k]):
+                        prompt_int[i, j, k] = np.nan
+                        total_int[i, j, k] = np.nan
+                        continue
                     # Calculate the prompt and total integrals
                     t0_bin = np.argmax(interactions[i, j, k]) - 5
                     end_prompt = t0_bin + prompt_bins
                     end_total = t0_bin + total_bins
-                    prompt_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_prompt])
-                    total_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_total])
-        # Calculate fprompt
-        with np.errstate(divide='ignore', invalid='ignore'):
-            fprompt = np.where(
-            (total_int > 0) & (prompt_int > 0) & ~np.isnan(prompt_int) & ~np.isnan(total_int),
-            np.divide(prompt_int, total_int),
-            np.nan
-            )
+                    if end_prompt > summed_wvfm.shape[-1] or end_total > summed_wvfm.shape[-1] or t0_bin < 0:
+                        prompt_int[i, j, k] = np.nan
+                        total_int[i, j, k] = np.nan
+                    else:
+                        prompt_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_prompt])
+                        total_int[i, j, k] = np.sum(summed_wvfm[i, j, k, t0_bin:end_total])
+        # create mask
+        invalid_mask = (total_int <= 0) | (prompt_int <= 0) | np.isnan(prompt_int) | np.isnan(total_int)
+        # Calculate fprompt using masked arrays
+        prompt_int_masked = ma.array(prompt_int, mask=invalid_mask)
+        total_int_masked = ma.array(total_int, mask=invalid_mask)
+        fprompt = ma.divide(prompt_int_masked, total_int_masked)
+        fprompt = fprompt.filled(np.nan)
+
         return total_int, fprompt
-
-
-    def get_noise_threshold(self, wvfms, n_mad_factor):
-        # Initialize median and MAD
-        median = np.ma.median(wvfms, axis=-1)
-        mad = np.ma.median(np.abs(wvfms - median[..., np.newaxis]), axis=-1)
-        # identify outliers in the waveform
-        mad_factor = n_mad_factor * mad
-        noise_mask = np.abs(wvfms - median[..., np.newaxis]) < mad_factor[..., np.newaxis]
-        # set non mask values to nan
-        noise_samples = np.where(noise_mask, wvfms, np.nan)
-        # calculate noise as stddev of noise_samples
-        noise = np.where(np.nansum(noise_samples, axis=-1) != 0,
-                         np.nanstd(noise_samples, axis=-1),
-                         np.nan)
-        return  noise
 
 
     # gets ToT for threshold crossing pairs of samples (incl hysterisis)
@@ -271,12 +269,12 @@ class WaveformHitFinder(H5FlowStage):
 
         return duration_bins
 
-
     def peak_finder(self, wvfm, noise,
                     n_noise_factor,
                     n_bins_rolled,
                     n_sqrt_rt_factor,
-                    pe_weight):
+                    pe_weight,
+                    use_rising_edge=False):
 
         # height = flat threshold over noise (n*sigma)
         height = n_noise_factor * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
@@ -289,7 +287,22 @@ class WaveformHitFinder(H5FlowStage):
         rolling_average = uniform_filter1d(wvfm_rolled, size=n_bins_rolled)
         sqrt_rolling_average = np.sqrt(np.abs(rolling_average) * pe_weight**2)
         sqrt_rolling_average[sqrt_rolling_average == 0] = 1
-        dynamic_threshold = rolling_average + n_sqrt_rt_factor * sqrt_rolling_average
+        dynamic_threshold = rolling_average + n_sqrt_rt_factor*sqrt_rolling_average
+        # find bins over dynamic threshold and noise floor
+        bins_over_dynamic_threshold = (wvfm > dynamic_threshold) & (wvfm > height)
+        # Find first bins over threshold (rising edge)
+        first_bins_over = bins_over_dynamic_threshold.copy()
+        first_bins_over[..., 1:] &= ~bins_over_dynamic_threshold[..., :-1]
+        if use_rising_edge:
+            return first_bins_over
+        # check 5 bins after first_bins_over and add argmax
+        peak_bins = np.zeros_like(wvfm, dtype=bool)
+        first_bins_indices = np.where(first_bins_over)
+        for idx in zip(*first_bins_indices):
+            start_idx = idx[-1]
+            end_idx = min(start_idx + 5, wvfm.shape[-1])
+            peak_bin = np.argmax(wvfm[idx[:-1] + (slice(start_idx, end_idx),)])
+            peak_bins[idx[:-1] + (start_idx + peak_bin,)] = True
 
         # find bins over noise floor
         bins_over_noise_threshold = (wvfm > height)
@@ -338,19 +351,18 @@ class WaveformHitFinder(H5FlowStage):
         super(WaveformHitFinder, self).__init__(**params)
         self.wvfm_dset_name = params.get('wvfm_dset_name')
         self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
+        self.rms_dset_name = params.get('rms_dset_name')
         self.t_ns_dset_name = params.get('t_ns_dset_name')
         self.hits_dset_name = params.get('hits_dset_name',
                                          self.default_hits_dset_name)
         self.near_samples = params.get('near_samples',
                                        self.default_near_samples)
         self.hit_level = params.get('hit_level')
-        self.mad_factor = params.get('mad_factor')
         self.noise_factor = params.get('noise_factor')
         self.n_bins_rolled = params.get('n_bins_rolled')
         self.rt_sqrt_factor = params.get('rt_sqrt_factor')
         self.pe_weight = params.get('pe_weight')
         self.rising_edge = params.get('rising_edge')
-        self.local_maxima = params.get('local_maxima')
         self.prompt_window = params.get('prompt_window')
         self.long_window = params.get('long_window')
         self.tick_duration = params.get('tick_duration')
@@ -435,13 +447,15 @@ class WaveformHitFinder(H5FlowStage):
 
         wvfm_det = np.broadcast_to(np.arange(wvfms.shape[-2]).reshape(1,1,-1), wvfms.shape[:-1])
 
-        noise = self.get_noise_threshold(wvfms, self.mad_factor)
+        noise = cache[self.rms_dset_name].reshape(cache[source_name].shape)[
+            'rms']
 
         peaks_found, tot, tot_upper = self.peak_finder(wvfms, noise,
                                       self.noise_factor,
                                       self.n_bins_rolled,
                                       self.rt_sqrt_factor,
-                                      self.pe_weight)
+                                      self.pe_weight,
+                                      self.rising_edge)
 
         t0_bin = np.argmax(peaks_found, axis=-1)
 
@@ -460,6 +474,7 @@ class WaveformHitFinder(H5FlowStage):
         threshold_mask = peak_max >= self.threshold[peaks[1], peaks[2], 0]
 
         if self.hit_level=="sum_tpc" or self.hit_level=="sum":
+
             integrals, fprompts = self.calculate_fprompt(wvfms, peaks_found,
                                                          self.prompt_window,
                                                          self.long_window,
