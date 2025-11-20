@@ -12,16 +12,18 @@ class WaveformCalib(H5FlowStage):
         Parameters:
          - ``wvfm_dset_name`` : ``str``, required, input dataset path
          - ``wvfm_calib_dset_name`` : ``str``, required, output calibrated wvfm dataset path
+         - ``crms_dset_name`` : ``str``, required, output calibrated rms dataset path
          - ``gain``: ``dict`` of ``dict`` of ``<adc #>: <channel #>: <gain correction>`` where each gain correction converts the ADC value to visible energy
          - ``gain_mc``: same as ``gain``, but only applied if datafile is simulation
 
         ``wvfm_dset_name`` is required in the data cache.
+        RMS data is expected to be at ``<source_name>/rms`` (created by WaveformNoiseFilter).
 
         The Geometry resource is required in the workflow.
 
         Example config::
 
-            wvfm_sum:
+            wvfm_calib:
                 classname: WaveformCalib
                 requires:
                     - 'light/events'
@@ -29,6 +31,7 @@ class WaveformCalib(H5FlowStage):
                 params:
                     wvfm_dset_name: 'light/deconv'
                     wvfm_calib_dset_name: 'light/cwvfm'
+                    crms_dset_name: 'light/cwvfm_rms'
                     gain:
                         default: 1.0
 
@@ -43,6 +46,9 @@ class WaveformCalib(H5FlowStage):
             ('clipped', '?', (nadc, nchannels))  # Propagated from input waveforms
         ])
 
+    def crms_dtype(self, nadc, nchannels):
+        return np.dtype([('rms', 'f4', (nadc, nchannels))])
+
     def align_dtype(self, nadc, nchannels):
         return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (nadc, nchannels))])
 
@@ -53,6 +59,11 @@ class WaveformCalib(H5FlowStage):
         self.wvfm_align_dset_name = f'{self.wvfm_dset_name}/alignment'
         self.cwvfm_dset_name = params.get('cwvfm_dset_name')
         self.align_dset_name = f'{self.cwvfm_dset_name}/alignment'
+
+        # RMS data is a subdataset of the source, will be set in init()
+        self.rms_dset_name = None
+        self.crms_dset_name = params.get('crms_dset_name')
+
         self.gain = params.get('gain',{'default': 1.0})
         self.gain_mc = params.get('gain_mc',{'default': 1.0})
 
@@ -68,6 +79,9 @@ class WaveformCalib(H5FlowStage):
 
     def init(self, source_name):
         super(WaveformCalib, self).init(source_name)
+
+        # Set RMS dataset path to subdataset of source
+        self.rms_dset_name = f'{source_name}/rms'
 
         # use appropriate gain data
         if resources['RunData'].is_mc:
@@ -94,6 +108,12 @@ class WaveformCalib(H5FlowStage):
         self.data_manager.create_dset(self.cwvfm_dset_name, dtype=self.cwvfm_dtype)
         self.data_manager.create_ref(source_name, self.cwvfm_dset_name)
 
+        # crms_dtype only needs nadc, nchannels - not nsamples
+        nadc, nchannels, nsamples = wvfm_dset.dtype['samples'].shape
+        self.crms_dtype = self.crms_dtype(nadc, nchannels)
+        self.data_manager.create_dset(self.crms_dset_name, dtype=self.crms_dtype)
+        self.data_manager.create_ref(source_name, self.crms_dset_name)
+
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             self.align_dtype = self.align_dtype(wvfm_dset.dtype['samples'].shape[-3], wvfm_dset.dtype['samples'].shape[-2])
             self.data_manager.create_dset(self.align_dset_name, dtype=self.align_dtype)
@@ -105,6 +125,8 @@ class WaveformCalib(H5FlowStage):
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape)
         cwvfm_data = np.zeros(event_data.shape, dtype=self.cwvfm_dtype)
+        rms_data = cache[self.rms_dset_name].reshape(event_data.shape)
+        crms_data = np.zeros(event_data.shape, dtype=self.crms_dtype)
 
         # Check if input waveforms have clipped field
         has_clipped = 'clipped' in wvfm_data.dtype.names
@@ -127,6 +149,9 @@ class WaveformCalib(H5FlowStage):
                 cwvfm_data['samples'][mask,adc,chan,:] = (
                     wvfm_data['samples'][mask,adc,chan].filled(0)
                     * self.gain[adc][chan])
+                crms_data['rms'][mask,adc,chan] = (
+                    rms_data['rms'][mask,adc,chan]
+                    * self.gain[adc][chan])
 
                 # Propagate clipped flag from input waveforms
                 if has_clipped:
@@ -140,6 +165,9 @@ class WaveformCalib(H5FlowStage):
             align_slice = self.data_manager.reserve_data(self.align_dset_name, source_slice)
             self.data_manager.write_data(self.align_dset_name, align_slice, align_data)
 
+        crms_slice = self.data_manager.reserve_data(self.crms_dset_name, source_slice)
+        self.data_manager.write_data(self.crms_dset_name, source_slice, crms_data)
+
         # save references
         ref = np.c_[source_slice, cwvfm_slice]
         self.data_manager.write_ref(source_name, self.cwvfm_dset_name, ref)
@@ -147,4 +175,7 @@ class WaveformCalib(H5FlowStage):
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             ref = np.c_[source_slice, align_slice]
             self.data_manager.write_ref(source_name, self.align_dset_name, ref)
+
+        ref = np.c_[source_slice, crms_slice]
+        self.data_manager.write_ref(source_name, self.crms_dset_name, ref)
 

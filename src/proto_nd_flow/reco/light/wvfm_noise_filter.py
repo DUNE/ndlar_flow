@@ -52,9 +52,11 @@ class WaveformNoiseFilter(H5FlowStage):
     default_filter_samples = (0, 80)
     default_modulo_param = 10
     default_keep_noise = False
-    default_segment_size = 25
+    default_segment_size = 15
     default_num_segment = 40
     default_num_means = 4
+    default_rms_dset_name = 'light/wvfm_rms'
+    default_baseline_dset_name = 'light/wvfm_baseline'
     default_noise_dset_name = 'light/fwvfm_noise'
 
     # dtype for filtered & baselined waveforms
@@ -63,6 +65,8 @@ class WaveformNoiseFilter(H5FlowStage):
             ('samples', 'f4', (nadc, nchannels, nsamples)),
             ('clipped', '?', (nadc, nchannels))  # Propagated from input waveforms
         ])
+    def rms_dtype(self, nadc, nchannels): return np.dtype([('rms', 'f4', (nadc, nchannels))])
+    def baseline_dtype(self, nadc, nchannels): return np.dtype([('baseline', 'f4', (nadc, nchannels))])
 
     def __init__(self, **params):
         super(WaveformNoiseFilter, self).__init__(**params)
@@ -77,6 +81,8 @@ class WaveformNoiseFilter(H5FlowStage):
         self.segment_size = params.get("segment_size", self.default_segment_size)
         self.num_segment = params.get("num_segment", self.default_num_segment)
         self.num_means = params.get("num_means", self.default_num_means)
+        self.rms_dset_name = params.get('rms_dset_name', self.default_rms_dset_name)
+        self.baseline_dset_name = params.get('baseline_dset_name', self.default_baseline_dset_name)
 
     def init(self, source_name):
         super(WaveformNoiseFilter, self).init(source_name)
@@ -99,9 +105,17 @@ class WaveformNoiseFilter(H5FlowStage):
         if self.keep_noise:
             self.data_manager.create_dset(self.noise_dset_name, dtype=wvfm_dset.dtype)
             self.data_manager.create_ref(source_name, self.noise_dset_name)
+        # baselines and rms (only need nadc, nchannels - not nsamples)
+        nadc, nchannels, nsamples = wvfm_dset.dtype['samples'].shape
+        self.baseline_dtype = self.baseline_dtype(nadc, nchannels)
+        self.data_manager.create_dset(f'{source_name}/baseline', dtype=self.baseline_dtype)
+        self.data_manager.create_ref(source_name, f'{source_name}/baseline')
+        self.rms_dtype = self.rms_dtype(nadc, nchannels)
+        self.data_manager.create_dset(f'{source_name}/rms', dtype=self.rms_dtype)
+        self.data_manager.create_ref(source_name, f'{source_name}/rms')
 
 
-    def min_range_baseline(self, array, segment_size, num_segments, num_means=4):
+    def min_range_baseline(self, array, segment_size, num_segments, num_means):
 
         # Define start and end indices for segments
         indices = np.arange(num_segments + 1) * segment_size
@@ -119,11 +133,10 @@ class WaveformNoiseFilter(H5FlowStage):
 
         # Mask zero ranges
         mask_zero = (ranges != 0)
-        ranges = np.where(mask_zero, ranges, np.nan)
-        means = np.where(mask_zero, means, np.nan)
+        ranges_masked = np.where(mask_zero, ranges, np.nan)
 
         # Find the ordering of the segments based on the smallest range
-        smallest_ordering = np.argsort(ranges, axis=-1)
+        smallest_ordering = np.argsort(ranges_masked, axis=-1)
 
         # Sort means according to the ordering of smallest ranges
         sorted_means = np.take_along_axis(means, smallest_ordering, axis=-1)
@@ -132,7 +145,9 @@ class WaveformNoiseFilter(H5FlowStage):
         average_mean = np.mean(sorted_means[..., 1:num_means], axis=-1)
 
         # calculate RMS for the ranges of the smallest range segments
-        rms = np.sqrt(np.mean(np.square(np.take_along_axis(ranges, smallest_ordering[..., :num_means], axis=-1)), axis=-1))
+        range_samples = np.take_along_axis(ranges_masked, smallest_ordering[..., :num_means], axis=-1)
+        range_samples = range_samples.astype('uint32') # avoid overflowing int16
+        rms = np.sqrt(np.mean(np.square(range_samples), axis=-1))
 
         return average_mean, rms
 
@@ -145,6 +160,9 @@ class WaveformNoiseFilter(H5FlowStage):
 
         # Check if input waveforms have clipped field
         has_clipped = 'clipped' in cache[self.wvfm_dset_name].dtype.names
+        event_shape = event_data.shape
+        nadc = wvfm_data['samples'].shape[1]
+        nchannels = wvfm_data['samples'].shape[2]
 
         # flatten into individual waveforms
         wvfm_samples = wvfm_data['samples'].reshape(-1, wvfm_data['samples'].shape[-1])
@@ -161,6 +179,25 @@ class WaveformNoiseFilter(H5FlowStage):
         # Propagate clipped flag from input waveforms
         if has_clipped:
             fwvfm['clipped'] = wvfm_data['clipped']
+
+        # save baselines as light/events/baseline (structured array) with dims [event, adc, channel]
+        baseline_data = np.zeros(event_shape, dtype=self.baseline_dtype)
+        baseline_data['baseline'] = pedestal.reshape(event_shape + (nadc, nchannels))
+        baseline_slice = self.data_manager.reserve_data(f'{source_name}/baseline', source_slice)
+        self.data_manager.write_data(f'{source_name}/baseline', baseline_slice, baseline_data)
+        # save references
+        ref = np.c_[baseline_slice, baseline_slice]
+        self.data_manager.write_ref(source_name, f'{source_name}/baseline', ref)
+
+        # save RMS (noise widths) as light/events/rms (structured array) with dims [event, adc, channel]
+        rms_data = np.zeros(event_shape, dtype=self.rms_dtype)
+        rms_data['rms'] = rms.reshape(event_shape + (nadc, nchannels))
+        rms_slice = self.data_manager.reserve_data(f'{source_name}/rms', source_slice)
+        self.data_manager.write_data(f'{source_name}/rms', rms_slice, rms_data)
+        # save references
+        ref = np.c_[rms_slice, rms_slice]
+        self.data_manager.write_ref(source_name, f'{source_name}/rms', ref)
+
 
         # reserve new data
         fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
