@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-from functools import total_ordering
-=======
-from networkx import random_shell_graph
->>>>>>> feature/baseline_fix_rms_thresholding
 import numpy as np
 import numpy.ma as ma
 from collections import defaultdict
