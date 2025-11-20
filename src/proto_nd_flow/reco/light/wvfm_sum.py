@@ -60,7 +60,6 @@ class WaveformSum(H5FlowStage):
             ('clipped', '?', (ntpc, 2))  # True if any contributing channel was clipped
         ])
 
-        return np.dtype([('samples', 'f4', (ntpc, ndet, nsamples))])
     def swvfm_rms_dtype(self, ntpc, ndet):
         return np.dtype([('rms', 'f4', (ntpc, ndet))])
 
