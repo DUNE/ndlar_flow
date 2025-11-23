@@ -771,7 +771,8 @@ class Geometry(H5FlowResource):
 
         mod_centers = det_geometry_yaml['tpc_offsets']
         n_modules = len(det_geometry_yaml['module_to_io_groups'])
-        n_tiles = sum(len(j) for i in det_geometry_yaml['tile_map'] for j in i)
+        # Have n_tiles only look at the number of tiles in one module. Should be moved to the for loop below.
+        n_tiles = sum([len(i) for i_tpc in self.det_geometry_yaml["module_to_tpcs"][1] for i in det_geometry_yaml['tile_map'][i_tpc]])
         # DOUBLE WARNING!: I'm doing a terrible thing and hardcoding things based on
         #                  the first geometry file option in the list...
         #                  Please, fix me! (move into loop below)
