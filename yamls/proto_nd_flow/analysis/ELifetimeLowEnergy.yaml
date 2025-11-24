@@ -1,0 +1,32 @@
+classname: ELifetimeLowEnergy
+path: proto_nd_flow.analysis.elifetime_low_energy
+dset_name: 'tau_measurements'
+#requires:
+#  - 'light/events'
+params:
+  # input
+  clusters_dset_name: 'charge/clusters_matched'
+  tau_measurements_dset_name: 'tau_measurements'
+  cluster_files_list: '/Users/samuelfogarty/Documents/ndlar_analysis/ndlar_flow/data/proto_nd_flow/cluster_files_2x2_2024.txt'
+  measurement_periods_list: '/Users/samuelfogarty/Documents/ndlar_analysis/ndlar_flow/data/proto_nd_flow/measurement_periods_2x2_2024_radon.txt'
+  clusters_data_path: '/Users/samuelfogarty/Documents/ndlar_analysis/2x2_220Radon_data.npz'
+  kde_bandwidth_path: '/Users/samuelfogarty/Documents/ndlar_analysis/ndlar_flow/data/proto_nd_flow/kde_bandwidth_2x2_2024_test.txt'
+  data_type: 'data'
+
+  n_q_bins: 100
+  q_range: [20, 60]
+  n_t_bins: 8
+  t_range: [20, 170]
+  bin_factor: 1.0
+  csa_gain: 0.221
+  vref_mv: 1568.0
+  vcm_mv: 478.1
+  adc_counts: 256
+  lifetime_range: [200, 2500]
+  lifetime_bin_size: 1
+  bootstrap_samples: 1000
+  lifetime_guess: 1000
+  lifetime_bounds: [200, 2500]
+  smoothing_sigma: 0.0
+  kde_bandwidth: 0.13
+  rand_seed: -1

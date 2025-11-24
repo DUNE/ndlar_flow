@@ -1,0 +1,14 @@
+# Extract electron lifetime with low energy CL matched events
+flow:
+  source: elifetime_analysis
+  stages: [] # just generate events, no analysis stages
+  drop: []
+
+
+#resources:
+  #- !include yamls/proto_nd_flow/resources/RunDataData.yaml
+  #- !include yamls/proto_nd_flow/resources/GeometryData.yaml
+  #- !include yamls/proto_nd_flow/resources/LArData.yaml
+
+elifetime_analysis:
+  !include yamls/proto_nd_flow/analysis/ELifetimeLowEnergy.yaml
