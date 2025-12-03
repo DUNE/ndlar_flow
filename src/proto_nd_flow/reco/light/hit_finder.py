@@ -140,92 +140,66 @@ class WaveformHitFinder(H5FlowStage):
                 ('ns_spline', 'f4'),
                 ('rising_spline', 'f4'),
                 ('rising_err_spline', 'f4'),
-                ('fwhm_spline', 'f4')
+                ('fwhm_spline', 'f4'),
+                ('integral', 'f4'),
+                ('fprompt', 'f4'),
+                ('tot', 'f4'),
+                ('tot_upper', 'f4'),
             ])
         else:
             raise RuntimeError(f'Invalid hit level {self.hit_level}')
 
 
     # function to calculate the prompt light fraction in a vectorized way
-    def calculate_fprompt(self, summed_wvfm, interactions,
+    def extract_pulse_shape_disc(self, summed_wvfm, peak_bins,
                         prompt_window_ns, long_window_ns, tick_duration_ns):
         """
+        Calculates fprompt and integral for each peak, returning arrays shaped
+        like the input waveforms with values placed at peak indices.
+
         summed_wvfm:   shape (n_events, n_tpcs, n_detectors, n_samples)
-        interactions:  same shape, 0 where no hit, 1 where there is a hit
-                    (possibly multiple hits per waveform/channel)
+        peak_bins:     same shape, True at peak locations, False elsewhere
+
+        Returns:
+            integrals: array shaped like summed_wvfm, with integral values at peak indices
+            fprompts:  array shaped like summed_wvfm, with fprompt values at peak indices
         """
-
-
         # Define regions (in bins)
         prompt_bins = int(np.ceil(prompt_window_ns / tick_duration_ns))
         total_bins  = int(np.ceil(long_window_ns   / tick_duration_ns))
 
-        print('interactions.shape =', interactions.shape)
+        n_samples = summed_wvfm.shape[-1]
 
-        # Always use the last 4 dims for (n_events, n_tpcs, n_detectors, n_samples)
-        n_events, n_tpcs, n_detectors, n_samples = interactions.shape
+        # Initialize output arrays with zeros (will place values at peak indices)
+        integrals = np.zeros_like(summed_wvfm, dtype=np.float32)
+        fprompts = np.zeros_like(summed_wvfm, dtype=np.float32)
 
-        # How many hits per (event, tpc, det)? (assuming exactly one "1" per hit)
-        hit_counts = interactions.sum(axis=-1).astype(int)  # shape (n_events, n_tpcs, n_detectors)
-        max_hits   = hit_counts.max()  # the maximum number of hits in any channel
+        # Find all peaks (hits)
+        peak_indices = np.where(peak_bins)
+        # Each entry in peak_indices is (event, tpc, det, sample)
 
-        if max_hits == 0:
-            # no hits at all – just return nan arrays of the right shape
-            shape = (n_events, n_tpcs, n_detectors, 0)
-            return np.full(shape, np.nan), np.full(shape, np.nan)
+        for e, t, d, s in zip(*peak_indices):
+            t0_bin    = s - 5
+            end_prompt = t0_bin + prompt_bins
+            end_total  = t0_bin + total_bins
 
-        # Allocate integrals with one extra axis for hit index
-        prompt_int = np.full((n_events, n_tpcs, n_detectors, max_hits), np.nan)
-        total_int  = np.full((n_events, n_tpcs, n_detectors, max_hits), np.nan)
+            # Check boundaries
+            if t0_bin < 0 or end_prompt > n_samples or end_total > n_samples:
+                integrals[e, t, d, s] = np.nan
+                fprompts[e, t, d, s] = np.nan
+                continue
 
-        # Loop over each channel
-        for i in range(n_events):
-            for j in range(n_tpcs):
-                for k in range(n_detectors):
-                    # Indices of all hits for this waveform
-                    hit_bins = np.where(interactions[i, j, k] == 1)[0]
+            prompt_val = np.sum(summed_wvfm[e, t, d, t0_bin:end_prompt])
+            total_val  = np.sum(summed_wvfm[e, t, d, t0_bin:end_total])
 
-                    if hit_bins.size == 0:
-                        # No hits -> leave NaNs
-                        continue
+            if total_val <= 0 or prompt_val <= 0 or np.isnan(prompt_val) or np.isnan(total_val):
+                integrals[e, t, d, s] = np.nan
+                fprompts[e, t, d, s] = np.nan
+            else:
+                integrals[e, t, d, s] = total_val
+                fprompts[e, t, d, s] = prompt_val / total_val
 
-                    # Loop over hits in this channel
-                    for h, peak_bin in enumerate(hit_bins):
-                        if h >= max_hits:
-                            # Shouldn't really happen, but safe-guard
-                            break
-
-                        t0_bin    = peak_bin - 5
-                        end_prompt = t0_bin + prompt_bins
-                        end_total  = t0_bin + total_bins
-
-                        # Check boundaries
-                        if t0_bin < 0 or end_prompt > n_samples or end_total > n_samples:
-                            # leave NaN for this hit
-                            continue
-
-                        # Integrate for this hit
-                        prompt_int[i, j, k, h] = np.sum(
-                            summed_wvfm[i, j, k, t0_bin:end_prompt]
-                        )
-                        total_int[i, j, k, h] = np.sum(
-                            summed_wvfm[i, j, k, t0_bin:end_total]
-                        )
-
-        # Mask invalid entries
-        invalid_mask = (
-            (total_int <= 0) |
-            (prompt_int <= 0) |
-            np.isnan(prompt_int) |
-            np.isnan(total_int)
-        )
-
-        prompt_int_masked = ma.array(prompt_int, mask=invalid_mask)
-        total_int_masked  = ma.array(total_int,  mask=invalid_mask)
-
-        fprompt = ma.divide(prompt_int_masked, total_int_masked).filled(np.nan)
-
-        return total_int, fprompt
+        return integrals, fprompts
 
 
 
@@ -382,7 +356,15 @@ class WaveformHitFinder(H5FlowStage):
         # upper threshold tot
         tout = self.pair_runs_with_peaks(first_bins_over_upper, first_bins_under_upper, peak_bins)
 
-        return peak_bins, tot, tout
+        # fprompt and integral
+        integrals, fprompts = self.extract_pulse_shape_disc(
+            wvfm, peak_bins,
+            self.prompt_window,
+            self.long_window,
+            self.tick_duration
+        )
+
+        return peak_bins, tot, tout, integrals, fprompts
 
 
     def __init__(self, **params):
@@ -488,7 +470,7 @@ class WaveformHitFinder(H5FlowStage):
         noise = cache[self.rms_dset_name].reshape(cache[source_name].shape)[
             'rms']
 
-        peaks_found, tot, tot_upper = self.peak_finder(wvfms, noise,
+        peaks_found, tot, tot_upper, integrals, fprompts = self.peak_finder(wvfms, noise,
                                       self.noise_factor,
                                       self.n_bins_rolled,
                                       self.rt_sqrt_factor,
@@ -496,48 +478,20 @@ class WaveformHitFinder(H5FlowStage):
                                       self.rising_edge)
 
         t0_bin = np.argmax(peaks_found, axis=-1)
-
         t0_mask = np.any(peaks_found, axis=-1)
-
         t0_bin[~t0_mask] = -1
 
+        # get values stored at each peak index
         peaks = np.where(peaks_found)
-
-        peak_max = wvfms[peaks]  # waveform value at each peak
+        peak_max = wvfms[peaks]
         peak_tot = tot[peaks]
         peak_tot_upper = tot_upper[peaks]
+        peak_integral = integrals[peaks]
+        peak_fprompt = fprompts[peaks]
 
         # For threshold, we need adc and channel indices only (peaks[1] and peaks[2])
         # self.threshold has shape (ntpc, ndet, 1)
         threshold_mask = peak_max >= self.threshold[peaks[1], peaks[2], 0]
-
-        if self.hit_level=="sum_tpc" or self.hit_level=="sum":
-
-            integrals_all, fprompts_all = self.calculate_fprompt(wvfms, peaks_found,
-                                                         self.prompt_window,
-                                                         self.long_window,
-                                                         self.tick_duration)
-            # Build correct indices for the hit axis
-            # peaks is a tuple of arrays: (event_idx, tpc_idx, det_idx, sample_idx)
-            # For each (event, tpc, det), find the hit index for the current sample_idx
-            event_idx, tpc_idx, det_idx, sample_idx = peaks
-            hit_indices = []
-            for e, t, d, s in zip(event_idx, tpc_idx, det_idx, sample_idx):
-                # Find all hit bins for this (e, t, d)
-                hit_bins = np.where(peaks_found[e, t, d])[0]
-                # Find which hit index matches this sample_idx
-                try:
-                    hit_idx = np.where(hit_bins == s)[0][0]
-                except IndexError:
-                    hit_idx = 0  # fallback, should not happen
-                hit_indices.append(hit_idx)
-            hit_indices = np.array(hit_indices)
-            # Now extract the correct values
-            integrals = integrals_all[event_idx, tpc_idx, det_idx, hit_indices]
-            fprompts = fprompts_all[event_idx, tpc_idx, det_idx, hit_indices]
-            # Apply threshold mask
-            integrals = np.ma.array(integrals)[threshold_mask].filled(np.nan)
-            fprompts = np.ma.array(fprompts)[threshold_mask].filled(np.nan)
 
         if np.count_nonzero(threshold_mask):
             # hits are present in event, extract parameters
@@ -545,6 +499,8 @@ class WaveformHitFinder(H5FlowStage):
             peak_max = peak_max[threshold_mask]
             peak_tot = peak_tot[threshold_mask]
             peak_tot_upper = peak_tot_upper[threshold_mask]
+            peak_integral = peak_integral[threshold_mask]
+            peak_fprompt = peak_fprompt[threshold_mask]
             # get neighboring samples
             peak_sample_index = np.clip(peaks[-1].reshape(-1, 1)
                                         + np.arange(-self.near_samples + 1, self.near_samples + 2), 0, self.nsamples - 1)
@@ -608,19 +564,11 @@ class WaveformHitFinder(H5FlowStage):
             if self.hit_level=="sum_tpc":
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['trap_type'] = wvfm_det[peaks[:3]].ravel()
-                hit_data['integral'] = integrals#.ravel()
-                hit_data['fprompt'] = fprompts#.ravel()
-                hit_data['tot'] = peak_tot.ravel()
-                hit_data['tot_upper'] = peak_tot_upper.ravel()
 
             elif self.hit_level=="sum":
                 hit_data['tpc'] = peaks[1].ravel()
                 hit_data['det'] = wvfm_det[peaks[:3]].ravel()
                 hit_data['boundary'] = [np.array(resources['Geometry'].det_bounds[(tpc,det)][0]) for tpc, det in zip(peaks[1].ravel(),wvfm_det[peaks[:3]].ravel())]
-                hit_data['integral'] = integrals#.ravel()
-                hit_data['fprompt'] = fprompts#.ravel()
-                hit_data['tot'] = peak_tot.ravel()
-                hit_data['tot_upper'] = peak_tot_upper.ravel()
 
             elif self.hit_level=="sipm":
                 hit_data['adc'] = peaks[1].ravel()
@@ -629,6 +577,10 @@ class WaveformHitFinder(H5FlowStage):
 
             hit_data['ns'] = wvfm_align['ns'][peaks[0]].ravel()
             hit_data['sample_idx'] = peaks[-1].ravel()
+            hit_data['integral'] = peak_integral.ravel()
+            hit_data['fprompt'] = peak_fprompt.ravel()
+            hit_data['tot'] = peak_tot.ravel()
+            hit_data['tot_upper'] = peak_tot_upper.ravel()
 
 
             # =================================================================
