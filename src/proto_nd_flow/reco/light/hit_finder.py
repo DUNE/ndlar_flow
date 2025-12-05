@@ -151,56 +151,81 @@ class WaveformHitFinder(H5FlowStage):
 
 
     # function to calculate the prompt light fraction in a vectorized way
-    def extract_pulse_shape_disc(self, summed_wvfm, peak_bins,
+    def extract_pulse_shape_disc(self, wvfm, peak_bins,
                         prompt_window_ns, long_window_ns, tick_duration_ns):
         """
         Calculates fprompt and integral for each peak, returning arrays shaped
         like the input waveforms with values placed at peak indices.
 
-        summed_wvfm:   shape (n_events, n_tpcs, n_detectors, n_samples)
+        wvfm:   shape (..., n_samples)
         peak_bins:     same shape, True at peak locations, False elsewhere
 
         Returns:
-            integrals: array shaped like summed_wvfm, with integral values at peak indices
-            fprompts:  array shaped like summed_wvfm, with fprompt values at peak indices
+            integrals: array shaped like wvfm, with integral values at peak indices
+            fprompts:  array shaped like wvfm, with fprompt values at peak indices
         """
-        # Define regions (in bins)
+        # Validate input parameters
+        if prompt_window_ns > long_window_ns:
+            raise ValueError(f"prompt_window_ns ({prompt_window_ns}) must be <= long_window_ns ({long_window_ns})")
+        if tick_duration_ns <= 0:
+            raise ValueError(f"tick_duration_ns must be positive, got {tick_duration_ns}")
+
         prompt_bins = int(np.ceil(prompt_window_ns / tick_duration_ns))
         total_bins  = int(np.ceil(long_window_ns   / tick_duration_ns))
-
-        n_samples = summed_wvfm.shape[-1]
-
-        # Initialize output arrays with zeros (will place values at peak indices)
-        integrals = np.zeros_like(summed_wvfm, dtype=np.float32)
-        fprompts = np.zeros_like(summed_wvfm, dtype=np.float32)
+        n_samples = wvfm.shape[-1]
 
         # Find all peaks (hits)
         peak_indices = np.where(peak_bins)
-        # Each entry in peak_indices is (event, tpc, det, sample)
+        if len(peak_indices[0]) == 0:
+            # No peaks, return zeros
+            return np.zeros_like(wvfm, dtype=np.float32), np.zeros_like(wvfm, dtype=np.float32)
 
-        for e, t, d, s in zip(*peak_indices):
-            t0_bin    = s - 5
-            end_prompt = t0_bin + prompt_bins
-            end_total  = t0_bin + total_bins
+        # Compute t0_bin for each peak
+        s = peak_indices[-1]
+        t0_bin = s - np.minimum(5, s)
+        start_idx = np.clip(t0_bin, 0, n_samples)
+        end_prompt = np.clip(t0_bin + prompt_bins, 0, n_samples)
+        end_total  = np.clip(t0_bin + total_bins,  0, n_samples)
 
-            # Check boundaries
-            if t0_bin < 0 or end_prompt > n_samples or end_total > n_samples:
-                integrals[e, t, d, s] = np.nan
-                fprompts[e, t, d, s] = np.nan
-                continue
+        # Prepare output arrays
+        integrals = np.zeros_like(wvfm, dtype=np.float32)
+        fprompts = np.zeros_like(wvfm, dtype=np.float32)
 
-            prompt_val = np.sum(summed_wvfm[e, t, d, t0_bin:end_prompt])
-            total_val  = np.sum(summed_wvfm[e, t, d, t0_bin:end_total])
+        # Build all base indices (all axes except last)
+        base_indices = peak_indices[:-1]
+        # Flatten base indices for advanced indexing
+        flat_base = tuple(np.array(ax) for ax in base_indices)
 
-            if total_val <= 0 or prompt_val <= 0 or np.isnan(prompt_val) or np.isnan(total_val):
-                integrals[e, t, d, s] = np.nan
-                fprompts[e, t, d, s] = np.nan
+        # For each peak, sum over the prompt and total windows
+        prompt_vals = []
+        total_vals = []
+        for i in range(len(s)):
+            idx = tuple(ax[i] for ax in flat_base)
+            p0, p1 = start_idx[i], end_prompt[i]
+            t1 = end_total[i]
+            # If the window is invalid (start >= end or prompt > total), set nan
+            if p0 >= p1 or p0 >= t1 or p1 > t1:
+                prompt_vals.append(np.nan)
+                total_vals.append(np.nan)
             else:
-                integrals[e, t, d, s] = total_val
-                fprompts[e, t, d, s] = prompt_val / total_val
+                prompt_vals.append(np.sum(wvfm[idx + (slice(p0, p1),)]))
+                total_vals.append(np.sum(wvfm[idx + (slice(p0, t1),)]))
+
+        prompt_vals = np.array(prompt_vals, dtype=np.float32)
+        total_vals = np.array(total_vals, dtype=np.float32)
+
+        # Compute fprompt and assign to output arrays
+        with np.errstate(divide='ignore', invalid='ignore'):
+            fprompt_vals = np.where(
+                (total_vals > 0) & (prompt_vals > 0) & ~np.isnan(prompt_vals) & ~np.isnan(total_vals),
+                prompt_vals / total_vals,
+                np.nan
+            )
+        # Place results at peak indices
+        integrals[peak_indices] = total_vals
+        fprompts[peak_indices] = fprompt_vals
 
         return integrals, fprompts
-
 
 
     # gets ToT for threshold crossing pairs of samples (incl hysterisis)
@@ -215,9 +240,9 @@ class WaveformHitFinder(H5FlowStage):
         seen_start = np.maximum.accumulate(starts_raw, axis=-1)
         ends_armed = ends_raw & seen_start
 
-        # Cumsums over time
-        cs = np.cumsum(starts_raw, axis=-1, dtype=np.int32)
-        ce = np.cumsum(ends_armed, axis=-1, dtype=np.int32)
+        # Cumsums over time (use int64 to avoid overflow on long waveforms)
+        cs = np.cumsum(starts_raw, axis=-1, dtype=np.int64)
+        ce = np.cumsum(ends_armed, axis=-1, dtype=np.int64)
 
         # 1) VALID STARTS: only the first start after the most recent armed end
         max_ce = np.maximum.accumulate(ce, axis=-1)
@@ -241,7 +266,7 @@ class WaveformHitFinder(H5FlowStage):
         has_future_end = next_end_idx < inf
 
         # Count peaks between start and its matched end: (start, end]
-        peaks_cum = np.cumsum(peak_bins.astype(np.int32), axis=-1)
+        peaks_cum = np.cumsum(peak_bins.astype(np.int64), axis=-1)
         peaks_at_end   = np.take_along_axis(peaks_cum, np.minimum(next_end_idx, T - 1), axis=-1)
         peaks_at_start = np.take_along_axis(peaks_cum, idx, axis=-1)
         peaks_between = peaks_at_end - peaks_at_start
@@ -264,7 +289,7 @@ class WaveformHitFinder(H5FlowStage):
         next_peak_idx = np.minimum.accumulate(peak_pos[..., ::-1], axis=-1)[..., ::-1]
 
         # Duration values placed at the PEAK indices
-        duration_bins = np.zeros_like(valid_starts, dtype=np.int32)
+        duration_bins = np.zeros_like(valid_starts, dtype=np.int64)
         if start_idxs[0].size:
             # indices for each kept start
             peak_for_kept = next_peak_idx[start_idxs]         # first peak after start
@@ -295,26 +320,11 @@ class WaveformHitFinder(H5FlowStage):
         uheight_below = (2*n_noise_factor-1) * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
 
         # dynamic_threshold = rolling threshold of previous 5 bins + n*sqrt(rolling threshold)
-        wvfm_rolled = np.roll(wvfm, n_bins_rolled)  # kept as in original
+        wvfm_rolled = np.roll(wvfm, n_bins_rolled)
         rolling_average = uniform_filter1d(wvfm_rolled, size=n_bins_rolled)
         sqrt_rolling_average = np.sqrt(np.abs(rolling_average) * pe_weight**2)
         sqrt_rolling_average[sqrt_rolling_average == 0] = 1
         dynamic_threshold = rolling_average + n_sqrt_rt_factor*sqrt_rolling_average
-        # find bins over dynamic threshold and noise floor
-        bins_over_dynamic_threshold = (wvfm > dynamic_threshold) & (wvfm > height)
-        # Find first bins over threshold (rising edge)
-        first_bins_over = bins_over_dynamic_threshold.copy()
-        first_bins_over[..., 1:] &= ~bins_over_dynamic_threshold[..., :-1]
-        if use_rising_edge:
-            return first_bins_over
-        # check 5 bins after first_bins_over and add argmax
-        peak_bins = np.zeros_like(wvfm, dtype=bool)
-        first_bins_indices = np.where(first_bins_over)
-        for idx in zip(*first_bins_indices):
-            start_idx = idx[-1]
-            end_idx = min(start_idx + 5, wvfm.shape[-1])
-            peak_bin = np.argmax(wvfm[idx[:-1] + (slice(start_idx, end_idx),)])
-            peak_bins[idx[:-1] + (start_idx + peak_bin,)] = True
 
         # find bins over noise floor
         bins_over_noise_threshold = (wvfm > height)
@@ -342,7 +352,7 @@ class WaveformHitFinder(H5FlowStage):
         first_bins_over = bins_over_thresholds.copy()
         first_bins_over[..., 1:] &= ~bins_over_thresholds[..., :-1]
 
-        # check 5 bins after first_bins_over and add argmax
+        # Find peak bins: check 5 bins after each rising edge and take argmax
         peak_bins = np.zeros_like(wvfm, dtype=bool)
         first_bins_indices = np.where(first_bins_over)
         for idx in zip(*first_bins_indices):
@@ -364,6 +374,9 @@ class WaveformHitFinder(H5FlowStage):
             self.tick_duration
         )
 
+        # If rising_edge mode, return early (for backward compatibility)
+        if use_rising_edge:
+            return first_bins_over, tot, tout, integrals, fprompts
         return peak_bins, tot, tout, integrals, fprompts
 
 
