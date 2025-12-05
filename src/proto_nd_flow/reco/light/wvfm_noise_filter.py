@@ -138,11 +138,17 @@ class WaveformNoiseFilter(H5FlowStage):
         # Compute the average of the 2nd, 3rd, and 4th smallest means
         average_mean = np.mean(sorted_means[..., 1:num_means], axis=-1)
 
-        # calculate RMS for the ranges of the smallest range segments
+        # Calculate RMS for the smallest range segments
         range_samples = np.take_along_axis(ranges_masked, smallest_ordering[..., :num_means], axis=-1)
-        range_samples = range_samples.astype('uint32') # avoid overflowing int16
-        rms = np.sqrt(np.mean(np.square(range_samples), axis=-1))
 
+        # Compute RMS, ignoring NaN values
+        valid_mask = ~np.isnan(range_samples)
+        n_valid = np.sum(valid_mask, axis=-1)
+        rms = np.where(
+            n_valid > 0,
+            np.sqrt(np.nanmean(np.square(range_samples), axis=-1)),
+            0.0
+        )
         return average_mean, rms
 
     def run(self, source_name, source_slice, cache):
