@@ -22,5 +22,4 @@ params:
 
   # baseline calculation parameters
   segment_size: 25
-  num_segment: 24
   num_means: 4

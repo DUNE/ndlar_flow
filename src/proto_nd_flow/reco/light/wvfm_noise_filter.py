@@ -52,8 +52,7 @@ class WaveformNoiseFilter(H5FlowStage):
     default_filter_samples = (0, 80)
     default_modulo_param = 10
     default_keep_noise = False
-    default_segment_size = 15
-    default_num_segment = 40
+    default_segment_size = 25
     default_num_means = 4
     default_rms_dset_name = 'light/wvfm_rms'
     default_baseline_dset_name = 'light/wvfm_baseline'
@@ -109,9 +108,10 @@ class WaveformNoiseFilter(H5FlowStage):
         self.data_manager.create_dset(f'{source_name}/rms', dtype=self.rms_dtype)
         self.data_manager.create_ref(source_name, f'{source_name}/rms')
 
-    def min_range_baseline(self, array, segment_size, num_segments, num_means):
+    def min_range_baseline(self, array, segment_size, num_means):
 
         # Define start and end indices for segments
+        num_segments = array.shape[-1] // segment_size
         indices = np.arange(num_segments + 1) * segment_size
         start_indices, end_indices = indices[:-1], indices[1:]
         # Generate index array for advanced indexing
@@ -170,7 +170,7 @@ class WaveformNoiseFilter(H5FlowStage):
         fwvfm = np.empty(wvfm_data.shape, dtype=self.fwvfm_dtype)
 
         # subtract pedestal value
-        pedestal, rms = self.min_range_baseline(wvfm_data['samples'], self.segment_size, self.num_segment, self.num_means)
+        pedestal, rms = self.min_range_baseline(wvfm_data['samples'], self.segment_size, self.num_means)
         fwvfm['samples'] = wvfm_data['samples']  - pedestal[..., np.newaxis]
 
         # save baselines as light/events/baseline (structured array) with dims [event, adc, channel]
