@@ -31,6 +31,8 @@ class WaveformHitFinder(H5FlowStage):
          - ``n_bins_rolled``:  ``int``, number of bins over which the rolling threshold of the hit finder is defined
          - ``rt_sqrt_factor``: ``float``, factor used to scale the statistical contribution to the rolling threshold
          - ``pe_weight``:      ``float``, weight applied to the PEs in rolling threshold statistical component
+         - ``tot_th``:         ``float``, lower threshold for hit finding's time over threshold measure
+         - ``tout_th``:        ``float``, upper threshold for hit finding's time over threshold measure
          - ``rising_edge``:    ``bool``, True => hit finder tags first bin over rolling threshold as the hit
          - ``prompt_window``:  ``float``, Prompt light window in ns (fprompt caluclation input for PSD)
          - ``long_window``:    ``float``, Long light window in ns (fprompt caluclation input for PSD)
@@ -304,6 +306,10 @@ class WaveformHitFinder(H5FlowStage):
                 idx_tuple = tuple(ax[sel] for ax in start_idxs[:-1]) + (peak_for_kept[sel],)
                 duration_bins[idx_tuple] = dur_vals
 
+        # for peak bins without valid starts, set ToT to -1
+        mask_invalid_peaks = peak_bins & (duration_bins == 0)
+        duration_bins[mask_invalid_peaks] = -1
+
         return duration_bins
 
     def peak_finder(self, wvfm, noise,
@@ -311,13 +317,17 @@ class WaveformHitFinder(H5FlowStage):
                     n_bins_rolled,
                     n_sqrt_rt_factor,
                     pe_weight,
+                    tot_th,
+                    tout_th,
                     use_rising_edge=False):
 
         # height = flat threshold over noise (n*sigma)
         height = n_noise_factor * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
         height_below = (n_noise_factor-1) * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
-        uheight = 2*n_noise_factor * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
-        uheight_below = (2*n_noise_factor-1) * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
+        lheight = tot_th * np.ones_like(height)
+        lheight_below = tot_th - noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
+        uheight = tout_th * np.ones_like(height)
+        uheight_below = tout_th - noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
 
         # dynamic_threshold = rolling threshold of previous 5 bins + n*sqrt(rolling threshold)
         wvfm_rolled = np.roll(wvfm, n_bins_rolled)
@@ -334,6 +344,15 @@ class WaveformHitFinder(H5FlowStage):
         bins_under_noise_threshold = (wvfm <= height_below)
         first_bins_under_noise = bins_under_noise_threshold.copy()
         first_bins_under_noise[..., 1:] &= ~bins_under_noise_threshold[..., :-1]
+
+        # find bins over lower threshold
+        bins_over_lower_threshold = (wvfm > lheight)
+        first_bins_over_lower = bins_over_lower_threshold.copy()
+        first_bins_over_lower[..., 1:] &= ~bins_over_lower_threshold[..., :-1]
+        # find bins under lower threshold - hysteresis
+        bins_under_lower_threshold = (wvfm <= lheight_below)
+        first_bins_under_lower = bins_under_lower_threshold.copy()
+        first_bins_under_lower[..., 1:] &= ~bins_under_lower_threshold[..., :-1]
 
         # find bins over upper threshold
         bins_over_upper_threshold = (wvfm > uheight)
@@ -362,13 +381,16 @@ class WaveformHitFinder(H5FlowStage):
             peak_bins[idx[:-1] + (start_idx + peak_bin,)] = True
 
         # noise threshold tot
-        tot = self.pair_runs_with_peaks(first_bins_over_noise, first_bins_under_noise, peak_bins)
+        tot = self.pair_runs_with_peaks(first_bins_over_lower, first_bins_under_lower, peak_bins)
         # upper threshold tot
         tout = self.pair_runs_with_peaks(first_bins_over_upper, first_bins_under_upper, peak_bins)
 
-        # fprompt and integral
+        # fprompt and integral - use appropriate bins based on mode
+        # In rising_edge mode, we need integrals/fprompts at first_bins_over positions
+        # Otherwise, use peak_bins positions
+        bins_for_psd = first_bins_over if use_rising_edge else peak_bins
         integrals, fprompts = self.extract_pulse_shape_disc(
-            wvfm, peak_bins,
+            wvfm, bins_for_psd,
             self.prompt_window,
             self.long_window,
             self.tick_duration
@@ -395,6 +417,8 @@ class WaveformHitFinder(H5FlowStage):
         self.n_bins_rolled = params.get('n_bins_rolled')
         self.rt_sqrt_factor = params.get('rt_sqrt_factor')
         self.pe_weight = params.get('pe_weight')
+        self.tot_th = params.get('tot_th')
+        self.tout_th = params.get('tout_th')
         self.rising_edge = params.get('rising_edge')
         self.prompt_window = params.get('prompt_window')
         self.long_window = params.get('long_window')
@@ -488,6 +512,8 @@ class WaveformHitFinder(H5FlowStage):
                                       self.n_bins_rolled,
                                       self.rt_sqrt_factor,
                                       self.pe_weight,
+                                      self.tot_th,
+                                      self.tout_th,
                                       self.rising_edge)
 
         t0_bin = np.argmax(peaks_found, axis=-1)
@@ -590,11 +616,6 @@ class WaveformHitFinder(H5FlowStage):
 
             hit_data['ns'] = wvfm_align['ns'][peaks[0]].ravel()
             hit_data['sample_idx'] = peaks[-1].ravel()
-            hit_data['integral'] = peak_integral.ravel()
-            hit_data['fprompt'] = peak_fprompt.ravel()
-            hit_data['tot'] = peak_tot.ravel()
-            hit_data['tot_upper'] = peak_tot_upper.ravel()
-
 
             # =================================================================
             # 2022-05-17 kvtsang
@@ -620,6 +641,11 @@ class WaveformHitFinder(H5FlowStage):
             hit_data['samples'] = peak_samples.reshape(-1, 2 * self.near_samples + 1)
             hit_data['sum'] = peak_sum.ravel()
             hit_data['max'] = peak_max.ravel()
+            hit_data['integral'] = peak_integral.ravel()
+            hit_data['fprompt'] = peak_fprompt.ravel()
+            hit_data['tot'] = peak_tot.ravel()
+            hit_data['tot_upper'] = peak_tot_upper.ravel()
+
             hit_data['sum_spline'] = peak_sum_spline.ravel()
             hit_data['max_spline'] = peak_max_spline.ravel()
             hit_data['ns_spline'] = peak_ns_spline.ravel()
