@@ -144,11 +144,18 @@ class WaveformNoiseFilter(H5FlowStage):
         # Compute RMS, ignoring NaN values
         valid_mask = ~np.isnan(range_samples)
         n_valid = np.sum(valid_mask, axis=-1)
-        rms = np.where(
-            n_valid > 0,
-            np.sqrt(np.nanmean(np.square(range_samples), axis=-1)),
-            0.0
+
+        sq = np.square(range_samples)
+        sum_sq = np.nansum(sq, axis=-1)     # safe, ignores NaNs
+
+        # mean of squares only where valid
+        mean_sq = np.divide(
+            sum_sq, n_valid,
+            out=np.full_like(sum_sq, -1.0, dtype=float),
+            where=n_valid > 0
         )
+        rms = np.sqrt(mean_sq, where=mean_sq >= 0)
+
         return average_mean, rms
 
     def run(self, source_name, source_slice, cache):
