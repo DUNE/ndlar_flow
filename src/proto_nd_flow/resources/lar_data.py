@@ -171,19 +171,11 @@ class LArData(H5FlowResource):
             file_dt = datetime.strptime(ts_str, "%Y_%m_%d_%H_%M_%S").replace(tzinfo=tz).timestamp()
 
             # Convert JSON keys to timestamps and values
-            lifetime_data = []
-            for ts_str, lifetime in lifetimes.items():
-                dt = datetime.strptime(ts_str, "%Y_%m_%d_%H_%M_%S").replace(tzinfo=ZoneInfo("Europe/Paris"))
-                lifetime_data.append((dt.timestamp(), lifetime[0]))
-        
-            # Sort by timestamp
-            lifetime_data = np.array(sorted(lifetime_data, key=lambda x: x[0]))
-            idx = (np.abs(lifetime_data[:, 0] - file_dt)).argmin()
-            lifetime_data[idx][1]
+            lifetime_ts_arr = np.sort(np.array(list(lifetimes.keys()),dtype=int))
+            print(file_dt,lifetime_ts_arr)
+            str_key = str(lifetime_ts_arr[(file_dt - lifetime_ts_arr)>0][-1])
 
-            # Find the closest lifetime in time
-            idx = np.abs(lifetime_data[:, 0] - file_dt).argmin()
-            self._electron_lifetime = lifetime_data[idx][1] * units.ms  # convert ms → µs or as needed
+            self._electron_lifetime = lifetimes[str_key][0] * units.ms  # convert ms → µs or as needed
             return
         else:
             central_value_x = np.array([0, 1])

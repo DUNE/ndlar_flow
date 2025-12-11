@@ -2,7 +2,9 @@ import numpy as np
 import numpy.lib.recfunctions as rfn
 from collections import defaultdict
 import json
-
+import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from h5flow.core import H5FlowStage, resources
 import proto_nd_flow.util.units as units
 import proto_nd_flow.util.pixel_functions as pf
@@ -104,6 +106,7 @@ class CalibHitBuilder(H5FlowStage):
         self.t0_dset_name = params.get('t0_dset_name')
         self.pedestal_file = params.get('pedestal_file', '')
         self.gain_file = params.get('gain_file', '')
+        self.db_calibration = params.get('calibration_db', False)
         self.configuration_file = params.get('configuration_file', '')
         self.pedestal_mv = params.get('pedestal_mv', self.default_pedestal_mv)
         self.vref_mv = params.get('vref_mv', self.default_vref_mv)
@@ -131,8 +134,8 @@ class CalibHitBuilder(H5FlowStage):
 
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
-        self.load_pedestals()
-        self.load_gains()
+        self.load_pedestals(self.db_calibration)
+        self.load_gains(self.db_calibration)
         self.load_configurations()
 
     def run(self, source_name, source_slice, cache):
@@ -279,9 +282,9 @@ class CalibHitBuilder(H5FlowStage):
                 ped = np.full(len(hit_uniqueid_str), self.pedestal_mv)
             if self.gain_file != '':
                 gain = np.array([self.gains[unique_id]['gain'] for unique_id in hit_uniqueid_str])
+                
             else:
                 gain = np.full(len(hit_uniqueid_str), self.gain)
-
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             calib_hits_arr['x'] = x
             #if has_mc_truth:
@@ -398,17 +401,50 @@ class CalibHitBuilder(H5FlowStage):
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped, adc_counts, gain):
         return (dw / adc_counts * (vref - vcm) + vcm - ped) / gain
+        
+    @staticmethod
+    def find_closest_timestamp(array_tstamp):
+        charge_name = resources['RunData'].charge_filename
 
-    def load_pedestals(self):
+        match = re.search(r"(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})", charge_name)
+        if not match:
+            raise ValueError(f"No timestamp found in filename: {charge_name} cannot extract elifetime")
+        
+        ts_str = match.group(1)
+        if 'CET' in charge_name:
+            tz = ZoneInfo("Europe/Paris")
+        elif 'CDT' in charge_name:
+            tz = ZoneInfo("America/Chicago")
+        elif 'CST' in charge_name:
+            tz = ZoneInfo("America/Chicago")
+        else:
+            tz = ZoneInfo("UTC")
+            
+        file_dt = datetime.strptime(ts_str, "%Y_%m_%d_%H_%M_%S").replace(tzinfo=tz).timestamp()
+
+        array_tstamp = np.sort(array_tstamp)
+        return str(array_tstamp[file_dt - array_tstamp>0][-1]) # Select the last timestamp before the file timestamp
+        
+        
+    
+    def load_pedestals(self,is_db=False):
         if self.pedestal_file != '':
             with open(self.pedestal_file, 'r') as infile:
-                for key, value in json.load(infile).items():
+                jfile = json.load(infile)
+                if (is_db) : #db calibration values have two keys: time and channels
+                    ts_key = self.find_closest_timestamp(np.array(list(jfile.keys()), dtype=int))
+                    jfile = jfile[ts_key]
+                for key, value in jfile.items():
                     self.pedestal[key] = value
 
-    def load_gains(self):
+    def load_gains(self,is_db=False):
         if self.gain_file != '':
             with open(self.gain_file, 'r') as infile:
-                for key, value in json.load(infile).items():
+                jfile = json.load(infile)
+                if (is_db):#db calibration values have two keys: time and channels
+                    ts_key = self.find_closest_timestamp(np.array(list(jfile.keys()), dtype=int))
+                    jfile = jfile[ts_key]
+                for key, value in jfile.items():
                     self.gains[key] = value
 
     def load_configurations(self):
