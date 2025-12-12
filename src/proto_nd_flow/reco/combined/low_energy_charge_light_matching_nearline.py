@@ -10,6 +10,7 @@ from datetime import datetime
 
 from h5flow.core import H5FlowStage, resources
 from h5flow import H5FLOW_MPI
+import matplotlib.pyplot as plt
 
 import proto_nd_flow.reco.charge.raw_event_generator as r
 
@@ -51,13 +52,15 @@ class LowEnergyChargeLightMatching(H5FlowStage):
     default_proximity_distance_z_LCM = 20
     default_proximity_distance_y_LCM = 20
     default_clusters_matched_dset_name = 'charge/clusters_matched'
-    default_clusters_matched_all_dset_name = 'charge/clusters_matched_all'
+    default_clusters_time_matched_dset_name = 'charge/clusters_time_matched'
     default_clusters_hits_matched_dset_name = 'charge/clusters_hits_matched'
+    default_clusters_hits_time_matched_dset_name = 'charge/clusters_hits_time_matched'
+    
     default_clusters_dset_name = 'charge/clusters'
     default_clusters_hits_dset_name = 'charge/clusters_hits'
     default_light_events_dset_name = 'light/events'
     default_sum_hits_dset_name = 'light/simple_hits'
-    default_swvfm_dset_name = 'light/schan_wvfm'
+    default_swvfm_dset_name = 'light/swvfm'
     default_charge_data_dir = ''
     default_is_FSD = False
     default_is_mc = False
@@ -68,7 +71,8 @@ class LowEnergyChargeLightMatching(H5FlowStage):
         self.clusters_hits_dset_name = params.get('clusters_hits_dset_name', self.default_clusters_hits_dset_name)
         self.clusters_hits_matched_dset_name = params.get('clusters_hits_matched_dset_name', self.default_clusters_hits_matched_dset_name)
         self.clusters_matched_dset_name = params.get('clusters_matched_dset_name', self.default_clusters_matched_dset_name)
-        self.clusters_matched_all_dset_name = params.get('clusters_matched_all_dset_name', self.default_clusters_matched_all_dset_name)
+        self.clusters_hits_time_matched_dset_name = params.get('clusters_hits_time_matched_dset_name', self.default_clusters_hits_time_matched_dset_name)
+        self.clusters_time_matched_dset_name = params.get('clusters_time_matched_dset_name', self.default_clusters_time_matched_dset_name)
         self.sum_hits_dset_name = params.get('sum_hits_dset_name', self.default_sum_hits_dset_name)
         self.light_events_dset_name = params.get('light_events_dset_name', self.default_light_events_dset_name)
         self.pps_matching_window = params.get('pps_matching_window', self.default_pps_matching_window)
@@ -87,7 +91,7 @@ class LowEnergyChargeLightMatching(H5FlowStage):
         super(LowEnergyChargeLightMatching, self).init(source_name)
         self.clusters_dtype = r.RawEventGenerator.clusters_dtype
         self.clusters_hits_dtype = r.RawEventGenerator.clusters_hits_dtype
-        print(f'{self.data_manager.filepath=}')
+        #print(f'{self.data_manager.filepath=}')
         
         # assuming clusters data in output file
         with h5py.File(self.data_manager.filepath, 'r') as f:
@@ -105,37 +109,37 @@ class LowEnergyChargeLightMatching(H5FlowStage):
             self.event_unix_time = (utime_ms[utime_ms != 0]*1e-3).astype('int')
         else:
             self.event_unix_time = (utime_ms[:,0]).astype('int')
+        #print(f'{self.event_unix_time=}')
         tai_ns = light_events['tai_ns']
-        tai_ns = (tai_ns[tai_ns != 0]).astype('int')
-        if self.is_mc:
-            self.event_pps_time = (tai_ns[:,0].astype('int'))*1e-3
+        #tai_ns = (tai_ns[tai_ns != 0]).astype('int')
+        #print(f'{tai_ns[0:20]=}')
+        if not self.is_mc:
+            #self.event_pps_time = (tai_ns[:,0].astype('int'))*1e-3
+            self.event_pps_time = (tai_ns[tai_ns != 0]*1e-3).astype('int')
         else:
             self.event_pps_time = (tai_ns*1e-9 - (tai_ns*1e-9).astype('int'))*1e9*1e-3
-        #light_unix_span = (min(self.event_unix_time), max(self.event_unix_time))
-        #pattern = re.compile(r"(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})")
-        
-        #clusters_dset = np.array(f[self.clusters_dset_name+'/data'])
+        #print(f'{self.event_pps_time[0:20]=}')
         is_matched_mask = self.clusters_dset['is_matched'].astype('bool')
         self.clusters_dset = self.clusters_dset[is_matched_mask]
-
+        
         #clusters_hits_ref_region = self.data_manager.get_ref_region(self.clusters_dset_name, self.clusters_hits_dset_name)
         self.clusters_hits_ref_region = self.clusters_hits_ref_region[is_matched_mask]
         #clusters_hits_dset = np.array(f[self.clusters_hits_dset_name+'/data'])
         #clusters_hits_dset = self.data_manager.get_dset(self.clusters_hits_dset_name)
         
         self.cluster_pps_list = self.clusters_dset['ts'][:,1]
+        #print(f'{list(self.cluster_pps_list)=}')
+        
         self.cluster_unix_list = self.clusters_dset['unix_ts']
+        #print(f'{self.cluster_unix_list=}')
         self.cluster_x_list = self.clusters_dset['x_pix'][:,1]
         self.cluster_z_list = self.clusters_dset['z_pix'][:,1]
         self.cluster_y_list = self.clusters_dset['y_pix'][:,1]
         self.cluster_io_list = self.clusters_dset['io_group']
-        #self.clusters_dset_list = clusters_dset
-        #self.clusters_hits_dset_list = clusters_hits_dset
-        #self.clusters_hits_ref_region_list = clusters_hits_ref_region
         self.light_events_sum_hits_ref = self.data_manager.get_ref(self.light_events_dset_name, self.sum_hits_dset_name)
 
         self.data_manager.set_attrs(self.clusters_matched_dset_name,
-                                    clusters_matched_all_dset_name=self.clusters_matched_all_dset_name,
+                                    clusters_matched_dset_name=self.clusters_matched_dset_name,
                                     classname=self.classname,
                                     class_version=self.class_version,
                                     source_dset=source_name,
@@ -145,13 +149,15 @@ class LowEnergyChargeLightMatching(H5FlowStage):
         # create the datasets and references
         self.sum_hits_dset = self.data_manager.get_dset(self.sum_hits_dset_name)
         self.data_manager.create_dset(self.clusters_matched_dset_name, dtype=self.clusters_dtype)
-        self.data_manager.create_dset(self.clusters_matched_all_dset_name, dtype=self.clusters_dtype)
+        self.data_manager.create_dset(self.clusters_time_matched_dset_name, dtype=self.clusters_dtype)
         self.data_manager.create_dset(self.clusters_hits_matched_dset_name, self.clusters_hits_dtype)
+        self.data_manager.create_dset(self.clusters_hits_time_matched_dset_name, self.clusters_hits_dtype)
         self.data_manager.create_ref(self.clusters_matched_dset_name, self.sum_hits_dset_name)
         self.data_manager.create_ref(self.clusters_matched_dset_name, source_name)
-        self.data_manager.create_ref(self.clusters_matched_all_dset_name, self.sum_hits_dset_name)
-        self.data_manager.create_ref(self.clusters_matched_all_dset_name, source_name)
+        self.data_manager.create_ref(self.clusters_time_matched_dset_name, self.sum_hits_dset_name)
+        self.data_manager.create_ref(self.clusters_time_matched_dset_name, source_name)
         self.data_manager.create_ref(self.clusters_matched_dset_name, self.clusters_hits_matched_dset_name)
+        self.data_manager.create_ref(self.clusters_time_matched_dset_name, self.clusters_hits_time_matched_dset_name)
 
         # make dict of event -> sum_hits indices
         change_indices = np.where(np.diff(self.light_events_sum_hits_ref[0][:,0]) != 0)[0] + 1
@@ -162,10 +168,12 @@ class LowEnergyChargeLightMatching(H5FlowStage):
         for start, stop in tqdm(zip(start_indices, stop_indices)):
             key = eventids[start]
             self.sum_hits_range_dict[int(key)] = (int(start), int(stop))
-        self.total_matched_clusters = 0
-        self.total_clusters = 0
-        #self.prox_masks_all = {}
 
+        print(f'{self.sum_hits_range_dict=}')
+        self.total_matched_clusters = 0
+        self.total_time_matched_clusters = 0
+        self.total_clusters = 0
+        
         # pre-make masks for improved speed
         self.prox_masks = {} 
         
@@ -198,37 +206,47 @@ class LowEnergyChargeLightMatching(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         super(LowEnergyChargeLightMatching, self).run(source_name, source_slice, cache)
         event_data = cache[source_name]
-        #clusters_hits_matched = []
-        rel_cluster_id = []
-        
-        matched_cluster_indices = []
-        
+        print(f"{event_data['id']=}")
         for ievent in range(len(event_data)):
+            #print(f'{ievent=}')
             total_matches = 0
             clusters_matched = []
+            clusters_time_matched = []
             hits_matched = []
+            hits_time_matched = []
             
             clusters_matched_all = []
             light_indices, event_indices = [], []
-            light_indices_all, event_indices_all = [], []
+            light_indices_time_matched, event_indices_time_matched = [], []
+            print(f"{ievent=}, {event_data[ievent]['id']=}")
+            #sum_hits_range = self.sum_hits_range_dict[event_data[ievent]['id']]
             try:
                 sum_hits_range = self.sum_hits_range_dict[event_data[ievent]['id']]
             except:
+                print(f"skipping, {event_data[ievent]['id']=}")
                 continue
             sum_hits_in_event = self.sum_hits_dset[sum_hits_range[0]:sum_hits_range[1]]
             utime_ms = event_data[ievent]['utime_ms']
             light_unix = ((utime_ms[utime_ms != 0]*1e-3).astype('int'))[0]
             tai_ns = event_data[ievent]['tai_ns']
-            tai_ns = (tai_ns[tai_ns != 0]).astype('int')
-            light_pps = ((tai_ns*1e-9 - (tai_ns*1e-9).astype('int'))*1e9*1e-3)[0]
             
+            tai_ns = (tai_ns[tai_ns != 0]).astype('int')
+            if not self.is_mc:
+                light_pps = ((tai_ns*1e-9 - (tai_ns*1e-9).astype('int'))*1e9*1e-3)[0]
+            else:
+                #light_pps = (tai_ns[0]*1e-3)
+                light_pps = (tai_ns[0]*1e-9 - (tai_ns[0]*1e-9).astype('int'))*1e9*1e-3
+            #print(f'{np.unique(self.cluster_unix_list)=}')
+            #print(f'{int(light_unix)=}')
             time_mask = (self.cluster_pps_list.astype('float') < light_pps + self.upper_pps_matching_window) \
                 & (self.cluster_pps_list.astype('float') > light_pps - self.lower_pps_matching_window) \
                 & (self.cluster_unix_list == int(light_unix))
             if np.any(self.clusters_dset[time_mask]['nhit'] > self.cluster_nhit_limit):
+                print('skipping, 2')
                 continue
 
             if not np.any(time_mask):
+                #print('skipping')
                 continue
             #if not len(sum_hits_in_event):
             #    print('no sum hits in event')
@@ -241,9 +259,11 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                 
                 matching_mask = time_mask & self.prox_masks[sum_chan]
                 self.total_matched_clusters += np.sum(matching_mask)
-
+                self.total_time_matched_clusters += np.sum(time_mask)
+                
                 matched_indices = np.where(matching_mask)[0]
-                for cluster_index in matched_indices:
+                time_matched_indices = np.where(time_mask)[0]
+                for cluster_index in time_matched_indices:
                     cluster = self.clusters_dset[cluster_index]
                     hits_region = self.clusters_hits_ref_region[cluster_index]
                     cluster_matched = np.zeros((1,), dtype=self.clusters_dtype)
@@ -251,11 +271,19 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                         if name in cluster.dtype.names:
                             cluster_matched[name] = cluster[name]
                     if cluster_index in matched_indices:
+                        # only saving a cluster with a proximity match
                         clusters_matched.append(cluster_matched[0])
                         light_indices.append(sum_hit['id'])
                         event_indices.append(event_data[ievent]['id'])
                         for hit in self.clusters_hits_dset[hits_region[0]:hits_region[1]]:
                             hits_matched.append(hit)
+                    # saving all clusters time matched
+                    clusters_time_matched.append(cluster_matched[0])
+                    light_indices_time_matched.append(sum_hit['id'])
+                    event_indices_time_matched.append(event_data[ievent]['id'])
+                    for hit in self.clusters_hits_dset[hits_region[0]:hits_region[1]]:
+                        hits_time_matched.append(hit)
+                    
             
             # write datasets and references
             if len(clusters_matched):
@@ -277,4 +305,25 @@ class LowEnergyChargeLightMatching(H5FlowStage):
 
                 ref = np.c_[np.repeat(clusters_matched_dset['id'], clusters_matched_dset['nhit']), clusters_hits_matched['id']]
                 self.data_manager.write_ref(self.clusters_matched_dset_name, self.clusters_hits_matched_dset_name, ref)
+            if len(clusters_time_matched):
+                clusters_time_matched_dset = np.array(clusters_time_matched)
+                clusters_time_matched_slice = self.data_manager.reserve_data(self.clusters_time_matched_dset_name, len(clusters_time_matched_dset))
+                clusters_time_matched_dset['id'][:] = np.arange(clusters_time_matched_slice.start, clusters_time_matched_slice.stop)
+                self.data_manager.write_data(self.clusters_time_matched_dset_name, clusters_time_matched_slice, clusters_time_matched_dset)
+
+                ref = np.c_[clusters_time_matched_dset['id'], np.array(light_indices_time_matched)]
+                self.data_manager.write_ref(self.clusters_time_matched_dset_name, self.sum_hits_dset_name, ref)
+
+                ref = np.c_[clusters_time_matched_dset['id'], np.array(event_indices_time_matched)]
+                self.data_manager.write_ref(self.clusters_time_matched_dset_name, source_name, ref)
+
+                clusters_hits_time_matched = np.array(hits_time_matched)
+                clusters_hits_time_matched_slice = self.data_manager.reserve_data(self.clusters_hits_time_matched_dset_name, len(clusters_hits_time_matched))
+                clusters_hits_time_matched['id'][:] = np.arange(clusters_hits_time_matched_slice.start, clusters_hits_time_matched_slice.stop)
+                self.data_manager.write_data(self.clusters_hits_time_matched_dset_name, clusters_hits_time_matched_slice, clusters_hits_time_matched)
+
+                ref = np.c_[np.repeat(clusters_time_matched_dset['id'], clusters_time_matched_dset['nhit']), clusters_hits_time_matched['id']]
+                self.data_manager.write_ref(self.clusters_time_matched_dset_name, self.clusters_hits_time_matched_dset_name, ref)
+                
         print(f'total clusters matched = {self.total_matched_clusters}')
+        print(f'total clusters time matched = {self.total_time_matched_clusters}')
