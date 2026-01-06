@@ -28,6 +28,10 @@ params:
   mc_hit_frac_dset_name: 'mc_truth/calib_prompt_hit_backtrack'
 
   # configuration parameters
+  vref_mv: 1504.2
+  vcm_mv: 458.7
+  adc_counts: 256
+  gain: 2.46
 
   pedestal_file: '/global/common/software/dune/inputs/FSD/pedestals/FSD_pedestals_20241112.json'
   #pedestal_file: 'data/module0_flow/datalog_2021_04_02_19_00_46_CESTevd_ped.json'
