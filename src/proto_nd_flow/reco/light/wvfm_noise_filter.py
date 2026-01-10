@@ -158,7 +158,7 @@ class WaveformNoiseFilter(H5FlowStage):
             out=np.full_like(sum_sq, -1.0, dtype=float),
             where=n_valid > 0
         )
-        rms = np.sqrt(mean_sq, where=mean_sq >= 0)
+        rms = np.sqrt(mean_sq, out=np.full_like(mean_sq, -1.0), where=mean_sq >= 0)
 
         return average_mean, rms
 
