@@ -244,7 +244,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         # get module start channel
         next_startch = [tr_ev[0][0] for tr_ev in next_trig]
-        
+
         # convert channel map
         tmp_wvfms = np.zeros((next_wvfms.shape[0], self.n_modules*self.n_sipms_per_module, next_wvfms.shape[-1]),dtype=next_wvfms.dtype)
         for ev in range(next_wvfms.shape[0]):
@@ -256,13 +256,18 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         # mock busy signal
         # remapped_wvfms[:, np.r_[range(self.n_adcs)], self.busy_channel, self.busy_delay:] = self.busy_ampl
-        
+
         # add baseline offset
         remapped_wvfms += self.baseline_offset
 
         # zero out disabled channels
         if self.disabled_channels.shape[0]:
             remapped_wvfms[:, :, self.disabled_channels, :] = 0.
+
+        # detect clipping before applying bounds (check for saturation at ADC limits)
+        # ADC is 14-bit signed, stored in 16-bit register left-shifted by 2 bits: ±8192 → ±32768
+        adc_max = 32764  # slightly below max to account for noise
+        clipped = np.any(np.abs(remapped_wvfms) >= adc_max, axis=-1)  # shape: (n_events, n_adcs, n_channels)
 
         # clip to ensure within datatype bounds
         remapped_wvfms = remapped_wvfms.clip(np.iinfo(self.wvfm_dtype['samples'].base).min, np.iinfo(self.wvfm_dtype['samples'].base).max)
@@ -284,6 +289,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
         wvfm_arr = np.empty(next_trig.shape[0], self.wvfm_dtype)
         if next_trig.shape[0]:
             wvfm_arr['samples'] = remapped_wvfms
+            wvfm_arr['clipped'] = clipped
         self.data_manager.write_data(self.wvfm_dset_name, event_slice, wvfm_arr)
 
         # set up references

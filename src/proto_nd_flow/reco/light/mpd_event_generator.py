@@ -68,6 +68,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
         ``wvfm`` datatype::
 
             samples     i2(n_adc,n_channels,n_samples), sample 10-bit ADC value (lowest 6 bits are not used)
+            clipped     ?(n_adc,n_channels),            boolean indicator if any samples are saturated
     '''
     defaults = dict(
         n_adcs = 8,
@@ -75,7 +76,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
         batch_size = 64,
         sync_channel = 0,
         sync_threshold = 40000,
-        sync_buffer = 200,        
+        sync_buffer = 200,
         clock_timestamp_factor = 1.0,
         utime_ms_window = 1000,
         tai_ns_window = 1000,
@@ -90,12 +91,13 @@ class LightMPDEventGenerator(H5FlowGenerator):
         #('ch', 'u1', (self.n_adcs, self.n_channels)),  # channel number
         ('utime_ms', 'u8', (self.n_adcs,)),  # unix time [ms since epoch]
         ('tai_ns', 'u8', (self.n_adcs,)),  # time since PPS [ns]
-        ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels)),  # boolean, 1 if channel present in event    
+        ('wvfm_valid', 'u1', (self.n_adcs, self.n_channels)),  # boolean, 1 if channel present in event
         ('trig_type', 'u1') #trigger type 0:threshold 1: beam
         ])
 
     def wvfm_dtype(self): return np.dtype([
-        ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples))  # sample value
+        ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples)),  # sample value
+        ('clipped', '?', (self.n_adcs, self.n_channels))  # boolean indicator if any samples are saturated
     ])
 
     def __init__(self, **params):
@@ -215,6 +217,8 @@ class LightMPDEventGenerator(H5FlowGenerator):
                         event_arr[ievent]['tai_ns'][iadc] = time[data_index.item()]['tai_s'][0]*1e9 + time[data_index.item()]['tai_ns'][0]
                         event_arr[ievent]['wvfm_valid'][iadc, channels] = True
                         wvfm_arr[ievent]['samples'][iadc, channels] = data[data_index.item()]['voltage']
+                        # Check for clipping (ADC saturation at max value ~32764)
+                        wvfm_arr[ievent]['clipped'][iadc, channels] = np.any(np.abs(data[data_index.item()]['voltage']) >= 32764, axis=-1)
                     else:
                         print("ADC", hex(sn)," not found")
 
@@ -225,7 +229,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
             mask = np.any(event_arr['wvfm_valid'], axis=(-1,-2))
             event_arr = event_arr[mask]
             wvfm_arr = wvfm_arr[mask]
-            
+
             # mask off any extraneous events
             if self.curr_position + len(event_arr) > self.end_position:
                 mask = self.curr_position + np.arange(len(event_arr)) < self.end_position
@@ -235,11 +239,11 @@ class LightMPDEventGenerator(H5FlowGenerator):
         else:
             event_arr = np.empty((0,), dtype=self.event_dtype)
             wvfm_arr = np.empty((0,), dtype=self.wvfm_dtype)
-        
+
         # tag beam events using RWM
         if self.rwm_channel != []:
             event_arr['trig_type'] = np.any(wvfm_arr["samples"][:,*self.rwm_channel,:] > self.rwm_threshold, axis = -1).astype(int)
-        
+
         # write event to file
         event_slice = self.data_manager.reserve_data(self.event_dset_name, len(event_arr))
         event_arr['id'] = np.arange(event_slice.start, event_slice.stop)

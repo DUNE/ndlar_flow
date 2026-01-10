@@ -38,7 +38,10 @@ class WaveformSum(H5FlowStage):
 
 
         Uses the same dtype as the input waveform dataset(s) except with
-        ``(nadc, nchannel)`` resized to be ``(ntpc, ndet)``.
+        ``(nadc, nchannel)`` resized to be ``(ntpc, ndet)``. If the input
+        waveforms have a ``clipped`` field, it will be propagated to the summed
+        waveforms: if any channel contributing to a sum is clipped, that sum
+        channel will be marked as clipped.
 
     '''
     class_version = '1.0.0'
@@ -46,7 +49,17 @@ class WaveformSum(H5FlowStage):
     default_detector_channels = [list(range(64))]
 
     def swvfm_dtype(self, ntpc, ndet, nsamples):
-        return np.dtype([('samples', 'f4', (ntpc, ndet, nsamples))])
+        return np.dtype([
+            ('samples', 'f4', (ntpc, ndet, nsamples)),
+            ('clipped', '?', (ntpc, ndet))  # True if any contributing channel was clipped
+        ])
+
+    def stpc_wvfm_dtype(self, ntpc, nsamples):
+        return np.dtype([
+            ('samples', 'f4', (ntpc, 2, nsamples)),
+            ('clipped', '?', (ntpc, 2))  # True if any contributing channel was clipped
+        ])
+
     def swvfm_rms_dtype(self, ntpc, ndet):
         return np.dtype([('rms', 'f4', (ntpc, ndet))])
 
@@ -54,6 +67,7 @@ class WaveformSum(H5FlowStage):
         return np.dtype([('samples', 'f4', (ntpc, 2, nsamples))])
     def stpc_wvfm_rms_dtype(self, ntpc):
         return np.dtype([('rms', 'f4', (ntpc, 2))])
+
 
     def swvfm_align_dtype(self, ntpc, ndet):
         return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (ntpc, ndet))])
@@ -135,6 +149,9 @@ class WaveformSum(H5FlowStage):
         stpc_wvfm_data = np.zeros(event_data.shape, dtype=self.stpc_wvfm_dtype)
         stpc_rms_data = np.zeros(event_data.shape, dtype=self.stpc_rms_dtype)
 
+        # Check if input waveforms have clipped field
+        has_clipped = 'clipped' in wvfm_data.dtype.names
+
         if(self.data_manager.dset_exists(self.wvfm_align_dset_name)):
             wvfm_align_data = cache[self.wvfm_align_dset_name].reshape(event_data.shape)
             swvfm_align_data = np.zeros(event_data.shape, dtype=self.swvfm_align_dtype)
@@ -177,6 +194,12 @@ class WaveformSum(H5FlowStage):
                     wvfm_data['samples'][mask,adc,chan].filled(0))
                 # add sum tpc rms in quadrature
                 stpc_rms_data['rms'][mask,tpc_id,det_type] += rms_data['rms'][mask,adc,chan]**2
+
+                # propagate clipped flag: if any channel contributing to sum is clipped, mark sum as clipped
+                if has_clipped:
+                    swvfm_data['clipped'][mask,tpc_id,det_id] |= wvfm_data['clipped'][mask,adc,chan]
+                    stpc_wvfm_data['clipped'][mask,tpc_id,det_type] |= wvfm_data['clipped'][mask,adc,chan]
+
 
         # Take square root to complete RMS in quadrature calculation
         srms_data['rms'] = np.sqrt(srms_data['rms'])
