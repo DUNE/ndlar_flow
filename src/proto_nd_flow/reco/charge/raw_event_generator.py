@@ -160,11 +160,6 @@ class RawEventGenerator(H5FlowGenerator):
         if self.pps_delay_extractor_enabled:
             self.delay_extractor.setup(self.data_manager)
 
-        if self.data_manager.dset_exists(self.raw_event_dset_name):
-            raise RuntimeError(f'{self.raw_event_dset_name} already exists, refusing to append!')
-        if self.data_manager.dset_exists(self.packets_dset_name):
-            raise RuntimeError(f'{self.packets_dset_name} already exists, refusing to append!')
-
         self.is_mc = resources['RunData'].is_mc
 
         self.packets_dtype = self.packets.dtype
