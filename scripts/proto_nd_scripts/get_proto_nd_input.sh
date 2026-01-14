@@ -76,11 +76,30 @@ curl -s "$URL" \
   | group_by(.tv)
   | map({
       (.[0].tv|tostring):
-        ( map({ (.channel|tostring): { "gain": .pedestal } }) | add )
+        ( map({ (.channel|tostring): { "gain": .gain } }) | add )
     })
   | add
 ' > 2x2_gain_db.json
 
+
+echo "Querying 2x2 drift velocity data..."
+
+curl -s "$URL" \
+  --get \
+  --data-urlencode "folder=neardet2x2.vdrift" \
+  --data-urlencode "t0=0" \
+  --data-urlencode "t1=1000000000000" \
+  --data-urlencode "data_type=2x2_data" \
+  --data-urlencode "format=json" \
+| jq '
+  .rows
+  | group_by(.tv)
+  | map({
+      (.[0].tv|tostring):
+        ( map({ (.channel|tostring): { "vdrift": .vdrift } }) | add )
+    })
+  | add
+' > 2x2_vdrift_db.json
 
 
 
@@ -142,5 +161,24 @@ curl -s "$URL" \
     })
   | add
 ' > FSD_gain_db.json
+
+echo "Querying 2x2 drift velocity data..."
+
+curl -s "$URL" \
+  --get \
+  --data-urlencode "folder=neardet2x2.vdrift" \
+  --data-urlencode "t0=0" \
+  --data-urlencode "t1=1000000000000" \
+  --data-urlencode "data_type=FSD_data" \
+  --data-urlencode "format=json" \
+| jq '
+  .rows
+  | group_by(.tv)
+  | map({
+      (.[0].tv|tostring):
+        ( map({ (.channel|tostring): { "vdrift": .vdrift } }) | add )
+    })
+  | add
+' > FSD_vdrift_db.json
 
 cd ${HERE}
