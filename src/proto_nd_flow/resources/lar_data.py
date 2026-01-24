@@ -291,22 +291,22 @@ class LArData(H5FlowResource):
         if 'v_drift' in self.data:
             return self.data['v_drift']
 
-        if (self._v_drift == [] or resources['RunData'].is_mc): #no vdrift provided or we are in MC, will compute with the field
+        if (self.vdrift_file is not None):                          
+            tmp_vdrift=[]                                             
+            with open(self.vdrift_file, 'r') as infile:                   
+                jfile = json.load(infile)                             
+                ts_key = timefunc.find_closest_timestamp(np.array(list(jfile.keys()), dtype=int), resources['RunData'].charge_filename)
+                jfile = jfile[ts_key]                                 
+                for key, value in jfile.items():
+                    tmp_vdrift.append(value["vdrift"])
+                self.data['v_drift'] = np.array(tmp_vdrift)
+
+        elif (self._v_drift == [] or resources['RunData'].is_mc): #no vdrift provided or we are in MC, will compute with the field
             # get electric field from run data
             e_field = resources['RunData'].e_field
     
             # calculate drift velocity
             self.data['v_drift'] = np.array([self.electron_mobility(e_field) * e_field])
-        elif (self.vdrift_file is not None):
-            tmp_vdrift=[]
-            with open(self.v_drift, 'r') as infile:
-                jfile = json.load(infile)
-                ts_key = timefunc.find_closest_timestamp(np.array(list(jfile.keys()), dtype=int), resources['RunData'].charge_filename)
-                jfile = jfile[ts_key]
-                
-                for key, value in jfile.items():
-                    tmp_vdrift.append(value)
-                self.data['v_drift'] = np.array(tmp_vdrift)
         else:
             self.data['v_drift'] = np.array(self._v_drift)
 
