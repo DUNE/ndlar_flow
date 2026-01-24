@@ -29,6 +29,8 @@ params:
   # configuration parameters
 
   pedestal_file: '/global/common/software/dune/inputs/FSD/pedestals/FSD_pedestals_20241112.json'
+  pedestal_file: 'data/fsd_flow/FSD_pedestal_db.json'
+  
   #pedestal_file: 'data/module0_flow/datalog_2021_04_02_19_00_46_CESTevd_ped.json'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/TPC1+2/configFiles/datalog_2021_04_02_19_00_46_CESTevd_ped.json
   #configuration_file: 'data/module0_flow/evd_config_21-03-31_12-36-13.json'
