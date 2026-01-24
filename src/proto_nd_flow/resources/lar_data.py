@@ -3,15 +3,12 @@ import logging
 import scipy.interpolate as interpolate
 import os
 import json
-import re
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from h5flow.core import H5FlowResource, resources
 
 from module0_flow.util.compat import assert_compat_version
 import module0_flow.util.units as units
-
+import module0_flow.util.time as timefunc
 
 class LArData(H5FlowResource):
     '''
@@ -55,6 +52,7 @@ class LArData(H5FlowResource):
     default_electron_lifetime = 2.2e3  # us
     default_electron_lifetime_file = None
     default_vdrift = []
+    default_vdrift_file = None
     default_box_alpha = 0.93
     default_box_beta = 0.207 #0.3 (MeV/cm)^-1 * 1.383 (g/cm^3)* 0.5 (kV/cm), R. Acciarri et al JINST 8 (2013) P08005
     default_birks_Ab = 0.800
@@ -75,6 +73,7 @@ class LArData(H5FlowResource):
         self._electron_lifetime = params.get('electron_lifetime', self.default_electron_lifetime)
         self._v_drift = params.get('vdrift', self.default_vdrift)
         self.electron_lifetime_file = params.get('electron_lifetime_file', self.default_electron_lifetime_file)
+        self.vdrift_file = params.get('vdrift_file', self.default_vdrift_file)
         self.box_alpha = params.get('box_alpha', self.default_box_alpha)
         self.box_beta = params.get('box_beta', self.default_box_beta)
         self.birks_Ab = params.get('birks_Ab', self.default_birks_Ab)
@@ -108,6 +107,7 @@ class LArData(H5FlowResource):
             logging.info(f'W(ionization): {self.ionization_w}')
 
     def _init_electron_lifetime(self):
+        charge_name = resources['RunData'].charge_filename
         if 'electron_lifetime_central_value' in self.data:
             # handle case when electron lifetime is saved in file
             central_value_x = self.data['electron_lifetime_central_value']['unix_s']
@@ -145,37 +145,13 @@ class LArData(H5FlowResource):
             lower_bound_x = d['electron_lifetime_lower_bound']['unix_s']
             lower_bound_y = d['electron_lifetime_lower_bound']['lt_us']
         elif (self.electron_lifetime_file is not None
-              and os.path.exists(self.electron_lifetime_file)
               and self.electron_lifetime_file[-5:] == '.json'
               and not resources['RunData'].is_mc):
             # handle case when electron lifetime text file is specified --> Should be created from calibration with the direct value already available
             with open(self.electron_lifetime_file, 'r') as f:
                 lifetimes = json.load(f)
-            charge_name = resources['RunData'].charge_filename
-
-            #extract timestamp
-            match = re.search(r"(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})", charge_name)
-            if not match:
-                raise ValueError(f"No timestamp found in filename: {charge_name} cannot extract elifetime")
-            
-            ts_str = match.group(1)
-            if 'CET' in charge_name:
-                tz = ZoneInfo("Europe/Paris")
-            elif 'CDT' in charge_name:
-                tz = ZoneInfo("America/Chicago")
-            elif 'CST' in charge_name:
-                tz = ZoneInfo("America/Chicago")
-            else:
-                tz = ZoneInfo("UTC")
-                
-            file_dt = datetime.strptime(ts_str, "%Y_%m_%d_%H_%M_%S").replace(tzinfo=tz).timestamp()
-
-            # Convert JSON keys to timestamps and values
-            lifetime_ts_arr = np.sort(np.array(list(lifetimes.keys()),dtype=int))
-            print(file_dt,lifetime_ts_arr)
-            str_key = str(lifetime_ts_arr[(file_dt - lifetime_ts_arr)>0][-1])
-
-            self._electron_lifetime = lifetimes[str_key][0] * units.ms  # convert ms → µs or as needed
+            ts_key = timefunc.find_closest_timestamp(np.array(list(lifetimes.keys()), dtype=int), resources['RunData'].charge_filename)
+            self._electron_lifetime = lifetimes[ts_key][0] * units.ms  # convert ms → µs or as needed
             return
         else:
             central_value_x = np.array([0, 1])
@@ -283,7 +259,7 @@ class LArData(H5FlowResource):
                 R_s = dQ * W_s / dE
         '''
         return 1 - self.ionization_recombination(self, dedx) * self.scintillation_w()/self.ionization_w()
-
+    
     @property
     def A(self):
         ''' Fixed value of 39.948 '''
@@ -321,6 +297,16 @@ class LArData(H5FlowResource):
     
             # calculate drift velocity
             self.data['v_drift'] = np.array([self.electron_mobility(e_field) * e_field])
+        elif (self.vdrift_file is not None):
+            tmp_vdrift=[]
+            with open(self.v_drift, 'r') as infile:
+                jfile = json.load(infile)
+                ts_key = timefunc.find_closest_timestamp(np.array(list(jfile.keys()), dtype=int), resources['RunData'].charge_filename)
+                jfile = jfile[ts_key]
+                
+                for key, value in jfile.items():
+                    tmp_vdrift.append(value)
+                self.data['v_drift'] = np.array(tmp_vdrift)
         else:
             self.data['v_drift'] = np.array(self._v_drift)
 
@@ -356,3 +342,4 @@ class LArData(H5FlowResource):
         mu = mu * ((units.cm**2) / units.V / units.s)
 
         return mu
+
