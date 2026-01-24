@@ -32,7 +32,10 @@ params:
 
   #pedestal_file: '/global/common/software/dune/inputs/FSD/pedestals/FSD_pedestals_20241112.json'
 
+  
   pedestal_file: 'data/fsd_flow/FSD_pedestal_db.json'
+  # pedestal_file: '/global/common/software/dune/inputs/FSD/pedestals/FSD_pedestals_20241112.json'
+
   # gain_file: 'data/fsd_flow/FSD_gain_db.json'
   calibration_db: True
   
