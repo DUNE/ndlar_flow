@@ -73,7 +73,6 @@ class WaveformNoiseFilter(H5FlowStage):
         self.keep_noise = params.get('keep_noise', self.default_keep_noise)
         self.noise_dset_name = params.get('noise_dset_name', self.default_noise_dset_name)
         self.segment_size = params.get("segment_size", self.default_segment_size)
-        self.num_segment = params.get("num_segment", self.default_num_segment)
         self.num_means = params.get("num_means", self.default_num_means)
         self.rms_dset_name = params.get('rms_dset_name', self.default_rms_dset_name)
         self.baseline_dset_name = params.get('baseline_dset_name', self.default_baseline_dset_name)
