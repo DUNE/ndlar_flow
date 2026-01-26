@@ -324,10 +324,10 @@ class WaveformHitFinder(H5FlowStage):
         # height = flat threshold over noise (n*sigma)
         height = n_noise_factor * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
         height_below = (n_noise_factor-1) * noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
-        lheight = tot_th * np.ones_like(height)
-        lheight_below = tot_th - noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
-        uheight = tout_th * np.ones_like(height)
-        uheight_below = tout_th - noise[..., np.newaxis] * np.ones(wvfm.shape[-1])
+        lheight = tot_th * height
+        lheight_below = tot_th * height_below
+        uheight = tout_th * height
+        uheight_below = tout_th * height_below
 
         # dynamic_threshold = rolling threshold of previous 5 bins + n*sqrt(rolling threshold)
         wvfm_rolled = np.roll(wvfm, n_bins_rolled)
