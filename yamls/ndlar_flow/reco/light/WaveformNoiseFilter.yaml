@@ -21,4 +21,4 @@ params:
   modulo_param: 10 # template length
   keep_noise: False # flag to save extracted noise
   segment_size: 25
-  num_segment: 24
+  num_means: 4
