@@ -63,11 +63,8 @@ class WaveformSum(H5FlowStage):
     def swvfm_rms_dtype(self, ntpc, ndet):
         return np.dtype([('rms', 'f4', (ntpc, ndet))])
 
-    def stpc_wvfm_dtype(self, ntpc, nsamples):
-        return np.dtype([('samples', 'f4', (ntpc, 2, nsamples))])
     def stpc_wvfm_rms_dtype(self, ntpc):
         return np.dtype([('rms', 'f4', (ntpc, 2))])
-
 
     def swvfm_align_dtype(self, ntpc, ndet):
         return np.dtype([('ns', 'f8'), ('sample_idx', 'f4', (ntpc, ndet))])
