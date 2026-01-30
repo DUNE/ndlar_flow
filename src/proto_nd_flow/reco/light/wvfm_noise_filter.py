@@ -58,7 +58,12 @@ class WaveformNoiseFilter(H5FlowStage):
     default_baseline_dset_name = 'light/wvfm_baseline'
     default_noise_dset_name = 'light/fwvfm_noise'
 
-    def fwvfm_dtype(self, nadc, nchannels, nsamples): return np.dtype([('samples', 'f4', (nadc, nchannels, nsamples))])
+    # dtype for filtered & baselined waveforms
+    def fwvfm_dtype(self, nadc, nchannels, nsamples):
+        return np.dtype([
+            ('samples', 'f4', (nadc, nchannels, nsamples)),
+            ('clipped', '?', (nadc, nchannels))  # Propagated from input waveforms
+        ])
     def rms_dtype(self, nadc, nchannels): return np.dtype([('rms', 'f4', (nadc, nchannels))])
     def baseline_dtype(self, nadc, nchannels): return np.dtype([('baseline', 'f4', (nadc, nchannels))])
 
@@ -163,6 +168,8 @@ class WaveformNoiseFilter(H5FlowStage):
         event_data = cache[source_name]
         wvfm_data = cache[self.wvfm_dset_name].reshape(event_data.shape).data  # don't worry about masked data since 1:1 references
 
+        # Check if input waveforms have clipped field
+        has_clipped = 'clipped' in cache[self.wvfm_dset_name].dtype.names
         event_shape = event_data.shape
         nadc = wvfm_data['samples'].shape[1]
         nchannels = wvfm_data['samples'].shape[2]
@@ -170,7 +177,7 @@ class WaveformNoiseFilter(H5FlowStage):
         # flatten into individual waveforms
         wvfm_samples = wvfm_data['samples'].reshape(-1, wvfm_data['samples'].shape[-1])
         # truncate lowest 2-bits and convert to float
-        wvfm_samples = (wvfm_samples - wvfm_samples % 4).astype(float)
+        wvfm_samples = (wvfm_samples >> 2).astype(float)
 
         # # subtract noise from waveform
         fwvfm = np.empty(wvfm_data.shape, dtype=self.fwvfm_dtype)
@@ -178,6 +185,10 @@ class WaveformNoiseFilter(H5FlowStage):
         # subtract pedestal value
         pedestal, rms = self.min_range_baseline(wvfm_data['samples'], self.segment_size, self.num_means)
         fwvfm['samples'] = wvfm_data['samples']  - pedestal[..., np.newaxis]
+
+        # Propagate clipped flag from input waveforms
+        if has_clipped:
+            fwvfm['clipped'] = wvfm_data['clipped']
 
         # save baselines as light/events/baseline (structured array) with dims [event, adc, channel]
         baseline_data = np.zeros(event_shape, dtype=self.baseline_dtype)
@@ -196,6 +207,7 @@ class WaveformNoiseFilter(H5FlowStage):
         # save references
         ref = np.c_[rms_slice, rms_slice]
         self.data_manager.write_ref(source_name, f'{source_name}/rms', ref)
+
 
         # reserve new data
         fwvfm_slice = self.data_manager.reserve_data(self.fwvfm_dset_name, source_slice)
