@@ -1,0 +1,15 @@
+classname: Geometry # resources/geometry.py
+path: proto_nd_flow.resources.geometry
+params:
+  path: 'geometry_info'
+  det_geometry_file: 'data/fsd_flow/fsd.yaml'
+  # crs_geometry_files: ['data/proto_nd_flow/multi_tile_layout-2.4.16.yaml',
+  #                      'data/proto_nd_flow/multi_tile_layout-2.5.16.yaml']
+  # crs_geometry_to_module: [0,0,1,0]
+  crs_geometry_files: ['data/fsd_flow/multi_tile_layout-3.0.40_fsd_v3.yaml']
+  crs_geometry_to_module: [0]
+  lrs_geometry_file: 'data/fsd_flow/light_module_desc-6.0.1.yaml'
+  beam_direction: 'z'
+  drift_direction: 'x'
+  network_agnostic: true
+  charge_only: false
