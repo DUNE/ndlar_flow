@@ -36,32 +36,6 @@ Finally, install ``ndlar_flow``::
 Note that the ``-e`` option installs the packages in "editable" mode, meaning
 any changes you make will take effect without the need to re-run ``pip install``.
 
-The next section describes the older setup procedure based on ``conda``. The
-comments regarding MPI are historical; h5flow's MPI support is slated to be
-removed in the future.
-
-conda method (deprecated)
--------------------------
-
-To install proper dependencies, use the provided conda environment file ``env.yaml``::
-
-    conda env create -f env.yaml -n <environment name>
-    conda activate <environment>
-
-To update an existing environment::
-
-    conda env update -f env.yaml -n <environment name>
-
-If MPI is not available, you may use the alternative environment file
-(``env-nompi.yaml``) that does not install parallel-HDF5. The ``ndlar_flow`` code
-is built off of ``h5flow`` [https://github.com/larpix/h5flow], so you
-will also need to install this in order to run any of the workflows described
-here.
-
-To install::
-
-    pip install .
-
 usage
 =====
 
