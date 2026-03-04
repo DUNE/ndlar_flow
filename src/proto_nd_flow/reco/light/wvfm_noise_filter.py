@@ -95,7 +95,6 @@ class WaveformNoiseFilter(H5FlowStage):
             self.data_manager.create_ref(source_name, self.noise_dset_name)
 
     def min_range_baseline(self, array, segment_size=25, num_segments=40):
-
         # Define start and end indices for segments
         indices = np.arange(num_segments + 1) * segment_size  # (41,)
         start_indices, end_indices = indices[:-1], indices[1:]  # (40,)
@@ -103,7 +102,7 @@ class WaveformNoiseFilter(H5FlowStage):
         # Generate index array for advanced indexing
         segment_range = np.arange(segment_size)  # (25,)
         index_array = start_indices[:, None] + segment_range  # Shape: (40, 25)
-    
+
         # Extract data from segments using indexing
         sliced_data = array[..., index_array]  # Shape (..., 40, 25)
     
@@ -137,6 +136,9 @@ class WaveformNoiseFilter(H5FlowStage):
         fwvfm = np.empty(wvfm_data.shape, dtype=self.fwvfm_dtype)
 
         # subtract pedestal value
+        
+        # number of segments based on length of the waveform
+        self.num_segment = int( (wvfm_data['samples'].shape[-1]) / self.segment_size )
         pedestal = self.min_range_baseline(wvfm_data['samples'], self.segment_size, self.num_segment)
         fwvfm['samples'] = wvfm_data['samples']  - pedestal[..., np.newaxis]
 
