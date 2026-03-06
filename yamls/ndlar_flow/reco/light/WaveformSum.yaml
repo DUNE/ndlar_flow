@@ -4,6 +4,7 @@ requires:
   - 'light/events'
   - 'light/cwvfm'
   - 'light/cwvfm/alignment'
+  - 'light/cwvfm_rms'
 params:
   # input
   wvfm_dset_name: 'light/cwvfm'
