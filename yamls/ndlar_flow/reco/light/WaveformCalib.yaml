@@ -12,6 +12,10 @@ params:
   # Note: rms_dset_name is automatically constructed as '<source_name>/rms' in code
   # output
   cwvfm_dset_name: 'light/cwvfm'
+  crms_dset_name: 'light/cwvfm_rms'
 
   gain_mc:
     default: 0.022857
+
+  thresh_mc:
+    default: 0.0000e+00
