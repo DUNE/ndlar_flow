@@ -64,7 +64,7 @@ class LowEnergyChargeLightMatching(H5FlowStage):
     default_charge_data_dir = ''
     default_is_FSD = False
     default_is_mc = False
-    default_cluster_nhit_limit = 10
+    default_cluster_nhit_limit = 50
     def __init__(self, **params):
         super(LowEnergyChargeLightMatching, self).__init__(**params)
         self.clusters_dset_name = params.get('clusters_dset_name', self.default_clusters_dset_name)
@@ -76,8 +76,8 @@ class LowEnergyChargeLightMatching(H5FlowStage):
         self.sum_hits_dset_name = params.get('sum_hits_dset_name', self.default_sum_hits_dset_name)
         self.light_events_dset_name = params.get('light_events_dset_name', self.default_light_events_dset_name)
         self.pps_matching_window = params.get('pps_matching_window', self.default_pps_matching_window)
-        self.upper_pps_matching_window = 300
-        self.lower_pps_matching_window = 100
+        self.upper_pps_matching_window = 400
+        self.lower_pps_matching_window = 400
         self.proximity_distance_z_ACL = params.get('proximity_distance_z_ACL', self.default_proximity_distance_z_ACL)
         self.proximity_distance_y_ACL = params.get('proximity_distance_y_ACL', self.default_proximity_distance_y_ACL)
         self.proximity_distance_z_LCM = params.get('proximity_distance_z_LCM', self.default_proximity_distance_z_LCM)
@@ -120,10 +120,10 @@ class LowEnergyChargeLightMatching(H5FlowStage):
             self.event_pps_time = (tai_ns*1e-9 - (tai_ns*1e-9).astype('int'))*1e9*1e-3
         #print(f'{self.event_pps_time[0:20]=}')
         is_matched_mask = self.clusters_dset['is_matched'].astype('bool')
-        self.clusters_dset = self.clusters_dset[is_matched_mask]
+        #self.clusters_dset = self.clusters_dset[is_matched_mask]
         
         #clusters_hits_ref_region = self.data_manager.get_ref_region(self.clusters_dset_name, self.clusters_hits_dset_name)
-        self.clusters_hits_ref_region = self.clusters_hits_ref_region[is_matched_mask]
+        #self.clusters_hits_ref_region = self.clusters_hits_ref_region[is_matched_mask]
         #clusters_hits_dset = np.array(f[self.clusters_hits_dset_name+'/data'])
         #clusters_hits_dset = self.data_manager.get_dset(self.clusters_hits_dset_name)
         
@@ -206,7 +206,7 @@ class LowEnergyChargeLightMatching(H5FlowStage):
     def run(self, source_name, source_slice, cache):
         super(LowEnergyChargeLightMatching, self).run(source_name, source_slice, cache)
         event_data = cache[source_name]
-        print(f"{event_data['id']=}")
+        #print(f"{event_data['id']=}")
         for ievent in range(len(event_data)):
             #print(f'{ievent=}')
             total_matches = 0
@@ -218,7 +218,7 @@ class LowEnergyChargeLightMatching(H5FlowStage):
             clusters_matched_all = []
             light_indices, event_indices = [], []
             light_indices_time_matched, event_indices_time_matched = [], []
-            print(f"{ievent=}, {event_data[ievent]['id']=}")
+            #print(f"{ievent=}, {event_data[ievent]['id']=}")
             #sum_hits_range = self.sum_hits_range_dict[event_data[ievent]['id']]
             try:
                 sum_hits_range = self.sum_hits_range_dict[event_data[ievent]['id']]
@@ -242,9 +242,9 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                 & (self.cluster_pps_list.astype('float') > light_pps - self.lower_pps_matching_window) \
                 & (self.cluster_unix_list == int(light_unix))
             if np.any(self.clusters_dset[time_mask]['nhit'] > self.cluster_nhit_limit):
-                print('skipping, 2')
+                #print('skipping, 2')
                 continue
-
+            
             if not np.any(time_mask):
                 #print('skipping')
                 continue
@@ -270,6 +270,9 @@ class LowEnergyChargeLightMatching(H5FlowStage):
                     for name in self.clusters_dtype.names:
                         if name in cluster.dtype.names:
                             cluster_matched[name] = cluster[name]
+                    cluster_matched['t_drift'][:] = np.array([cluster_matched['ts'][:,0] - light_pps, \
+                                                            cluster_matched['ts'][:,1] - light_pps, \
+                                                              cluster_matched['ts'][:,2] - light_pps]).T
                     if cluster_index in matched_indices:
                         # only saving a cluster with a proximity match
                         clusters_matched.append(cluster_matched[0])
