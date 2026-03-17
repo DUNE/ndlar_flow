@@ -56,7 +56,16 @@ class RockMuonSelection(H5FlowStage):
     
     #Datatype wanted
     
-    rock_muon_track_dtype = np.dtype([('event_id','i4'),('rock_muon_id', 'i4'),('length','f8'),('x_start', 'f8'),('y_start','f8'),('z_start', 'f8'),('x_end','f8'),('y_end', 'f8'),('z_end', 'f8'),('exp_var', 'f8'), ('theta_xz','f8'), ('theta_yz', 'f8'), ('theta_z','f8')])
+    rock_muon_track_dtype = np.dtype([
+        ('event_id','i4'),
+        ('rock_muon_id', 'i4'),
+        ('length','f8'),
+        ('x_start', 'f8'),('y_start','f8'),('z_start', 'f8'),
+        ('x_end','f8'),('y_end', 'f8'),('z_end', 'f8'),
+        ('exp_var', 'f8'),
+        ('theta_xz','f8'), ('theta_yz', 'f8'), ('theta_z','f8'),
+        ('pca_mean_x', 'f8'),('pca_mean_y', 'f8'),('pca_mean_z', 'f8'),
+        ('pca_direction_x', 'f8') ,('pca_direction_y', 'f8'),('pca_direction_z', 'f8')])
    
     rock_muon_segments_dtype = np.dtype([
         ('rock_segment_id', 'i4'),
@@ -320,8 +329,6 @@ class RockMuonSelection(H5FlowStage):
         track_direction = pca.components_[0]
         hits_mean = pca.mean_
 
-
-
         # Project points onto the principal component (the line)
         projections = np.dot(positions - hits_mean, track_direction[:, np.newaxis]) * track_direction + hits_mean
 
@@ -366,7 +373,7 @@ class RockMuonSelection(H5FlowStage):
 
                     #l_track, start_point, end_point = self.length(filtered_hits)
 
-            return np.array(muon_hits), l_track, start_point, end_point, explained_var, direction_vector
+            return np.array(muon_hits), l_track, start_point, end_point, explained_var, direction_vector, mean_point
     
     #@staticmethod
     def angle(self,direction_vector):
@@ -375,10 +382,10 @@ class RockMuonSelection(H5FlowStage):
         # Calculate the unit vector in the xz-plane
         normal_vector_xz = np.array([0, 1, 0])
         
-        # Calculate the dot product between the direction vector and the unit vector in the yz-plane
+        # Calculate the dot product between the direction vector and the unit vector in the xz-plane
         dot_product = np.dot(direction_vector, normal_vector_xz)
 
-        # Calculate the angle between the direction vector and the yz-plane
+        # Calculate the angle between the direction vector and the xz-plane
         theta_xz = np.arccos(dot_product / magnitude)
 
         # Convert the angle from radians to degrees
@@ -516,6 +523,7 @@ class RockMuonSelection(H5FlowStage):
 
                 Energy_of_segment = sum(hits_of_segment['E'])
                 Q_of_segment = sum(hits_of_segment['Q'])
+                nhit_segment = len(hits_of_segment)
                 drift_time = (max(hits_of_segment['t_drift'])+min(hits_of_segment['t_drift']))/2
             
                 io_group_of_segment = np.unique(hits_of_segment['io_group'])[0]
@@ -560,7 +568,7 @@ class RockMuonSelection(H5FlowStage):
                 hits = self.clean_noise_hits(hits)
                 if len(hits) < 1:
                     continue
-                muon_track,length_of_track, start_point, end_point, explained_var, direction_vector = self.select_muon_track(hits,Min_max_detector_bounds)
+                muon_track,length_of_track, start_point, end_point, explained_var, direction_vector, mean_point = self.select_muon_track(hits,Min_max_detector_bounds)
                  
                 if len(muon_track) != 0:
                     #Loop through tracks and changes the DBSCAN cluster_id to a given track number
@@ -571,7 +579,8 @@ class RockMuonSelection(H5FlowStage):
                     theta_xz, theta_yz,theta_z = self.angle(direction_vector)
                     
                     #Fill track info
-                    track_info = [event_id,track_number,length_of_track, start_point[0],start_point[1],start_point[2], end_point[0],end_point[1],end_point[2], explained_var, theta_xz, theta_yz, theta_z]
+                    track_info = [event_id,track_number,length_of_track, start_point[0],start_point[1],start_point[2], end_point[0],end_point[1],end_point[2], explained_var, 
+                        theta_xz, theta_yz, theta_z, mean_point[0], mean_point[1], mean_point[2], direction_vector[0], direction_vector[1], direction_vector[2]]
                     
                     track_info = np.array([tuple(track_info)], dtype = self.rock_muon_track_dtype)
                     #Get segments
@@ -579,7 +588,6 @@ class RockMuonSelection(H5FlowStage):
                     
                     #  1. reserve a new data region within the output dataset
                     rock_muon_slice = self.data_manager.reserve_data(self.rock_muon_hits_dset_name, 1)
-
 
                     #  2. write the data to the new data region
                     self.data_manager.write_data(self.rock_muon_hits_dset_name, rock_muon_slice, track_info)
