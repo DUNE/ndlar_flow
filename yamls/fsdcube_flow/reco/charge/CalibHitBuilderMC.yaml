@@ -26,5 +26,5 @@ params:
   calib_hits_dset_name: 'charge/calib_prompt_hits'
   mc_hit_frac_dset_name: 'mc_truth/calib_prompt_hit_backtrack'
 
-# FIXME: Propagate ref voltages and pedestals to larnd-sim?
+# FIXME: Propagate ref voltages / gain / ADC scale factor / pedestals to larnd-sim?
 # (see fsdcube's CalibHitBuilderMC.yaml)

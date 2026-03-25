@@ -5,11 +5,9 @@ params:
     hist_dset_name: 'charge/hist_data' 
     pedestal_dset_name: 'charge/channel_pedestals'
 
-    # FIXME!
     vref_dac: 223
-    vcm_dac: 68
-    adc_counts: 255
-    vdda: 1720
+    vcm_dac: 0
+    adc_counts: 1023
+    adc_scale_factor: 2
+    vdda: 2000
     mean_trunc: 3 # ADCs
-    
-    

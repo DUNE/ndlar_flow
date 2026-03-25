@@ -13,3 +13,4 @@ params:
     is_mc: True
     crs_ticks: 0.1 # us
     lrs_ticks: 0.016 # us
+    data_packet_type: 1

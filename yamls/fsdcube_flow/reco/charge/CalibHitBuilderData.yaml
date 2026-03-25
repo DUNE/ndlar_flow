@@ -24,6 +24,7 @@ params:
   vref_mv: 1750
   vcm_mv: 0
   adc_counts: 1023
+  adc_scale_factor: 2
   gain: 3.4
 
   #flag to perform electron liftime calibration
