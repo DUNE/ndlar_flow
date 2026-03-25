@@ -158,7 +158,8 @@ class CalibHitBuilder(H5FlowStage):
         # get event boundaries
         if np.count_nonzero(mask):
             raw_hits_arr = raw_hits.data[rh_mask]
-            mask = (packets_data['packet_type'] == 0) & mask
+            data_packet_type = resources['RunData'].data_packet_type
+            mask = (packets_data['packet_type'] == data_packet_type) & mask
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
             if resources['RunData'].is_mc:
