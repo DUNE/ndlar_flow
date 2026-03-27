@@ -1,2 +1,2 @@
-e_field charge_filename
-0.0262 put_actual_charge_files_here.h5
+e_field charge_filename light_filename
+0.0262 put_actual_charge_files_here.h5 -
