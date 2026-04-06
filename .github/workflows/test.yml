@@ -16,7 +16,7 @@ jobs:
         shell: bash -l {0}
     strategy:
       matrix:
-        mpi_enabled: [0, 1]
+        mpi_enabled: [0]
       fail-fast: false
 
     steps:

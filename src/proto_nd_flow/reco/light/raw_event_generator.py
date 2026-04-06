@@ -54,9 +54,10 @@ class LightEventGenerator(H5FlowGenerator):
             wvfm_valid  u1(n_adcs,n_channels),  boolean indicator if channel is present in event
 
         ``wvfm`` datatype::
-
             samples     i2(n_adc,n_channels,n_samples), sample 10-bit ADC value (lowest 6 bits are not used)
+            clipped    ?(n_adc,n_channels),          boolean indicator if any samples are saturated
     '''
+
     default_n_adcs = 2
     default_n_channels = 64
     default_chunk_size = 128
@@ -70,7 +71,8 @@ class LightEventGenerator(H5FlowGenerator):
         ('ch', 'u1'),  # channel number
         ('utime_ms', 'u8'),  # unix time [ms since epoch]
         ('tai_ns', 'u8'),  # time since PPS [ns]
-        ('wvfm', 'i2', self.n_samples)  # sample value
+        ('wvfm', 'i2', self.n_samples),  # sample value
+        ('is_clipped', '?'),  # boolean, 1 if waveform is clipped
     ])
 
     def event_dtype(self): return np.dtype([
@@ -84,8 +86,10 @@ class LightEventGenerator(H5FlowGenerator):
     ])
 
     def wvfm_dtype(self): return np.dtype([
-        ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples))  # sample value
+        ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples)),  # sample value
+        ('clipped', '?', (self.n_adcs, self.n_channels))  # boolean indicator if any samples are saturated
     ])
+
 
     def __init__(self, **params):
         super(LightEventGenerator, self).__init__(**params)
@@ -129,6 +133,8 @@ class LightEventGenerator(H5FlowGenerator):
         self.data_buffer = defaultdict(list)  # serial number : [<buffered wvfm data>]
         self.event = np.zeros((1,), dtype=self.event_dtype)
         self.wvfms = np.zeros((1,), dtype=self.wvfm_dtype)
+        # Ensure clipped is initialized to False
+        self.wvfms['clipped'].fill(False)
         self.event_buffer = list()
         self.curr_event = 0
 
@@ -178,10 +184,12 @@ class LightEventGenerator(H5FlowGenerator):
                 new_event = self.store_event(self.curr_event)
                 if new_event != self.curr_event:
                     # logging.debug(f'~~~ NEW EVENT ~~~ (ch {np.sum(self.event["wvfm_valid"])})')
-                    self.event_buffer.append((self.event.copy(), self.wvfms.copy()))
+                    self.event_buffer.append((np.copy(self.event), np.copy(self.wvfms)))
 
                     self.event = np.zeros((1,), dtype=self.event_dtype)
                     self.wvfms = np.zeros((1,), dtype=self.wvfm_dtype)
+                    # Ensure clipped is initialized to False (np.zeros should do this, but being explicit)
+                    self.wvfms['clipped'].fill(False)
 
                 # update position
                 self.curr_event = new_event
@@ -241,13 +249,20 @@ class LightEventGenerator(H5FlowGenerator):
         # create new array
         arr = np.zeros((1,), dtype=self.buffer_dtype)
 
+        # read waveform before inversion to check for clipping
+        wvfm_raw = np.frombuffer(self.rwf.th1s_ptr.fArray, dtype=np.int16, count=self.n_samples)
+
         # copy data (this also inverts the waveforms)
         arr['event'] = self.rwf.event
         arr['sn'] = self.rwf.sn
         arr['ch'] = self.rwf.ch
         arr['utime_ms'] = self.rwf.utime_ms
         arr['tai_ns'] = self.rwf.tai_ns
-        arr['wvfm'] = -np.frombuffer(self.rwf.th1s_ptr.fArray, dtype='i2', count=self.n_samples)
+        arr['wvfm'] = -wvfm_raw
+
+        # store clipping info in buffer (check raw data before un-inversion)
+        # Raw data is negative voltage, so saturation appears as large negative values
+        arr['is_clipped'] = np.any(wvfm_raw <= -32760)
 
         self.data_buffer[self.rwf.sn].append(arr)
 
@@ -322,6 +337,12 @@ class LightEventGenerator(H5FlowGenerator):
 
             # fill waveform array
             self.wvfms['samples'][0, sn_hash, ch_hash] = data['wvfm']
+            # Use the clipping flag computed during store_entry (before inversion)
+            self.wvfms['clipped'][0, sn_hash, ch_hash] = data['is_clipped']
+
+            # Debug: log if clipped
+            if data['is_clipped']:
+                logging.debug(f'Clipped waveform detected: event={event_number}, sn={data["sn"]}, ch={data["ch"]}, sn_hash={sn_hash}, ch_hash={ch_hash}')
 
             # remove from buffer
             self.data_buffer[sn[i]] = self.data_buffer[sn[i]][1:]

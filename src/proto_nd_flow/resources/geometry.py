@@ -13,6 +13,8 @@ from proto_nd_flow.util.lut import LUT, write_lut, read_lut
 from proto_nd_flow.util.compat import assert_compat_version
 import proto_nd_flow.util.units as units
 
+from tqdm import tqdm
+
 class Geometry(H5FlowResource):
     '''
         Provides helper functions for looking up geometric properties. 
@@ -388,9 +390,10 @@ class Geometry(H5FlowResource):
 
         self._module_RO_bounds = []
 
+        io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
+
         # Loop through modules
-        for module_id in module_to_io_groups:  
-            io_group, io_channel, chip_id, channel_id = self.pixel_coordinates_2D.keys()
+        for module_id in module_to_io_groups:
             min_coord = np.finfo(self.pixel_coordinates_2D.dtype).min
             max_coord = np.finfo(self.pixel_coordinates_2D.dtype).max
             min_x, max_x = min_coord, max_coord
@@ -784,7 +787,8 @@ class Geometry(H5FlowResource):
         self._pixel_pitch = [0.]*n_modules
 
         # Loop through modules
-        for module_id in module_to_io_groups:
+        for module_id in tqdm(module_to_io_groups, desc='Module geometries'):
+            iog_per_mod = len(det_geometry_yaml['module_to_io_groups'][module_id])
             geometry_yaml = geometry_yamls[self.crs_geometry_to_module[module_id-1]]
             pixel_pitch = geometry_yaml['pixel_pitch'] / units.cm # convert mm -> cm
             self._pixel_pitch[module_id-1] = pixel_pitch
@@ -802,7 +806,7 @@ class Geometry(H5FlowResource):
 
                 for chip in tile_chip_to_io[tile]:
                     io_group_io_channel = tile_chip_to_io[tile][chip]
-                    io_group = io_group_io_channel//1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
+                    io_group = io_group_io_channel//1000 + (module_id-1)*iog_per_mod
                     io_channel = io_group_io_channel % 1000
                     self._tile_id[([io_group], [io_channel])] = tile+(module_id-1)*len(tile_chip_to_io)
                     
@@ -826,9 +830,9 @@ class Geometry(H5FlowResource):
                         else:
                             continue
 
-                    io_group = io_group_io_channel // 1000 + (module_id-1)*len(det_geometry_yaml['module_to_io_groups'][module_id])
+                    io_group = io_group_io_channel // 1000 + (module_id-1)*iog_per_mod
                     io_channel = io_group_io_channel % 1000
-                    
+
                     z = chip_channel_to_position[chip_channel][0] * \
                         pixel_pitch - z_size / 2 + pixel_pitch / 2
                     y = chip_channel_to_position[chip_channel][1] * \
@@ -849,7 +853,7 @@ class Geometry(H5FlowResource):
 
                     for ioc in io_channels:
                         try:
-                            self._pixel_coordinates_2D[(io_group, ioc, chip, channel)] = z, y
+                            self._pixel_coordinates_2D.set_scalar((io_group, ioc, chip, channel), (z, y))
                         except:
                             print(io_group, ioc, chip, channel)
 
