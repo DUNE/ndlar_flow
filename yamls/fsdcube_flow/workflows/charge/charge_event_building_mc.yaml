@@ -9,6 +9,7 @@ flow:
 
 resources:
   - !include yamls/fsdcube_flow/resources/RunDataMC.yaml
+  - !include yamls/fsdcube_flow/resources/GeometryMC.yaml
 
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files

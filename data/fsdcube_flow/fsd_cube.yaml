@@ -1,0 +1,21 @@
+temperature: 87.17 # K
+e_field: 0.25 # kV/cm ; FSDCube ran at half-nominal e-field
+lifetime: 1.1e+3 # us ; based on data-taking conditions
+long_diff: 3.78e-6 # cm * cm / us ; calculated by scaling the larnd-sim values by the ratio of 0.5 to 0.25 kV/cm
+tran_diff: 6.34e-6 # cm * cm / us ; on the BNL LAr properties page for diffusion, -5% and -28% for D_L and D_T respectively
+drift_length: 47.75 # cm ; This is different from the FSD
+response_sampling: 0.1 # us
+response_bin_size: 0.04434 # cm 
+time_padding: 190 # us
+time_window: 189.1 # us
+tpc_offsets: # cm
+  - [0, 0, 0]
+# Note the tile_map convention is different than 2x2
+# as in nd-lar (also in fsd) one vertical row of tiles are connected to one pacman (one io-group)
+# while in 2x2 modules, the tile numbering follows horizontal first and then vertical in the 2x4 anode.
+tile_map:
+  - [[1]]
+module_to_io_groups:
+  1: [1]
+
+module_to_tpcs: {1: [0]}

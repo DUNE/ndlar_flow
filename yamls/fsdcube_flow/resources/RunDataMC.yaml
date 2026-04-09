@@ -6,8 +6,7 @@ params:
   defaults:
     charge_filename: '-'
     light_filename: '-'
-    # FIXME: Is this e_field applied in larnd-sim?
-    e_field: 0.0262 # kV/mm
+    e_field: 0.025 # kV/mm
     light_samples: 256
     charge_thresholds: 'medm'
     is_mc: True
