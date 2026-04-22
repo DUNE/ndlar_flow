@@ -4,7 +4,7 @@ flow:
   drop: []
 
 #resources:
-#  - !include yamls/fsdcube_flow/resources/GeometryData.yaml
+#  - !include yamls/fsdcube_flow/resources/Geometry.yaml
 
 generate_pedestal_json:
   !include yamls/fsdcube_flow/reco/charge/GeneratePedestalJson.yaml

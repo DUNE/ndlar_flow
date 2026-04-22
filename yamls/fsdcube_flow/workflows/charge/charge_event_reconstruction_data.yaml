@@ -9,7 +9,7 @@ flow:
 
 resources:
   - !include yamls/fsdcube_flow/resources/RunDataData.yaml
-  - !include yamls/fsdcube_flow/resources/GeometryData.yaml
+  - !include yamls/fsdcube_flow/resources/Geometry.yaml
 
 
 raw_events:

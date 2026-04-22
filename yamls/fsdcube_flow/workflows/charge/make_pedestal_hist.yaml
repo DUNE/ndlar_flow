@@ -4,7 +4,7 @@ flow:
   drop: []
 
 resources:
-  - !include yamls/fsdcube_flow/resources/GeometryData.yaml
+  - !include yamls/fsdcube_flow/resources/Geometry.yaml
 
 make_pedestal_hist:
   !include yamls/fsdcube_flow/reco/charge/MakePedestalHist.yaml
