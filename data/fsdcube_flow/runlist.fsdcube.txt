@@ -1,2 +1,2 @@
 e_field charge_filename light_filename
-262 put_actual_charge_files_here.h5 -
+262 put_actual_charge_files_here.h5 THERE_IS_NO_LIGHT_ONLY_DARKNESS
