@@ -5,7 +5,7 @@ params:
   # electron_lifetime_file: 'data/module0_flow/ElecLifetimeFit_Module0.npz'
   # download link: https://portal.nersc.gov/project/dune/data/Module0/electronLifetime/ElecLifetimeFit_Module0.root
   electron_lifetime: 2200 # us
-  electron_lifetime_file: "data/proto_nd_flow/lifetime.json"
+  electron_lifetime_file: "data/proto_nd_flow/2x2_run1-2_lifetime.json"
   #: Recombination :math:`\alpha` constant for the Box model
   box_alpha: 0.93
   #: Recombination :math:`\beta` value for the Box model in :math:`(kV/cm)(g/cm^2)/MeV`
