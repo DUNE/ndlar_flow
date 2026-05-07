@@ -83,7 +83,11 @@ class CalibHitBuilder(H5FlowStage):
         ('Q_raw', 'f8'),
         ('Q', 'f8'),
         ('E', 'f8'),
-        ('is_disabled', '?')
+        ('is_disabled', '?'),
+        ('x_corr', 'f8'),
+        ('t_0', 'f8'),
+        ('t_confidence','f4'),
+        ('t_cluster_id','f4')
     ])
 
     default_pedestal_mv = 580
