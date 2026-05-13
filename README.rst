@@ -9,9 +9,9 @@
 environment
 ===========
 
-First, download this code::
+First, download/clone the repository::
 
-    git clone https://github.com/larpix/ndlar_flow
+    git clone https://github.com/DUNE/ndlar_flow
 
 venv method (recommended)
 -------------------------
@@ -21,14 +21,7 @@ Create and activate a virtual environment::
     python -m venv ndlar_flow.venv
     source ndlar_flow.venv/bin/activate
 
-Install the ``h5flow`` framework::
-
-    git clone https://github.com/larpix/h5flow
-    cd h5flow
-    pip install -e .
-    cd ..
-
-Finally, install ``ndlar_flow``::
+Install ``ndlar_flow``::
 
     cd ndlar_flow
     pip install -e .
@@ -36,31 +29,20 @@ Finally, install ``ndlar_flow``::
 Note that the ``-e`` option installs the packages in "editable" mode, meaning
 any changes you make will take effect without the need to re-run ``pip install``.
 
-The next section describes the older setup procedure based on ``conda``. The
-comments regarding MPI are historical; h5flow's MPI support is slated to be
-removed in the future.
+legacy install notes
+--------------------
 
-conda method (deprecated)
--------------------------
+Previous versions of ndlar-flow assumed h5flow was already installed or available
+in the current environment. 
 
-To install proper dependencies, use the provided conda environment file ``env.yaml``::
+To install h5flow manually::
 
-    conda env create -f env.yaml -n <environment name>
-    conda activate <environment>
+    git clone https://github.com/DUNE/h5flow
+    cd h5flow
+    pip install -e .
+    cd ..
 
-To update an existing environment::
-
-    conda env update -f env.yaml -n <environment name>
-
-If MPI is not available, you may use the alternative environment file
-(``env-nompi.yaml``) that does not install parallel-HDF5. The ``ndlar_flow`` code
-is built off of ``h5flow`` [https://github.com/larpix/h5flow], so you
-will also need to install this in order to run any of the workflows described
-here.
-
-To install::
-
-    pip install .
+Be sure this is in the same (virtual) environment as ndlar-flow.
 
 usage
 =====

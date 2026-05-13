@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=64.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ndlar_flow"
+description = "An h5flow-based analysis framework for DUNE ND-LAr simulation and data"
+readme = { file = "README.rst", content-type = "text/x-rst" }
+authors = [
+    { name = "Peter Madigan" }
+]
+maintainers = [
+    { name = "Yifan Chen" },
+    { name = "Matt Kramer" },
+    { name = "Noe Roy" },
+    { name = "Kevin Wood" },
+]
+requires-python = ">=3.7"
+license = "Apache-2.0"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering :: Physics"
+]
+dynamic = ["version"]
+dependencies = [
+    "h5py>=2.10",
+    "pytest",
+    "scipy",
+    "scikit-image",
+    "scikit-learn>=1.3.0",
+    "dbscan1d==0.2.3",
+    "h5flow @ git+https://github.com/DUNE/h5flow.git#egg=h5flow",
+    "pylandau @ git+https://github.com/SiLab-Bonn/pylandau.git",
+    "adc64format @ git+https://github.com/larpix/adc64format.git@v0.1.5#egg=adc64format",
+]
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+indent-width = 4
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # Pyflakes
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "I",   # isort
+]
+ignore = ["E501"]
+
+[tool.mypy]
+disable_error_code = ["import-untyped"]
