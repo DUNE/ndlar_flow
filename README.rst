@@ -9,9 +9,9 @@
 environment
 ===========
 
-First, download this code::
+First, download/clone the repository::
 
-    git clone https://github.com/larpix/ndlar_flow
+    git clone https://github.com/DUNE/ndlar_flow
 
 venv method (recommended)
 -------------------------
@@ -21,20 +21,28 @@ Create and activate a virtual environment::
     python -m venv ndlar_flow.venv
     source ndlar_flow.venv/bin/activate
 
-Install the ``h5flow`` framework::
-
-    git clone https://github.com/larpix/h5flow
-    cd h5flow
-    pip install -e .
-    cd ..
-
-Finally, install ``ndlar_flow``::
+Install ``ndlar_flow``::
 
     cd ndlar_flow
     pip install -e .
 
 Note that the ``-e`` option installs the packages in "editable" mode, meaning
 any changes you make will take effect without the need to re-run ``pip install``.
+
+legacy install notes
+--------------------
+
+Previous versions of ndlar-flow assumed h5flow was already installed or available
+in the current environment. 
+
+To install h5flow manually::
+
+    git clone https://github.com/DUNE/h5flow
+    cd h5flow
+    pip install -e .
+    cd ..
+
+Be sure this is in the same (virtual) environment as ndlar-flow.
 
 usage
 =====

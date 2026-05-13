@@ -32,7 +32,7 @@ dependencies = [
     "scikit-image",
     "scikit-learn>=1.3.0",
     "dbscan1d==0.2.3",
-    "h5flow>=0.2.0",
+    "h5flow @ git+https://github.com/DUNE/h5flow.git#egg=h5flow",
     "pylandau @ git+https://github.com/SiLab-Bonn/pylandau.git",
     "adc64format @ git+https://github.com/larpix/adc64format.git@v0.1.5#egg=adc64format",
 ]
