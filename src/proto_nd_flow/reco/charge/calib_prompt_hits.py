@@ -65,6 +65,7 @@ class CalibHitBuilder(H5FlowStage):
             Q_raw          f8, hit charge [ke-] (uncalibrated for ADC droop)
             Q              f8, calibrated hit charge with ADC droop corrections
             E              f8, hit energy [MeV]
+            is_disabled    ? , Missing definition FIXME 
             x_corr         f8, drift-time corrected x location [cm]
             t_0            i2, charge-light matching timestamp [ns]
             t_confidence   f4, charge-light matching accuracy confidence      
