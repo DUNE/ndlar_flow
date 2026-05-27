@@ -68,6 +68,7 @@ class RunData(H5FlowResource):
 
     class_defaults = {
         'rollover_ticks': int(1E7),
+        'data_packet_type': 0,
     }
 
     def __init__(self, **params):
@@ -250,3 +251,8 @@ class RunData(H5FlowResource):
     def rollover_ticks(self):
         ''' Nominal number of CRS ticks between SYNC rollovers '''
         return self.data['rollover_ticks']
+
+    @property
+    def data_packet_type(self):
+        ''' The LArPix ``packet_type`` for data packets '''
+        return self.data['data_packet_type']

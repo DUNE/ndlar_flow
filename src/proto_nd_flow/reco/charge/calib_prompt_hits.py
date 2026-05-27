@@ -90,6 +90,7 @@ class CalibHitBuilder(H5FlowStage):
     default_vref_mv = 1568.0
     default_vcm_mv = 478.1
     default_adc_counts = 256
+    default_adc_scale_factor = 1
     default_gain = 4.522
     
     def __init__(self, **params):
@@ -109,6 +110,7 @@ class CalibHitBuilder(H5FlowStage):
         self.vref_mv = params.get('vref_mv', self.default_vref_mv)
         self.vcm_mv = params.get('vcm_mv', self.default_vcm_mv)
         self.adc_counts = params.get('adc_counts', self.default_adc_counts)
+        self.adc_scale_factor = params.get('adc_scale_factor', self.default_adc_scale_factor)
         self.gain = params.get('gain', self.default_gain)
         self.adc_droop_calibration = params.get('adc_droop_calibration', False)
         self.elifetime_calibration = params.get('elifetime_calibration',False)
@@ -156,7 +158,8 @@ class CalibHitBuilder(H5FlowStage):
         # get event boundaries
         if np.count_nonzero(mask):
             raw_hits_arr = raw_hits.data[rh_mask]
-            mask = (packets_data['packet_type'] == 0) & mask
+            data_packet_type = resources['RunData'].data_packet_type
+            mask = (packets_data['packet_type'] == data_packet_type) & mask
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
             if resources['RunData'].is_mc:
@@ -294,10 +297,14 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['io_channel'] = packets_arr['io_channel']
             calib_hits_arr['chip_id'] = packets_arr['chip_id']
             calib_hits_arr['channel_id'] = packets_arr['channel_id']
-            hits_charge = self.charge_from_dataword(packets_arr['dataword'], vref, vcm, ped, self.adc_counts, gain) # ke-
+            hits_charge = self.charge_from_dataword(
+                packets_arr['dataword'], vref, vcm, ped, self.adc_counts,
+                self.adc_scale_factor, gain) # ke-
             calib_hits_arr['Q_raw'] = hits_charge # ke-
-            if self.adc_droop_calibration: 
-                hits_charge_calibrated = self.charge_from_dataword_corrected(packets_arr['dataword'], packets_arr['timestamp'], hit_uniqueid, vref, vcm, ped, self.adc_counts, gain) # ke- 
+            if self.adc_droop_calibration:
+                hits_charge_calibrated = self.charge_from_dataword_corrected(
+                    packets_arr['dataword'], packets_arr['timestamp'], hit_uniqueid,
+                    vref, vcm, ped, self.adc_counts, self.adc_scale_factor, gain) # ke-
                 calib_hits_arr['Q'] = hits_charge_calibrated  # ke-
             else:
                 calib_hits_arr['Q'] = hits_charge # ke-
@@ -363,7 +370,7 @@ class CalibHitBuilder(H5FlowStage):
         return np.sum( amps * np.exp( -1*dt/taus  )  )
 
     
-    def charge_from_dataword_corrected(self, dw, ts, uid, vref, vcm, ped, adc_counts, gain):
+    def charge_from_dataword_corrected(self, dw, ts, uid, vref, vcm, ped, adc_counts, adc_scale_factor, gain):
         #accounts for changes in vref, vcm due to nonlinearities in adc (excessive load on vref/vcm bypass capacitors on tile PCB) 
 
         # Find chips that had 
@@ -393,11 +400,11 @@ class CalibHitBuilder(H5FlowStage):
             vcm_arr[mask] += vcm_corrs
             vref_arr[mask] += vref_corrs
              
-        return (dw / adc_counts * (vref_arr - vcm_arr) + vcm_arr - ped) / gain
+        return (dw / adc_counts * adc_scale_factor * (vref_arr - vcm_arr) + vcm_arr - ped) / gain
 
     @staticmethod
-    def charge_from_dataword(dw, vref, vcm, ped, adc_counts, gain):
-        return (dw / adc_counts * (vref - vcm) + vcm - ped) / gain
+    def charge_from_dataword(dw, vref, vcm, ped, adc_counts, adc_scale_factor, gain):
+        return (dw / adc_counts * adc_scale_factor * (vref - vcm) + vcm - ped) / gain
 
     def load_pedestals(self):
         if self.pedestal_file != '':

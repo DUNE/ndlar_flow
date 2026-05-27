@@ -436,7 +436,9 @@ class RawEventGenerator(H5FlowGenerator):
         else:
             mc_assn = None
 
-        mask = (block['valid_parity'].astype(bool) & (block['packet_type'] == 0))  # data packets
+        data_packet_type = resources['RunData'].data_packet_type
+        mask = ((block['valid_parity'].astype(bool) &
+                 (block['packet_type'] == data_packet_type)))
         mask = mask | (block['packet_type'] == 4)  # timestamp packets
         mask = mask | (block['packet_type'] == 7)  # external trigger packets
         mask = mask | (block['packet_type'] == 6)  # sync packets
