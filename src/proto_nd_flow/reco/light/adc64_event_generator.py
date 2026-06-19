@@ -65,6 +65,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
         ``wvfm`` datatype::
 
             samples     i2(n_adc,n_channels,n_samples), sample 10-bit ADC value (lowest 6 bits are not used)
+            clipped     ?(n_adc,n_channels),            boolean indicator if any samples are saturated
     '''
     defaults = dict(
         n_adcs = 8,
@@ -72,7 +73,7 @@ class LightADC64EventGenerator(H5FlowGenerator):
         batch_size = 64,
         sync_channel = 0,
         sync_threshold = 40000,
-        sync_buffer = 200,        
+        sync_buffer = 200,
         clock_timestamp_factor = 1.0,
         utime_ms_window = 1000,
         tai_ns_window = 1000,
@@ -89,7 +90,8 @@ class LightADC64EventGenerator(H5FlowGenerator):
     ])
 
     def wvfm_dtype(self): return np.dtype([
-        ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples))  # sample value
+        ('samples', 'i2', (self.n_adcs, self.n_channels, self.n_samples)),  # sample value
+        ('clipped', '?', (self.n_adcs, self.n_channels))  # boolean indicator if any samples are saturated
     ])
 
     def __init__(self, **params):
@@ -187,6 +189,8 @@ class LightADC64EventGenerator(H5FlowGenerator):
                     event_arr[ievent]['tai_ns'][iadc] = time[data_index]['tai_s']*1e9 + time[data_index]['tai_ns']
                     event_arr[ievent]['wvfm_valid'][iadc, channels] = True
                     wvfm_arr[ievent]['samples'][iadc, channels] = data[data_index]['voltage']
+                    # Check for clipping (ADC saturation at max value ~32764)
+                    wvfm_arr[ievent]['clipped'][iadc, channels] = np.any(np.abs(data[data_index]['voltage']) >= 32764, axis=-1)
 
             # apply different clock frequency
             event_arr['tai_ns'] = (event_arr['tai_ns'] * self.clock_timestamp_factor).astype(event_arr.dtype['tai_ns'].base)

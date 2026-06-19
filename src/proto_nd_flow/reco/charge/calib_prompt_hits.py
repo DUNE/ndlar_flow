@@ -90,6 +90,7 @@ class CalibHitBuilder(H5FlowStage):
     default_vref_mv = 1568.0
     default_vcm_mv = 478.1
     default_adc_counts = 256
+    default_adc_scale_factor = 1
     default_gain = 4.522
     
     def __init__(self, **params):
@@ -103,13 +104,16 @@ class CalibHitBuilder(H5FlowStage):
         self.packets_index_name = params.get('packets_index_name', self.packets_dset_name + '_index')
         self.t0_dset_name = params.get('t0_dset_name')
         self.pedestal_file = params.get('pedestal_file', '')
+        self.gain_file = params.get('gain_file', '')
         self.configuration_file = params.get('configuration_file', '')
         self.pedestal_mv = params.get('pedestal_mv', self.default_pedestal_mv)
         self.vref_mv = params.get('vref_mv', self.default_vref_mv)
         self.vcm_mv = params.get('vcm_mv', self.default_vcm_mv)
         self.adc_counts = params.get('adc_counts', self.default_adc_counts)
+        self.adc_scale_factor = params.get('adc_scale_factor', self.default_adc_scale_factor)
         self.gain = params.get('gain', self.default_gain)
         self.adc_droop_calibration = params.get('adc_droop_calibration', False)
+        self.elifetime_calibration = params.get('elifetime_calibration',False)
         self.hit_ref = params.get('hit_ref', True)
 
         #: ASIC ADC configuration lookup table
@@ -123,9 +127,14 @@ class CalibHitBuilder(H5FlowStage):
             pedestal_mv=self.pedestal_mv
         ))
 
+        self.gains = defaultdict(lambda : dict(
+            gain=self.gain
+        ))
+
     def init(self, source_name):
         super(CalibHitBuilder, self).init(source_name)
         self.load_pedestals()
+        self.load_gains()
         self.load_configurations()
 
     def run(self, source_name, source_slice, cache):
@@ -149,7 +158,8 @@ class CalibHitBuilder(H5FlowStage):
         # get event boundaries
         if np.count_nonzero(mask):
             raw_hits_arr = raw_hits.data[rh_mask]
-            mask = (packets_data['packet_type'] == 0) & mask
+            data_packet_type = resources['RunData'].data_packet_type
+            mask = (packets_data['packet_type'] == data_packet_type) & mask
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
             if resources['RunData'].is_mc:
@@ -172,6 +182,7 @@ class CalibHitBuilder(H5FlowStage):
                                     packets_dset=self.packets_dset_name,
                                     t0_dset=self.t0_dset_name,
                                     pedestal_file=self.pedestal_file,
+                                    gain_file=self.gain_file,
                                     configuration_file=self.configuration_file,
                                     adc_droop_calibration=self.adc_droop_calibration
                                     )
@@ -236,9 +247,13 @@ class CalibHitBuilder(H5FlowStage):
             # This time we add the rollover period instead of subtracting.
             drift_t[after_sync_mask] += resources['RunData'].rollover_ticks
 
-            drift_d = drift_t * (resources['LArData'].v_drift * resources['RunData'].crs_ticks) / units.cm # convert mm -> cm
+            v_drift_arr = resources['LArData'].v_drift
+            if len(v_drift_arr) == 1:
+                v_drift = v_drift_arr[0] #Default vdrift
+            else :
+                v_drift = v_drift_arr[(packets_arr['io_group']-1)//2]
+            drift_d = drift_t * (v_drift * resources['RunData'].crs_ticks) / units.cm # convert mm -> cm
             x = resources['Geometry'].get_drift_coordinate(packets_arr['io_group'],packets_arr['io_channel'],drift_d)
-
             ## true drift position pair
             #if has_mc_truth:
             #    drift_t_true = packet_seg_bt_arr['t'] #us
@@ -265,6 +280,11 @@ class CalibHitBuilder(H5FlowStage):
                                 for unique_id in hit_uniqueid_str])
             else:
                 ped = np.full(len(hit_uniqueid_str), self.pedestal_mv)
+            if self.gain_file != '':
+                gain = np.array([self.gains[unique_id]['gain'] for unique_id in hit_uniqueid_str])
+            else:
+                gain = np.full(len(hit_uniqueid_str), self.gain)
+
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             calib_hits_arr['x'] = x
             #if has_mc_truth:
@@ -277,16 +297,24 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['io_channel'] = packets_arr['io_channel']
             calib_hits_arr['chip_id'] = packets_arr['chip_id']
             calib_hits_arr['channel_id'] = packets_arr['channel_id']
-            hits_charge = self.charge_from_dataword(packets_arr['dataword'], vref, vcm, ped, self.adc_counts, self.gain) # ke-
+            hits_charge = self.charge_from_dataword(
+                packets_arr['dataword'], vref, vcm, ped, self.adc_counts,
+                self.adc_scale_factor, gain) # ke-
             calib_hits_arr['Q_raw'] = hits_charge # ke-
-            if self.adc_droop_calibration: 
-                hits_charge_calibrated = self.charge_from_dataword_corrected(packets_arr['dataword'], packets_arr['timestamp'], hit_uniqueid, vref, vcm, ped, self.adc_counts, self.gain) # ke- 
-                calib_hits_arr['Q'] = hits_charge_calibrated # ke-
+            if self.adc_droop_calibration:
+                hits_charge_calibrated = self.charge_from_dataword_corrected(
+                    packets_arr['dataword'], packets_arr['timestamp'], hit_uniqueid,
+                    vref, vcm, ped, self.adc_counts, self.adc_scale_factor, gain) # ke-
+                calib_hits_arr['Q'] = hits_charge_calibrated  # ke-
             else:
-                calib_hits_arr['Q'] = hits_charge
-
+                calib_hits_arr['Q'] = hits_charge # ke-
+                
+            
+                
             #FIXME supply more realistic dEdx in the recombination; also apply measured electron lifetime
-            calib_hits_arr['E'] = calib_hits_arr['Q'] * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV) # MeV
+            calib_hits_arr['E'] = calib_hits_arr['Q'] * (1000 * units.e) / resources['LArData'].ionization_recombination(mode=2,dEdx=2) * (resources['LArData'].ionization_w / units.MeV)  # MeV
+            if self.elifetime_calibration:
+                calib_hits_arr['E'] /= resources['LArData'].charge_reduction_lifetime(t_drift=(drift_t * resources['RunData'].crs_ticks )) # ke- we change the drift_t to µs
             #if has_mc_truth:
             #    true_recomb = resources['LArData'].ionization_recombination(mode=2,dEdx=packet_seg_bt_arr['dEdx'])
             #    calib_hits_arr['E_true_recomb_elife'] = np.divide(hits_charge.reshape((hits_charge.shape[0],1)) * (1000 * units.e), true_recomb, out=np.zeros_like(true_recomb), where=true_recomb!=0) / resources['LArData'].charge_reduction_lifetime(t_drift=drift_t_true) * (resources['LArData'].ionization_w / units.MeV) # MeV
@@ -342,7 +370,7 @@ class CalibHitBuilder(H5FlowStage):
         return np.sum( amps * np.exp( -1*dt/taus  )  )
 
     
-    def charge_from_dataword_corrected(self, dw, ts, uid, vref, vcm, ped, adc_counts, gain):
+    def charge_from_dataword_corrected(self, dw, ts, uid, vref, vcm, ped, adc_counts, adc_scale_factor, gain):
         #accounts for changes in vref, vcm due to nonlinearities in adc (excessive load on vref/vcm bypass capacitors on tile PCB) 
 
         # Find chips that had 
@@ -372,17 +400,23 @@ class CalibHitBuilder(H5FlowStage):
             vcm_arr[mask] += vcm_corrs
             vref_arr[mask] += vref_corrs
              
-        return (dw / adc_counts * (vref_arr - vcm_arr) + vcm_arr - ped) / gain
+        return (dw / adc_counts * adc_scale_factor * (vref_arr - vcm_arr) + vcm_arr - ped) / gain
 
     @staticmethod
-    def charge_from_dataword(dw, vref, vcm, ped, adc_counts, gain):
-        return (dw / adc_counts * (vref - vcm) + vcm - ped) / gain
+    def charge_from_dataword(dw, vref, vcm, ped, adc_counts, adc_scale_factor, gain):
+        return (dw / adc_counts * adc_scale_factor * (vref - vcm) + vcm - ped) / gain
 
     def load_pedestals(self):
         if self.pedestal_file != '':
             with open(self.pedestal_file, 'r') as infile:
                 for key, value in json.load(infile).items():
                     self.pedestal[key] = value
+
+    def load_gains(self):
+        if self.gain_file != '':
+            with open(self.gain_file, 'r') as infile:
+                for key, value in json.load(infile).items():
+                    self.gains[key] = value
 
     def load_configurations(self):
         if self.configuration_file != '' and not resources['RunData'].is_mc:

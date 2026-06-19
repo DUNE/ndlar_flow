@@ -63,7 +63,9 @@ class PPSDelayExtractor:
                 pkts = all_pkts[np.min(pkt_idcs) - self.window
                                 :np.max(pkt_idcs) + self.window]
                 rollover = resources['RunData'].rollover_ticks
-                data_pkts = pkts[pkts['packet_type'] == 0]
+
+                data_packet_type = resources['RunData'].data_packet_type
+                data_pkts = pkts[pkts['packet_type'] == data_packet_type]
                 if len(data_pkts) < self.min_packets:
                     continue
                 delay = np.float64(rollover) - np.median(data_pkts['timestamp'])

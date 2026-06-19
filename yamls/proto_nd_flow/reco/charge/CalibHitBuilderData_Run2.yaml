@@ -1,0 +1,36 @@
+classname: CalibHitBuilder # reco/charge/calib_hit_builder.py
+path: proto_nd_flow.reco.charge.calib_prompt_hits
+requires:
+  - 'charge/events'
+  - 'charge/raw_hits'
+  - 'charge/packets'
+  - 'combined/t0'
+  - name: 'charge/packets_index'
+    path: ['charge/packets']
+    index_only: True
+
+params:
+  # inputs
+  events_dset_name: 'charge/events'
+  packets_dset_name: 'charge/packets'
+  packets_index_name: 'charge/packets_index'
+  raw_hits_dset_name: 'charge/raw_hits'
+  t0_dset_name: 'combined/t0'
+  max_contrib_segments: 10
+
+  # output
+  calib_hits_dset_name: 'charge/calib_prompt_hits'
+
+  # configuration parameters
+  # pedestal_mv: 580.0
+  vref_mv: 1568.0 #M0-like: 1300 #2x2: 1568.0
+  vcm_mv: 478.1 #M0-like:288 #478.0 #2x2: 478.1
+  adc_counts: 256
+  gain: 4.522 #datasheet: 4 #measurement(?): 4.522
+
+  #flag to perform ADC droop calibration
+  adc_droop_calibration: True
+  elifetime_calibration: True
+
+  # from Sam F:
+  pedestal_file: '/global/common/software/dune/mkramer/devel/flow4pedestal/packet-pedestal_nominal_60min-2025_10_02_23_03_26_CDT.json'

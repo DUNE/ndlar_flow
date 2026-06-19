@@ -116,6 +116,7 @@ class RawEventBuilder(object):
             Each IO group is treated independently here.
         '''
         rollover_ticks = resources['RunData'].rollover_ticks
+        data_packet_type = resources['RunData'].data_packet_type
         offsets = np.zeros((len(packets),), dtype='i8')
         for io_group in np.unique(packets['io_group']):
             mask = packets['io_group'] == io_group
@@ -136,7 +137,7 @@ class RawEventBuilder(object):
             # means that a SYNC arrived while the packet was traveling across
             # the tile. In that case, subtract the timestamp of the preceding SYNC.
             oops_mask = (mask &
-                         (packets['packet_type'] == 0) &
+                         (packets['packet_type'] == data_packet_type) &
                          (packets['receipt_timestamp'] < packets['timestamp']))
             last_sync_ts = fill_with_last(sync_ts)
             offsets[oops_mask] -= last_sync_ts[oops_mask]
@@ -350,7 +351,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         # calculate time distance between hits
         min_ts, max_ts = np.min(ts), np.max(ts)
         bin_edges = np.linspace(min_ts - 1, max_ts + 1, int((max_ts - min_ts + 2) // self.window))
-        ts_data = ts[packets['packet_type'] == 0]
+        ts_data = ts[packets['packet_type'] == resources['RunData'].data_packet_type]
         hist, bin_edges = np.histogram(ts_data, bins=bin_edges)
 
         # find high correlation regions

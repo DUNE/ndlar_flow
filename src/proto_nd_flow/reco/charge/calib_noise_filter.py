@@ -176,11 +176,10 @@ class correlated_post_trigger_filter:
         if X.shape[1]==3: X[:, 2] = X[:, 2]/self.SCALE_Q
     
         nhit_lr=1
-        chip_nhit=n_chip_hits-chan_nhit
-    
+
         nhit_bins = self.nhit_bins
 
-        if chip_nhit > 80: chip_nhit=80
+        if chan_nhit > 80: chan_nhit=80
         
         kdes = self.kdes
         kdes_cpth=self.kdes_cpth6

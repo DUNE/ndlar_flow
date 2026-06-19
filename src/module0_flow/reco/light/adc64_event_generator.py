@@ -217,8 +217,8 @@ class LightADC64EventGenerator(H5FlowGenerator):
                         time = events['time'][ievent]
                         header = events['header'][ievent]
                         channels = data['channel']
-                        event_arr[ievent]['event'] = event['serial']
-                        event_arr[ievent]['sn'][iadc] = device['serial']
+                        event_arr[ievent]['event'] = event['serial'][0]
+                        event_arr[ievent]['sn'][iadc] = device['serial'][0]
                         event_arr[ievent]['ch'][iadc, channels] = channels
                         event_arr[ievent]['utime_ms'][iadc, channels] = header['unix']
                         event_arr[ievent]['tai_ns'][iadc, channels] = time['tai_s']*1e9 + time['tai_ns']

@@ -59,7 +59,8 @@ class LUT(object):
         self.dtype = dtype
         self.min_max_keys = np.array(min_max_keys, dtype='i8')
         self.lengths = np.array([max_ - min_ + 1 for min_, max_ in self.min_max_keys])
-        self.max_hash = int(self._hash(*[max_ for min_, max_ in min_max_keys]))
+        self.strides = np.cumprod(self.lengths) # used by set_scalar
+        self.max_hash = self._hash(*[max_ for min_, max_ in min_max_keys])[0]
         shape = (self.max_hash + 1,) + shape if shape else (self.max_hash + 1,)
         self._data = np.zeros(shape, dtype=self.dtype)
         self._filled = np.zeros(shape[0], dtype=bool)
@@ -277,6 +278,13 @@ class LUT(object):
 
     def __getitem__(self, keys):
         return self._data[self.hash(*keys)]
+
+    def set_scalar(self, keys, val):
+        idx = 1 + keys[0] - self.min_max_keys[0][0]
+        for i, key in enumerate(keys[1:]):
+            idx += (key - self.min_max_keys[i + 1][0]) * self.strides[i]
+        self._data[idx] = val
+        self._filled[idx] = True
 
     def __setitem__(self, keys, val):
         idx = self.hash(*keys)

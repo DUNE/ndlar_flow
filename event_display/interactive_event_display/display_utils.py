@@ -720,9 +720,9 @@ def get_waveforms_all_detectors(match_light, sim_version):
     """
     Get the light waveforms for the matched light events.
     """
-    n_matches = match_light["samples"].shape[1]
+    _, n_matches, _, n_adcs, n_chans, n_ticks = match_light["samples"].shape
     if sim_version != "single_mod":
-        waveforms_all_detectors = match_light["samples"].reshape(n_matches, 8, 64, 1000)
+        waveforms_all_detectors = match_light["samples"].reshape(n_matches, n_adcs, n_chans, n_ticks)
         # compute the mean of the first 50 samples along the last axis
         baseline_mean = np.mean(waveforms_all_detectors[:, :, :, :50], axis=-1)
         # subtract the baseline mean from each waveform
