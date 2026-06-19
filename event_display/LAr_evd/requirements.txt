@@ -7,8 +7,5 @@ cmasher
 matplotlib
 Pillow
 uproot
-periodictable
-particle
 jupyter
 ipykernel
-PyPDF2
