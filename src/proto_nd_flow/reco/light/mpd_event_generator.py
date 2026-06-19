@@ -206,7 +206,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
                 data = [np.array(events['data'][index]) for index in self.valid_adc_index]
                 device = np.array([events['device'][index] for index in self.valid_adc_index])
                 time = np.array([events['time'][index] for index in self.valid_adc_index])
-                event_arr[ievent]['event'] = event['event']
+                event_arr[ievent]['event'] = event['event'][0]
                 for iadc, sn in enumerate(self.sn_table):
                     data_index = np.where(device["serial"] == sn)[0]
                     if len(data_index):
