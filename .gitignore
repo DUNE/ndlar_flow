@@ -6,6 +6,7 @@ docs/_templates*
 *.ipynb
 *.txt
 !runlist*.txt
+!requirements.txt
 *.npz
 *.npy
 build/
