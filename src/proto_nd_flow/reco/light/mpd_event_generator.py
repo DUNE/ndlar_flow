@@ -213,7 +213,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
                         channels = data[data_index.item()]['channel']
                         # Avoid indexing error when more channels than necessary were recorded in the data file.
                         if len(channels) != self.n_channels:
-                            channels = np.arange(self.first_channel, self.first_channel + self.n_channels)
+                            channels = list(range(self.first_channel, self.first_channel + self.n_channels))
                         event_arr[ievent]['sn'][iadc] = device[data_index.item()]['serial'][0]
                         event_arr[ievent]['utime_ms'][iadc] = event['unix_ms'][0]
                         event_arr[ievent]['tai_ns'][iadc] = time[data_index.item()]['tai_s'][0]*1e9 + time[data_index.item()]['tai_ns'][0]
