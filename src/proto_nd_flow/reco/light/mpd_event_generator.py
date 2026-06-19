@@ -202,7 +202,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
             for ievent,events in enumerate(matched_events):
                 if not events:
                     continue
-                event = events['event'][0]
+                event = events['event']
                 data = [np.array(events['data'][index]) for index in self.valid_adc_index]
                 device = np.array([events['device'][index] for index in self.valid_adc_index])
                 time = np.array([events['time'][index] for index in self.valid_adc_index])
