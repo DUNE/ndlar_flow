@@ -31,4 +31,7 @@ params:
   #flag to perform ADC droop calibration
   adc_droop_calibration: True
 
+  elifetime_calibration: True
+
+
   pedestal_file: '/global/common/software/dune/mkramer/devel/flow4pedestal/reference-cold-pedestal-2024_06_05_08_28_19_CDTevd_ped.tile_id.decimal.json'

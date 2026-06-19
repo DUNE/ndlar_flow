@@ -1029,7 +1029,7 @@ class StoppingMuonSelection(H5FlowStage):
                                     np.minimum(+max_range, rr[valid_mask].max()))
                         rr_offset = np.expand_dims(
                             np.linspace(rr_range[0], rr_range[1],
-                                        np.clip(sample_factor * int(np.diff(rr_range) / self.profile_dx),1,None)),
+                                        np.clip(sample_factor * int(np.diff(rr_range)[0] / self.profile_dx),1,None)),
                             axis=-1)
                         close_dqdx = np.take_along_axis(profile_dqdx[i:i + 1], np.argmin(np.abs(rr[np.newaxis,...] - rr_offset), axis=-1)[..., np.newaxis], axis=-1)
                         mask = np.ones_like((close_dqdx > self.dqdx_peak_cut)) # ignore dQ/dx mask
@@ -1048,9 +1048,9 @@ class StoppingMuonSelection(H5FlowStage):
 
                     muon_j_min = np.argmin([np.min(ll) if ll is not np.nan and np.any(~ll.mask) else 1e+303 for ll in muon_likelihood])
                     proton_j_min = np.argmin([np.min(ll) if ll is not np.nan and np.any(~ll.mask) else 1e+303 for ll in proton_likelihood])
-                    muon_score[i] = muon_likelihood[muon_j_min].filled(1e+303)
-                    muon_r0[i] = muon_offset[muon_j_min]
-                    proton_r0[i] = proton_offset[proton_j_min]
+                    muon_score[i] = muon_likelihood[muon_j_min].filled(1e+303)[0]
+                    muon_r0[i] = muon_offset[muon_j_min][0]
+                    proton_r0[i] = proton_offset[proton_j_min][0]
                     profile_rr[i] = [profile_rr0[i], profile_rr1[i]][muon_j_min]
 
             # use only the dQ/dx profile from the most "stopping muon"-like seed point

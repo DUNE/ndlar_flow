@@ -1,0 +1,11 @@
+PyMuPDF
+numpy
+pandas
+ipywidgets
+h5py
+cmasher
+matplotlib
+Pillow
+uproot
+jupyter
+ipykernel

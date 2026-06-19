@@ -1,12 +1,7 @@
 import numpy as np
 import h5py
-import numpy.ma as ma
-from collections import defaultdict
-import logging
-from math import ceil
 
 from h5flow.core import H5FlowGenerator, resources
-from h5flow import H5FLOW_MPI
 
 from proto_nd_flow.reco.light.raw_event_generator import LightEventGenerator
 import proto_nd_flow.util.units as units
@@ -126,6 +121,28 @@ class LightEventGeneratorMC(H5FlowGenerator):
         return len(self.slices)
 
     @staticmethod
+    def _remap_array_local(channel_map, arr, offset, axis=0):
+        '''
+            Remap an array of shape (..., Ni, ...) to (..., Nj, ...) using
+            an array of indices. This is essentially the 1D equivalent of _remap_array.
+
+            :param channel_map: 1D array of indices into ``Ni`` to remap, shape: ``(Nj,)``
+
+            :param arr: ND array to remap, shape ``(..., Ni, ...)``
+
+            :param offset: An offset to subtract from the channel IDs (in channel_map)
+            before using them as indices into ``arr``.
+        '''
+        if axis < 0:
+            axis = arr.ndim + axis
+        new_shape = tuple(np.r_[arr.shape[:axis], channel_map.shape, arr.shape[axis+1:]].astype(int))
+        new_arr = np.zeros(new_shape, dtype=arr.dtype)
+        rel_channel_map = channel_map - offset
+        rel_channel_map[rel_channel_map < 0] = -1
+        new_arr = np.take(arr, rel_channel_map, axis=axis)
+        return new_arr
+
+    @staticmethod
     def _remap_array(channel_map, arr, axis=0):
         '''
             Remap an array of shape (..., Ni, ...) to (..., Nj, Nk, ...) using
@@ -179,7 +196,6 @@ class LightEventGeneratorMC(H5FlowGenerator):
                                     busy_delay=self.busy_delay,
                                     adc_sn=self.adc_sn,
                                     baseline_offset=self.baseline_offset,
-                                    channel_map=self.channel_map,
                                     #busy_channel=self.busy_channel,
                                     disabled_channels=self.disabled_channels,
                                     wvfm_dset_name=self.wvfm_dset_name,
@@ -188,47 +204,31 @@ class LightEventGeneratorMC(H5FlowGenerator):
                                     input_filename=self.input_filename,
                                     mc_truth_dset_name=self.mc_truth_dset_name
                                     )
+        # For high channel counts (e.g. ND-LAr) we can't store the channel map as
+        # an attribute; it exceeds the max size that the hdf5 library allows.
+        # TODO: Move to separate dataset? For now retain attribute for 2x2/FSD
+        # analyzers.
+        if self.n_modules <= 4:
+            self.data_manager.set_attrs(self.event_dset_name,
+                                        channel_map=self.channel_map)
 
-        # copy and remap the truth information
-        if type(self.light_dat) is h5py.Group: # We have four 96-column matrices
-            if 'light_dat_allmodules' in self.light_dat:
-                light_dat = self.light_dat['light_dat_allmodules']
-            else:
-                light_dat = self._bloat_light_dat(self.light_dat) # Now have 384 col
-        else:                   # We have the old 384-column matrix
-            light_dat = self.light_dat
+        assert isinstance(self.light_dat, h5py.Group)
+        nmod = len(self.light_dat)
+        adc_per_mod = self.n_adcs // self.n_modules
+        for imod in range(nmod):
+            in_name = f'light_dat_module{imod}'
+            this_light_dat = self.light_dat[in_name]
+            adc0 = imod // adc_per_mod * adc_per_mod
+            this_channel_map = self.channel_map[adc0:adc0+adc_per_mod]
+            out_name = f'{self.mc_truth_dset_name}_module{imod}'
+            self.data_manager.create_dset(out_name, dtype=this_light_dat.dtype,
+                                          shape=this_channel_map.shape)
+            this_remapped_light_dat = self._remap_array_local(this_channel_map, this_light_dat, axis=-1,
+                                                              offset=imod*self.n_sipms_per_module)
+            this_slice = slice(0, this_remapped_light_dat.shape[0])
+            self.data_manager.reserve_data(out_name, this_slice)
+            self.data_manager.write_data(out_name, this_slice, this_remapped_light_dat)
 
-        self.data_manager.create_dset(self.mc_truth_dset_name, dtype=light_dat.dtype, shape=self.channel_map.shape)
-        truth_len = ceil(light_dat.shape[0] // self.size)
-        truth_slice = slice(self.rank * truth_len, (self.rank+1) * truth_len)
-        remapped_light_dat = self._remap_array(self.channel_map, light_dat[truth_slice], axis=-1)
-        self.data_manager.reserve_data(self.mc_truth_dset_name, truth_slice)
-        self.data_manager.write_data(self.mc_truth_dset_name, truth_slice, remapped_light_dat)
-
-        mc_channel = np.indices(light_dat[0:1].shape)[1]
-
-
-    @staticmethod
-    def _bloat_light_dat(light_dat_group: h5py.Group) -> np.array:
-        """ HACK
-        Merge the four 96-channel matrices into a 384-channel matrix like the
-        one that larnd-sim formerly produced. Avoids modifying downstream code. """
-        def blocks(i):
-            """Return the `light_dat` for module `i` and a clone with
-            `n_photons_det` set to 0."""
-            dat = light_dat_group[f'light_dat_module{i}']
-            nulls = np.array(dat)
-            nulls['n_photons_det'] = 0
-            return dat, nulls
-        dat0, nulls0 = blocks(0)
-        dat1, nulls1 = blocks(1)
-        dat2, nulls2 = blocks(2)
-        dat3, nulls3 = blocks(3)
-        light_dat_wide0 = np.hstack([dat0, nulls0, nulls0, nulls0])
-        light_dat_wide1 = np.hstack([nulls1, dat1, nulls1, nulls1])
-        light_dat_wide2 = np.hstack([nulls2, nulls2, dat2, nulls2])
-        light_dat_wide3 = np.hstack([nulls3, nulls3, nulls3, dat3])
-        return np.vstack([light_dat_wide0, light_dat_wide1, light_dat_wide2, light_dat_wide3])
 
     def finish(self):
         super(LightEventGeneratorMC, self).finish()
@@ -244,7 +244,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         # get module start channel
         next_startch = [tr_ev[0][0] for tr_ev in next_trig]
-        
+
         # convert channel map
         tmp_wvfms = np.zeros((next_wvfms.shape[0], self.n_modules*self.n_sipms_per_module, next_wvfms.shape[-1]),dtype=next_wvfms.dtype)
         for ev in range(next_wvfms.shape[0]):
@@ -256,13 +256,18 @@ class LightEventGeneratorMC(H5FlowGenerator):
 
         # mock busy signal
         # remapped_wvfms[:, np.r_[range(self.n_adcs)], self.busy_channel, self.busy_delay:] = self.busy_ampl
-        
+
         # add baseline offset
         remapped_wvfms += self.baseline_offset
 
         # zero out disabled channels
         if self.disabled_channels.shape[0]:
             remapped_wvfms[:, :, self.disabled_channels, :] = 0.
+
+        # detect clipping before applying bounds (check for saturation at ADC limits)
+        # ADC is 14-bit signed, stored in 16-bit register left-shifted by 2 bits: ±8192 → ±32768
+        adc_max = 32764  # slightly below max to account for noise
+        clipped = np.any(np.abs(remapped_wvfms) >= adc_max, axis=-1)  # shape: (n_events, n_adcs, n_channels)
 
         # clip to ensure within datatype bounds
         remapped_wvfms = remapped_wvfms.clip(np.iinfo(self.wvfm_dtype['samples'].base).min, np.iinfo(self.wvfm_dtype['samples'].base).max)
@@ -284,6 +289,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
         wvfm_arr = np.empty(next_trig.shape[0], self.wvfm_dtype)
         if next_trig.shape[0]:
             wvfm_arr['samples'] = remapped_wvfms
+            wvfm_arr['clipped'] = clipped
         self.data_manager.write_data(self.wvfm_dset_name, event_slice, wvfm_arr)
 
         # set up references

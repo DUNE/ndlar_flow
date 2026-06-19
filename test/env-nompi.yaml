@@ -14,4 +14,4 @@ dependencies:
   - pip:
     - pyyaml-include==1.3.2
     - adc64format>=0.0.2
-    - git+https://github.com/cuddandr/pylandau.git@npy_owndata_fix
+    - git+https://github.com/SiLab-Bonn/pylandau.git
