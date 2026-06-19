@@ -8,6 +8,7 @@ params:
   # configuration parameters
   n_adcs: 1
   n_channels: 7
+  first_channel: 0
   sn_table:
    - '0x0cd9416d' 
   sync_channel: 0

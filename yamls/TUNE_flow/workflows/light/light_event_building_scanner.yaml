@@ -5,5 +5,7 @@ flow:
   source: light_event_generator
 
 light_event_generator:
-  !include yamls/fsd_flow/reco/light/LightScannerEventGenerator.yaml
+  !include yamls/TUNE_flow/reco/light/LightScannerEventGenerator.yaml
   
+
+
