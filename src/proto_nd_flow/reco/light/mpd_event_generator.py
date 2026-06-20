@@ -250,6 +250,8 @@ class LightMPDEventGenerator(H5FlowGenerator):
         self.data_manager.write_data(self.event_dset_name, event_slice, event_arr)
 
         self.data_manager.reserve_data(self.wvfm_dset_name, event_slice)
+        # print(f"data type; wvfm_arr dtype: {wvfm_arr.dtype}")
+        # print(f"expected dtype: {self.data_manager.get_dset(self.wvfm_dset_name).dtype}")
         self.data_manager.write_data(self.wvfm_dset_name, event_slice, wvfm_arr)
 
         # set up references
