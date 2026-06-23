@@ -137,7 +137,7 @@ class Charge2LightAssociation(H5FlowStage):
             return np.empty((0, 2), dtype=int)
 
         # subselect only portion of light events that overlaps with unix timestamps
-        i_min = np.argmax((self.light_unix_ts >= unix_ts_start - self.unix_ts_window))
+        i_min = np.argmax((self.light_unix_ts >= float(unix_ts_start) - float(self.unix_ts_window)))
         i_max = len(self.light_unix_ts) - np.argmax((self.light_unix_ts <= unix_ts_end + self.unix_ts_window)[::-1])
         sl = slice(i_min, i_max)
         assoc_mat = (np.abs(self.light_unix_ts[sl].reshape(1, -1) - charge_unix_ts.reshape(-1, 1)) <= self.unix_ts_window) \
