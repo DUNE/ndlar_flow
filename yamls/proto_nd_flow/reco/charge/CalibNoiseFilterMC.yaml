@@ -22,7 +22,7 @@ params:
   hits_name: 'charge/calib_prompt_hits'
   hit_ref: True
   filter_function_names: ['hot_pixel_filter','correlated_post_trigger_filter', 'low_current_filter'] #which filter functions to apply (this is an ordered list, but all filters will be "OR'd")
-  low_current_filter__channel_threshold_file: 'data/proto_nd_flow/thresholds_2x2.swapped.json'
+  low_current_filter__channel_threshold_file: 'data/proto_nd_flow/thresholds_2x2.json'
   #params specific to each cut
   low_current_filter__threshold: 1 #
   hot_pixel_filter__max_n_hits: 35 
