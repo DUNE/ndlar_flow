@@ -41,7 +41,7 @@ import pandas as pd
 from io import BytesIO
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-from ndlar_flow.src.proto_nd_flow.util.lut import LUT
+from src.proto_nd_flow.util.lut import LUT
 # from h5flow.core import resources
 # import itertools
 import math
@@ -116,8 +116,7 @@ class LArEventDisplayFSD:
                  hist_projection=True, light_event_only=False, show_fig_wfms=False, output_path=None):
         
         # Open files
-        f = h5py.File(filedir+filename, 'r')
-
+        f = h5py.File(os.path.join(filedir,filename), 'r')
         # Set general class-level variables from inputs
         self.filedir = filedir
         self.filename = filename
