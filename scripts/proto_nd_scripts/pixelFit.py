@@ -9,7 +9,7 @@ import h5flow
 
 from ROOT import TH1D, TH2D, TFile, TCanvas, TF1
 
-from pixelQ import get_pixels_yz, build_pixel_lookup
+from pixelQ import get_networkid_to_position_index, get_pixels_yz, build_hit_lookup, get_networkid_to_position_index
 
 def pixelFit(h, highstat=False):    
     f = TF1("f", "landau", 15.0, 120.0)
@@ -69,7 +69,8 @@ else:
 
 f_manager = h5flow.data.H5FlowDataManager(f_name, 'r')
 positions = get_pixels_yz( f_manager, io_group )
-lookup = build_pixel_lookup( f_manager, io_group )
+lookup = build_hit_lookup( f_manager, io_group )
+networkids = get_networkid_to_position_index(lookup, positions)
 
 if io_group in (5, 6):
     pixel_pitch = 0.387975
@@ -119,7 +120,7 @@ print("MPV from fit is ", mpv_fit)
 chi2_list = np.ones((npix_y*npix_z, 1 ))
 chi2_list2 = np.ones((npix_y*npix_z, 1 ))
 mpverr_list = np.ones((npix_y*npix_z, 1 ))
-gains = np.zeros((npix_y*npix_z, 1 ) )
+gains = np.ones((npix_y*npix_z, 1 ) )
 for pix in range(npix):
     if hist[pix].Integral() < 10:
         continue

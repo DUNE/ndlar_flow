@@ -66,7 +66,7 @@ def get_pixels_yz( f_manager, io_group ):
 
 def build_hit_lookup(f_manager, io_group):
     """
-    Build mapping: (y, z) -> network_id
+    Build mapping: (y, z) -> network_id,
     """
     #check if file with the lookup already exists
     try:
@@ -129,6 +129,17 @@ def build_hit_lookup(f_manager, io_group):
 
     print("found ", len(lookup), " unique pixel positions")
     return lookup
+
+#Function that relates network id to the index of the position in the positions array
+def get_networkid_to_position_index(lookup, positions):
+    """
+    Build mapping: positions_index -> network_id
+    """
+    networkid_to_index = {}
+    for idx, pos in enumerate(positions):
+        networkid_to_index[idx] = lookup.get(tuple(pos), None)
+    return networkid_to_index
+
 
 def get_pixel_ids_by_position(f_manager, positions):
     network_ids = {}
