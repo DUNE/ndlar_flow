@@ -7,7 +7,7 @@
 
 INPUT_FILE=$1
 
-OUTPUT_DIR=`pwd` #!!! change me
+OUTPUT_DIR="/global/cfs/cdirs/dune/users/demaross/2x2_data_2025_cosmics/" #!!! change me
 OUTPUT_NAME=(${INPUT_FILE//"/"/ })
 OUTPUT_NAME=${OUTPUT_NAME[-1]}
 OUTPUT_FILE="${OUTPUT_DIR}/${OUTPUT_NAME}"
@@ -36,7 +36,8 @@ cd ../../
 # avoid being asked if we want to overwrite the file if it exists.
 # this is us answering "yes".
 if [ -e $OUTPUT_FILE ]; then
-    rm $OUTPUT_FILE
+	echo "$OUTPUT_FILE already exists"
+	exit 1
 fi
 
 #$H5FLOW_CMD -c $WORKFLOW1 $WORKFLOW2 $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 $WORKFLOW6 -i $INPUT_FILE -o $OUTPUT_FILE
