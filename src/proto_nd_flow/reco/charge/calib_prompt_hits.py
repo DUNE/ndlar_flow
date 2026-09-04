@@ -90,7 +90,7 @@ class CalibHitBuilder(H5FlowStage):
         ('E', 'f8'),
         ('is_disabled', '?'),
         ('x_corr', 'f8'),
-        ('t_0', 'i2'),
+        ('t_0', 'f4'),
         ('t_confidence','f4'),
         ('t_cluster_id','i2')
     ])
