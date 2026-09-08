@@ -1,5 +1,6 @@
 from collections import defaultdict
 import numpy as np
+import numpy.typing as npt
 import logging
 
 from h5flow import H5FLOW_MPI
@@ -539,28 +540,9 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & trig_mask)
 
             if self.extendable[this_io_group]:
-                while True:
-                    # Scan for further triggers in the window
-                    pileup_trig_mask = ((ts - last_trig_time) > 0) \
-                        & ((ts - last_trig_time) <= self.window[last_io_group]) \
-                        & hotfix_mask \
-                        & trig_mask
-                    if not pileup_trig_mask.any():
-                        break
-                    for pileup_trig_idx in np.where(pileup_trig_mask)[0]:
-                        iog = packets[pileup_trig_idx]['io_group']
-                        if (self.trig_io_grp != -1) and (iog not in self.trig_io_grp):
-                            continue
-                        used_trig_idcs.add(pileup_trig_idx)
-                        last_io_group = iog
-                        last_trig_time = ts[pileup_trig_idx]
-                        # If we find a non-extendable ("beam") trigger then we
-                        # stop at the end of that trigger's window
-                        if not self.extendable[last_io_group]:
-                            break
-                    else: # no break
-                        continue # Scan over new window starting from last trig
-                    break # Or, if we broke out of "for", break out of "while"
+                last_io_group, last_trig_time = self.extend_window(
+                    packets, ts, trig_mask,
+                    used_trig_idcs, last_io_group, last_trig_time)
 
             mask = ((ts - this_trig_time) >= 0) \
                 & ((ts - last_trig_time) <= self.window[last_io_group]) \
@@ -608,3 +590,35 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
 
         return zip(*[v for v in zip(full_events, full_event_unix_ts)]) if mc_assn is None \
                 else zip(*[v for v in zip(full_events, full_event_unix_ts, full_event_mc_assn)])
+
+    def extend_window(self, packets: np.ndarray, ts: npt.NDArray[np.int64],
+                      trig_mask: npt.NDArray[np.bool],
+                      used_trig_idcs: set[int],
+                      last_io_group: int, last_trig_time: int) -> tuple[int, int]:
+        hotfix_mask = (ts % 1E7 != 0) | ((ts % 1E7 == 0) & trig_mask)
+
+        while True:
+            # Scan for further triggers in the window
+            pileup_trig_mask = ((ts - last_trig_time) > 0) \
+                & ((ts - last_trig_time) <= self.window[last_io_group]) \
+                & hotfix_mask \
+                & trig_mask
+            if not pileup_trig_mask.any():
+                break
+            for pileup_trig_idx in np.where(pileup_trig_mask)[0]:
+                iog = packets[pileup_trig_idx]['io_group']
+                if (self.trig_io_grp != -1) and (iog not in self.trig_io_grp):
+                    continue
+                used_trig_idcs.add(pileup_trig_idx)
+                last_io_group = iog
+                last_trig_time = ts[pileup_trig_idx]
+                # If we find a non-extendable ("beam") trigger then we
+                # stop at the end of that trigger's window
+                if not self.extendable[last_io_group]:
+                    break
+            else: # no break
+                continue # Scan over new window starting from last trig
+            break # Or, if we broke out of "for", break out of "while"
+
+        return last_io_group, last_trig_time
+
