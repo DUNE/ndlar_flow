@@ -575,8 +575,8 @@ class RawEventGenerator(H5FlowGenerator):
 
     def get_event_unix_ts(self, packets, packet_unix_ts, packet_unix_ts_usec,
                           event_masks):
-        event_unix_ts = np.zeros(len(event_masks), dtype=np.uint32)
-        event_unix_ts_usec = np.zeros(len(event_masks), dtype=np.float32)
+        event_unix_ts = np.zeros(len(event_masks), dtype=np.uint64)
+        event_unix_ts_usec = np.zeros(len(event_masks), dtype=np.float64)
         for i, mask in enumerate(event_masks):
             for p, unix_ts, unix_ts_usec in \
                     zip(packets[mask], packet_unix_ts[mask],

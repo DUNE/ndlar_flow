@@ -22,8 +22,8 @@ from proto_nd_flow.util.array import fill_with_last, fill_with_next
 
 @dataclass
 class Timestamps:
-    unix_ts: npt.NDArray[np.uint32]
-    unix_ts_usec: npt.NDArray[np.float32]
+    unix_ts: npt.NDArray[np.uint64]
+    unix_ts_usec: npt.NDArray[np.float64]
 
 
 def _next_tagged(B: np.ndarray, N: int, fill=None):
@@ -38,13 +38,13 @@ def _prev_tagged(B: np.ndarray, N: int, fill=-1):
     return Bs[np.searchsorted(B, np.arange(N), side='right')]
 
 
-def _find_unix_jumps(unix_ts: npt.NDArray[np.uint32]) \
+def _find_unix_jumps(unix_ts: npt.NDArray[np.uint64]) \
         -> npt.NDArray[np.uint64]:
     sel = unix_ts[1:] - unix_ts[:-1] == 1
     return 1 + np.where(sel)[0]
 
 
-def _find_pps_jumps(pps_ts: npt.NDArray[np.uint32]) \
+def _find_pps_jumps(pps_ts: npt.NDArray[np.uint64]) \
         -> npt.NDArray[np.uint64]:
     pps_ts = fill_with_next(pps_ts)
     sel = pps_ts[:-1] > pps_ts[:1]
@@ -59,8 +59,8 @@ def _get_delay(pps_delays: npt.NDArray[np.void], iog: int) -> float:
 
 def get_true_timestamps(packets: npt.NDArray[np.void],
                         pps_delays: Optional[npt.NDArray[np.void]]) -> Timestamps:
-    all_unix_ts = np.zeros(packets.shape, dtype=np.uint32)
-    all_unix_ts_usec = np.zeros(packets.shape, dtype=np.float32)
+    all_unix_ts = np.zeros(packets.shape, dtype=np.uint64)
+    all_unix_ts_usec = np.zeros(packets.shape, dtype=np.float64)
 
     for iog in sorted(np.unique(packets['io_group'])):
         delay = _get_delay(pps_delays, iog) if pps_delays else 0
@@ -68,7 +68,7 @@ def get_true_timestamps(packets: npt.NDArray[np.void],
         map2all = np.where(sel)[0]
         p = packets[sel]
 
-        unix_ts = np.zeros(p.shape, dtype=np.uint32)
+        unix_ts = np.zeros(p.shape, dtype=np.uint64)
 
         is_unix = p['packet_type'] == 4
         unix_ts[is_unix] = p[is_unix]['packet_type']
