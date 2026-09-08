@@ -41,7 +41,7 @@ class PPSDelayExtractor:
             self.data_manager.create_dset('charge/pps_delay',
                                           dtype=self.delay_dtype)
 
-    def update(self, packets: npt.NDArray[Any]):
+    def _process(self, packets: npt.NDArray[Any]):
         for iog in np.unique(packets['io_group']):
             all_pkts = packets[packets['io_group'] == iog]
             ts2pkt = np.where(all_pkts['packet_type'] == 4)[0]
@@ -74,18 +74,24 @@ class PPSDelayExtractor:
                 self.delay_ticks.append(delay)
                 self.io_group.append(iog)
 
-    def finish(self):
-        data = np.empty(len(self.unix_ts), dtype=self.delay_dtype)
+    def _calculate(self):
+        self.data = np.empty(len(self.unix_ts), dtype=self.delay_dtype)
         order = np.argsort(self.unix_ts)
-        data['unix_ts'] = np.array(self.unix_ts)[order]
-        data['delay_ticks'] = np.array(self.delay_ticks)[order]
-        data['io_group'] = np.array(self.io_group)[order]
+        self.data['unix_ts'] = np.array(self.unix_ts)[order]
+        self.data['delay_ticks'] = np.array(self.delay_ticks)[order]
+        self.data['io_group'] = np.array(self.io_group)[order]
 
+
+    def update(self, packets: npt.NDArray[Any]):
+        self._process(packets)
+        self._calculate()
+
+    def finish(self):
         delays: list[tuple[int, int]] = [] # iog -> median delay
 
-        for iog in np.sort(np.unique(data['io_group'])):
-            sel = data['io_group'] == iog
-            delay = np.median(data[sel]['delay_ticks'])
+        for iog in np.sort(np.unique(self.data['io_group'])):
+            sel = self.data['io_group'] == iog
+            delay = np.median(self.data[sel]['delay_ticks'])
             delays.append((int(iog), int(delay)))
 
         assert self.data_manager is not None, "call setup plz"
@@ -96,4 +102,4 @@ class PPSDelayExtractor:
             name = 'charge/pps_delay'
             self.data_manager.create_dset(name, dtype=self.delay_dtype)
             sl = self.data_manager.reserve_data(name, len(self.unix_ts))
-            self.data_manager.write_data(name, sl, data)
+            self.data_manager.write_data(name, sl, self.data)
