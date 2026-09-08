@@ -48,7 +48,6 @@ class RawEventGenerator(H5FlowGenerator):
          - ``mc_packet_fraction_dset_name`` : ``str``, optional, output dataset path for packet charge fraction truth (if present)
          - ``pps_delay_extractor_enabled`` : ``bool``, optional, whether to extract the delay between GPS and PPS ticks
          - ``pps_delay_extractor_config`` : ``dict``, optional, modify parameters of the PPS delay extractor
-         - ``autocorrect_unix_ts`` : ``bool``, optional, take median unix_ts among io_groups instead of just first iog
 
         ``dset_name`` points to a lightweight array used to organize low-level
         event references.
@@ -93,12 +92,12 @@ class RawEventGenerator(H5FlowGenerator):
     default_mc_trajectories_dset_name = 'mc_truth/trajectories'
     default_mc_packet_fraction_dset_name = 'mc_truth/packet_fraction'
     default_truth_ref = True
-    default_autocorrect_unix_ts = False
     default_pps_delay_extractor_enabled = False
 
     raw_event_dtype = np.dtype([
         ('id', 'u8'),
-        ('unix_ts', 'u8')
+        ('unix_ts', 'u8'),
+        ('unix_ts_usec', 'f8')
     ])
 
     # mc_event_dtype = np.dtype([
@@ -126,8 +125,6 @@ class RawEventGenerator(H5FlowGenerator):
         self.mc_packet_fraction_dset_name = params.get('mc_packet_fraction_dset_name', self.default_mc_packet_fraction_dset_name)
         # set up whether to store truth reference
         self.truth_ref = params.get('truth_ref', self.default_truth_ref)
-        self.autocorrect_unix_ts = params.get('autocorrect_unix_ts',
-                                              self.default_autocorrect_unix_ts)
         self.pps_delay_extractor_enabled = params.get('pps_delay_extractor_enabled',
                                                       self.default_pps_delay_extractor_enabled)
 
@@ -490,15 +487,14 @@ class RawEventGenerator(H5FlowGenerator):
         self.data_manager.write_ref(self.raw_event_dset_name, self.packets_dset_name, ref)
 
         if self.is_mc:
-
             # packet -> mc_packet_assn
+            event_mc_assn = [mc_assn[mask] for mask in event_masks]
             ref = np.c_[packets_idcs.ravel(), packets_idcs.ravel()]
             sl = self.data_manager.reserve_data(self.mc_packet_fraction_dset_name, len(ref))
             self.data_manager.write_data(self.mc_packet_fraction_dset_name, sl, np.concatenate(event_mc_assn))
             self.data_manager.write_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name, ref)
 
             # packet -> segment
-            event_mc_assn = [mc_assn[mask] for mask in event_masks]
             mc_assn = (np.concatenate(event_mc_assn, axis=0)
                        if len(event_mc_assn) else np.full((0,), -1, dtype=self.mc_assn.dtype))
             id_field = 'segment_ids' if 'segment_ids' in mc_assn.dtype.fields else 'track_ids'
@@ -569,7 +565,7 @@ class RawEventGenerator(H5FlowGenerator):
         else:
             pps_delays = None
         result = get_true_timestamps(packets, pps_delays)
-        abs_ticks = (result.unix_ts.astype(np.int64)
+        abs_ticks = (int(1E7)*result.unix_ts.astype(np.int64)
                      + np.round(10 * result.unix_ts_usec).astype(np.int64))
         return result.unix_ts, result.unix_ts_usec, abs_ticks
 
