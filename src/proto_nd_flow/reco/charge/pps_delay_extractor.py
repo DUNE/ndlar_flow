@@ -68,7 +68,7 @@ class PPSDelayExtractor:
                 data_pkts = pkts[pkts['packet_type'] == data_packet_type]
                 if len(data_pkts) < self.min_packets:
                     continue
-                delay = np.float64(rollover) - np.median(data_pkts['timestamp'])
+                delay = np.float64(rollover) - np.median(data_pkts['receipt_timestamp'])
 
                 self.unix_ts.append(t)
                 self.delay_ticks.append(delay)
