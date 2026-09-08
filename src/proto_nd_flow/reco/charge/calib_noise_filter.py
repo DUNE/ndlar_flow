@@ -351,10 +351,8 @@ class CalibNoiseFilter(H5FlowStage):
             hit_bt_slice = self.data_manager.reserve_data(self.mc_hit_frac_dset_name, new_nhit)
 
         hits_idx = np.r_[hits_slice].astype(hits.dtype['id'])
-        #FIXME Do we still need to renumber the hit id?
-        #if new_nhit > 0:
-        #    ref[:,1] += hits_idx[0] # offset references based on reserved region in output file
-        #    np.place(hits['id'], ~hits_mask, hits_idx)
+        if new_nhit > 0:
+            hits_ref[:,1] += hits_idx[0] # offset references based on reserved region in output file
 
         new_hits = hits[~hits_mask]
 
