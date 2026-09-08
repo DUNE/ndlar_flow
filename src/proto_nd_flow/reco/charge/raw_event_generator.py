@@ -12,8 +12,9 @@ from h5flow.core import H5FlowGenerator, resources
 from h5flow.data import dereference
 from h5flow import H5FLOW_MPI
 
-from proto_nd_flow.reco.charge.raw_event_builder import *
-from proto_nd_flow.reco.charge.pps_delay_extractor import PPSDelayExtractor
+from .raw_event_builder import *
+from .pps_delay_extractor import PPSDelayExtractor
+from .raw_timestamp_utils import add_timestamp_packets, get_true_timestamps
 import proto_nd_flow.util.units as units
 
 
@@ -383,17 +384,6 @@ class RawEventGenerator(H5FlowGenerator):
                             self.data_manager.write_ref(self.mc_events_dset_name, self.mc_stack_dset_name, np.empty((0,2)))
                             self.data_manager.write_ref(self.mc_stack_dset_name, self.mc_trajectories_dset_name, np.empty((0,2)))
 
-        # if self.is_mc:
-        #     # copy meta-data from input file
-        #     resources['LArData'].data['v_drift'] = self.input_fh['configs'].attrs['vdrift'] * \
-        #         (units.cm / units.us)
-
-        # get first timestamp packet from file, without loading the full dataset
-        self.last_unix_ts = np.empty((0,), dtype=self.packets_dtype)
-        for p in self.packets:
-            if p['packet_type'] == 4:
-                self.last_unix_ts = p
-                break
 
     def get_null_mc_assn(self):
         '''
@@ -444,95 +434,49 @@ class RawEventGenerator(H5FlowGenerator):
         mask = mask | (block['packet_type'] == 6)  # sync packets
 
         packet_buffer = np.copy(block[mask])
-        self.pass_last_unix_ts(packet_buffer)
-        packet_buffer = np.insert(packet_buffer, [0], self.last_unix_ts)
+        packet_buffer = self.maybe_insert_unix_ts(packet_buffer)
         if self.is_mc:
             mc_assn = mc_assn[mask]
-
-        # find unix timestamp groups
-        ts_mask = packet_buffer['packet_type'] == 4
-        ts_grps = np.split(packet_buffer, np.argwhere(ts_mask).ravel())
-        unix_ts_grps = [np.full(len(ts_grp), ts_grp[0], dtype=packet_buffer.dtype)
-                        for ts_grp in ts_grps if len(ts_grp)]
-        unix_ts = np.concatenate(unix_ts_grps, axis=0) \
-            if len(unix_ts_grps) else np.empty((0,), dtype=packet_buffer.dtype)
-        if self.is_mc:
             mc_assn = np.insert(mc_assn, [0], self.get_null_mc_assn())
-        # ignore 32nd bit from pacman triggers
-        # (don't do this for timestamp packets, where the timestamp is a unix ts)
-        packet_buffer[~ts_mask]['timestamp'] = \
-            packet_buffer[~ts_mask]['timestamp'].astype(int) % (2**31)
-        self.last_unix_ts = unix_ts[-1] if len(unix_ts) else self.last_unix_ts
 
-        if self.sync_noise_cut_enabled and not self.is_mc:
-            # remove all packets that occur before the cut
+        self.clear_timestamp_high_bit(packet_buffer)
+        packet_buffer = self.maybe_cut_sync_noise(packet_buffer)
+        if self.pps_delay_extractor_enabled:
+            self.delay_extractor.update(packet_buffer)
 
-            # We % rollover_ticks in the second sub-condition to avoid vetoing
-            # everything after a chip misses a SYNC. (Should we just get rid of
-            # the sync noise upper cut? Current default of 1.1E7 is effectively
-            # null now.)
-            R = resources['RunData'].rollover_ticks
-            sync_noise_mask = ((packet_buffer['timestamp']   > self.sync_noise_cut[0]) &
-                               (packet_buffer['timestamp']%R < self.sync_noise_cut[1]))
-            # don't apply cut to timestamp packets
-            sync_noise_mask |= packet_buffer['packet_type'] == 4
-            packet_buffer = packet_buffer[sync_noise_mask]
-            unix_ts = unix_ts[sync_noise_mask]
-            if self.is_mc:
-                mc_assn = mc_assn[sync_noise_mask]
+        unix_ts, unix_ts_usec, abs_ticks = self.get_timestamps(packet_buffer)
 
         # run event builder
-        events, event_unix_ts, event_mc_assn = [], [], None
-        eb_rv = list(self.event_builder.build_events(packet_buffer, unix_ts, mc_assn))
+        event_masks = self.event_builder.build_events(packet_buffer, abs_ticks)
+        for mask in event_masks:
+            add_timestamp_packets(packet_buffer, mask)
 
-        if eb_rv:
-            events, event_unix_ts = eb_rv[:2]
-            if self.is_mc:
-                event_mc_assn = eb_rv[2]
-
-        if not events:
+        if not event_masks:
             return H5FlowGenerator.EMPTY
 
-        if self.is_mc:
-            # apply disable channel mask
-            def nhit_filter(x):
-                event = x[0]
-                mask_disabled_channels = np.isin(event[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
-                mask_disabled_chips = np.isin(event[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
-                return (~(mask_disabled_channels | mask_disabled_chips)).sum() >= self.nhit_cut
+        # apply disable channel mask
+        def nhit_filter(x):
+            event = packet_buffer[x[0]]
+            mask_disabled_channels = np.isin(event[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
+            mask_disabled_chips = np.isin(event[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
+            return (~(mask_disabled_channels | mask_disabled_chips)).sum() >= self.nhit_cut
 
-            nhit_filtered = list(filter(nhit_filter, zip(events, event_unix_ts, event_mc_assn)))
-        else:
-            nhit_filtered = list(filter(lambda x: len(x[0]) >= self.nhit_cut, zip(events, event_unix_ts)))
+        event_masks = list(filter(nhit_filter, event_masks))
 
-        if len(nhit_filtered):
-            if self.is_mc:
-                events, event_unix_ts, event_mc_assn = zip(*nhit_filtered)
-            else:
-                events, event_unix_ts = zip(*nhit_filtered)
-                
-        else:
-            events, event_unix_ts = list(), list()
-            if self.is_mc:
-                event_mc_assn = list()
-
-        nevents = len(events)
+        nevents = len(event_masks)
 
         # write event to file
         raw_event_array = np.zeros((nevents,), dtype=self.raw_event_dtype)
         raw_event_slice = self.data_manager.reserve_data(self.raw_event_dset_name, nevents)
         raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop, dtype=int)
         if nevents:
-            if self.autocorrect_unix_ts:
-                raw_event_array['unix_ts'] = [self.get_corrected_unix_ts(p)
-                                              for p in event_unix_ts]
-            else:
-                raw_event_array['unix_ts'] = [p[0]['timestamp']
-                                              for p in event_unix_ts]
+            raw_event_array['unix_ts'], raw_event_array['unix_ts_usec'] = \
+                self.get_event_unix_ts(packet_buffer, unix_ts, unix_ts_usec, event_masks)
             raw_event_array['id'] = raw_event_idcs
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
         # write packets to file
+        events = [packet_buffer[mask] for mask in event_masks]
         packets_array = np.concatenate(events, axis=0) if nevents else np.empty((0,), dtype=self.packets_dtype)
         packets_slice = self.data_manager.reserve_data(self.packets_dset_name, len(packets_array))
         packets_idcs = np.arange(packets_slice.start, packets_slice.stop)
@@ -554,6 +498,7 @@ class RawEventGenerator(H5FlowGenerator):
             self.data_manager.write_ref(self.packets_dset_name, self.mc_packet_fraction_dset_name, ref)
 
             # packet -> segment
+            event_mc_assn = [mc_assn[mask] for mask in event_masks]
             mc_assn = (np.concatenate(event_mc_assn, axis=0)
                        if len(event_mc_assn) else np.full((0,), -1, dtype=self.mc_assn.dtype))
             id_field = 'segment_ids' if 'segment_ids' in mc_assn.dtype.fields else 'track_ids'
@@ -586,33 +531,59 @@ class RawEventGenerator(H5FlowGenerator):
                 ref = np.unique(ref, axis=0) if len(ref) else ref
                 self.data_manager.write_ref(self.raw_event_dset_name, self.mc_events_dset_name, ref)
 
-        if self.pps_delay_extractor_enabled:
-            self.delay_extractor.update(packet_buffer)
-
         return raw_event_slice if nevents else H5FlowGenerator.EMPTY
 
-    def pass_last_unix_ts(self, packets):
-        if self.size < 2:
+    def maybe_insert_unix_ts(self, packets):
+        if packets[0]['packet_type'] == 4:
             return
+        iog = packets[0]['io_group']
+        for p in packets:
+            if p['io_group'] == iog and p['packet_type'] == 4:
+                return np.insert(packets, [0], p)
+        raise RuntimeError(f'Could not find timestamp packet for io_group {iog}')
 
-        # rank 0 get stored from rank N-1
-        if self.rank == self.size - 1:
-            self.comm.send(self.last_unix_ts, dest=0)
-        # rank i give max unix timestamp to i+1
-        mask = packets['packet_type'] == 4
-        max_unix_ts = packets[mask][np.argmax(packets[mask]['timestamp'])] if np.any(mask) else self.last_unix_ts
-        self.last_unix_ts = self.comm.recv(source=self.rank - 1 if self.rank > 0 else self.size - 1)
-        # rank N-1 store max unix timestamp for next iteration
-        if self.rank != self.size - 1:
-            self.comm.send(max_unix_ts, dest=self.rank + 1)
+    def maybe_cut_sync_noise(self, packets):
+        if self.is_mc or (not self.sync_noise_cut_enabled):
+            return packets
 
-    def get_corrected_unix_ts(self, ts_packets: npt.NDArray['packets_dtype']) \
-            -> np.uint64:
-        '''
-           Takes the median, across all IO groups, of the first unix_ts for each
-           IO group.
-        '''
-        _, idcs = np.unique(ts_packets['io_group'], return_index=True)
-        # first unix_ts in each io group:
-        unix_ts = ts_packets[idcs]['timestamp']
-        return np.median(unix_ts).astype('u8')
+        # Remove all packets that occur before the cut.
+        # We % rollover_ticks in the second sub-condition to avoid vetoing
+        # everything after a chip misses a SYNC. (Should we just get rid of
+        # the sync noise upper cut? Current default of 1.1E7 is effectively
+        # null now.)
+        R = resources['RunData'].rollover_ticks
+        sync_noise_mask = ((packets['timestamp']   > self.sync_noise_cut[0]) &
+                            (packets['timestamp']%R < self.sync_noise_cut[1]))
+        # don't apply cut to timestamp packets
+        sync_noise_mask |= packets['packet_type'] == 4
+        return packets[sync_noise_mask]
+
+    def clear_timestamp_high_bit(self, packets):
+        ts_mask = packets['packet_type'] == 4
+        packets[~ts_mask]['timestamp'] = \
+            packets[~ts_mask]['timestamp'].astype(int) % (2**31)
+
+    def get_timestamps(self, packets):
+        if self.pps_delay_extractor_enabled:
+            pps_delays = self.delay_extractor.data
+        else:
+            pps_delays = None
+        result = get_true_timestamps(packets, pps_delays)
+        abs_ticks = (result.unix_ts.astype(np.int64)
+                     + np.round(10 * result.unix_ts_usec).astype(np.int64))
+        return result.unix_ts, result.unix_ts_usec, abs_ticks
+
+    def get_event_unix_ts(self, packets, packet_unix_ts, packet_unix_ts_usec,
+                          event_masks):
+        event_unix_ts = np.zeros(len(event_masks), dtype=np.uint32)
+        event_unix_ts_usec = np.zeros(len(event_masks), dtype=np.float32)
+        for i, mask in enumerate(event_masks):
+            for p, unix_ts, unix_ts_usec in \
+                    zip(packets[mask], packet_unix_ts[mask],
+                        packet_unix_ts_usec[mask]):
+                if p['packet_type'] == 0:
+                    event_unix_ts[i] = unix_ts
+                    event_unix_ts_usec[i] = unix_ts_usec
+                    break
+            assert p['packet_type'] == 0
+        return event_unix_ts, event_unix_ts_usec
