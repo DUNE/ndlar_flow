@@ -1222,6 +1222,10 @@ class LArEventDisplay:
     def plot_light(self, light_wvfms, light_cmap, light_norm, light_cmap_zero):
         
         #acl_det_ids = [0,4,8,12] # Used in previous version of code to identify ACL detectors
+
+        sipm_abs_pos = {}
+        for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
+            sipm_abs_pos[(i,j)]=self.sipm_abs_pos[(i,j)][0]
         
         print("Sum light waveforms and plot light in ZX (beam, drift) projection")
         # Sum light waveforms and plot light in ZX (beam, drift) projection
@@ -1232,7 +1236,7 @@ class LArEventDisplay:
             # Get light sum for each SiPM in this z,x position
             for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
                 #det_id = self.light_det_id[(i,j)][0]
-                pos=self.sipm_abs_pos[(i,j)][0]
+                pos=sipm_abs_pos[(i,j)]
                 if pos[0]==-1:
                     continue
                 if (abs(pos[0]-x) < 0.5) and (pos[2]==z):
@@ -1273,7 +1277,7 @@ class LArEventDisplay:
             this_zy_sum = 0
             # Get light sum for each SiPM in this z,y position
             for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
-                pos=self.sipm_abs_pos[(i,j)][0]
+                pos=sipm_abs_pos[(i,j)]
                 #det_id = self.light_det_id[(i,j)][0]
                 if pos[0]==-1:
                     continue
@@ -1300,7 +1304,7 @@ class LArEventDisplay:
             this_xy_sum = 0
             # Get light sum for each SiPM in this x,y position
             for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
-                pos=self.sipm_abs_pos[(i,j)][0]
+                pos=sipm_abs_pos[(i,j)]
                 #det_id = self.light_det_id[(i,j)][0]
                 if pos[0]==-1:
                     continue
@@ -1322,7 +1326,7 @@ class LArEventDisplay:
         print("Plot light in 3D projection")
         # Plot light for XYZ (beam, drift, vertical) 3D view (and ND LAr+tms view if using)
         for i,j in itertools.product(range(light_wvfms[0].shape[0]),range(light_wvfms[0].shape[1])):
-            pos=self.sipm_abs_pos[(i,j)][0]
+            pos=sipm_abs_pos[(i,j)]
             #det_id = self.light_det_id[(i,j)][0]
             if pos[0]==-1:
                 continue
@@ -1404,8 +1408,8 @@ def make_x_plane(y1, y2, z1, z2, x):
     return X, Y, Z
 
 def make_z_plane(x1, x2, y1, y2, z):
-    x = np.linspace(x1, x2, 100)
-    y = np.linspace(y1, y2, 100)
+    x = np.linspace(x1, x2, 2)
+    y = np.linspace(y1, y2, 2)
     X, Y = np.meshgrid(x, y)
     Z = np.full(X.shape, z)
     return X, Y, Z
