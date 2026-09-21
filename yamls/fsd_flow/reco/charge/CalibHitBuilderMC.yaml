@@ -21,12 +21,17 @@ params:
   raw_hits_dset_name: 'charge/raw_hits'
   t0_dset_name: 'combined/t0'
   max_contrib_segments: 10
+  hit_ref: True
 
   # output
   calib_hits_dset_name: 'charge/calib_prompt_hits'
   mc_hit_frac_dset_name: 'mc_truth/calib_prompt_hit_backtrack'
 
   # configuration parameters
+  vref_mv: 1504.2
+  vcm_mv: 458.7
+  adc_counts: 256
+  gain: 2.46
 
   pedestal_file: '/global/common/software/dune/inputs/FSD/pedestals/FSD_pedestals_20241112.json'
   #pedestal_file: 'data/module0_flow/datalog_2021_04_02_19_00_46_CESTevd_ped.json'
