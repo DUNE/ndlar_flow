@@ -3,7 +3,7 @@ import json
 import numpy as np
 from math import ceil, floor, sqrt
 import h5py
-
+import time
 import h5flow
 from h5flow.data import dereference, dereference_chain
 
@@ -218,7 +218,7 @@ def get_thresholds_by_position_index(positions, lookup, thresholds):
                               Returns None if position not in lookup or network_id not in thresholds
     """
     thresh_by_idx = {}
-    threshold_keys = [int(k) for k in thresholds.keys()]
+    threshold_keys = [ int(k) for k in thresholds.keys()]
     missed_count = 0
     for pix_idx, pos in enumerate(positions):
         pos_tuple = (pos[0], pos[1])  # (y, z)
@@ -392,7 +392,10 @@ def main():
     else:
         #f_name = '/global/homes/l/lzazueta/rockmuon_Datafilterv2_july8.hdf5'
         #f_name = '/global/homes/l/lzazueta/rockmuon_Datav10_160f.hdf5'
-        f_name = '/global/homes/l/lzazueta/rockmuon_Datav11_64files.hdf5'
+        #f_name = '/global/homes/l/lzazueta/rockmuon_Datav11_64files.hdf5' 
+
+        f_name = '/global/homes/l/lzazueta/rockmuon_Datav11_342f.hdf5' #current good file
+        #f_name = '/global/homes/l/lzazueta/rockmuon_Datav11_july10.hdf5' #120 files
 
     #f_manager = h5flow.data.H5FlowDataManager(f_name, 'r')
     f_manager = h5flow.data.H5FlowDataManager(f_name, 'r')
@@ -409,6 +412,10 @@ def main():
     lookup = build_hit_lookup(f_manager, io_group)
 
     thresholds = load_thresholds('/global/homes/l/lzazueta/ndlar_flow/data/proto_nd_flow/thresholds_2x2.json')
+
+    # once, before the file loop
+    pos_to_idx = { (float(p[0]), float(p[1])): i for i, p in enumerate(positions) }
+
     '''
     thr_count = 0
     channel_id_list = []
@@ -428,7 +435,7 @@ def main():
                 lookup_channel_ids.append(unique_to_channel_id(int(id)))
     print(sorted(lookup_channel_ids))
     '''
-    threshold_idx = get_thresholds_by_position_index(positions, lookup, thresholds)
+    #threshold_idx = get_thresholds_by_position_index(positions, lookup, thresholds)
 
     if io_group==5 or io_group==6:
         pixel_pitch = 0.387975
@@ -452,9 +459,9 @@ def main():
     print(ymax, zmax)
     print(ymin, zmin)
     if is_mc:
-        outfilename = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+str(io_group)+"_mcmr65_"+ str(args.n_files) +"_v503.root" 
+        outfilename = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+str(io_group)+"_mcmr65_"+ str(args.n_files) +"_v505.root" 
     else:
-        outfilename = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+str(io_group)+"_datav11_"+ str(args.n_files) +"_v503.root" 
+        outfilename = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+str(io_group)+"_datav11_"+ str(args.n_files) +"_v505.root" 
 
     gStyle.SetOptStat(1100)
     gStyle.SetOptFit(1)
@@ -478,13 +485,13 @@ def main():
         #dqdx_hist.append(dqdx)
 
 
-    hqsum = TH1D('hqsum', 'Anode charge sum', 60, 0, 60 )
+    hqsum = TH1D('hqsum', 'Anode charge sum', 1000, 0, 60 )
     #a histogram to count the frequency of hits per pixel per segment
     hfreq = TH1D('hit_freq', 'Hit frequency per pixel', 10, 0, 10 )
     #make 6 histograms for the number of sum hits per pixel
-    hqsum1 = TH1D('hqsum1', 'hit per pixel per segment 1', 60, 0, 60 )
-    hqsum2 = TH1D('hqsum2', 'hit per pixel per segment 2', 60, 0, 60 )
-    hqsum3 = TH1D('hqsum3', 'hit per pixel per segment 3', 60, 0, 60 )
+    hqsum1 = TH1D('hqsum1', 'hit per pixel per segment 1', 1000, 0, 60 )
+    hqsum2 = TH1D('hqsum2', 'hit per pixel per segment 2', 1000, 0, 60 )
+    hqsum3 = TH1D('hqsum3', 'hit per pixel per segment 3', 1000, 0, 60 )
 
     hqmiss1 = TH1D('hqmiss1', 'missed hit per pixel per segment 1', 60, 0, 60 )
     hqmiss2 = TH1D('hqmiss2', 'missed hit per pixel per segment 2+', 60, 0, 60 )
@@ -532,10 +539,11 @@ def main():
     #hrms_corrected = TH2D('anodermsq_corrected', 'Anode rms q corrected', npix_z, zmin, zmax, npix_y, ymin, ymax )
     #hq_test = TH2D('anodecharge_test', 'Anode charge test', npix_z, zmin, zmax, npix_y, ymin, ymax )
     #hq_test_corr = TH2D('anodecharge_test_corr', 'Anode charge test corrected', npix_z, zmin, zmax, npix_y, ymin, ymax )
-    sum = 0
+    
+
     #loop for each file, hardcoded how many
     for n in range(1,args.n_files+1):
-        #print(n)
+        #print("File ", n)
 
         try:
             f_manager['link' + str(n) + '/analysis/rock_muon_segments/ref/charge/calib_prompt_hits/ref']
@@ -554,9 +562,14 @@ def main():
 
         iogroup_mask = segments['io_group']==io_group
         seg_dqdx = segments[iogroup_mask]['dQ'] / segments[iogroup_mask]['dx']
+        segdq = segments[iogroup_mask]['dQ']
+        for dq in segdq:
+            if dq > 0:
+                hdq.Fill(dq)
         for s in seg_dqdx:
             if s > 0:
                 hsegdqdx.Fill(s)
+                
 
         #packets = f_manager['link' + str(n) + '/charge/packets/data']
         #print(packets.dtype)
@@ -564,12 +577,18 @@ def main():
         #get the rock muon segment hits as calib_prompt_hits
         #track2segments = dereference( tracks['rock_muon_id'], tracks_segment_ref, segments )
         #segment_hits = dereference( segments['rock_segment_id'], segments_hits_ref, hits )
-        #track_hits = dereference( tracks['rock_muon_id'], track_hits_ref, hits )
+        all_track_hits = dereference( tracks['rock_muon_id'], track_hits_ref, hits )
         
         #track_hits_group = track_hits[group_mask]
-        
-        for track in tracks:        
-            track_hits = dereference( track['rock_muon_id'], track_hits_ref, hits ).flatten()
+        #print("number of tracks " , len(tracks))
+        for i, track in enumerate(tracks):
+            #start = time.time()
+            #print("track id ", track['rock_muon_id'])
+            #track_hits = dereference( track['rock_muon_id'], track_hits_ref, hits ).flatten()
+            track_hits = all_track_hits[i].flatten()
+            #elapsed = time.time() - start
+            #print("time elapsed for ", elapsed, " seconds")
+
             group_mask = track_hits['io_group']==io_group
 
             if track_hits[group_mask].shape[0] < 2:
@@ -586,13 +605,10 @@ def main():
             #dx = distance_between_intersections(center, direction, positions_hits, pixel_pitch/2  )
             #print(tr['rock_muon_id'])
         
-            pix_list = []
             pix_dict = {}
             dx_dict = {}
-            #position_dict = {}
             count_dict = {}
-            dQ = 0.
-
+            #print("number of hits for this track ", track_hits[group_mask].shape[0])
             for hit in track_hits[group_mask]:
                 if hit['is_disabled']:
                     continue    
@@ -609,7 +625,13 @@ def main():
                 #ignored nan positions for now
                 if np.isnan(y) or np.isnan(z):
                     continue
-            
+
+                key = (y, z)
+                i_pix = pos_to_idx.get(key)
+                if i_pix is None:
+                    print("Could not find pixel for hit at y ", y, " z ", z)
+                    continue
+                '''    
                 #find where this hit is on yz. i_pix is the row index for the positions
                 where_y = np.where( np.logical_and( positions[:,0] == y, positions[:,1] == z ) )
                 if len(where_y[0]) == 0:
@@ -617,8 +639,13 @@ def main():
                     continue
                 i_pix = where_y[0].item()
                 #print("i_pix is ", i_pix, " for hit at y ", y, " z ", z, " with q ", q)
+                '''
 
                 #check if the pixel is already in the list
+
+                pix_dict[i_pix] = pix_dict.get(i_pix, 0.0) + q
+                count_dict[i_pix] = count_dict.get(i_pix, 0) + 1
+                '''
                 if i_pix in pix_list:
                     pix_dict.update({str(i_pix): pix_dict[str(i_pix)] + q})
                     count_dict.update({str(i_pix): count_dict[str(i_pix)] + 1})
@@ -627,7 +654,8 @@ def main():
                     pix_dict.update({str(i_pix): q})
                     count_dict.update({str(i_pix): 1})
                     #position_dict.update({str(i_pix): (y,z)} )
-                dQ += q   
+                '''
+                #dQ += q   
                 hh.Fill(z,y)
                 #hq.Fill(z,y,q)
             #pos = []
@@ -636,15 +664,15 @@ def main():
             #print(pos)
             #plt.scatter( np.array(pos)[:,1], np.array(pos)[:,0], label='Data', color='green' )
 
-            if dQ > 0:
-                hdq.Fill(dQ)
+            #if dQ > 0:
+            #    hdq.Fill(dQ)
             
             for pixel in pix_dict.keys():
-                dx_3d, dx = distance_between_intersections(center, direction, positions[int(pixel)], pixel_pitch/2  )
+                dx_3d, dx = distance_between_intersections(center, direction, positions[pixel], pixel_pitch/2  )
                 #store dx for each pixel
                 hdx.Fill(dx_3d)
                 hdx_zoom.Fill(dx_3d)
-                dx_dict.update({pixel: dx_3d})
+                dx_dict[pixel] = dx_3d
 
             for pix, sumq in pix_dict.items():
                 #print("Pixel ", pix, " sumq ", sumq, " count ", count_dict[pix], " dx ", dx_dict[pix])
@@ -654,21 +682,23 @@ def main():
                 _dx = dx_dict[pix]
                 if _dx > 0:
                     dqdx = sumq / _dx
+                    hdqdx.Fill(dqdx) #fill dqdx for all
+                    hist[pix].Fill(dqdx)
                     hdqdxdx.Fill(dqdx, _dx)
                 if _dx > pixel_pitch*0.95:
                     #if dx_dict[pix] < 0.11:
                     #    print("Pixel ", pix, "count", count_dict[pix], " sumq ", sumq, " dx ", dx_dict[pix], " dqdx ", dqdx)
                     if count_dict[pix] == 1:
                         hqsum1.Fill(sumq)
-                        if io_group==5 or io_group==6:
-                            hist[int(pix)].Fill(dqdx)  
-                            hdqdx.Fill(dqdx)
+                        #if io_group==5 or io_group==6:
+                            #hist[pix].Fill(dqdx)  
+                            #hdqdx.Fill(dqdx)
 
                     elif count_dict[pix] == 2:
-                        hist[int(pix)].Fill(dqdx)
+                        #hist[pix].Fill(dqdx)
                         #dqdx_hist[int(pix)].Fill(dqdx)
                         hqsum2.Fill(sumq)
-                        hdqdx.Fill(dqdx)
+                        #hdqdx.Fill(dqdx)
                         hdqdxdx2.Fill(dqdx, _dx)
                         '''
                         if _dx < 0.443:
@@ -681,21 +711,23 @@ def main():
                             hdqdx_dxbin4.Fill(dqdx)
                             '''
                     else:
-                        hist[int(pix)].Fill(dqdx)
+                        #hist[pix].Fill(dqdx)
                         hqsum3.Fill(sumq)
-                        hdqdx.Fill(dqdx)
+                        #hdqdx.Fill(dqdx)
                         hdqdxdx2.Fill(dqdx, _dx)
                 else:
                     if count_dict[pix] == 1:
                         hqmiss1.Fill(sumq)
                     elif count_dict[pix] >= 2:
                         hqmiss2.Fill(sumq)
-                    
+   
         if n % 50 == 0:
             print(n)
 
+
     mpv_fit, chi2_fit = langau_fit(hsegdqdx, highstat=True)
     pixel_mpv, chi2_pixel = langau_fit(hdqdx, highstat=True)
+
     #mpv_fit = landau_fit(hsegdqdx, highstat=True)
 
     for pix in range(npix):
