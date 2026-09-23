@@ -423,6 +423,9 @@ class RawEventGenerator(H5FlowGenerator):
         else:
             mc_assn = None
 
+        if block.shape[0] == 0:
+            return H5FlowGenerator.EMPTY
+
         data_packet_type = resources['RunData'].data_packet_type
         mask = ((block['valid_parity'].astype(bool) &
                  (block['packet_type'] == data_packet_type)))
@@ -452,8 +455,8 @@ class RawEventGenerator(H5FlowGenerator):
             return H5FlowGenerator.EMPTY
 
         # apply disable channel mask
-        def nhit_filter(x):
-            event = packet_buffer[x[0]]
+        def nhit_filter(evt_mask):
+            event = packet_buffer[evt_mask]
             mask_disabled_channels = np.isin(event[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
             mask_disabled_chips = np.isin(event[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
             return (~(mask_disabled_channels | mask_disabled_chips)).sum() >= self.nhit_cut
@@ -531,7 +534,7 @@ class RawEventGenerator(H5FlowGenerator):
 
     def maybe_insert_unix_ts(self, packets):
         if packets[0]['packet_type'] == 4:
-            return
+            return packets
         iog = packets[0]['io_group']
         for p in packets:
             if p['io_group'] == iog and p['packet_type'] == 4:

@@ -59,7 +59,7 @@ class RawEventBuilder(object):
         raise NotImplementedError('Event building for this class has not been implemented!')
 
     def build_events(self, packets: npt.NDArray[np.void], ts: npt.NDArray[np.int64],
-                     used_mask: Optional[npt.NDArray[np.bool]]) \
+                     used_mask: Optional[npt.NDArray[np.bool]] = None) \
             -> list[npt.NDArray[np.bool]]:
         '''
             Run the event builder on a sub-set of packet-formatted array data
@@ -252,7 +252,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
 
             used_mask = np.logical_or( used_mask, mask )
 
-        
         if not self.build_off_beam_events:
             return event_masks
 

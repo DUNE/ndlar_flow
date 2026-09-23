@@ -47,8 +47,8 @@ def _find_unix_jumps(unix_ts: npt.NDArray[np.uint64]) \
 def _find_pps_jumps(pps_ts: npt.NDArray[np.uint64]) \
         -> npt.NDArray[np.uint64]:
     pps_ts = fill_with_next(pps_ts)
-    sel = pps_ts[:-1] > pps_ts[:1]
-    sel &= pps_ts[:-1] - pps_ts[:1] > 9E6
+    sel = pps_ts[:-1] > pps_ts[1:]
+    sel &= pps_ts[:-1] - pps_ts[1:] > 9E6
     return 1 + np.where(sel)[0]
 
 
@@ -63,7 +63,7 @@ def get_true_timestamps(packets: npt.NDArray[np.void],
     all_unix_ts_usec = np.zeros(packets.shape, dtype=np.float64)
 
     for iog in sorted(np.unique(packets['io_group'])):
-        delay = _get_delay(pps_delays, iog) if pps_delays else 0
+        delay = _get_delay(pps_delays, iog) if (pps_delays is not None) else 0
         sel = packets['io_group'] == iog
         map2all = np.where(sel)[0]
         p = packets[sel]
@@ -71,15 +71,15 @@ def get_true_timestamps(packets: npt.NDArray[np.void],
         unix_ts = np.zeros(p.shape, dtype=np.uint64)
 
         is_unix = p['packet_type'] == 4
-        unix_ts[is_unix] = p[is_unix]['packet_type']
+        unix_ts[is_unix] = p[is_unix]['timestamp']
         unix_ts = fill_with_last(unix_ts)
 
         unix_jumps = _find_unix_jumps(unix_ts)
         pps_jumps = _find_pps_jumps(p['receipt_timestamp'])
 
-        next_unix_jumps = _next_tagged(unix_jumps, packets.shape[0])
-        next_pps_jumps = _next_tagged(pps_jumps, packets.shape[0])
-        on_right = next_pps_jumps < next_unix_jumps
+        next_unix_jumps = _next_tagged(unix_jumps, p.shape[0])
+        next_pps_jumps = _next_tagged(pps_jumps, p.shape[0])
+        on_right = next_pps_jumps < next_unix_jumps # right of unix jump
 
         to_corr1 = on_right & (p['timestamp'] + delay < 1E7) & ~is_unix
         unix_ts[to_corr1] -= 1
@@ -88,7 +88,7 @@ def get_true_timestamps(packets: npt.NDArray[np.void],
         unix_ts[to_corr2] -= 1
         # decrement twice when both conditions apply
 
-        unix_ts_usec = (p['timestamp'] + delay) % 1E7
+        unix_ts_usec = ((p['timestamp'] + delay) % 1E7 / 10)
         all_unix_ts[map2all] = unix_ts
         all_unix_ts_usec[map2all] = unix_ts_usec
 
