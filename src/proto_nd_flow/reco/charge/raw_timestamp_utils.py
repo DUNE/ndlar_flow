@@ -17,6 +17,7 @@ from typing import Optional, TYPE_CHECKING
 import numpy as np
 import numpy.typing as npt
 
+from h5flow.core import resources
 from proto_nd_flow.util.array import fill_with_last, fill_with_next
 
 
@@ -93,6 +94,70 @@ def get_true_timestamps(packets: npt.NDArray[np.void],
         all_unix_ts_usec[map2all] = unix_ts_usec
 
     return Timestamps(all_unix_ts, all_unix_ts_usec)
+
+
+def unroll_timestamps(packets: np.ndarray) -> np.ndarray:
+    '''
+        Calculates "unrolled" timestamps for an array of packets. The
+        unrolled timestamps increase monotonically, rather than rolling over
+        every ~second. Each SYNC packet introduces an additional cumulative
+        offset (of rollover_ticks, e.g. 1E7) that gets added to each
+        subsequent raw timestamp, giving the unrolled timestamps. We round
+        the LArPix timestamp of the SYNC to the nearest rollover_ticks,
+        which takes care of the case when a SYNC is missed by the PACMAN.
+        Each IO group is treated independently here.
+    '''
+    rollover_ticks = resources['RunData'].rollover_ticks
+    data_packet_type = resources['RunData'].data_packet_type
+    offsets = np.zeros((len(packets),), dtype='i8')
+    for io_group in np.unique(packets['io_group']):
+        mask = packets['io_group'] == io_group
+        sync_mask = (mask &
+                        (packets['packet_type'] == 6) &
+                        (packets['trigger_type'] == 83))
+        sync_ts = np.zeros_like(offsets)
+        # Replace 0 with ~1E7 at each SYNC; ~2E7 if PACMAN missed prev SYNC
+        # (assuming rollover_ticks is 1E7)
+        sync_ts[sync_mask] = packets[sync_mask]['timestamp']
+        # And round to the nearest 1E7 to prevent clock drift
+        sync_ts[sync_mask] = (np.round(sync_ts[sync_mask] / rollover_ticks)
+                                * rollover_ticks)
+        # Now get the cumulative sum of all _preceding_ increments
+        # (subtracting sync_ts[mask] => "preceding")
+        offsets[mask] = np.cumsum(sync_ts[mask]) # - sync_ts[mask]
+
+        # Apply correction for clogged UARTs
+        clog_mask = (mask &
+                     (packets['packet_type'] != 7) &
+                     (packets['packet_type'] != 6) &
+                     (packets['timestamp'].astype(np.int32)
+                      - packets['receipt_timestamp'].astype(np.int32) > 1E6))
+        offsets[clog_mask] -= rollover_ticks
+
+        # Finally: If the receipt_timestamp is a bit less than the timestamp, this
+        # means that a SYNC arrived while the packet was traveling across
+        # the tile. In that case, subtract the timestamp of the preceding SYNC.
+        oops_mask = (mask &
+                     (packets['packet_type'] == data_packet_type) &
+                     (packets['receipt_timestamp'] < packets['timestamp']) &
+                     (packets['timestamp'].astype(np.int32)
+                      - packets['receipt_timestamp'].astype(np.int32) <= 1E6))
+        last_sync_ts = fill_with_last(sync_ts)
+        offsets[oops_mask] -= last_sync_ts[oops_mask]
+
+    # The offsets are already corrected for the cases when the SYNC was
+    # missed by the PACMAN. Now the "% rollover_ticks" takes care of
+    # LArPix ASICs (as opposed to PACMEN) that missed one or more SYNCs.
+    ts = (packets['timestamp'].astype('i8') % rollover_ticks) + offsets
+
+    # Timestamp packets require special treatment, since their timestamp
+    # field is actually a unix timestamp. For these, we just assign the same
+    # unrolled timestamp as the one in the next non-timestamp packet
+    unix_mask = packets['packet_type'] == 4
+    ts[unix_mask] = -1
+    ts = fill_with_next(ts, marker=-1)
+
+    return ts
 
 
 def add_timestamp_packets(packets: npt.NDArray[np.void],

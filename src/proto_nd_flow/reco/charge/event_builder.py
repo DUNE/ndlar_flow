@@ -53,9 +53,11 @@ class EventBuilder(H5FlowStage):
     events_dtype = np.dtype([
         ('id', 'u8'),
         ('nhit', 'u4'),
-        ('ADC', 'f8'),
-        ('ts_start', 'f8'), ('ts_end', 'f8'),
+        ('ADC', 'u4'),
         ('n_ext_trigs', 'u4'),
+        ('ts_tag', 'u4'),
+        ('ts_start', 'u4'),
+        ('ts_end', 'u4'),
         ('unix_ts', 'u8'),
         ('unix_ts_usec', 'u4'),
     ])
@@ -109,10 +111,21 @@ class EventBuilder(H5FlowStage):
         events_arr['unix_ts_usec'] = raw_event_data['unix_ts_usec']
         events_arr['nhit'] = np.count_nonzero(hits_mask, axis=-1)
         events_arr['ADC'] = hits_data['ADC'].sum(axis=-1)
-        ts = ma.concatenate((hits_data['ts_pps'], ext_trigs_data['ts']), axis=-1)
+        ts = ma.concatenate((hits_data['ts_pps'], ext_trigs_data['ts_raw']), axis=-1)
         events_arr['ts_start'] = ts.min(axis=-1)
         events_arr['ts_end'] = ts.max(axis=-1)
         events_arr['n_ext_trigs'] = np.count_nonzero(ext_trigs_mask, axis=-1)
+
+        ts_start, ts_end = events_arr['ts_start'][:], events_arr['ts_end'][:]
+        wrap_mask = ts_end - ts_start > 5E6
+        wrap_ts = ts[wrap_mask]
+        lo_mask, hi_mask = wrap_ts < 5E6, wrap_ts >= 5E6
+        events_arr['ts_start'][wrap_mask] = np.min(wrap_ts[hi_mask])
+        events_arr['ts_end'][wrap_mask] = np.max(wrap_ts[lo_mask])
+
+        m = ext_trigs_mask[:, 0]
+        events_arr['ts_tag'][m] = ext_trigs_data['ts_raw'][m, 0]
+        events_arr['ts_tag'][~m] = events_arr['ts_start'][~m] // 100 * 100
 
         self.data_manager.write_data(self.events_dset_name, events_slice, events_arr)
 

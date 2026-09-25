@@ -261,7 +261,10 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         off_beam_builder = SymmetricWindowRawEventBuilder( **off_beam_config )
         off_beam_event_masks = off_beam_builder.build_events(packets, ts, used_mask)
 
-        return [*event_masks, *off_beam_event_masks]
+        all_event_masks = [*event_masks, *off_beam_event_masks]
+        start_ts = [ts[m][0] for m in all_event_masks]
+        event_order = np.argsort(start_ts)
+        return [all_event_masks[i] for i in event_order]
 
     def extend_window(self, packets: np.ndarray, ts: npt.NDArray[np.int64],
                       trig_mask: npt.NDArray[np.bool],
