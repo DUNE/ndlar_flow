@@ -449,11 +449,11 @@ class RawEventGenerator(H5FlowGenerator):
 
         # run event builder
         event_masks = self.event_builder.build_events(packet_buffer, abs_ticks)
-        for mask in tqdm(event_masks):
-            add_timestamp_packets(packet_buffer, mask)
 
         if not event_masks:
             return H5FlowGenerator.EMPTY
+
+        add_timestamp_packets(event_masks, packet_buffer)
 
         # apply disable channel mask
         def nhit_filter(evt_mask):

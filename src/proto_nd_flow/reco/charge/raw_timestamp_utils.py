@@ -34,9 +34,9 @@ def _next_tagged(B: np.ndarray, N: int, fill=None):
     return Bs[np.searchsorted(B, np.arange(N), side='right')]
 
 
-def _prev_tagged(B: np.ndarray, N: int, fill=-1):
-    Bs = np.concatenate(([fill], B))                        # sentinel in front
-    return Bs[np.searchsorted(B, np.arange(N), side='right')]
+def _prev_tagged(B: np.ndarray, N: int):
+    assert B[0] == 0
+    return B[np.searchsorted(B, np.arange(N), side='right') - 1]
 
 
 def _find_unix_jumps(unix_ts: npt.NDArray[np.uint64]) \
@@ -160,10 +160,11 @@ def unroll_timestamps(packets: np.ndarray) -> np.ndarray:
     return ts
 
 
-def add_timestamp_packets(packets: npt.NDArray[np.void],
-                          sel: npt.NDArray[np.bool]):
+def add_timestamp_packets(event_masks: list[npt.NDArray[np.bool]],
+                          packets: npt.NDArray[np.void],):
     is_unix = packets['packet_type'] == 4
     unix_idcs = np.where(is_unix)[0]
     prev_unix_idcs = _prev_tagged(unix_idcs, packets.shape[0])
-    our_unix_idcs = prev_unix_idcs[sel]
-    sel[our_unix_idcs] = True
+    for mask in event_masks:
+        our_unix_idcs = prev_unix_idcs[mask]
+        mask[our_unix_idcs] = True
