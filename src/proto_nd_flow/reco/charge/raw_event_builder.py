@@ -262,6 +262,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         off_beam_event_masks = off_beam_builder.build_events(packets, ts, used_mask)
 
         all_event_masks = [*event_masks, *off_beam_event_masks]
+        all_event_masks = [m for m in all_event_masks if np.any(m)]
         start_ts = [ts[m][0] for m in all_event_masks]
         event_order = np.argsort(start_ts)
         return [all_event_masks[i] for i in event_order]

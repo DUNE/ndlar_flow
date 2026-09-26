@@ -120,8 +120,9 @@ class EventBuilder(H5FlowStage):
         wrap_mask = ts_end - ts_start > 5E6
         wrap_ts = ts[wrap_mask]
         lo_mask, hi_mask = wrap_ts < 5E6, wrap_ts >= 5E6
-        events_arr['ts_start'][wrap_mask] = np.min(wrap_ts[hi_mask])
-        events_arr['ts_end'][wrap_mask] = np.max(wrap_ts[lo_mask])
+        if np.any(lo_mask) and np.any(hi_mask):
+            events_arr['ts_start'][wrap_mask] = np.min(wrap_ts[hi_mask])
+            events_arr['ts_end'][wrap_mask] = np.max(wrap_ts[lo_mask])
 
         m = ext_trigs_mask[:, 0]
         events_arr['ts_tag'][m] = ext_trigs_data['ts_raw'][m, 0]

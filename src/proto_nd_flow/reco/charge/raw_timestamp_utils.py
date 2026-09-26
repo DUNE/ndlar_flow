@@ -36,7 +36,7 @@ def get_unix_ts_usec(packets: npt.NDArray[np.void],
     return all_unix_ts_usec
 
 
-def unroll_timestamps(packets: np.ndarray) -> np.ndarray:
+def unroll_timestamps(packets: np.ndarray, last_offsets) -> np.ndarray:
     '''
         Calculates "unrolled" timestamps for an array of packets. The
         unrolled timestamps increase monotonically, rather than rolling over
@@ -50,6 +50,8 @@ def unroll_timestamps(packets: np.ndarray) -> np.ndarray:
     rollover_ticks = resources['RunData'].rollover_ticks
     data_packet_type = resources['RunData'].data_packet_type
     offsets = np.zeros((len(packets),), dtype='i8')
+    new_last_offsets = {}
+
     for io_group in np.unique(packets['io_group']):
         mask = packets['io_group'] == io_group
         sync_mask = (mask &
@@ -65,6 +67,9 @@ def unroll_timestamps(packets: np.ndarray) -> np.ndarray:
         # Now get the cumulative sum of all _preceding_ increments
         # (subtracting sync_ts[mask] => "preceding")
         offsets[mask] = np.cumsum(sync_ts[mask]) # - sync_ts[mask]
+
+        new_last_offsets[io_group] = last_offsets[io_group] + offsets[mask][-1]
+        offsets[mask] += last_offsets[io_group]
 
         # Apply correction for clogged UARTs
         clog_mask = (mask &
@@ -97,7 +102,7 @@ def unroll_timestamps(packets: np.ndarray) -> np.ndarray:
     ts[unix_mask] = -1
     ts = fill_with_next(ts, marker=-1)
 
-    return ts
+    return ts, new_last_offsets
 
 
 def add_timestamp_packets(event_masks: list[npt.NDArray[np.bool]],
@@ -124,7 +129,9 @@ def get_event_unix_ts(packets, packet_unix_ts_usec, event_masks):
     for i, mask in enumerate(event_masks):
         p = packets[mask]
         data_mask = p['packet_type'] == dpkt_type
-        assert np.any(data_mask)
+        if not np.any(data_mask):
+            data_mask = p['packet_type'] != 4
+            assert np.any(data_mask)
         unix_ts = get_unix_timestamps(p)
         rcpt_ts, ts = \
             p['receipt_timestamp'].astype(np.int32), p['timestamp']
@@ -133,7 +140,7 @@ def get_event_unix_ts(packets, packet_unix_ts_usec, event_masks):
             clean_mask = data_mask
         event_unix_ts[i] = np.min(unix_ts[clean_mask])
         event_unix_ts_usec[i] = packet_unix_ts_usec[mask][clean_mask][0]
-    deglitch_unix_ts(event_unix_ts)
+    # deglitch_unix_ts(event_unix_ts)
     return event_unix_ts, event_unix_ts_usec
 
 
@@ -148,8 +155,11 @@ def deglitch_unix_ts(unix_ts: npt.NDArray[np.float64]):
                    & (unix_ts[1:-1] > unix_ts[2:]))
     glitch_idcs = 1 + np.where(glitch_mask)[0]
     assert np.all((glitch_idcs[1:] - glitch_idcs[:-1]) > 1)
+    glitch_vals = unix_ts[glitch_idcs]
     left_vals = unix_ts[glitch_idcs-1]
     right_vals = unix_ts[glitch_idcs+1]
-    assert np.all(left_vals == right_vals)
+    assert np.all((left_vals == right_vals)
+                  | ((right_vals == left_vals + 1)
+                     & (glitch_vals == right_vals + 1)))
     glitch_mask = np.r_[False, glitch_mask, False]
-    unix_ts[glitch_mask] = left_vals
+    unix_ts[glitch_mask] = right_vals
