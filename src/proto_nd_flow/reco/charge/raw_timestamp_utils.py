@@ -133,4 +133,18 @@ def get_event_unix_ts(packets, packet_unix_ts_usec, event_masks):
             clean_mask = data_mask
         event_unix_ts[i] = np.min(unix_ts[clean_mask])
         event_unix_ts_usec[i] = packet_unix_ts_usec[mask][clean_mask][0]
+    deglitch_unix_ts(event_unix_ts)
     return event_unix_ts, event_unix_ts_usec
+
+
+def deglitch_unix_ts(unix_ts: npt.NDArray[np.float64]):
+    assert len(unix_ts) >= 3
+    glitch_mask = ((unix_ts[1:-1] > unix_ts[:-2])
+                   & (unix_ts[1:-1] > unix_ts[2:]))
+    glitch_idcs = 1 + np.where(glitch_mask)[0]
+    assert np.all((glitch_idcs[1:] - glitch_idcs[:-1]) > 1)
+    left_vals = unix_ts[glitch_idcs-1]
+    right_vals = unix_ts[glitch_idcs+1]
+    assert np.all(left_vals == right_vals)
+    glitch_mask = np.r_[False, glitch_mask, False]
+    unix_ts[glitch_mask] = left_vals
