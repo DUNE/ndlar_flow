@@ -15,7 +15,7 @@ from h5flow import H5FLOW_MPI
 from .raw_event_builder import *
 from .pps_delay_extractor import PPSDelayExtractor
 from .raw_timestamp_utils import (
-    add_timestamp_packets, get_true_timestamps, get_event_unix_ts,
+    add_timestamp_packets, get_unix_ts_usec, get_event_unix_ts,
     unroll_timestamps)
 import proto_nd_flow.util.units as units
 
@@ -446,7 +446,7 @@ class RawEventGenerator(H5FlowGenerator):
         if self.pps_delay_extractor_enabled:
             self.delay_extractor.update(packet_buffer)
 
-        unix_ts, unix_ts_usec, abs_ticks = self.get_timestamps(packet_buffer)
+        unix_ts_usec, abs_ticks = self.get_timestamps(packet_buffer)
 
         # run event builder
         event_masks = self.event_builder.build_events(packet_buffer, abs_ticks)
@@ -569,8 +569,8 @@ class RawEventGenerator(H5FlowGenerator):
             pps_delays = self.delay_extractor.data
         else:
             pps_delays = None
-        result = get_true_timestamps(packets, pps_delays)
+        unix_ts_usec = get_unix_ts_usec(packets, pps_delays)
         # abs_ticks = (int(1E7)*result.unix_ts.astype(np.int64)
         #              + np.round(10 * result.unix_ts_usec).astype(np.int64))
         abs_ticks = unroll_timestamps(packets)
-        return result.unix_ts, result.unix_ts_usec, abs_ticks
+        return unix_ts_usec, abs_ticks
