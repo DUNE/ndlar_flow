@@ -15,7 +15,8 @@ from h5flow import H5FLOW_MPI
 from .raw_event_builder import *
 from .pps_delay_extractor import PPSDelayExtractor
 from .raw_timestamp_utils import (
-    add_timestamp_packets, get_true_timestamps, unroll_timestamps)
+    add_timestamp_packets, get_true_timestamps, get_event_unix_ts,
+    unroll_timestamps)
 import proto_nd_flow.util.units as units
 
 
@@ -453,8 +454,6 @@ class RawEventGenerator(H5FlowGenerator):
         if not event_masks:
             return H5FlowGenerator.EMPTY
 
-        add_timestamp_packets(event_masks, packet_buffer)
-
         # apply disable channel mask
         def nhit_filter(evt_mask):
             event = packet_buffer[evt_mask]
@@ -464,6 +463,8 @@ class RawEventGenerator(H5FlowGenerator):
 
         event_masks = list(filter(nhit_filter, event_masks))
 
+        add_timestamp_packets(event_masks, packet_buffer)
+
         nevents = len(event_masks)
 
         # write event to file
@@ -472,7 +473,7 @@ class RawEventGenerator(H5FlowGenerator):
         raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop, dtype=int)
         if nevents:
             raw_event_array['unix_ts'], raw_event_array['unix_ts_usec'] = \
-                self.get_event_unix_ts(packet_buffer, unix_ts, unix_ts_usec, event_masks)
+                get_event_unix_ts(packet_buffer, unix_ts_usec, event_masks)
             raw_event_array['id'] = raw_event_idcs
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
@@ -573,18 +574,3 @@ class RawEventGenerator(H5FlowGenerator):
         #              + np.round(10 * result.unix_ts_usec).astype(np.int64))
         abs_ticks = unroll_timestamps(packets)
         return result.unix_ts, result.unix_ts_usec, abs_ticks
-
-    def get_event_unix_ts(self, packets, packet_unix_ts, packet_unix_ts_usec,
-                          event_masks):
-        event_unix_ts = np.zeros(len(event_masks), dtype=np.uint64)
-        event_unix_ts_usec = np.zeros(len(event_masks), dtype=np.float64)
-        for i, mask in enumerate(event_masks):
-            for p, unix_ts, unix_ts_usec in \
-                    zip(packets[mask], packet_unix_ts[mask],
-                        packet_unix_ts_usec[mask]):
-                if p['packet_type'] == 0:
-                    event_unix_ts[i] = unix_ts
-                    event_unix_ts_usec[i] = unix_ts_usec
-                    break
-            # assert p['packet_type'] == 0
-        return event_unix_ts, event_unix_ts_usec

@@ -161,10 +161,36 @@ def unroll_timestamps(packets: np.ndarray) -> np.ndarray:
 
 
 def add_timestamp_packets(event_masks: list[npt.NDArray[np.bool]],
-                          packets: npt.NDArray[np.void],):
+                          packets: npt.NDArray[np.void]):
     is_unix = packets['packet_type'] == 4
     unix_idcs = np.where(is_unix)[0]
     prev_unix_idcs = _prev_tagged(unix_idcs, packets.shape[0])
     for mask in event_masks:
         our_unix_idcs = prev_unix_idcs[mask]
         mask[our_unix_idcs] = True
+
+
+def get_unix_timestamps(packets: npt.NDArray[np.void]):
+    is_unix = packets['packet_type'] == 4
+    unix_idcs = np.where(is_unix)[0]
+    prev_unix_idcs = _prev_tagged(unix_idcs, packets.shape[0])
+    return packets['timestamp'][prev_unix_idcs]
+
+
+def get_event_unix_ts(packets, packet_unix_ts_usec, event_masks):
+    event_unix_ts = np.zeros(len(event_masks), dtype=np.uint64)
+    event_unix_ts_usec = np.zeros(len(event_masks), dtype=np.float64)
+    dpkt_type = resources['RunData'].data_packet_type
+    for i, mask in enumerate(event_masks):
+        p = packets[mask]
+        data_mask = p['packet_type'] == dpkt_type
+        assert np.any(data_mask)
+        unix_ts = get_unix_timestamps(p)
+        rcpt_ts, ts = \
+            p['receipt_timestamp'].astype(np.int32), p['timestamp']
+        clean_mask = data_mask & (rcpt_ts - ts > 0) & (rcpt_ts - ts < 1E5)
+        if not np.any(clean_mask):
+            clean_mask = data_mask
+        event_unix_ts[i] = np.min(unix_ts[clean_mask])
+        event_unix_ts_usec[i] = packet_unix_ts_usec[mask][clean_mask][0]
+    return event_unix_ts, event_unix_ts_usec
