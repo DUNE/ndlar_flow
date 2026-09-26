@@ -1,3 +1,4 @@
+from collections import defaultdict
 import numpy as np
 import numpy.ma as ma
 from numpy.lib import recfunctions as rfn
@@ -147,6 +148,7 @@ class RawEventGenerator(H5FlowGenerator):
             self.end_position = len(self.packets)
         self.slices = [slice(st, st + self.buffer_size) for st in range(self.start_position + self.rank * self.buffer_size, self.end_position, self.size * self.buffer_size)]
         self.iteration = 0
+        self.tot_time = defaultdict(lambda: 0)      # iog -> total unrolled LArPix time
 
         if self.pps_delay_extractor_enabled:
             self.delay_extractor = PPSDelayExtractor(**params)
@@ -573,4 +575,8 @@ class RawEventGenerator(H5FlowGenerator):
         # abs_ticks = (int(1E7)*result.unix_ts.astype(np.int64)
         #              + np.round(10 * result.unix_ts_usec).astype(np.int64))
         abs_ticks = unroll_timestamps(packets)
+        for iog in np.unique(packets['io_group']):
+            mask = np.where(packets['io_group'] == iog)[0]
+            abs_ticks[mask] += self.tot_time[iog]
+            self.tot_time[iog] = abs_ticks[mask][-1]
         return unix_ts_usec, abs_ticks

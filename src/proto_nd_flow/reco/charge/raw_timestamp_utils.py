@@ -138,6 +138,11 @@ def get_event_unix_ts(packets, packet_unix_ts_usec, event_masks):
 
 
 def deglitch_unix_ts(unix_ts: npt.NDArray[np.float64]):
+    """A clogged IO channel can send packets so late that they get the next
+    unix_ts. The event builder correct for this automatically (via
+    unroll_timestamps) but for a small, noise-induced event from such a
+    channel, the event's unix_ts values may need to be corrected.
+    """
     assert len(unix_ts) >= 3
     glitch_mask = ((unix_ts[1:-1] > unix_ts[:-2])
                    & (unix_ts[1:-1] > unix_ts[2:]))
