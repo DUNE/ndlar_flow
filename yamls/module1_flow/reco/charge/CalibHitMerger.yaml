@@ -1,4 +1,4 @@
-#Copied and modified from yamls/proto_nd_flow/workflows/charge/final_calibration.yaml
+#Copied and modified from yamls/proto_nd_flow/workflows/charge/merged_calibration.yaml
 
 classname: CalibHitMerger # reco/charge/calib_hit_merger.py
 path: proto_nd_flow.reco.charge.calib_hit_merger

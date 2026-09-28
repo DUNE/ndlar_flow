@@ -42,7 +42,7 @@ WORKFLOW3='yamls/module1_flow/workflows/charge/charge_event_building.yaml'
 WORKFLOW4='yamls/module1_flow/workflows/charge/charge_event_reconstruction.yaml'
 WORKFLOW5='yamls/module1_flow/workflows/combined/combined_reconstruction.yaml'
 WORKFLOW6='yamls/module1_flow/workflows/charge/prompt_calibration_mc.yaml'
-WORKFLOW7='yamls/module1_flow/workflows/charge/final_calibration.yaml'
+WORKFLOW7='yamls/module1_flow/workflows/charge/merged_calibration.yaml'
 
 $H5FLOW_CMD -c $WORKFLOW3 $WORKFLOW4 $WORKFLOW5 $WORKFLOW6 $WORKFLOW7 -i $CHARGE_INPUT_FILE -o $OUTPUT_FILE
 
