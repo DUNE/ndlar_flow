@@ -15,6 +15,6 @@ params:
   max_merge_steps: 50 # max number of iterations when merging
                        # adjacent packets in time on the same channel
   # outputs
-  merged_name: 'charge/calib_final_hits'
-  mc_hit_frac_dset_name: 'mc_truth/calib_final_hit_backtrack'
+  merged_name: 'charge/calib_merged_hits'
+  mc_hit_frac_dset_name: 'mc_truth/calib_merged_hit_backtrack'
 

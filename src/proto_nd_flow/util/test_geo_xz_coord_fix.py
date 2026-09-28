@@ -30,8 +30,8 @@ class GeometryTestFix(H5FlowStage):
     class_version = '0.0.0'
 
     default_geo_dset_name = 'sel/geo_fix'
-    default_hits_dset_name = 'charge/calib_final_hits'
-    default_charge_dset_name = 'charge/calib_final_hits'
+    default_hits_dset_name = 'charge/calib_filtered_hits'
+    default_charge_dset_name = 'charge/calib_filtered_hits'
 
     #default_dbscan_eps = 2.5
     default_fid_cut=2.0, # cm

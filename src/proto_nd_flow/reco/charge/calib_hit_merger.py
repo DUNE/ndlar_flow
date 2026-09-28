@@ -47,7 +47,7 @@ class CalibHitMerger(H5FlowStage):
         max_contrib_segments = 200,
         merge_mode = 'last-first',
         merge_cut = 50, # CRS ticks
-        mc_hit_frac_dset_name = 'mc_truth/calib_final_hit_backtrack'
+        mc_hit_frac_dset_name = 'mc_truth/calib_merged_hit_backtrack'
         )
     valid_merge_modes = ['last-first', 'pairwise']
 
