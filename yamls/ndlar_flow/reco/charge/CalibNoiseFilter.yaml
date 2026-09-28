@@ -24,7 +24,7 @@ params:
   filter_function_names: ['hot_pixel_filter', 'low_current_filter'] #which filter functions to apply (this is an ordered list, but all filters will be "OR'd")
   low_current_filter__channel_threshold_file: null
   #params specific to each cut
-  low_current_filter__threshold: 6.0 #
+  low_current_filter__threshold: 1.0 #
   hot_pixel_filter__max_n_hits: 35 
     #hot_pixel_filter__max_n_hits: 
     # - maximum number of hits on a channel in single event before filtering all hits from channel
