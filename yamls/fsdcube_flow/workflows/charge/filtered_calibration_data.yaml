@@ -8,9 +8,9 @@ flow:
 
 
 resources:
-  - !include yamls/ndlar_flow/resources/RunDataData.yaml
-  - !include yamls/ndlar_flow/resources/LArData.yaml
-  - !include yamls/ndlar_flow/resources/GeometryData.yaml
+  - !include yamls/fsdcube_flow/resources/RunDataData.yaml
+  - !include yamls/fsdcube_flow/resources/LArData.yaml
+  - !include yamls/fsdcube_flow/resources/Geometry.yaml
 
 raw_events:
   classname: H5FlowDatasetLoopGenerator
@@ -20,5 +20,5 @@ raw_events:
     chunk_size: 1
 
 calib_noise_filter:
-  !include yamls/ndlar_flow/reco/charge/CalibNoiseFilter.yaml
+  !include yamls/fsdcube_flow/reco/charge/CalibNoiseFilter.yaml
 
