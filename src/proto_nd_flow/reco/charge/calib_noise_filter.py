@@ -81,10 +81,10 @@ class low_current_filter:
         charge_above_threshold = np.ones(hits.shape)*99.
 
         unique_ids, counts = np.unique(hit_uniqueid, return_counts=True)
-        threshold=default_threshold
         n = 0
         for u in unique_ids:
             if not str(u) in self.channel_thresholds.keys():
+                threshold = default_threshold
                 if self.channel_thresholds and (str(u) not in self.reported_channels):
                     # print('No threshold found for channel {}! Using default threshold of {} ke-!'.format(u, default_threshold))
                     n+=1
