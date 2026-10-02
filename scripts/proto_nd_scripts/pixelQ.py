@@ -332,6 +332,28 @@ def intersect_pca_line_with_square(centroid, direction, center_yz, half_size):
     intersections = [c + t * d for t in t_sorted]
     return intersections
 
+#function that does a pca fit for a group of 3d points
+def pca_fit(points):
+    """
+    Perform a PCA fit for a group of 3D points.
+    
+    Parameters:
+    points (np.ndarray): Array of shape (N, 3) containing the 3D points.
+    
+    Returns:
+    tuple: Centroid of the points and the principal direction (eigenvector corresponding to the largest eigenvalue).
+    """
+    centroid = np.mean(points, axis=0)
+    centered_points = points - centroid
+    cov_matrix = np.cov(centered_points.T)
+    eigenvalues, eigenvectors = np.linalg.eig(cov_matrix)
+    principal_direction = eigenvectors[:, np.argmax(eigenvalues)]
+    #deal with complex eigenvalues (should not happen for real symmetric covariance matrix)
+    if np.iscomplex(principal_direction).any():
+        principal_direction = np.real(principal_direction)
+    
+    return centroid, principal_direction
+
 def distance_between_intersections(centroid, direction, center_zy, half_size):
     """
     Return (dist_3d, dist_yz) between the two intersection points of the PCA line
@@ -453,15 +475,20 @@ def main():
     ymax, zmax = np.amax(positions, 0) + 0.44
     ymin, zmin = np.amin(positions, 0)
 
-    #max, zmax = ceil(ymax), ceil(zmax)
-    #ymin, zmin = floor(ymin), floor(zmin)
+    _tracks = f_manager['link1/analysis/rock_muon_tracks/data']
+    _hits = f_manager['link1/charge/calib_prompt_hits/data']
+    _trackhits_ref = f_manager['link1/analysis/rock_muon_tracks/ref/charge/calib_prompt_hits/ref']
+    _trackhits = dereference(_tracks['rock_muon_id'], _trackhits_ref, _hits )
+    driftt = _trackhits[_trackhits['io_group'] == io_group]['t_drift'].flatten()
+    tmin, tmax = np.amin(driftt), np.amax(driftt)
+    print(tmin, tmax, tmax-tmin)
 
     print(ymax, zmax)
     print(ymin, zmin)
     if is_mc:
-        outfilename = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+str(io_group)+"_mcmr65_"+ str(args.n_files) +"_v505.root" 
+        outfilename = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+str(io_group)+"_mcmr65_"+ str(args.n_files) +"_v506.root" 
     else:
-        outfilename = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+str(io_group)+"_datav11_"+ str(args.n_files) +"_v505.root" 
+        outfilename = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+str(io_group)+"_datav11_"+ str(args.n_files) +"_v506.root" 
 
     gStyle.SetOptStat(1100)
     gStyle.SetOptFit(1)
@@ -489,21 +516,23 @@ def main():
     #a histogram to count the frequency of hits per pixel per segment
     hfreq = TH1D('hit_freq', 'Hit frequency per pixel', 10, 0, 10 )
     #make 6 histograms for the number of sum hits per pixel
-    hqsum1 = TH1D('hqsum1', 'hit per pixel per segment 1', 1000, 0, 60 )
-    hqsum2 = TH1D('hqsum2', 'hit per pixel per segment 2', 1000, 0, 60 )
-    hqsum3 = TH1D('hqsum3', 'hit per pixel per segment 3', 1000, 0, 60 )
+    #hqsum1 = TH1D('hqsum1', 'hit per pixel per segment 1', 1000, 0, 60 )
+    #hqsum2 = TH1D('hqsum2', 'hit per pixel per segment 2', 1000, 0, 60 )
+    #hqsum3 = TH1D('hqsum3', 'hit per pixel per segment 3', 1000, 0, 60 )
 
-    hqmiss1 = TH1D('hqmiss1', 'missed hit per pixel per segment 1', 60, 0, 60 )
-    hqmiss2 = TH1D('hqmiss2', 'missed hit per pixel per segment 2+', 60, 0, 60 )
+    hqdrift1 = TH1D('hqdrift11', 'hit per pixel per segment drift 1', 1000, 0, 60 )
+    hqdrift2 = TH1D('hqdrift21', 'hit per pixel per segment drift 2', 1000, 0, 60 )
+    hqdrift3 = TH1D('hqdrift31', 'hit per pixel per segment drift 3', 1000, 0, 60 )
+
+    hqdrift2d = TH2D('hqdrift2d', 'hit per pixel per segment drift 2D',  200, tmin, tmax, 200, 0, 120 )
+
+    hqsel  = TH1D('hqsel', 'selected hit per pixel per segment', 1000, 0, 60 )
+    hqmiss1 = TH1D('hqmiss1', 'missed hit per pixel per segment ', 1000, 0, 60 )
+    #hqmiss2 = TH1D('hqmiss2', 'missed hit per pixel per segment 2+', 60, 0, 60 )
 
     hdx = TH1D('dx', 'dx per pixel', 100, 0, 1)
     hdx_zoom = TH1D('dx_zoom', 'dx for pixel', 1000, 0.35, 1.0)
-    hdqdx = TH1D('dqdx', 'dQ/dx per pixel', 1000, 0, 200 )
-
-    hdqdx_dxbin1 = TH1D('dqdx_dxbin1', 'dQ/dx per pixel with dx less than 0.443', 100, 0, 200 )
-    hdqdx_dxbin2 = TH1D('dqdx_dxbin2', 'dQ/dx per pixel with dx (0.4431, 0.45)', 100, 0, 200 )
-    hdqdx_dxbin3 = TH1D('dqdx_dxbin3', 'dQ/dx per pixel with dx (0.451, 0.5)', 100, 0, 200 )
-    hdqdx_dxbin4 = TH1D('dqdx_dxbin4', 'dQ/dx per pixel with dx 0.5+', 100, 0, 200 )
+    hdqdx = TH1D('dqdx', 'dQ/dx per pixel', 1000, 0, 120 )
 
     #hhseg = TH1D('hpseg', 'hits per segment', 10, 0, 10 )
     #hqseg = TH1D('hqseg', 'charge/nhits per segment', 40, 0, 80)
@@ -530,7 +559,7 @@ def main():
     hhighmpv = TH2D('highmpv', 'investigation of high mpv', npix_z, zmin, zmax, npix_y, ymin, ymax )
     hmvp_thresholds = TH2D('mpv_thresholds', 'MPV vs Thresholds', 100, 0, 20, 1000, 20, 70 )
     hdqdxdx = TH2D('dqdxdx', 'dqdx vs dx', 200, 0, 200, 100, 0, 1 )
-    hdqdxdx2 = TH2D('dqdxdx2', 'dqdx vs dx without single hits', 200, 0, 200, 100, 0.35, 1.0 )
+    hdqdxdx2 = TH2D('dqdxdx2', 'dqdx vs dx without single hits', 200, 0, 120, 100, 0.35, 1.0 )
 
     hmean = TH2D('anodemeanq', 'Anode mean q', npix_z, zmin, zmax, npix_y, ymin, ymax )
     hrms = TH2D('anodermsq', 'Anode rms q', npix_z, zmin, zmax, npix_y, ymin, ymax )
@@ -553,11 +582,11 @@ def main():
             continue
         
         #load datasets and references
-        tracks = f_manager['link' + str(n) + '/analysis/rock_muon_tracks/data']
+        #tracks = f_manager['link' + str(n) + '/analysis/rock_muon_tracks/data']
         #tracks_segment_ref = f_manager['link' + str(n) + '/analysis/rock_muon_tracks/ref/analysis/rock_muon_segments/ref']
-        track_hits_ref = f_manager['link' + str(n) + '/analysis/rock_muon_tracks/ref/charge/calib_prompt_hits/ref']
+        #track_hits_ref = f_manager['link' + str(n) + '/analysis/rock_muon_tracks/ref/charge/calib_prompt_hits/ref']
         segments = f_manager['link' + str(n) + '/analysis/rock_muon_segments/data']
-        #segments_hits_ref = f_manager['link' + str(n) + '/analysis/rock_muon_segments/ref/charge/calib_prompt_hits/ref']
+        segments_hits_ref = f_manager['link' + str(n) + '/analysis/rock_muon_segments/ref/charge/calib_prompt_hits/ref']
         hits = f_manager['link' + str(n) + '/charge/calib_prompt_hits/data']
 
         iogroup_mask = segments['io_group']==io_group
@@ -576,26 +605,34 @@ def main():
         
         #get the rock muon segment hits as calib_prompt_hits
         #track2segments = dereference( tracks['rock_muon_id'], tracks_segment_ref, segments )
-        #segment_hits = dereference( segments['rock_segment_id'], segments_hits_ref, hits )
-        all_track_hits = dereference( tracks['rock_muon_id'], track_hits_ref, hits )
+        #all_track_hits = dereference( tracks['rock_muon_id'], track_hits_ref, hits )
+
+        #get hits by segment
+        all_segment_hits = dereference( segments['rock_segment_id'], segments_hits_ref, hits )
         
         #track_hits_group = track_hits[group_mask]
         #print("number of tracks " , len(tracks))
-        for i, track in enumerate(tracks):
+        for i, seg in enumerate(segments):
             #start = time.time()
             #print("track id ", track['rock_muon_id'])
             #track_hits = dereference( track['rock_muon_id'], track_hits_ref, hits ).flatten()
-            track_hits = all_track_hits[i].flatten()
+            #track_hits = all_track_hits[i].flatten()
+
+            segment_hits = all_segment_hits[i].flatten()
             #elapsed = time.time() - start
             #print("time elapsed for ", elapsed, " seconds")
 
-            group_mask = track_hits['io_group']==io_group
+            group_mask = segment_hits['io_group']==io_group
 
-            if track_hits[group_mask].shape[0] < 2:
+            if segment_hits[group_mask].shape[0] < 2:
                 continue
 
-            center = [track['pca_mean_x'], track['pca_mean_y'], track['pca_mean_z']]
-            direction = [track['pca_direction_x'], track['pca_direction_y'], track['pca_direction_z']]
+            #do a PCA fit for the segment hits
+            positions_hits = np.array([segment_hits[group_mask]['x'].flatten(), segment_hits[group_mask]['y'].flatten(), segment_hits[group_mask]['z'].flatten()]).transpose()
+            center, direction = pca_fit(positions_hits)
+                    
+            #center = [track['pca_mean_x'], track['pca_mean_y'], track['pca_mean_z']]
+            #direction = [track['pca_direction_x'], track['pca_direction_y'], track['pca_direction_z']]
 
             #positions_hits = np.array([track_hits['x'], track_hits['y'], track_hits['z']]).transpose()
             #Q = track_hits['Q']
@@ -606,14 +643,14 @@ def main():
             #print(tr['rock_muon_id'])
         
             pix_dict = {}
-            dx_dict = {}
+            #dx_dict = {}
             count_dict = {}
             #print("number of hits for this track ", track_hits[group_mask].shape[0])
-            for hit in track_hits[group_mask]:
+            for hit in segment_hits[group_mask]:
                 if hit['is_disabled']:
                     continue    
 
-                #x = hit['x']
+                tdrift = hit['t_drift']
                 y = hit['y']
                 z = hit['z']
                 q = hit['Q']
@@ -658,22 +695,33 @@ def main():
                 #dQ += q   
                 hh.Fill(z,y)
                 #hq.Fill(z,y,q)
-            #pos = []
-            #for pix in pix_dict.keys(): 
-            #    pos.append( positions[int(pix)] )
-            #print(pos)
-            #plt.scatter( np.array(pos)[:,1], np.array(pos)[:,0], label='Data', color='green' )
+
+                #get dx for this hit at this position
+                dx_3d, dx = distance_between_intersections(center, direction, positions[i_pix], pixel_pitch/2)
+                hdx.Fill(dx_3d)
+                hdx_zoom.Fill(dx_3d)
+                hqsum.Fill(q)
+                hqdrift2d.Fill(tdrift,q)
+
+                if dx_3d > 0:
+                    hqsel.Fill(q)
+                    _dqdx = q / dx_3d
+                    hist[i_pix].Fill(_dqdx)
+                    hdqdx.Fill(_dqdx)
+                    hdqdxdx.Fill(_dqdx, dx_3d)
+                else:
+                    hqmiss1.Fill(q)
 
             #if dQ > 0:
             #    hdq.Fill(dQ)
             
-            for pixel in pix_dict.keys():
-                dx_3d, dx = distance_between_intersections(center, direction, positions[pixel], pixel_pitch/2  )
-                #store dx for each pixel
-                hdx.Fill(dx_3d)
-                hdx_zoom.Fill(dx_3d)
-                dx_dict[pixel] = dx_3d
-
+            #for pixel in pix_dict.keys():
+            #    dx_3d, dx = distance_between_intersections(center, direction, positions[pixel], pixel_pitch/2  )
+            #    #store dx for each pixel
+            #    hdx.Fill(dx_3d)
+            #    hdx_zoom.Fill(dx_3d)
+            #    dx_dict[pixel] = dx_3d
+            '''
             for pix, sumq in pix_dict.items():
                 #print("Pixel ", pix, " sumq ", sumq, " count ", count_dict[pix], " dx ", dx_dict[pix])
                 #hist[int(pix)].Fill(sumq)
@@ -700,16 +748,6 @@ def main():
                         hqsum2.Fill(sumq)
                         #hdqdx.Fill(dqdx)
                         hdqdxdx2.Fill(dqdx, _dx)
-                        '''
-                        if _dx < 0.443:
-                            hdqdx_dxbin1.Fill(dqdx)
-                        elif 0.4431 <= _dx <= 0.45:
-                            hdqdx_dxbin2.Fill(dqdx)
-                        elif 0.451 < _dx <= 0.5:
-                            hdqdx_dxbin3.Fill(dqdx)   
-                        else:
-                            hdqdx_dxbin4.Fill(dqdx)
-                            '''
                     else:
                         #hist[pix].Fill(dqdx)
                         hqsum3.Fill(sumq)
@@ -720,8 +758,8 @@ def main():
                         hqmiss1.Fill(sumq)
                     elif count_dict[pix] >= 2:
                         hqmiss2.Fill(sumq)
-   
-        if n % 50 == 0:
+                ''' 
+        if n % 5 == 0:
             print(n)
 
 
@@ -743,19 +781,25 @@ def main():
     #hq.Write()
     hqsum.Write()
     hfreq.Write()
-    hqsum1.Write()
-    hqsum2.Write()  
-    hqsum3.Write()
+    #hqsum1.Write()
+    #hqsum2.Write()  
+    #hqsum3.Write()
     hqmiss1.Write()
-    hqmiss2.Write()
+    #hqmiss2.Write()
+    hqdrift2d.Write()
+    hqdrift1.Write()
+    hqdrift2.Write()
+    hqdrift3.Write()
+
+    hqsel.Write()
 
     hdx.Write()
     hdx_zoom.Write()
     hdqdx.Write()
-    hdqdx_dxbin1.Write()
-    hdqdx_dxbin2.Write()
-    hdqdx_dxbin3.Write()
-    hdqdx_dxbin4.Write()
+    #hdqdx_dxbin1.Write()
+    #hdqdx_dxbin2.Write()
+    #hdqdx_dxbin3.Write()
+    #hdqdx_dxbin4.Write()
     hdq.Write()
 
     hsegdqdx.Write()
@@ -789,3 +833,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main()
+    

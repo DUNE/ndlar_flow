@@ -12,7 +12,7 @@ from ROOT import TH1D, TH2D, TFile, TCanvas, TF1
 from pixelQ import get_networkid_to_position_index, get_pixels_yz, build_hit_lookup
 
 def pixelFit(h, highstat=False):    
-    f = TF1("f", "landau", 15.0, 120.0)
+    f = TF1("f", "landau", 5.0, 120.0)
     f.SetParameters(50.0, 40.0 , 5)
     #f.SetParLimits(3, 0, 100) #Keeping this parameter positive makes the fit more stable
     #f.SetParLimits(1, 0, 100)
@@ -71,7 +71,7 @@ def main():
         f_name = '/global/homes/l/lzazueta/rockmuon_Datav11_342f.hdf5'
 
         #file_name = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+ str(io_group) + "_datav11_342_v504.root"
-        file_name = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+ str(io_group) + "_datav11_120_v505.root"
+        file_name = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+ str(io_group) + "_datav11_120_v506.root"
 
 
         #file_name = "/pscratch/sd/l/lzazueta/pixelQ_iogroup"+ str(io_group) + "_datav11_121_v504_july10.root"
@@ -96,9 +96,9 @@ def main():
     npix = npix_y * npix_z
 
     if is_mc:
-        fit_file = TFile("/pscratch/sd/l/lzazueta/fitted_hist_iogroup" + str(io_group) + "_landau_mc_v505_666files.root", "RECREATE")
+        fit_file = TFile("/pscratch/sd/l/lzazueta/fitted_hist_iogroup" + str(io_group) + "_landau_mc_v506_666files.root", "RECREATE")
     else:
-        fit_file = TFile("/pscratch/sd/l/lzazueta/fitted_hist_iogroup" + str(io_group) + "_landau_data_v505.root", "RECREATE")
+        fit_file = TFile("/pscratch/sd/l/lzazueta/fitted_hist_iogroup" + str(io_group) + "_landau_data_v506.root", "RECREATE")
 
     hgains = TH1D('gains', 'Gain correction', 100, 0.5, 1.8 )
     hmpvs = TH1D("mpvs", "pixel MPVs ke/cm", 160, 0, 80 )
@@ -185,7 +185,7 @@ def main():
                 g = gains[pix].item()
                 
                 f.write(f"{pix}\t{mpvs[pix].item()}\t{g}\t{1.0}\t{hist[pix].Integral()}\t{chi2_list[pix].item()}\t{mpverr_list[pix].item()}\n")
-                hhighmpv.Fill(positions[pix][1], positions[pix][0] )
+                #hhighmpv.Fill(positions[pix][1], positions[pix][0] )
                 
                 hgains.Fill(g)
                 '''
