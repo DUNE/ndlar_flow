@@ -55,7 +55,7 @@ class EventBuilder(H5FlowStage):
         ('nhit', 'u4'),
         ('ADC', 'u4'),
         ('n_ext_trigs', 'u4'),
-        ('ts_tag', 'u4'),
+        ('ts_id', 'u8'),
         ('ts_start', 'u4'),
         ('ts_end', 'u4'),
         ('unix_ts', 'u8'),
@@ -124,9 +124,11 @@ class EventBuilder(H5FlowStage):
             events_arr['ts_start'][wrap_mask] = np.min(wrap_ts[hi_mask])
             events_arr['ts_end'][wrap_mask] = np.max(wrap_ts[lo_mask])
 
+        events_arr['ts_id'] = np.round(np.ma.median(ts, axis=-1) / 100) * 100
         m = ext_trigs_mask[:, 0]
-        events_arr['ts_tag'][m] = ext_trigs_data['ts_raw'][m, 0]
-        events_arr['ts_tag'][~m] = events_arr['ts_start'][~m] // 100 * 100
+        events_arr['ts_id'][m] = ext_trigs_data['ts_raw'][m, 0]
+        events_arr['ts_id'] = int(1e10) * events_arr['unix_ts'].astype(np.uint64) \
+            + events_arr['ts_id']
 
         self.data_manager.write_data(self.events_dset_name, events_slice, events_arr)
 
