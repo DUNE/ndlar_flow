@@ -23,7 +23,7 @@ class ProtoNDFlowEventDisplay:
             - geometry_file (str): full path and name of geometry file describing module to be displayed
             - nhits         (int): hit threshold for events to be made available in interactive display
             - hits_dset     (str): dataset of hits within the file that you want to display
-                                   options are 'raw_hits', 'calib_prompt_hits', and 'calib_final_hits'
+                                   options are 'raw_hits', 'calib_prompt_hits', and 'calib_filtered_hits'
         
         In order to run the display, set up a Jupyter Notebook, import everything in this file,
         and execute the run() method, e.g.:
@@ -39,7 +39,7 @@ class ProtoNDFlowEventDisplay:
         evd = ProtoNDFlowEventDisplay(filedir=d, filename=f, geometry_file=g,nhits=1, hits_dset=hd)
         test_evd.run()
     '''
-    def __init__(self, filedir, filename, geometry_file=None, nhits=1, hits_dset='calib_final_hits'):
+    def __init__(self, filedir, filename, geometry_file=None, nhits=1, hits_dset='calib_filtered_hits'):
         f = h5py.File(filedir+filename, 'r')
         self.filename = filename
 
@@ -86,7 +86,7 @@ class ProtoNDFlowEventDisplay:
             self.vcm_mv = 288.
             self.vref_mv = 1300.
         
-        else: # e.g. for calib_final_hits and calib_prompt_hits
+        else: # e.g. for calib_filtered_hits and calib_prompt_hits
             
             self.charge = 'Q'
             self.x_vals = 'x'
