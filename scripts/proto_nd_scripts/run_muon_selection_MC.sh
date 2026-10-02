@@ -7,7 +7,7 @@
 
 INPUT_FILE=$1
 
-OUTPUT_DIR=`pwd` #!!! change me
+OUTPUT_DIR='/pscratch/sd/l/lzazueta/sandbox/rockmuon/mc/minirun65/selectionv3'
 OUTPUT_NAME=(${INPUT_FILE//"/"/ })
 OUTPUT_NAME=${OUTPUT_NAME[-1]}
 OUTPUT_FILE="${OUTPUT_DIR}/${OUTPUT_NAME}"

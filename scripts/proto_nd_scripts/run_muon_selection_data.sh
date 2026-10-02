@@ -1,13 +1,9 @@
 #!/bin/bash
-# Runs proto_nd_flow on an example file.
-# Before using this script, use
-# >> source get_proto_nd_input.sh
-# to download all the necessary inputs into the correct directories
-#
+
 
 INPUT_FILE=$1
 
-OUTPUT_DIR=`pwd` #!!! change me
+OUTPUT_DIR="/pscratch/sd/l/lzazueta/sandbox/rockmuon/datav11/" 
 OUTPUT_NAME=(${INPUT_FILE//"/"/ })
 OUTPUT_NAME=${OUTPUT_NAME[-1]}
 OUTPUT_FILE="${OUTPUT_DIR}/${OUTPUT_NAME}"
@@ -17,7 +13,7 @@ echo ${OUTPUT_FILE}
 # for running on a login node
 H5FLOW_CMD='h5flow'
 # for running on a single compute node with 32 cores
-#H5FLOW_CMD='srun -n32 h5flow'
+#H5FLOW_CMD='srun -n 1 -c 256 --cpu_bind=cores h5flow'
 
 # run all stages
 # run all stages

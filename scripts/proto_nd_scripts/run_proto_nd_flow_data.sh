@@ -7,8 +7,7 @@
 
 INPUT_FILE=$1
 
-OUTPUT_DIR='/pscratch/sd/l/lzazueta/sandbox/rockmuon/datav9'
-#OUTPUT_DIR='/global/cfs/cdirs/dune/users/lzazueta/rockmuon/datav9'
+OUTPUT_DIR='/pscratch/sd/l/lzazueta/sandbox/rockmuon/datav10/'
 OUTPUT_NAME=(${INPUT_FILE//"/"/ })
 OUTPUT_NAME=${OUTPUT_NAME[-1]}
 OUTPUT_FILE="${OUTPUT_DIR}/${OUTPUT_NAME}"
@@ -27,7 +26,7 @@ H5FLOW_CMD='h5flow'
 #WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction.yaml'
 #WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration.yaml'
 #WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration.yaml'
-WORKFLOW6='yamls/proto_nd_flow/workflows/rock_muon_selection.yaml'
+WORKFLOW6='yamls/proto_nd_flow/workflows/rock_muon_selection_data.yaml'
 
 HERE=`pwd`
 #cd ndlar_flow
