@@ -9,6 +9,7 @@ workflows_charge=(
     yamls/fsdcube_flow/workflows/charge/charge_event_reconstruction_data.yaml
     yamls/fsdcube_flow/workflows/combined/combined_reconstruction_data.yaml
     yamls/fsdcube_flow/workflows/charge/prompt_calibration_data.yaml
+    yamls/fsdcube_flow/workflows/charge/filtered_calibration_data.yaml
 )
 
 mkdir -p end2end_outputs

@@ -9,7 +9,7 @@ workflows_charge=(
     yamls/fsd_flow/workflows/charge/charge_event_reconstruction_mc.yaml
     yamls/fsd_flow/workflows/combined/combined_reconstruction_mc.yaml
     yamls/fsd_flow/workflows/charge/prompt_calibration_mc.yaml
-    yamls/fsd_flow/workflows/charge/final_calibration_mc.yaml
+    yamls/fsd_flow/workflows/charge/filtered_calibration_mc.yaml
 )
 
 workflows_light=(

@@ -14,7 +14,7 @@ workflows_charge=(
     yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction_data.yaml
     yamls/proto_nd_flow/workflows/combined/combined_reconstruction_data.yaml
     yamls/proto_nd_flow/workflows/charge/prompt_calibration_data.yaml
-    yamls/proto_nd_flow/workflows/charge/final_calibration_data.yaml
+    yamls/proto_nd_flow/workflows/charge/filtered_calibration_data.yaml
 )
 
 workflows_light_evb=(

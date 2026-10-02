@@ -9,7 +9,7 @@ workflows_charge=(
     yamls/ndlar_flow/workflows/charge/charge_event_reconstruction_mc.yaml
     yamls/ndlar_flow/workflows/combined/combined_reconstruction_mc.yaml
     yamls/ndlar_flow/workflows/charge/prompt_calibration_mc.yaml
-    yamls/ndlar_flow/workflows/charge/merged_calibration_mc.yaml
+    yamls/ndlar_flow/workflows/charge/filtered_calibration_mc.yaml
 )
 
 workflows_light=(
