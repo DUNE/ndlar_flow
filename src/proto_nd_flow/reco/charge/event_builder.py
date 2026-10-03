@@ -124,7 +124,7 @@ class EventBuilder(H5FlowStage):
             events_arr['ts_start'][wrap_mask] = np.min(wrap_ts[hi_mask])
             events_arr['ts_end'][wrap_mask] = np.max(wrap_ts[lo_mask])
 
-        events_arr['ts_id'] = np.round(np.ma.median(ts, axis=-1) / 100) * 100
+        events_arr['ts_id'] = np.round(np.ma.min(ts, axis=-1) / 100) * 100
         m = ext_trigs_mask[:, 0]
         events_arr['ts_id'][m] = ext_trigs_data['ts_raw'][m, 0]
         events_arr['ts_id'] = int(1e10) * events_arr['unix_ts'].astype(np.uint64) \
