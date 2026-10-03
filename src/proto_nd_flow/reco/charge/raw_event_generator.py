@@ -16,8 +16,10 @@ from h5flow import H5FLOW_MPI
 from .raw_event_builder import *
 from .pps_delay_extractor import PPSDelayExtractor
 from .raw_timestamp_utils import (
-    add_timestamp_packets, get_unix_ts_usec, get_event_unix_ts,
-    unroll_timestamps)
+    add_timestamp_packets, clear_timestamp_high_bit,
+    get_anchor_unix_ts, get_unix_timestamps,
+    get_unix_ts_usec, get_event_unix_ts,
+    maybe_insert_unix_ts, unroll_timestamps)
 import proto_nd_flow.util.units as units
 
 
@@ -133,6 +135,7 @@ class RawEventGenerator(H5FlowGenerator):
 
         # create event builder
         self.event_builder = globals()[self.event_builder_class](**self.event_builder_config)
+        self.anchor_unix_ts = None
 
         # set up input file
         if H5FLOW_MPI:
@@ -438,17 +441,23 @@ class RawEventGenerator(H5FlowGenerator):
         mask = mask | (block['packet_type'] == 6)  # sync packets
 
         packet_buffer = np.copy(block[mask])
-        packet_buffer = self.maybe_insert_unix_ts(packet_buffer)
+        packet_buffer = maybe_insert_unix_ts(packet_buffer)
         if self.is_mc:
             mc_assn = mc_assn[mask]
             mc_assn = np.insert(mc_assn, [0], self.get_null_mc_assn())
 
-        self.clear_timestamp_high_bit(packet_buffer)
+        clear_timestamp_high_bit(packet_buffer)
         packet_buffer = self.maybe_cut_sync_noise(packet_buffer)
         if self.pps_delay_extractor_enabled:
             self.delay_extractor.update(packet_buffer)
 
-        unix_ts_usec, abs_ticks = self.get_timestamps(packet_buffer)
+        if self.anchor_unix_ts is None:
+            packet_msg_unix_ts = get_unix_timestamps(packet_buffer)
+            self.anchor_unix_ts = get_anchor_unix_ts(
+                packet_buffer, packet_msg_unix_ts,
+                self.delay_extractor.data)
+
+        unix_ts, unix_ts_usec, abs_ticks = self.get_timestamps(packet_buffer)
 
         # run event builder
         event_masks = self.event_builder.build_events(packet_buffer, abs_ticks)
@@ -475,7 +484,7 @@ class RawEventGenerator(H5FlowGenerator):
         raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop, dtype=int)
         if nevents:
             raw_event_array['unix_ts'], raw_event_array['unix_ts_usec'] = \
-                get_event_unix_ts(packet_buffer, unix_ts_usec, event_masks)
+                get_event_unix_ts(packet_buffer, unix_ts, unix_ts_usec, event_masks)
             raw_event_array['id'] = raw_event_idcs
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
@@ -536,15 +545,6 @@ class RawEventGenerator(H5FlowGenerator):
 
         return raw_event_slice if nevents else H5FlowGenerator.EMPTY
 
-    def maybe_insert_unix_ts(self, packets):
-        if packets[0]['packet_type'] == 4:
-            return packets
-        iog = packets[0]['io_group']
-        for p in packets:
-            if p['io_group'] == iog and p['packet_type'] == 4:
-                return np.insert(packets, [0], p)
-        raise RuntimeError(f'Could not find timestamp packet for io_group {iog}')
-
     def maybe_cut_sync_noise(self, packets):
         if self.is_mc or (not self.sync_noise_cut_enabled):
             return packets
@@ -561,25 +561,13 @@ class RawEventGenerator(H5FlowGenerator):
         sync_noise_mask |= packets['packet_type'] == 4
         return packets[sync_noise_mask]
 
-    def clear_timestamp_high_bit(self, packets):
-        ts_mask = packets['packet_type'] == 4
-        packets[~ts_mask]['timestamp'] = \
-            packets[~ts_mask]['timestamp'].astype(int) % (2**31)
-
     def get_timestamps(self, packets):
         if self.pps_delay_extractor_enabled:
             pps_delays = self.delay_extractor.data
+            pps_delay = np.median(pps_delays['delay_ticks'])
         else:
-            pps_delays = None
+            pps_delay = 0
         unix_ts_usec = get_unix_ts_usec(packets, pps_delays)
-        # abs_ticks = (int(1E7)*result.unix_ts.astype(np.int64)
-        #              + np.round(10 * result.unix_ts_usec).astype(np.int64))
         abs_ticks, self.last_offsets = unroll_timestamps(packets, self.last_offsets)
-        # for iog in np.unique(packets['io_group']):
-        #     for iochan in np.unique(packets['io_channel']):
-        #         mask = np.where((packets['io_group'] == iog) & (packets['io_channel'] == iochan))[0]
-        #         if not np.any(mask):
-        #             continue
-        #         abs_ticks[mask] += self.tot_time[(iog, iochan)]
-        #         self.tot_time[(iog, iochan)] = np.max(abs_ticks[mask]) // int(1E7) * int(1E7)
-        return unix_ts_usec, abs_ticks
+        unix_ts = self.anchor_unix_ts + ((abs_ticks + pps_delay) // 1E7)
+        return unix_ts, unix_ts_usec, abs_ticks

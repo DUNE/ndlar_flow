@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import itertools
 from typing import Optional
 
 import numpy as np
@@ -36,7 +37,8 @@ def get_unix_ts_usec(packets: npt.NDArray[np.void],
     return all_unix_ts_usec
 
 
-def unroll_timestamps(packets: np.ndarray, last_offsets) -> np.ndarray:
+def unroll_timestamps(packets: np.ndarray, last_offsets) \
+        -> tuple[np.ndarray, dict]:
     '''
         Calculates "unrolled" timestamps for an array of packets. The
         unrolled timestamps increase monotonically, rather than rolling over
@@ -131,44 +133,57 @@ def get_unix_timestamps(packets: npt.NDArray[np.void]):
     return packets['timestamp'][prev_unix_idcs]
 
 
-def get_event_unix_ts(packets, packet_unix_ts_usec, event_masks):
+def get_event_unix_ts(packets, packet_unix_ts, packet_unix_ts_usec, event_masks):
     event_unix_ts = np.zeros(len(event_masks), dtype=np.uint64)
     event_unix_ts_usec = np.zeros(len(event_masks), dtype=np.float64)
     dpkt_type = resources['RunData'].data_packet_type
     for i, mask in enumerate(event_masks):
         p = packets[mask]
-        data_mask = p['packet_type'] == dpkt_type
-        if not np.any(data_mask):
-            data_mask = p['packet_type'] != 4
-            assert np.any(data_mask)
-        unix_ts = get_unix_timestamps(p)
-        rcpt_ts, ts = \
-            p['receipt_timestamp'].astype(np.int32), p['timestamp']
-        clean_mask = data_mask & (rcpt_ts - ts > 0) & (rcpt_ts - ts < 1E5)
-        if not np.any(clean_mask):
-            clean_mask = data_mask
-        event_unix_ts[i] = np.min(unix_ts[clean_mask])
-        event_unix_ts_usec[i] = packet_unix_ts_usec[mask][clean_mask][0]
-    # deglitch_unix_ts(event_unix_ts)
+        submask = p['packet_type'] == dpkt_type
+        if not np.any(submask):
+            submask = p['packet_type'] != 4
+            assert np.any(submask)
+        event_unix_ts[i] = np.min(packet_unix_ts[mask][submask])
+        event_unix_ts_usec[i] = packet_unix_ts_usec[mask][submask][0]
     return event_unix_ts, event_unix_ts_usec
 
 
-def deglitch_unix_ts(unix_ts: npt.NDArray[np.float64]):
-    """A clogged IO channel can send packets so late that they get the next
-    unix_ts. The event builder correct for this automatically (via
-    unroll_timestamps) but for a small, noise-induced event from such a
-    channel, the event's unix_ts values may need to be corrected.
-    """
-    assert len(unix_ts) >= 3
-    glitch_mask = ((unix_ts[1:-1] > unix_ts[:-2])
-                   & (unix_ts[1:-1] > unix_ts[2:]))
-    glitch_idcs = 1 + np.where(glitch_mask)[0]
-    assert np.all((glitch_idcs[1:] - glitch_idcs[:-1]) > 1)
-    glitch_vals = unix_ts[glitch_idcs]
-    left_vals = unix_ts[glitch_idcs-1]
-    right_vals = unix_ts[glitch_idcs+1]
-    assert np.all((left_vals == right_vals)
-                  | ((right_vals == left_vals + 1)
-                     & (glitch_vals == right_vals + 1)))
-    glitch_mask = np.r_[False, glitch_mask, False]
-    unix_ts[glitch_mask] = right_vals
+def get_anchor_unix_ts(packets, packet_msg_unix_ts, pps_delays, threshold=30):
+    result = {}
+    iogs = np.unique(packets['io_group'])
+
+    for iog in iogs:
+        sel = packets['io_group'] == iog
+        p = packets[sel]
+        u = packet_msg_unix_ts[sel]
+        anchor0 = u[0]
+        for anchor in itertools.count(anchor0):
+            anchor_pkts = p[u == anchor]
+            anchor_unix_pkts = anchor_pkts[anchor_pkts['packet_type'] == 4]
+            if len(anchor_unix_pkts) > threshold:
+                break
+        delay = np.median(pps_delays['delay_ticks'][pps_delays['io_group'] == iog])
+        first_receipt_ts = p[p['packet_type'] != 4]['receipt_timestamp'][0]
+        if first_receipt_ts + delay > 1E7: 
+            result[iog] = anchor + 1
+        else:
+            result[iog] = anchor
+
+    assert all(result[iog] == result[iogs[0]] for iog in iogs)
+    return result[iogs[0]]
+
+
+def maybe_insert_unix_ts(packets):
+    if packets[0]['packet_type'] == 4:
+        return packets
+    iog = packets[0]['io_group']
+    for p in packets:
+        if p['io_group'] == iog and p['packet_type'] == 4:
+            return np.insert(packets, [0], p)
+    raise RuntimeError(f'Could not find timestamp packet for io_group {iog}')
+
+
+def clear_timestamp_high_bit(packets):
+    ts_mask = packets['packet_type'] == 4
+    packets[~ts_mask]['timestamp'] = \
+        packets[~ts_mask]['timestamp'].astype(int) % (2**31)
