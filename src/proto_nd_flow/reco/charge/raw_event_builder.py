@@ -118,23 +118,21 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
         )
 
     def do_build_events(self, packets, ts, used_mask):
-        sorted_idcs = np.argsort(ts, kind='stable')
-        ts_orig = ts
-        ts = ts[sorted_idcs]
-        packets = packets[sorted_idcs]
-
         # calculate time distance between hits
         min_ts, max_ts = np.min(ts), np.max(ts)
-        bin_edges = np.linspace(min_ts - 1, max_ts + 1, int((max_ts - min_ts + 2) // self.window))
-        ts_data = ts[packets['packet_type'] == resources['RunData'].data_packet_type
-                     & ~used_mask]
+        bin_edges = np.linspace(min_ts - 1, max_ts + 1,
+                                int((max_ts - min_ts + 2) // self.window))
+        ts_data = ts[(packets['packet_type']
+                      == resources['RunData'].data_packet_type)
+                     & (~used_mask)]
         hist, bin_edges = np.histogram(ts_data, bins=bin_edges)
 
         # find high correlation regions
         event_mask = (hist > self.threshold)
         # include ±1 bin
-        event_mask[:-1] = event_mask[:-1] | event_mask[1:]
-        event_mask[1:] = event_mask[:-1] | event_mask[1:]
+        # FIXME: Add a flag
+        #event_mask[:-1] = event_mask[:-1] | event_mask[1:]
+        #event_mask[1:] = event_mask[:-1] | event_mask[1:]
 
         # find rising/falling edges
         event_edges = np.diff(event_mask.astype(int))
@@ -152,7 +150,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             # last packet ends event
             event_end_timestamp = np.r_[max_ts, event_end_timestamp]
 
-        event_masks = [(ts_orig >= ts_start) & (ts_orig <= ts_end) & ~used_mask
+        event_masks = [(ts >= ts_start) & (ts <= ts_end) & ~used_mask
                        for ts_start, ts_end
                        in zip(event_start_timestamp, event_end_timestamp)]
         
