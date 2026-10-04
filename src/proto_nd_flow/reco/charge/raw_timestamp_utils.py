@@ -24,9 +24,13 @@ def get_unix_ts_usec(packets: npt.NDArray[np.void],
                      pps_delays: Optional[npt.NDArray[np.void]]) \
         -> npt.NDArray[np.float64]:
     all_unix_ts_usec = np.zeros(packets.shape, dtype=np.float64)
+    iogs = sorted(np.unique(packets['io_group']))
 
-    for iog in sorted(np.unique(packets['io_group'])):
-        delay = _get_delay(pps_delays, iog) if (pps_delays is not None) else 0
+    delay = 0.
+    if pps_delays is not None:
+        delay = np.median([_get_delay(pps_delays, iog)
+                           for iog in iogs])
+    for iog in iogs:
         sel = packets['io_group'] == iog
         map2all = np.where(sel)[0]
         p = packets[sel]
@@ -133,18 +137,35 @@ def get_unix_timestamps(packets: npt.NDArray[np.void]):
     return packets['timestamp'][prev_unix_idcs]
 
 
-def get_event_unix_ts(packets, packet_unix_ts, packet_unix_ts_usec, event_masks):
+def get_event_unix_ts(packets, packet_unix_ts, packet_unix_ts_usec, event_masks,
+                      abs_ticks):
     event_unix_ts = np.zeros(len(event_masks), dtype=np.uint64)
     event_unix_ts_usec = np.zeros(len(event_masks), dtype=np.float64)
     dpkt_type = resources['RunData'].data_packet_type
     for i, mask in enumerate(event_masks):
         p = packets[mask]
-        submask = p['packet_type'] == dpkt_type
+        submask = p['packet_type'] == 7
+        is_trig = True
         if not np.any(submask):
-            submask = p['packet_type'] != 4
-            assert np.any(submask)
+            is_trig = False
+            submask = p['packet_type'] == dpkt_type
+            if not np.any(submask):
+                submask = p['packet_type'] != 4
+                assert np.any(submask)
         event_unix_ts[i] = np.min(packet_unix_ts[mask][submask])
         event_unix_ts_usec[i] = packet_unix_ts_usec[mask][submask][0]
+        ## the "168" file is with the following uncommented:
+        # if not is_trig:
+        #     ts2 = abs_ticks[mask][submask]
+        #     p2 = p[submask]
+        #     event_larpix_ts = np.floor(np.min(p2['timestamp']) / 100) * 100
+        #     # imin = np.argmin(p2['timestamp'])
+        #     imin = np.argmin(ts2)
+        #     delta1 = p2['timestamp'][imin] - event_larpix_ts
+        #     delta2 = ts2[0] - ts2[imin]
+        #     delta_usec = (delta1 + delta2) / 10
+        #     event_unix_ts_usec[i] -= delta_usec
+
     return event_unix_ts, event_unix_ts_usec
 
 

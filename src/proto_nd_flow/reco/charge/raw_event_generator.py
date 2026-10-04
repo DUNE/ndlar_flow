@@ -484,7 +484,7 @@ class RawEventGenerator(H5FlowGenerator):
         raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop, dtype=int)
         if nevents:
             raw_event_array['unix_ts'], raw_event_array['unix_ts_usec'] = \
-                get_event_unix_ts(packet_buffer, unix_ts, unix_ts_usec, event_masks)
+                get_event_unix_ts(packet_buffer, unix_ts, unix_ts_usec, event_masks, abs_ticks)
             raw_event_array['id'] = raw_event_idcs
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
