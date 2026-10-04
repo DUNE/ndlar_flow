@@ -150,7 +150,7 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             # last packet ends event
             event_end_timestamp = np.r_[max_ts, event_end_timestamp]
 
-        event_masks = [(ts >= ts_start) & (ts <= ts_end) & ~used_mask
+        event_masks = [np.where((ts >= ts_start) & (ts <= ts_end) & ~used_mask)[0]
                        for ts_start, ts_end
                        in zip(event_start_timestamp, event_end_timestamp)]
         
@@ -246,7 +246,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
                 & ((ts - last_trig_time) <= self.window[last_io_group]) \
                 & ~used_mask
 
-            event_masks.append(mask)
+            event_masks.append(np.where(mask)[0])
 
             used_mask = np.logical_or( used_mask, mask )
 

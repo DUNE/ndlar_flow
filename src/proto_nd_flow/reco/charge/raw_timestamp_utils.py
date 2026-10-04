@@ -121,14 +121,17 @@ def unroll_timestamps(packets: np.ndarray, last_offsets) \
     return ts, new_last_offsets
 
 
-def add_timestamp_packets(event_masks: list[npt.NDArray[np.bool]],
+def add_timestamp_packets(event_idcs: list[npt.NDArray[np.int64]],
                           packets: npt.NDArray[np.void]):
     is_unix = packets['packet_type'] == 4
     unix_idcs = np.where(is_unix)[0]
     prev_unix_idcs = _prev_tagged(unix_idcs, packets.shape[0])
-    for mask in event_masks:
-        our_unix_idcs = prev_unix_idcs[mask]
+    for i, idcs in enumerate(event_idcs):
+        mask = np.zeros_like(packets, dtype=bool)
+        mask[idcs] = True
+        our_unix_idcs = prev_unix_idcs[idcs]
         mask[our_unix_idcs] = True
+        event_idcs[i] = np.where(mask)[0]
 
 
 def get_unix_timestamps(packets: npt.NDArray[np.void]):
@@ -138,13 +141,13 @@ def get_unix_timestamps(packets: npt.NDArray[np.void]):
     return packets['timestamp'][prev_unix_idcs]
 
 
-def get_event_unix_ts(packets, packet_unix_ts, packet_unix_ts_usec, event_masks,
+def get_event_unix_ts(packets, packet_unix_ts, packet_unix_ts_usec, event_idcs,
                       abs_ticks):
-    event_unix_ts = np.zeros(len(event_masks), dtype=np.uint64)
-    event_unix_ts_usec = np.zeros(len(event_masks), dtype=np.float64)
+    event_unix_ts = np.zeros(len(event_idcs), dtype=np.uint64)
+    event_unix_ts_usec = np.zeros(len(event_idcs), dtype=np.float64)
     dpkt_type = resources['RunData'].data_packet_type
-    for i, mask in enumerate(event_masks):
-        p = packets[mask]
+    for i, idcs in enumerate(event_idcs):
+        p = packets[idcs]
         submask = p['packet_type'] == 7
         is_trig = True
         if not np.any(submask):
@@ -153,8 +156,8 @@ def get_event_unix_ts(packets, packet_unix_ts, packet_unix_ts_usec, event_masks,
             if not np.any(submask):
                 submask = p['packet_type'] != 4
                 assert np.any(submask)
-        event_unix_ts[i] = np.min(packet_unix_ts[mask][submask])
-        event_unix_ts_usec[i] = packet_unix_ts_usec[mask][submask][0]
+        event_unix_ts[i] = np.min(packet_unix_ts[idcs][submask])
+        event_unix_ts_usec[i] = packet_unix_ts_usec[idcs][submask][0]
         ## the "168" file is with the following uncommented:
         # if not is_trig:
         #     ts2 = abs_ticks[mask][submask]

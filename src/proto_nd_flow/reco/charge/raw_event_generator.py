@@ -460,23 +460,23 @@ class RawEventGenerator(H5FlowGenerator):
         unix_ts, unix_ts_usec, abs_ticks = self.get_timestamps(packet_buffer)
 
         # run event builder
-        event_masks = self.event_builder.build_events(packet_buffer, abs_ticks)
+        event_pkt_idcs = self.event_builder.build_events(packet_buffer, abs_ticks)
 
-        if not event_masks:
+        if not event_pkt_idcs:
             return H5FlowGenerator.EMPTY
 
         # apply disable channel mask
-        def nhit_filter(evt_mask):
-            event = packet_buffer[evt_mask]
+        def nhit_filter(evt_idcs):
+            event = packet_buffer[evt_idcs]
             mask_disabled_channels = np.isin(event[['io_group', 'io_channel', 'chip_id', 'channel_id']], resources['Geometry'].disabled_channels)
             mask_disabled_chips = np.isin(event[['io_group', 'io_channel', 'chip_id']], resources['Geometry'].disabled_chips)
             return (~(mask_disabled_channels | mask_disabled_chips)).sum() >= self.nhit_cut
 
-        event_masks = list(filter(nhit_filter, event_masks))
+        event_pkt_idcs = list(filter(nhit_filter, event_pkt_idcs))
 
-        add_timestamp_packets(event_masks, packet_buffer)
+        add_timestamp_packets(event_pkt_idcs, packet_buffer)
 
-        nevents = len(event_masks)
+        nevents = len(event_pkt_idcs)
 
         # write event to file
         raw_event_array = np.zeros((nevents,), dtype=self.raw_event_dtype)
@@ -489,7 +489,7 @@ class RawEventGenerator(H5FlowGenerator):
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
         # write packets to file
-        events = [packet_buffer[mask] for mask in event_masks]
+        events = [packet_buffer[idcs] for idcs in event_pkt_idcs]
         packets_array = np.concatenate(events, axis=0) if nevents else np.empty((0,), dtype=self.packets_dtype)
         packets_slice = self.data_manager.reserve_data(self.packets_dset_name, len(packets_array))
         packets_idcs = np.arange(packets_slice.start, packets_slice.stop)
@@ -504,7 +504,7 @@ class RawEventGenerator(H5FlowGenerator):
 
         if self.is_mc:
             # packet -> mc_packet_assn
-            event_mc_assn = [mc_assn[mask] for mask in event_masks]
+            event_mc_assn = [mc_assn[idcs] for idcs in event_pkt_idcs]
             ref = np.c_[packets_idcs.ravel(), packets_idcs.ravel()]
             sl = self.data_manager.reserve_data(self.mc_packet_fraction_dset_name, len(ref))
             self.data_manager.write_data(self.mc_packet_fraction_dset_name, sl, np.concatenate(event_mc_assn))
