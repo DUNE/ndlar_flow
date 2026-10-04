@@ -483,9 +483,17 @@ class RawEventGenerator(H5FlowGenerator):
         raw_event_slice = self.data_manager.reserve_data(self.raw_event_dset_name, nevents)
         raw_event_idcs = np.arange(raw_event_slice.start, raw_event_slice.stop, dtype=int)
         if nevents:
+            event_unix_ts, event_unix_ts_usec = \
+                get_event_unix_ts(packet_buffer, unix_ts, unix_ts_usec, event_pkt_idcs, abs_ticks)
+            event_unix_ts_precise = event_unix_ts.astype(np.float64) \
+                + event_unix_ts_usec.astype(np.float64)*1e-6
+            order = np.argsort(event_unix_ts_precise)
+            event_pkt_idcs = [event_pkt_idcs[i] for i in order]
+
             raw_event_array['unix_ts'], raw_event_array['unix_ts_usec'] = \
-                get_event_unix_ts(packet_buffer, unix_ts, unix_ts_usec, event_masks, abs_ticks)
+                event_unix_ts[order], event_unix_ts_usec[order]
             raw_event_array['id'] = raw_event_idcs
+
         self.data_manager.write_data(self.raw_event_dset_name, raw_event_slice, raw_event_array)
 
         # write packets to file
