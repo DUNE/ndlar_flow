@@ -15,9 +15,9 @@ def _prev_tagged(B: np.ndarray, N: int):
     return B[np.searchsorted(B, np.arange(N), side='right') - 1]
 
 
-def _get_delay(pps_delays: npt.NDArray[np.void], iog: int) -> float:
-    sel = pps_delays['io_group'] == iog
-    return np.median(pps_delays[sel]['delay_ticks'])
+# def _get_delay(pps_delays: npt.NDArray[np.void], iog: int) -> float:
+#     sel = pps_delays['io_group'] == iog
+#     return np.median(pps_delays[sel]['delay_ticks'])
 
 
 def get_unix_ts_usec(packets: npt.NDArray[np.void],
@@ -28,8 +28,9 @@ def get_unix_ts_usec(packets: npt.NDArray[np.void],
 
     delay = 0.
     if pps_delays is not None:
-        delay = np.median([_get_delay(pps_delays, iog)
-                           for iog in iogs])
+        # delay = np.median([_get_delay(pps_delays, iog)
+        #                    for iog in iogs])
+        delay = np.median(pps_delays['delay_ticks'])
     for iog in iogs:
         sel = packets['io_group'] == iog
         map2all = np.where(sel)[0]
