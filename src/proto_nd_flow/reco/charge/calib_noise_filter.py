@@ -356,6 +356,11 @@ class CalibNoiseFilter(H5FlowStage):
 
         new_hits = hits[~hits_mask]
 
+        # renumber id -> global row index (h5flow convention: id == row), so direct
+        # dereference and the hit<->backtrack ref on calib_filtered_hits work
+        if new_nhit > 0:
+            new_hits['id'] = hits_idx
+
         # write dataset and ref
         self.data_manager.write_data(self.calib_hits_dset_name, hits_slice, new_hits)
 
