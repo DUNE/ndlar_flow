@@ -18,7 +18,8 @@ except ImportError:
     nearline_date_from_filename = None
 
 
-HIT_DSET = 'charge/calib_final_hits'
+# Preferred first; fall back to prompt hits if the file was not run through the filtering stage
+HIT_DSETS = ('charge/calib_filtered_hits', 'charge/calib_prompt_hits')
 EVENT_DSET = 'charge/events'
 EXT_TRIG_DSET = 'charge/ext_trigs'
 IO_GROUPS = tuple(range(1, 9))
@@ -277,7 +278,14 @@ def accumulate_hits(histograms, hits):
             spatial['counts'] += counts.astype(np.int64)
 
 
-def load_final_hit_histograms(input_file):
+def select_hit_dset(manager):
+    for hit_dset in HIT_DSETS:
+        if hit_dset in manager.fh:
+            return hit_dset
+    raise KeyError(f'None of {HIT_DSETS} found in input file')
+
+
+def load_hit_histograms(input_file):
     from h5flow.data import H5FlowDataManager
 
     histograms = initialize_histograms()
@@ -285,13 +293,15 @@ def load_final_hit_histograms(input_file):
     rejected_events = 0
 
     with H5FlowDataManager(input_file, 'r', mpi=False) as manager:
+        hit_dset = select_hit_dset(manager)
+        print(f'Using hits from: {hit_dset}')
         total_events = int(manager[f'{EVENT_DSET}/data'].shape[0])
         for event_index in range(total_events):
             if not passes_event_filter(manager, event_index):
                 rejected_events += 1
                 continue
             try:
-                event_hits = manager[EVENT_DSET, HIT_DSET, event_index]
+                event_hits = manager[EVENT_DSET, hit_dset, event_index]
             except (IndexError, KeyError):
                 rejected_events += 1
                 continue
@@ -304,6 +314,7 @@ def load_final_hit_histograms(input_file):
 
     return {
         'histograms': histograms,
+        'hit_dset': hit_dset,
         'total_events': total_events,
         'selected_events': selected_events,
         'rejected_events': rejected_events,
@@ -540,7 +551,7 @@ def build_record(
     return {
         'timestamp': timestamp.isoformat() if timestamp is not None else None,
         'source_file': os.path.basename(input_file),
-        'sample': 'calib_final_hits_after_event_cuts',
+        'sample': f'{os.path.basename(loaded["hit_dset"])}_after_event_cuts',
         'normalization': normalization_metadata(velocity_scale),
         'detection_parameters': {
             'threshold_fraction': validate_threshold_fraction(threshold_fraction),
@@ -564,14 +575,14 @@ def build_record(
 
 def main(input_file, output_file_json, output_file_plot=None):
     print(f'Opening file: {input_file}')
-    loaded = load_final_hit_histograms(input_file)
+    loaded = load_hit_histograms(input_file)
     io_results = {io: analyze_io(io, loaded['histograms'][io]) for io in IO_GROUPS}
     record = build_record(input_file, loaded, io_results)
     update_json(output_file_json, record)
     print(f'Selected events: {loaded["selected_events"]}/{loaded["total_events"]}')
     print(f'Timestamp: {record["timestamp"]}, Velocity: {record["average_v_m_per_s"]} m/s')
     if output_file_plot is not None:
-        from vdrift_timeseries_lifetime import main as plot_timeseries
+        from vdrift_timeseries import main as plot_timeseries
 
         plot_timeseries(output_file_json, output_file_plot)
 
