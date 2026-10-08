@@ -81,10 +81,10 @@ class low_current_filter:
         charge_above_threshold = np.ones(hits.shape)*99.
 
         unique_ids, counts = np.unique(hit_uniqueid, return_counts=True)
-        threshold=default_threshold
         n = 0
         for u in unique_ids:
             if not str(u) in self.channel_thresholds.keys():
+                threshold = default_threshold
                 if self.channel_thresholds and (str(u) not in self.reported_channels):
                     # print('No threshold found for channel {}! Using default threshold of {} ke-!'.format(u, default_threshold))
                     n+=1
@@ -251,8 +251,8 @@ class CalibNoiseFilter(H5FlowStage):
         events_dset_name = 'charge/events',
         hits_name = 'charge/calib_prompt_hits',
         hit_charge_name = 'charge/calib_prompt_hits',
-        calib_hits_dset_name = 'charge/hits/calib_final_hits',
-        mc_hit_frac_dset_name = 'mc_truth/calib_final_hit_backtrack',
+        calib_hits_dset_name = 'charge/hits/calib_filtered_hits',
+        mc_hit_frac_dset_name = 'mc_truth/calib_filtered_hit_backtrack',
         low_current_filter__threshold=6.0,
         hot_pixel_filter__max_n_hits=35,
         low_current_filter__channel_threshold_file='data/proto_nd_flow/thresholds_2x2.json',
@@ -372,7 +372,7 @@ class CalibNoiseFilter(H5FlowStage):
             else:
                 raise Exception("The data hits and backtracking info do not match in size.")
 
-        # prompt hit -> final hit
+        # prompt hit -> filtered hit
         # sort based on the ID of the prompt hit, to make analysis more convenient
         hits_ref = hits_ref[np.argsort(hits_ref[:, 0])]
         self.data_manager.write_ref(self.hits_name, self.calib_hits_dset_name, hits_ref)

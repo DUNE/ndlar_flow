@@ -24,7 +24,7 @@ WORKFLOW1='yamls/proto_nd_flow/workflows/charge/charge_event_building_data.yaml'
 WORKFLOW2='yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction_data.yaml'
 WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction_data.yaml'
 WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration_data.yaml'
-WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration_data.yaml'
+WORKFLOW5='yamls/proto_nd_flow/workflows/charge/merged_calibration_data.yaml'
 
 HERE=`pwd`
 #cd ndlar_flow
