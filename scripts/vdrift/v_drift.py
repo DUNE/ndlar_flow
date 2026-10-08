@@ -45,30 +45,10 @@ MIN_HITS = 100
 N_Z_BINS = 10
 N_Y_BINS = 10
 
-TPC_BOUNDARIES = {
-    io: {
-        'name': f'M{(io - 1) // 2}_{"Right" if io % 2 else "Left"}',
-        'module': (io - 1) // 2,
-        'cathode': cathode,
-        'anode': anode,
-        'x_range': sorted((cathode, anode)),
-        'y_range': [-61.85, 61.85],
-        'z_range': [2.68, 64.32] if io in (1, 2, 5, 6) else [-64.32, -2.68],
-    }
-    for io, (cathode, anode) in enumerate(
-        (
-            (33.8175, 63.93),
-            (33.1825, 3.07),
-            (33.8175, 63.93),
-            (33.1825, 3.07),
-            (-33.1825, -3.07),
-            (-33.8175, -63.93),
-            (-33.1825, -3.07),
-            (-33.8175, -63.93),
-        ),
-        start=1,
-    )
-}
+GEOMETRY_PATH = 'geometry_info'
+# Older flow layouts store cathode_thickness = 0 (cathode at module centre); the hit edge
+# sits at the real cathode surface, so fall back to the 2x2 cathode thickness in that case
+CATHODE_THICKNESS_FALLBACK_CM = 0.635
 
 
 def json_safe(value):
@@ -215,18 +195,58 @@ def update_json(output_file_json, record):
     return safe_data
 
 
-def histogram_edges(io_group):
-    x_min, x_max = TPC_BOUNDARIES[io_group]['x_range']
+def load_tpc_config(manager):
+    from proto_nd_flow.util.lut import read_lut
+
+    geometry = manager.get_attrs(GEOMETRY_PATH)
+    module_bounds = np.asarray(geometry['module_RO_bounds'])
+    cathode_thickness = float(geometry['cathode_thickness']) or CATHODE_THICKNESS_FALLBACK_CM
+
+    tile_lut = read_lut(manager, GEOMETRY_PATH, 'tile_id')
+    anode_lut = read_lut(manager, GEOMETRY_PATH, 'anode_drift_coordinate')
+    drift_dir_lut = read_lut(manager, GEOMETRY_PATH, 'drift_dir')
+    io_keys, channel_keys = tile_lut.keys()
+
+    tpcs = {}
+    for io in IO_GROUPS:
+        tiles = tile_lut[(io_keys[io_keys == io], channel_keys[io_keys == io])]
+        tiles = np.unique(tiles[tiles >= 0])
+        anodes = np.unique(anode_lut[(tiles,)])
+        drift_dirs = np.unique(drift_dir_lut[(tiles,)])
+        if len(anodes) != 1 or len(drift_dirs) != 1:
+            raise ValueError(f'io_group {io}: expected one anode plane, got {anodes} / {drift_dirs}')
+        anode, drift_dir = float(anodes[0]), int(drift_dirs[0])
+
+        # 2x2 convention: two io_groups per module (as in calib_prompt_hits)
+        module = (io - 1) // 2
+        bounds = module_bounds[module]
+        if not np.isclose(anode, bounds[:, 0]).any():
+            raise ValueError(f'io_group {io}: anode x={anode} is not on module {module} bounds')
+        cathode = float(bounds[:, 0].mean() - drift_dir * cathode_thickness / 2)
+        tpcs[io] = {
+            'name': f'M{module}_{"Right" if io % 2 else "Left"}',
+            'module': module,
+            'cathode': cathode,
+            'anode': anode,
+            'x_range': sorted((cathode, anode)),
+            'y_range': [float(bounds[0, 1]), float(bounds[1, 1])],
+            'z_range': [float(bounds[0, 2]), float(bounds[1, 2])],
+        }
+    return tpcs
+
+
+def histogram_edges(tpc):
+    x_min, x_max = tpc['x_range']
     plot_min, plot_max = x_min - 2.0, x_max + 2.0
     edge_count = int(np.round((plot_max - plot_min) / X_BIN_WIDTH_CM)) + 1
     return np.linspace(plot_min, plot_max, edge_count)
 
 
-def initialize_histograms():
+def initialize_histograms(tpcs):
     histograms = {}
     for io in IO_GROUPS:
-        config = TPC_BOUNDARIES[io]
-        edges = histogram_edges(io)
+        config = tpcs[io]
+        edges = histogram_edges(config)
         histograms[io] = {
             'edges': edges,
             'counts': np.zeros(len(edges) - 1, dtype=np.int64),
@@ -282,11 +302,12 @@ def select_hit_dset(manager):
 def load_hit_histograms(input_file):
     from h5flow.data import H5FlowDataManager
 
-    histograms = initialize_histograms()
     selected_events = 0
     rejected_events = 0
 
     with H5FlowDataManager(input_file, 'r', mpi=False) as manager:
+        tpcs = load_tpc_config(manager)
+        histograms = initialize_histograms(tpcs)
         hit_dset = select_hit_dset(manager)
         print(f'Using hits from: {hit_dset}')
         total_events = int(manager[f'{EVENT_DSET}/data'].shape[0])
@@ -308,6 +329,7 @@ def load_hit_histograms(input_file):
 
     return {
         'histograms': histograms,
+        'tpcs': tpcs,
         'hit_dset': hit_dset,
         'total_events': total_events,
         'selected_events': selected_events,
@@ -364,11 +386,10 @@ def validate_velocity_scale(value):
     return scale
 
 
-def detect_boundary(hist, edges, io_group, n_hits, threshold_fraction=None):
+def detect_boundary(hist, edges, io_group, config, n_hits, threshold_fraction=None):
     threshold_fraction = validate_threshold_fraction(
         THRESHOLD_FRACTION if threshold_fraction is None else threshold_fraction
     )
-    config = TPC_BOUNDARIES[io_group]
     cathode = config['cathode']
     anode = config['anode']
     centers = 0.5 * (edges[:-1] + edges[1:])
@@ -448,9 +469,14 @@ def detect_boundary(hist, edges, io_group, n_hits, threshold_fraction=None):
     return result
 
 
-def analyze_io(io_group, histogram, threshold_fraction=None):
+def analyze_io(io_group, config, histogram, threshold_fraction=None):
     result = detect_boundary(
-        histogram['counts'], histogram['edges'], io_group, histogram['n_hits'], threshold_fraction
+        histogram['counts'],
+        histogram['edges'],
+        io_group,
+        config,
+        histogram['n_hits'],
+        threshold_fraction,
     )
     for axis in ('z', 'y'):
         spatial = histogram[axis]
@@ -458,7 +484,7 @@ def analyze_io(io_group, histogram, threshold_fraction=None):
         for index, counts in enumerate(spatial['counts']):
             n_hits = int(spatial['n_hits'][index])
             bin_result = detect_boundary(
-                counts, histogram['edges'], io_group, n_hits, threshold_fraction
+                counts, histogram['edges'], io_group, config, n_hits, threshold_fraction
             )
             if n_hits <= MIN_HITS:
                 bin_result.update(status='insufficient_data', v_m_per_s=None)
@@ -567,10 +593,12 @@ def build_record(
     }
 
 
-def main(input_file, output_file_json, output_file_plot=None):
+def main(input_file, output_file_json, output_file_plot=None, detector='2x2'):
     print(f'Opening file: {input_file}')
     loaded = load_hit_histograms(input_file)
-    io_results = {io: analyze_io(io, loaded['histograms'][io]) for io in IO_GROUPS}
+    io_results = {
+        io: analyze_io(io, loaded['tpcs'][io], loaded['histograms'][io]) for io in IO_GROUPS
+    }
     record = build_record(input_file, loaded, io_results)
     update_json(output_file_json, record)
     print(f'Selected events: {loaded["selected_events"]}/{loaded["total_events"]}')
@@ -578,7 +606,7 @@ def main(input_file, output_file_json, output_file_plot=None):
     if output_file_plot is not None:
         from vdrift_timeseries import main as plot_timeseries
 
-        plot_timeseries(output_file_json, output_file_plot)
+        plot_timeseries(output_file_json, output_file_plot, detector)
 
 
 def build_parser():
@@ -588,6 +616,9 @@ def build_parser():
         '--output_file_json', '--output-file-json', required=True, help='JSON history'
     )
     parser.add_argument('--output_file_plot', '--output-file-plot', help='Time-series plot')
+    parser.add_argument(
+        '--detector', default='2x2', help='Detector for the plot reference (see vdrift_timeseries)'
+    )
     return parser
 
 
