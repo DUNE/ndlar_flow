@@ -109,19 +109,13 @@ def passes_event_filter(f_manager, i_evt):
     except (IndexError, KeyError):
         return False
 
-    for iog_check in IO_GROUPS:
-        if len(trigs[trigs['iogroup'] == iog_check]) > 1:
-            return False
-
-    if len(trigs) == 0:
+    # trigs is a padded (1, N) masked array; compressed() keeps only the real triggers
+    iogroups = trigs['iogroup'].compressed()
+    if len(iogroups) == 0 or iogroups[0] <= 0:
         return False
 
-    try:
-        first_iog = trigs['iogroup'][0][0]
-    except (IndexError, TypeError):
-        first_iog = trigs['iogroup'][0]
-
-    if not first_iog > 0:
+    # at most one external trigger per io_group
+    if np.any(np.bincount(iogroups, minlength=max(IO_GROUPS) + 1)[1:] > 1):
         return False
 
     evt = f_manager[f'{EVENT_DSET}/data'][i_evt]
