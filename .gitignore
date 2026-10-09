@@ -3,7 +3,7 @@
 docs/_build*
 docs/_static*
 docs/_templates*
-*.ipynb
+#*.ipynb
 *.txt
 !runlist*.txt
 !requirements.txt
