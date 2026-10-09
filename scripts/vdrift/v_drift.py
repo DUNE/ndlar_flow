@@ -17,17 +17,18 @@ try:
 except ImportError:
     nearline_date_from_filename = None
 
+from vdrift_timeseries import DEFAULT_DETECTOR, DETECTORS, load_calibrated_vdrift
+from vdrift_timeseries import main as plot_timeseries
 
-# Preferred first; fall back to prompt hits if the file was not run through the filtering stage
-HIT_DSETS = ('charge/calib_filtered_hits', 'charge/calib_prompt_hits')
+
+# Preferred first; calib_final_hits is the pre-#246 name of the filtered hits (e.g. 2x2 reflow v11),
+# then fall back to prompt hits if the file was not run through the filtering stage
+HIT_DSETS = ('charge/calib_filtered_hits', 'charge/calib_final_hits', 'charge/calib_prompt_hits')
 EVENT_DSET = 'charge/events'
 EXT_TRIG_DSET = 'charge/ext_trigs'
 IO_GROUPS = tuple(range(1, 9))
 LOCAL_TIMEZONE = ZoneInfo('America/Chicago')
-NOMINAL_VELOCITY_M_PER_S = 1596.0
-REFERENCE_VELOCITY_M_PER_S = 1584.0
 BASELINE_RAW_MEAN_M_PER_S = 1566.165516590842
-FIXED_VELOCITY_SCALE = REFERENCE_VELOCITY_M_PER_S / BASELINE_RAW_MEAN_M_PER_S
 BASELINE_FILE_COUNT = 136
 BASELINE_MEASUREMENT_COUNT = 1086
 BASELINE_START_TIMESTAMP = '2024-07-11T00:07:46-05:00'
@@ -46,6 +47,7 @@ N_Z_BINS = 10
 N_Y_BINS = 10
 
 GEOMETRY_PATH = 'geometry_info'
+LAR_INFO_PATH = 'lar_info'
 # Older flow layouts store cathode_thickness = 0 (cathode at module centre); the hit edge
 # sits at the real cathode surface, so fall back to the 2x2 cathode thickness in that case
 CATHODE_THICKNESS_FALLBACK_CM = 0.635
@@ -202,6 +204,9 @@ def load_tpc_config(manager):
     module_bounds = np.asarray(geometry['module_RO_bounds'])
     cathode_thickness = float(geometry['cathode_thickness']) or CATHODE_THICKNESS_FALLBACK_CM
 
+    # v_drift [mm/us] used by flow for this file: one value, or one per module
+    v_drifts = np.atleast_1d(manager.get_attrs(LAR_INFO_PATH)['v_drift']) * 1e3
+
     tile_lut = read_lut(manager, GEOMETRY_PATH, 'tile_id')
     anode_lut = read_lut(manager, GEOMETRY_PATH, 'anode_drift_coordinate')
     drift_dir_lut = read_lut(manager, GEOMETRY_PATH, 'drift_dir')
@@ -228,6 +233,7 @@ def load_tpc_config(manager):
             'module': module,
             'cathode': cathode,
             'anode': anode,
+            'nominal_v_m_per_s': float(v_drifts[module] if len(v_drifts) > 1 else v_drifts[0]),
             'x_range': sorted((cathode, anode)),
             'y_range': [float(bounds[0, 1]), float(bounds[1, 1])],
             'z_range': [float(bounds[0, 2]), float(bounds[1, 2])],
@@ -392,12 +398,14 @@ def detect_boundary(hist, edges, io_group, config, n_hits, threshold_fraction=No
     )
     cathode = config['cathode']
     anode = config['anode']
+    nominal_velocity = config['nominal_v_m_per_s']
     centers = 0.5 * (edges[:-1] + edges[1:])
     result = {
         'io_group': io_group,
         'status': 'insufficient_data',
         'n_hits': int(n_hits),
         'n_histogram_hits': int(hist.sum()),
+        'nominal_v_m_per_s': nominal_velocity,
         'v_m_per_s': None,
         'v_m_per_s_error': None,
     }
@@ -463,7 +471,7 @@ def detect_boundary(hist, edges, io_group, config, n_hits, threshold_fraction=No
             'measured_drift_length_cm': float(measured_drift),
             'boundary_selection': 'stable_crossing',
             'velocity_ratio_percent': float((scale - 1.0) * 100.0),
-            'v_m_per_s': float(NOMINAL_VELOCITY_M_PER_S * scale),
+            'v_m_per_s': float(nominal_velocity * scale),
         }
     )
     return result
@@ -517,20 +525,26 @@ def normalize_io_result(result, velocity_scale):
                 'raw_velocity_ratio_percent', current['velocity_ratio_percent']
             )
             current['velocity_ratio_percent'] = (
-                float((current['v_m_per_s'] / NOMINAL_VELOCITY_M_PER_S - 1.0) * 100.0)
+                float((current['v_m_per_s'] / current['nominal_v_m_per_s'] - 1.0) * 100.0)
                 if current['v_m_per_s'] is not None
                 else None
             )
     return normalized
 
 
-def normalization_metadata(velocity_scale):
-    metadata = {
+def load_reference_velocity(detector):
+    '''Normalization target: the calibrated v_drift in the detector's LArData.yaml [m/s]'''
+    velocities = load_calibrated_vdrift(detector)
+    if len(velocities) != 1:
+        raise ValueError(f'Need exactly one calibrated vdrift for {detector}, got {velocities}')
+    return velocities[0]
+
+
+def normalization_metadata(velocity_scale, reference_velocity):
+    return {
         'velocity_scale': validate_velocity_scale(velocity_scale),
-        'reference_velocity_m_per_s': REFERENCE_VELOCITY_M_PER_S,
-    }
-    if math.isclose(velocity_scale, FIXED_VELOCITY_SCALE, rel_tol=0.0, abs_tol=1e-12):
-        metadata['baseline'] = {
+        'reference_velocity_m_per_s': reference_velocity,
+        'baseline': {
             'raw_mean_m_per_s': BASELINE_RAW_MEAN_M_PER_S,
             'source_file_count': BASELINE_FILE_COUNT,
             'successful_global_measurement_count': BASELINE_MEASUREMENT_COUNT,
@@ -538,22 +552,21 @@ def normalization_metadata(velocity_scale):
             'end_timestamp': BASELINE_END_TIMESTAMP,
             'threshold_fraction': 0.5,
             'weighting': 'equal_weight_per_successful_global_io_measurement',
-        }
-    return metadata
+        },
+    }
 
 
 def build_record(
     input_file,
     loaded,
     io_results,
+    reference_velocity,
     threshold_fraction=THRESHOLD_FRACTION,
-    velocity_scale=FIXED_VELOCITY_SCALE,
 ):
     timestamp = date_from_input_filename(input_file)
-    velocity_scale = validate_velocity_scale(velocity_scale)
-    if math.isclose(
-        velocity_scale, FIXED_VELOCITY_SCALE, rel_tol=0.0, abs_tol=1e-12
-    ) and not math.isclose(threshold_fraction, 0.5, rel_tol=0.0, abs_tol=1e-12):
+    # scale the raw velocities so the baseline period averages to the calibrated value
+    velocity_scale = validate_velocity_scale(reference_velocity / BASELINE_RAW_MEAN_M_PER_S)
+    if not math.isclose(threshold_fraction, 0.5, rel_tol=0.0, abs_tol=1e-12):
         raise ValueError('The frozen normalization requires a 0.5 threshold fraction')
     io_results = {
         io: normalize_io_result(result, velocity_scale) for io, result in io_results.items()
@@ -572,7 +585,7 @@ def build_record(
         'timestamp': timestamp.isoformat() if timestamp is not None else None,
         'source_file': os.path.basename(input_file),
         'sample': f'{os.path.basename(loaded["hit_dset"])}_after_event_cuts',
-        'normalization': normalization_metadata(velocity_scale),
+        'normalization': normalization_metadata(velocity_scale, reference_velocity),
         'detection_parameters': {
             'threshold_fraction': validate_threshold_fraction(threshold_fraction),
             'nominal_x_bin_width_cm': X_BIN_WIDTH_CM,
@@ -593,19 +606,18 @@ def build_record(
     }
 
 
-def main(input_file, output_file_json, output_file_plot=None, detector='2x2'):
+def main(input_file, output_file_json, output_file_plot=None, detector=DEFAULT_DETECTOR):
+    reference_velocity = load_reference_velocity(detector)
     print(f'Opening file: {input_file}')
     loaded = load_hit_histograms(input_file)
     io_results = {
         io: analyze_io(io, loaded['tpcs'][io], loaded['histograms'][io]) for io in IO_GROUPS
     }
-    record = build_record(input_file, loaded, io_results)
+    record = build_record(input_file, loaded, io_results, reference_velocity)
     update_json(output_file_json, record)
     print(f'Selected events: {loaded["selected_events"]}/{loaded["total_events"]}')
     print(f'Timestamp: {record["timestamp"]}, Velocity: {record["average_v_m_per_s"]} m/s')
     if output_file_plot is not None:
-        from vdrift_timeseries import main as plot_timeseries
-
         plot_timeseries(output_file_json, output_file_plot, detector)
 
 
@@ -617,7 +629,10 @@ def build_parser():
     )
     parser.add_argument('--output_file_plot', '--output-file-plot', help='Time-series plot')
     parser.add_argument(
-        '--detector', default='2x2', help='Detector for the plot reference (see vdrift_timeseries)'
+        '--detector',
+        choices=DETECTORS,
+        default=DEFAULT_DETECTOR,
+        help='Selects LArData.yaml for the reference velocity',
     )
     return parser
 
