@@ -41,6 +41,14 @@ class PPSDelayExtractor:
             self.data_manager.create_dset('charge/pps_delay',
                                           dtype=self.delay_dtype)
 
+    def _looks_aligned(self, timestamps: npt.NDArray[np.uint64]) \
+            -> bool:
+        rollover = resources['RunData'].rollover_ticks
+        # Get rid of missed-SYNC timestamps
+        ts = timestamps[timestamps < rollover]
+        lo, hi = np.quantile(ts, [0.45, 0.55])
+        return hi - lo > 0.5 * rollover
+
     def _process(self, packets: npt.NDArray[Any]):
         for iog in np.unique(packets['io_group']):
             all_pkts = packets[packets['io_group'] == iog]
@@ -68,7 +76,14 @@ class PPSDelayExtractor:
                 data_pkts = pkts[pkts['packet_type'] == data_packet_type]
                 if len(data_pkts) < self.min_packets:
                     continue
-                delay = np.float64(rollover) - np.median(data_pkts['receipt_timestamp'])
+
+                # A large spread indicates that we're straddling the PPS pulse,
+                # in which case we can just assign a delay of zero
+                if self._looks_aligned(data_pkts['receipt_timestamp']):
+                    delay = np.float64(0.)
+                else:
+                    delay = (np.float64(rollover)
+                             - np.median(data_pkts['receipt_timestamp']))
 
                 self.unix_ts.append(t)
                 self.delay_ticks.append(delay)
@@ -92,6 +107,17 @@ class PPSDelayExtractor:
         for iog in np.sort(np.unique(self.data['io_group'])):
             sel = self.data['io_group'] == iog
             delay = np.median(self.data[sel]['delay_ticks'])
+
+            # Similarly to the case in update(), a large spread here indicates
+            # that, at some point in this file, the PPS pulses came into
+            # alignment with the GPS ticks. In that case, just set the overall
+            # file's PPS delay to zero.
+            rollover = resources['RunData'].rollover_ticks
+            if self._looks_aligned(self.data[sel]['delay_ticks']):
+                delay = 0
+            else:
+                delay = np.median(self.data[sel]['delay_ticks'])
+
             delays.append((int(iog), int(delay)))
 
         assert self.data_manager is not None, "call setup plz"
