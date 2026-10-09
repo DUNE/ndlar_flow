@@ -494,8 +494,6 @@ def analyze_io(io_group, config, histogram, threshold_fraction=None):
             bin_result = detect_boundary(
                 counts, histogram['edges'], io_group, config, n_hits, threshold_fraction
             )
-            if n_hits <= MIN_HITS:
-                bin_result.update(status='insufficient_data', v_m_per_s=None)
             bin_result['bin_index'] = index + 1
             bin_result['range_cm'] = [
                 float(spatial['edges'][index]),
