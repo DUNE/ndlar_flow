@@ -37,7 +37,7 @@ HISTORY_IO_FIELDS = (
 )
 # Mean raw velocity (lar_info v_drift x geometric/measured, calib_final_hits) over the 2x2
 # reflow v11 beam july8_2024 + july10_2024 nominal_hv files; recompute if the method changes
-BASELINE_RAW_MEAN_M_PER_S = 1573.4802914621064
+BASELINE_RAW_MEAN_M_PER_S = 1573.4804971916153
 BASELINE_FILE_COUNT = 486
 BASELINE_MEASUREMENT_COUNT = 3881
 BASELINE_START_TIMESTAMP = '2024-07-08T13:43:25-05:00'
@@ -100,10 +100,9 @@ def ref_pairs(fh, parent, child):
 
 
 def event_filter_mask(fh):
-    '''Boolean mask over events: first ext trigger on a real io_group, at most one ext
-    trigger per io_group, and event duration <= 3300 ticks'''
-    events = fh[f'{EVENT_DSET}/data'][:]
-    n_events = len(events)
+    '''Boolean mask over events: first ext trigger on a real io_group and at most one ext
+    trigger per io_group'''
+    n_events = fh[f'{EVENT_DSET}/data'].shape[0]
     evt_idx, trig_idx = ref_pairs(fh, EVENT_DSET, EXT_TRIG_DSET)
     iogroups = fh[f'{EXT_TRIG_DSET}/data']['iogroup'][trig_idx].astype(np.int64)
 
@@ -119,8 +118,7 @@ def event_filter_mask(fh):
     multi_trig = np.zeros(n_events, dtype=bool)
     multi_trig[pairs[repeated] // 256] = True
 
-    too_long = (events['ts_end'] - events['ts_start']) > 3300
-    return first_ok & ~multi_trig & ~too_long
+    return first_ok & ~multi_trig
 
 
 def write_json(path, data):
