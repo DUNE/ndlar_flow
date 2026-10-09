@@ -569,16 +569,10 @@ def build_record(
     io_results = {
         io: normalize_io_result(result, velocity_scale) for io, result in io_results.items()
     }
-    velocities = [
-        result['v_m_per_s']
-        for result in io_results.values()
-        if result.get('status') == 'ok' and np.isfinite(result['v_m_per_s'])
-    ]
-    raw_velocities = [
-        result['raw_v_m_per_s']
-        for result in io_results.values()
-        if result.get('status') == 'ok' and result['raw_v_m_per_s'] is not None
-    ]
+    # detect_boundary only sets 'ok' with a finite velocity, so both averages use the same TPCs
+    ok_results = [result for result in io_results.values() if result.get('status') == 'ok']
+    velocities = [result['v_m_per_s'] for result in ok_results]
+    raw_velocities = [result['raw_v_m_per_s'] for result in ok_results]
     return {
         'timestamp': timestamp.isoformat() if timestamp is not None else None,
         'source_file': os.path.basename(input_file),
