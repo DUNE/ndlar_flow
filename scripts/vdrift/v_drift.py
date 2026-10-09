@@ -5,20 +5,14 @@ import math
 import os
 import re
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import numpy as np
 from flufl.lock import Lock
 from scipy.ndimage import gaussian_filter1d
 
-try:
-    from nearline_util import date_from_filename as nearline_date_from_filename
-except ImportError:
-    nearline_date_from_filename = None
-
-from vdrift_timeseries import DEFAULT_DETECTOR, DETECTORS, load_calibrated_vdrift
-from vdrift_timeseries import main as plot_timeseries
+from vdrift_config import DEFAULT_DETECTOR, DETECTORS, IO_GROUPS, load_calibrated_vdrift
 
 
 # Preferred first; calib_final_hits is the pre-#246 name of the filtered hits (e.g. 2x2 reflow v11),
@@ -26,8 +20,9 @@ from vdrift_timeseries import main as plot_timeseries
 HIT_DSETS = ('charge/calib_filtered_hits', 'charge/calib_final_hits', 'charge/calib_prompt_hits')
 EVENT_DSET = 'charge/events'
 EXT_TRIG_DSET = 'charge/ext_trigs'
-IO_GROUPS = tuple(range(1, 9))
 LOCAL_TIMEZONE = ZoneInfo('America/Chicago')
+# filename suffix -> UTC offset (e.g. packet-0050018-2024_07_10_09_36_12_CDT.FLOW.hdf5)
+TIMEZONE_SUFFIXES = {'CDT': timedelta(hours=-5), 'CST': timedelta(hours=-6)}
 # group/world readable so nearline web pages can serve the history (mkstemp creates 0600)
 JSON_FILE_MODE = 0o664
 # per-TPC fields kept in the history JSON; the full fit and y/z slices go to the detail JSON
@@ -83,16 +78,15 @@ def json_safe(value):
 
 
 def date_from_input_filename(input_file):
-    if nearline_date_from_filename is not None:
-        try:
-            timestamp = nearline_date_from_filename(input_file)
-            return timestamp if timestamp.tzinfo else timestamp.replace(tzinfo=LOCAL_TIMEZONE)
-        except (AttributeError, KeyError, TypeError, ValueError):
-            pass
-    match = re.search(r'\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}', os.path.basename(input_file))
+    match = re.search(
+        r'(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})(?:_(CDT|CST))?', os.path.basename(input_file)
+    )
     if match is None:
         return None
-    return datetime.strptime(match.group(), '%Y_%m_%d_%H_%M_%S').replace(tzinfo=LOCAL_TIMEZONE)
+    timestamp = datetime.strptime(match.group(1), '%Y_%m_%d_%H_%M_%S')
+    if match.group(2) is None:
+        return timestamp.replace(tzinfo=LOCAL_TIMEZONE)
+    return timestamp.replace(tzinfo=timezone(TIMEZONE_SUFFIXES[match.group(2)]))
 
 
 def json_file_lock(json_path):
@@ -337,13 +331,6 @@ def find_stable_crossing(positions, counts, threshold, bin_width):
     return None, 'no_stable_crossing'
 
 
-def validate_threshold_fraction(value):
-    fraction = float(value)
-    if not math.isfinite(fraction) or not 0.0 < fraction < 1.0:
-        raise ValueError('Threshold fraction must be finite and strictly between 0 and 1')
-    return fraction
-
-
 def validate_velocity_scale(value):
     scale = float(value)
     if not math.isfinite(scale) or scale <= 0:
@@ -351,10 +338,7 @@ def validate_velocity_scale(value):
     return scale
 
 
-def detect_boundary(hist, edges, io_group, config, n_hits, threshold_fraction=None):
-    threshold_fraction = validate_threshold_fraction(
-        THRESHOLD_FRACTION if threshold_fraction is None else threshold_fraction
-    )
+def detect_boundary(hist, edges, io_group, config, n_hits):
     cathode = config['cathode']
     anode = config['anode']
     nominal_velocity = config['nominal_v_m_per_s']
@@ -396,7 +380,7 @@ def detect_boundary(hist, edges, io_group, config, n_hits, threshold_fraction=No
     order = np.argsort(positions)
     positions = positions[order]
     search_counts = smoothed[search_mask][order]
-    threshold = plateau * threshold_fraction
+    threshold = plateau * THRESHOLD_FRACTION
     result.update(
         {
             'plateau_count': plateau,
@@ -434,23 +418,16 @@ def detect_boundary(hist, edges, io_group, config, n_hits, threshold_fraction=No
     return result
 
 
-def analyze_io(io_group, config, histogram, threshold_fraction=None):
+def analyze_io(io_group, config, histogram):
     result = detect_boundary(
-        histogram['counts'],
-        histogram['edges'],
-        io_group,
-        config,
-        histogram['n_hits'],
-        threshold_fraction,
+        histogram['counts'], histogram['edges'], io_group, config, histogram['n_hits']
     )
     for axis in ('z', 'y'):
         spatial = histogram[axis]
         bin_results = []
         for index, counts in enumerate(spatial['counts']):
             n_hits = int(spatial['n_hits'][index])
-            bin_result = detect_boundary(
-                counts, histogram['edges'], io_group, config, n_hits, threshold_fraction
-            )
+            bin_result = detect_boundary(counts, histogram['edges'], io_group, config, n_hits)
             bin_result['bin_index'] = index + 1
             bin_result['range_cm'] = [
                 float(spatial['edges'][index]),
@@ -490,21 +467,19 @@ def normalization_metadata(velocity_scale, reference_velocity):
             'successful_global_measurement_count': BASELINE_MEASUREMENT_COUNT,
             'start_timestamp': BASELINE_START_TIMESTAMP,
             'end_timestamp': BASELINE_END_TIMESTAMP,
-            'threshold_fraction': 0.5,
+            'threshold_fraction': THRESHOLD_FRACTION,
             'weighting': 'equal_weight_per_successful_global_io_measurement',
         },
     }
 
 
-def build_header(reference_velocity, threshold_fraction=THRESHOLD_FRACTION):
+def build_header(reference_velocity):
     '''Settings shared by every record of a history; stored once at the top of the JSON'''
-    if not math.isclose(threshold_fraction, 0.5, rel_tol=0.0, abs_tol=1e-12):
-        raise ValueError('The frozen normalization requires a 0.5 threshold fraction')
     # scale the raw velocities so the baseline period averages to the calibrated value
     velocity_scale = validate_velocity_scale(reference_velocity / BASELINE_RAW_MEAN_M_PER_S)
     return {
         'detection_parameters': {
-            'threshold_fraction': validate_threshold_fraction(threshold_fraction),
+            'threshold_fraction': THRESHOLD_FRACTION,
             'nominal_x_bin_width_cm': X_BIN_WIDTH_CM,
             'smooth_sigma_cm': SMOOTH_SIGMA_CM,
             'search_half_width_cm': SEARCH_WINDOW_CM,
@@ -556,7 +531,6 @@ def summarize_record(record):
 def main(
     input_file,
     output_file_json,
-    output_file_plot=None,
     output_file_detail=None,
     detector=DEFAULT_DETECTOR,
 ):
@@ -572,8 +546,6 @@ def main(
         write_json(output_file_detail, {**header, **record})
     print(f'Selected events: {loaded["selected_events"]}/{loaded["total_events"]}')
     print(f'Timestamp: {record["timestamp"]}, Velocity: {record["average_v_m_per_s"]} m/s')
-    if output_file_plot is not None:
-        plot_timeseries(output_file_json, output_file_plot, detector)
 
 
 def build_parser():
@@ -582,7 +554,6 @@ def build_parser():
     parser.add_argument(
         '--output_file_json', '--output-file-json', required=True, help='JSON history'
     )
-    parser.add_argument('--output_file_plot', '--output-file-plot', help='Time-series plot')
     parser.add_argument(
         '--output_file_detail',
         '--output-file-detail',
