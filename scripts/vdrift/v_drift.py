@@ -28,6 +28,18 @@ EVENT_DSET = 'charge/events'
 EXT_TRIG_DSET = 'charge/ext_trigs'
 IO_GROUPS = tuple(range(1, 9))
 LOCAL_TIMEZONE = ZoneInfo('America/Chicago')
+# group/world readable so nearline web pages can serve the history (mkstemp creates 0600)
+JSON_FILE_MODE = 0o664
+# per-TPC fields kept in the history JSON; the full fit and y/z slices go to the detail JSON
+HISTORY_IO_FIELDS = (
+    'status',
+    'v_m_per_s',
+    'raw_v_m_per_s',
+    'nominal_v_m_per_s',
+    'boundary_x_cm',
+    'measured_drift_length_cm',
+    'n_hits',
+)
 # Mean raw velocity (lar_info v_drift x geometric/measured, calib_final_hits) over the 2x2
 # reflow v11 beam july8_2024 + july10_2024 nominal_hv files; recompute if the method changes
 BASELINE_RAW_MEAN_M_PER_S = 1573.4802914621064
@@ -117,96 +129,44 @@ def event_filter_mask(fh):
     return first_ok & ~multi_trig & ~too_long
 
 
-def record_threshold_fraction(record):
-    parameters = record.get('detection_parameters', {})
-    if parameters.get('threshold_fraction') is not None:
-        return validate_threshold_fraction(parameters['threshold_fraction'])
-    for result in record.get('io_groups', {}).values():
-        if result.get('threshold_fraction') is not None:
-            return validate_threshold_fraction(result['threshold_fraction'])
-        plateau, threshold = result.get('plateau_count'), result.get('threshold_count')
-        if plateau is not None and plateau > 0 and threshold is not None:
-            return validate_threshold_fraction(threshold / plateau)
-    return None
-
-
-def record_velocity_scale(record):
-    return validate_velocity_scale(record.get('normalization', {}).get('velocity_scale', 1.0))
-
-
-def update_json(output_file_json, record):
-    parent = os.path.dirname(os.path.abspath(output_file_json))
+def write_json(path, data):
+    '''Atomically replace path with data (compact JSON)'''
+    parent = os.path.dirname(os.path.abspath(path))
     os.makedirs(parent, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix='.vdrift_', suffix='.json', dir=parent)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(json_safe(data), f, allow_nan=False)
+            f.write('\n')
+        os.chmod(tmp_path, JSON_FILE_MODE)
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
+
+def update_json(output_file_json, header, summary):
+    '''Add or replace this file's summary in the history; the header (detection parameters
+    and normalization) is stored once and must match for every record in the history'''
+    header = json_safe(header)
     with json_file_lock(output_file_json):
         if os.path.exists(output_file_json):
             with open(output_file_json, encoding='utf-8') as f:
                 data = json.load(f)
+            old_header = {key: data.get(key) for key in header}
+            if old_header != header:
+                raise ValueError(
+                    f'{output_file_json} was written with different detection parameters or '
+                    'normalization (or in the old per-record format); use a separate output JSON'
+                )
         else:
-            data = {'vdrifts': []}
+            data = {**header, 'vdrifts': []}
 
-        records = data.setdefault('vdrifts', [])
-
-        source_file = record['source_file']
-        fraction = record_threshold_fraction(record)
-        velocity_scale = record_velocity_scale(record)
-        for old in records:
-            if old.get('source_file') == source_file:
-                continue
-            old_fraction = record_threshold_fraction(old)
-            if (
-                fraction is not None
-                and old_fraction is not None
-                and not math.isclose(fraction, old_fraction, rel_tol=0.0, abs_tol=1e-12)
-            ):
-                raise ValueError(
-                    'Threshold fractions differ within the JSON history; '
-                    'use a separate output JSON for a different threshold'
-                )
-            if not math.isclose(
-                velocity_scale, record_velocity_scale(old), rel_tol=0.0, abs_tol=1e-12
-            ):
-                raise ValueError(
-                    'Velocity scales differ within the JSON history; '
-                    'use a separate output JSON or normalize the existing records consistently'
-                )
-        replaced = False
-
-        for i, old in enumerate(records):
-            if old.get('source_file') == source_file:
-                records[i] = record
-                replaced = True
-                break
-
-        if not replaced:
-            records.append(record)
-
-        records.sort(
-            key=lambda x: (
-                x.get('timestamp') is None,
-                x.get('timestamp') or '',
-            )
-        )
-
-        safe_data = json_safe(data)
-
-        fd, tmp_path = tempfile.mkstemp(
-            prefix='.vdrift_',
-            suffix='.json',
-            dir=parent,
-        )
-
-        try:
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                json.dump(safe_data, f, indent=2, allow_nan=False)
-                f.write('\n')
-
-            os.replace(tmp_path, output_file_json)
-        finally:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-
-    return safe_data
+        records = [r for r in data['vdrifts'] if r['source_file'] != summary['source_file']]
+        records.append(summary)
+        records.sort(key=lambda r: (r['timestamp'] is None, r['timestamp'] or ''))
+        data['vdrifts'] = records
+        write_json(output_file_json, data)
 
 
 def load_tpc_config(manager):
@@ -333,17 +293,12 @@ def load_hit_histograms(input_file):
         hits = manager.fh[f'{hit_dset}/data'].fields(['x', 'y', 'z', 'io_group'])[:]
         accumulate_hits(histograms, hits[hit_idx])
 
-    total_events = len(selected)
-    selected_events = int(selected.sum())
-    rejected_events = total_events - selected_events
-
     return {
         'histograms': histograms,
         'tpcs': tpcs,
         'hit_dset': hit_dset,
-        'total_events': total_events,
-        'selected_events': selected_events,
-        'rejected_events': rejected_events,
+        'total_events': len(selected),
+        'selected_events': int(selected.sum()),
     }
 
 
@@ -411,7 +366,6 @@ def detect_boundary(hist, edges, io_group, config, n_hits, threshold_fraction=No
         'n_histogram_hits': int(hist.sum()),
         'nominal_v_m_per_s': nominal_velocity,
         'v_m_per_s': None,
-        'v_m_per_s_error': None,
     }
     if hist.sum() < MIN_HITS:
         return result
@@ -447,9 +401,7 @@ def detect_boundary(hist, edges, io_group, config, n_hits, threshold_fraction=No
         {
             'plateau_count': plateau,
             'threshold_count': float(threshold),
-            'threshold_fraction': threshold_fraction,
             'search_range_cm': [float(search_min), float(search_max)],
-            'smooth_sigma_cm': SMOOTH_SIGMA_CM,
         }
     )
     crossing, status = find_stable_crossing(positions, search_counts, threshold, bin_width)
@@ -474,6 +426,7 @@ def detect_boundary(hist, edges, io_group, config, n_hits, threshold_fraction=No
             'geometric_drift_length_cm': float(geometric_drift),
             'measured_drift_length_cm': float(measured_drift),
             'boundary_selection': 'stable_crossing',
+            # raw velocity relative to the lar_info v_drift used to build x
             'velocity_ratio_percent': float((scale - 1.0) * 100.0),
             'v_m_per_s': float(nominal_velocity * scale),
         }
@@ -509,28 +462,13 @@ def analyze_io(io_group, config, histogram, threshold_fraction=None):
 
 
 def normalize_io_result(result, velocity_scale):
-    velocity_scale = validate_velocity_scale(velocity_scale)
     normalized = copy.deepcopy(result)
     for current in (normalized, *normalized.get('y_bins', []), *normalized.get('z_bins', [])):
-        raw_velocity = current.get('raw_v_m_per_s', current.get('v_m_per_s'))
-        raw_error = current.get('raw_v_m_per_s_error', current.get('v_m_per_s_error'))
+        raw_velocity = current['v_m_per_s']
         current['raw_v_m_per_s'] = raw_velocity
-        current['raw_v_m_per_s_error'] = raw_error
         current['v_m_per_s'] = (
             float(raw_velocity * velocity_scale) if raw_velocity is not None else None
         )
-        current['v_m_per_s_error'] = (
-            float(raw_error * velocity_scale) if raw_error is not None else None
-        )
-        if 'velocity_ratio_percent' in current:
-            current['raw_velocity_ratio_percent'] = current.get(
-                'raw_velocity_ratio_percent', current['velocity_ratio_percent']
-            )
-            current['velocity_ratio_percent'] = (
-                float((current['v_m_per_s'] / current['nominal_v_m_per_s'] - 1.0) * 100.0)
-                if current['v_m_per_s'] is not None
-                else None
-            )
     return normalized
 
 
@@ -558,18 +496,31 @@ def normalization_metadata(velocity_scale, reference_velocity):
     }
 
 
-def build_record(
-    input_file,
-    loaded,
-    io_results,
-    reference_velocity,
-    threshold_fraction=THRESHOLD_FRACTION,
-):
-    timestamp = date_from_input_filename(input_file)
-    # scale the raw velocities so the baseline period averages to the calibrated value
-    velocity_scale = validate_velocity_scale(reference_velocity / BASELINE_RAW_MEAN_M_PER_S)
+def build_header(reference_velocity, threshold_fraction=THRESHOLD_FRACTION):
+    '''Settings shared by every record of a history; stored once at the top of the JSON'''
     if not math.isclose(threshold_fraction, 0.5, rel_tol=0.0, abs_tol=1e-12):
         raise ValueError('The frozen normalization requires a 0.5 threshold fraction')
+    # scale the raw velocities so the baseline period averages to the calibrated value
+    velocity_scale = validate_velocity_scale(reference_velocity / BASELINE_RAW_MEAN_M_PER_S)
+    return {
+        'detection_parameters': {
+            'threshold_fraction': validate_threshold_fraction(threshold_fraction),
+            'nominal_x_bin_width_cm': X_BIN_WIDTH_CM,
+            'smooth_sigma_cm': SMOOTH_SIGMA_CM,
+            'search_half_width_cm': SEARCH_WINDOW_CM,
+            'stability_gap_cm': STABILITY_GAP_CM,
+            'stability_width_cm': STABILITY_WIDTH_CM,
+            'stability_min_bins': STABILITY_MIN_BINS,
+            'min_hits': MIN_HITS,
+        },
+        'normalization': normalization_metadata(velocity_scale, reference_velocity),
+    }
+
+
+def build_record(input_file, loaded, io_results, header):
+    '''Full per-file result, including the fit details and y/z slices'''
+    timestamp = date_from_input_filename(input_file)
+    velocity_scale = header['normalization']['velocity_scale']
     io_results = {
         io: normalize_io_result(result, velocity_scale) for io, result in io_results.items()
     }
@@ -580,37 +531,45 @@ def build_record(
     return {
         'timestamp': timestamp.isoformat() if timestamp is not None else None,
         'source_file': os.path.basename(input_file),
-        'sample': f'{os.path.basename(loaded["hit_dset"])}_after_event_cuts',
-        'normalization': normalization_metadata(velocity_scale, reference_velocity),
-        'detection_parameters': {
-            'threshold_fraction': validate_threshold_fraction(threshold_fraction),
-            'nominal_x_bin_width_cm': X_BIN_WIDTH_CM,
-            'smooth_sigma_cm': SMOOTH_SIGMA_CM,
-            'search_half_width_cm': SEARCH_WINDOW_CM,
-            'stability_gap_cm': STABILITY_GAP_CM,
-            'stability_width_cm': STABILITY_WIDTH_CM,
-            'stability_min_bins': STABILITY_MIN_BINS,
-        },
+        'hit_dset': loaded['hit_dset'],
         'total_events': int(loaded['total_events']),
         'selected_events': int(loaded['selected_events']),
-        'rejected_events': int(loaded['rejected_events']),
-        'io_groups': {str(io): io_results[io] for io in IO_GROUPS},
         'average_v_m_per_s': float(np.mean(velocities)) if velocities else None,
         'tpc_rms_m_per_s': float(np.std(velocities)) if velocities else None,
         'average_raw_v_m_per_s': float(np.mean(raw_velocities)) if raw_velocities else None,
         'raw_tpc_rms_m_per_s': float(np.std(raw_velocities)) if raw_velocities else None,
+        'io_groups': {str(io): io_results[io] for io in IO_GROUPS},
     }
 
 
-def main(input_file, output_file_json, output_file_plot=None, detector=DEFAULT_DETECTOR):
-    reference_velocity = load_reference_velocity(detector)
+def summarize_record(record):
+    '''History entry: the per-file record with only HISTORY_IO_FIELDS per TPC'''
+    return {
+        **{key: value for key, value in record.items() if key != 'io_groups'},
+        'io_groups': {
+            io: {field: result.get(field) for field in HISTORY_IO_FIELDS}
+            for io, result in record['io_groups'].items()
+        },
+    }
+
+
+def main(
+    input_file,
+    output_file_json,
+    output_file_plot=None,
+    output_file_detail=None,
+    detector=DEFAULT_DETECTOR,
+):
+    header = build_header(load_reference_velocity(detector))
     print(f'Opening file: {input_file}')
     loaded = load_hit_histograms(input_file)
     io_results = {
         io: analyze_io(io, loaded['tpcs'][io], loaded['histograms'][io]) for io in IO_GROUPS
     }
-    record = build_record(input_file, loaded, io_results, reference_velocity)
-    update_json(output_file_json, record)
+    record = build_record(input_file, loaded, io_results, header)
+    update_json(output_file_json, header, summarize_record(record))
+    if output_file_detail is not None:
+        write_json(output_file_detail, {**header, **record})
     print(f'Selected events: {loaded["selected_events"]}/{loaded["total_events"]}')
     print(f'Timestamp: {record["timestamp"]}, Velocity: {record["average_v_m_per_s"]} m/s')
     if output_file_plot is not None:
@@ -624,6 +583,11 @@ def build_parser():
         '--output_file_json', '--output-file-json', required=True, help='JSON history'
     )
     parser.add_argument('--output_file_plot', '--output-file-plot', help='Time-series plot')
+    parser.add_argument(
+        '--output_file_detail',
+        '--output-file-detail',
+        help='Optional per-file JSON with the full fit results and y/z slices',
+    )
     parser.add_argument(
         '--detector',
         choices=DETECTORS,
