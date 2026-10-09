@@ -28,11 +28,13 @@ EVENT_DSET = 'charge/events'
 EXT_TRIG_DSET = 'charge/ext_trigs'
 IO_GROUPS = tuple(range(1, 9))
 LOCAL_TIMEZONE = ZoneInfo('America/Chicago')
-BASELINE_RAW_MEAN_M_PER_S = 1566.165516590842
-BASELINE_FILE_COUNT = 136
-BASELINE_MEASUREMENT_COUNT = 1086
-BASELINE_START_TIMESTAMP = '2024-07-11T00:07:46-05:00'
-BASELINE_END_TIMESTAMP = '2024-07-11T23:50:18-05:00'
+# Mean raw velocity (lar_info v_drift x geometric/measured, calib_final_hits) over the 2x2
+# reflow v11 beam july8_2024 + july10_2024 nominal_hv files; recompute if the method changes
+BASELINE_RAW_MEAN_M_PER_S = 1573.4802914621064
+BASELINE_FILE_COUNT = 486
+BASELINE_MEASUREMENT_COUNT = 3881
+BASELINE_START_TIMESTAMP = '2024-07-08T13:43:25-05:00'
+BASELINE_END_TIMESTAMP = '2024-07-12T03:50:43-05:00'
 X_BIN_WIDTH_CM = 0.01596 * 2.0
 SEARCH_WINDOW_CM = 1.4
 PLATEAU_MARGIN_ANODE_CM = 3.0
@@ -85,24 +87,34 @@ def json_file_lock(json_path):
     return Lock(str(json_path) + '.lock')
 
 
-def passes_event_filter(f_manager, i_evt):
-    try:
-        trigs = f_manager[EVENT_DSET, EXT_TRIG_DSET, i_evt]
-    except (IndexError, KeyError):
-        return False
+def ref_pairs(fh, parent, child):
+    '''(parent index, child index) for every row of the h5flow reference parent -> child'''
+    ref = fh[f'{parent}/ref/{child}/ref'][:]
+    return ref[:, 0].astype(np.int64), ref[:, 1].astype(np.int64)
 
-    # trigs is a padded (1, N) masked array; compressed() keeps only the real triggers
-    iogroups = trigs['iogroup'].compressed()
-    if len(iogroups) == 0 or iogroups[0] <= 0:
-        return False
 
-    # at most one external trigger per io_group
-    if np.any(np.bincount(iogroups, minlength=max(IO_GROUPS) + 1)[1:] > 1):
-        return False
+def event_filter_mask(fh):
+    '''Boolean mask over events: first ext trigger on a real io_group, at most one ext
+    trigger per io_group, and event duration <= 3300 ticks'''
+    events = fh[f'{EVENT_DSET}/data'][:]
+    n_events = len(events)
+    evt_idx, trig_idx = ref_pairs(fh, EVENT_DSET, EXT_TRIG_DSET)
+    iogroups = fh[f'{EXT_TRIG_DSET}/data']['iogroup'][trig_idx].astype(np.int64)
 
-    evt = f_manager[f'{EVENT_DSET}/data'][i_evt]
+    # first trigger of each event (reference order) must be on a real io_group;
+    # events without triggers stay False
+    first_ok = np.zeros(n_events, dtype=bool)
+    triggered, first = np.unique(evt_idx, return_index=True)
+    first_ok[triggered] = iogroups[first] > 0
 
-    return not (evt['ts_end'] - evt['ts_start']) > 3300
+    # at most one external trigger per io_group (io_group 0 not counted)
+    pairs, counts = np.unique(evt_idx * 256 + iogroups, return_counts=True)
+    repeated = (counts > 1) & (pairs % 256 > 0)
+    multi_trig = np.zeros(n_events, dtype=bool)
+    multi_trig[pairs[repeated] // 256] = True
+
+    too_long = (events['ts_end'] - events['ts_start']) > 3300
+    return first_ok & ~multi_trig & ~too_long
 
 
 def record_threshold_fraction(record):
@@ -308,30 +320,22 @@ def select_hit_dset(manager):
 def load_hit_histograms(input_file):
     from h5flow.data import H5FlowDataManager
 
-    selected_events = 0
-    rejected_events = 0
-
     with H5FlowDataManager(input_file, 'r', mpi=False) as manager:
         tpcs = load_tpc_config(manager)
         histograms = initialize_histograms(tpcs)
         hit_dset = select_hit_dset(manager)
         print(f'Using hits from: {hit_dset}')
-        total_events = int(manager[f'{EVENT_DSET}/data'].shape[0])
-        for event_index in range(total_events):
-            if not passes_event_filter(manager, event_index):
-                rejected_events += 1
-                continue
-            try:
-                event_hits = manager[EVENT_DSET, hit_dset, event_index]
-            except (IndexError, KeyError):
-                rejected_events += 1
-                continue
-            if len(event_hits) == 0:
-                rejected_events += 1
-                continue
 
-            accumulate_hits(histograms, event_hits[0])
-            selected_events += 1
+        # read the references once and select with numpy instead of one lookup per event
+        selected = event_filter_mask(manager.fh)
+        evt_idx, hit_idx = ref_pairs(manager.fh, EVENT_DSET, hit_dset)
+        hit_idx = hit_idx[selected[evt_idx]]
+        hits = manager.fh[f'{hit_dset}/data'].fields(['x', 'y', 'z', 'io_group'])[:]
+        accumulate_hits(histograms, hits[hit_idx])
+
+    total_events = len(selected)
+    selected_events = int(selected.sum())
+    rejected_events = total_events - selected_events
 
     return {
         'histograms': histograms,
