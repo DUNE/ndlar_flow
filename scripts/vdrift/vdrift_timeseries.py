@@ -11,31 +11,12 @@ matplotlib.use('Agg')
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-import yaml
+
+from vdrift_config import DEFAULT_DETECTOR, DETECTORS, IO_GROUPS, load_calibrated_vdrift
 
 CENTRAL = ZoneInfo('America/Chicago')
-IO_GROUPS = tuple(range(1, 9))
 RECENT_RECORD_COUNT = 50
-YAML_DIR = Path(__file__).resolve().parents[2] / 'yamls'
-# detector option -> (flow yaml directory, plot label)
-DETECTORS = {
-    '2x2': ('proto_nd_flow', '2x2'),
-    'fsd': ('fsd_flow', 'FSD'),
-    'fsdcube': ('fsdcube_flow', 'FSD cube'),
-    'ndlar': ('ndlar_flow', 'ND-LAr'),
-}
-DEFAULT_DETECTOR = '2x2'
-
-
-def load_calibrated_vdrift(detector):
-    '''Calibrated drift velocity used by flow, drawn as the plot reference [m/s]'''
-    yaml_file = YAML_DIR / DETECTORS[detector][0] / 'resources/LArData.yaml'
-    with open(yaml_file, encoding='utf-8') as f:
-        vdrift = yaml.safe_load(f)['params'].get('vdrift')  # mm/us, one value or one per module
-    if not vdrift:
-        print(f'No vdrift set in {yaml_file} (computed from E field); no reference line drawn')
-        return []
-    return sorted({float(v) * 1e3 for v in vdrift})
+AVERAGE_LABEL = 'TPC average'
 
 
 def parse_timestamp(value):
@@ -59,24 +40,30 @@ def load_points(input_file):
 
 
 def extract_series(data):
-    series = {io: {'timestamps': [], 'velocities': [], 'raw_velocities': []} for io in IO_GROUPS}
+    '''Per-TPC series plus the TPC average (AVERAGE_LABEL), each with timestamps and
+    normalized and raw velocities'''
+    series = {
+        name: {'timestamps': [], 'velocities': [], 'raw_velocities': []}
+        for name in (*IO_GROUPS, AVERAGE_LABEL)
+    }
+
+    def append(name, velocity, raw_velocity, timestamp):
+        series[name]['timestamps'].append(timestamp)
+        series[name]['velocities'].append(float(velocity))
+        series[name]['raw_velocities'].append(float(raw_velocity))
 
     for entry in data:
-        timestamp_value = entry.get('timestamp')
-        if timestamp_value is None:
+        if entry.get('timestamp') is None:
             continue
-
-        timestamp = parse_timestamp(timestamp_value)
-        io_groups = entry.get('io_groups', {})
-
+        timestamp = parse_timestamp(entry['timestamp'])
+        if entry.get('average_v_m_per_s') is not None:
+            append(
+                AVERAGE_LABEL, entry['average_v_m_per_s'], entry['average_raw_v_m_per_s'], timestamp
+            )
         for io in IO_GROUPS:
-            result = io_groups.get(str(io), {})
-            if result.get('status') != 'ok' or result.get('v_m_per_s') is None:
-                continue
-
-            series[io]['timestamps'].append(timestamp)
-            series[io]['velocities'].append(float(result['v_m_per_s']))
-            series[io]['raw_velocities'].append(result.get('raw_v_m_per_s', result['v_m_per_s']))
+            result = entry.get('io_groups', {}).get(str(io), {})
+            if result.get('status') == 'ok':
+                append(io, result['v_m_per_s'], result['raw_v_m_per_s'], timestamp)
 
     return series
 
@@ -84,15 +71,34 @@ def extract_series(data):
 def draw_static(series, reference_velocities, output_file, title):
     fig, ax = plt.subplots(figsize=(10, 5))
 
+    # TPCs thin and faded so the average stands out
     for io in IO_GROUPS:
-        timestamps = series[io]['timestamps']
-        if timestamps:
-            ax.plot(timestamps, series[io]['velocities'], 'o-', label=f'IO {io}')
+        if series[io]['timestamps']:
+            ax.plot(
+                series[io]['timestamps'],
+                series[io]['velocities'],
+                'o-',
+                markersize=2,
+                linewidth=0.7,
+                alpha=0.4,
+                label=f'IO {io}',
+            )
+    average = series[AVERAGE_LABEL]
+    if average['timestamps']:
+        ax.plot(
+            average['timestamps'],
+            average['velocities'],
+            'o-',
+            color='black',
+            markersize=3,
+            linewidth=2.5,
+            label=AVERAGE_LABEL,
+        )
 
     for velocity in reference_velocities:
         ax.axhline(
             velocity,
-            color='black',
+            color='red',
             linestyle='--',
             linewidth=1.5,
             label=f'Calibrated v_drift: {velocity:g} m/s',
@@ -101,42 +107,56 @@ def draw_static(series, reference_velocities, output_file, title):
     ax.set_ylabel('Drift velocity [m/s]')
     ax.set_title(title)
     ax.grid(True)
-    ax.legend(ncol=2)
+    # legend order: calibrated value, average, then TPCs
+    handles, labels = ax.get_legend_handles_labels()
+    rank = {'Calibrated': 0, AVERAGE_LABEL: 1}
+    order = sorted(range(len(labels)), key=lambda i: rank.get(labels[i].split(' v_drift')[0], 2))
+    ax.legend([handles[i] for i in order], [labels[i] for i in order], ncol=2)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d/%Y\n%H:%M CT', tz=CENTRAL))
     fig.tight_layout()
     fig.savefig(output_file, dpi=180, bbox_inches='tight')
     plt.close(fig)
 
 
-def draw_interactive(data, reference_velocities, output_file, title):
-    series = extract_series(data)
+def draw_interactive(series, reference_velocities, output_file, title):
     fig = go.Figure()
 
-    for io in IO_GROUPS:
-        timestamps = series[io]['timestamps']
-        if timestamps:
-            fig.add_trace(
-                go.Scatter(
-                    x=timestamps,
-                    y=series[io]['velocities'],
-                    mode='lines+markers',
-                    name=f'IO {io}',
-                    customdata=series[io]['raw_velocities'],
-                    hovertemplate=(
-                        '%{x}<br>Velocity: %{y:.2f} m/s'
-                        '<br>Raw: %{customdata:.2f} m/s<extra>%{fullData.name}</extra>'
-                    ),
-                )
+    # TPCs start hidden (click the legend to show); the average is always drawn
+    traces = [(io, f'IO {io}', 'legendonly', {}) for io in IO_GROUPS]
+    traces.append((AVERAGE_LABEL, AVERAGE_LABEL, True, {'color': 'black', 'width': 3}))
+    for name, label, visible, line in traces:
+        if not series[name]['timestamps']:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=series[name]['timestamps'],
+                y=series[name]['velocities'],
+                mode='lines+markers',
+                name=label,
+                visible=visible,
+                line=line,
+                legendrank=2 if name == AVERAGE_LABEL else 3,
+                customdata=series[name]['raw_velocities'],
+                hovertemplate=(
+                    '%{x}<br>Velocity: %{y:.2f} m/s'
+                    '<br>Raw: %{customdata:.2f} m/s<extra>%{fullData.name}</extra>'
+                ),
             )
+        )
 
-    for velocity in reference_velocities:
-        fig.add_hline(
-            y=velocity,
-            line_color='black',
-            line_dash='dash',
-            line_width=1.5,
-            annotation_text=f'Calibrated v_drift: {velocity:g} m/s',
-            annotation_position='top left',
+    # calibrated value as a legend entry spanning the plotted time range
+    timestamps = [t for name in series for t in series[name]['timestamps']]
+    for velocity in reference_velocities if timestamps else []:
+        fig.add_trace(
+            go.Scatter(
+                x=[min(timestamps), max(timestamps)],
+                y=[velocity, velocity],
+                mode='lines',
+                name=f'Calibrated v_drift: {velocity:g} m/s',
+                line={'color': 'red', 'dash': 'dash', 'width': 1.5},
+                legendrank=1,
+                hoverinfo='skip',
+            )
         )
     fig.update_layout(
         title=title,
@@ -157,14 +177,15 @@ def main(input_file, output_file, detector=DEFAULT_DETECTOR):
     reference_velocities = load_calibrated_vdrift(detector)
     title = f'{DETECTORS[detector][1]} Drift Velocity'
 
-    draw_static(extract_series(data), reference_velocities, output_file, title)
+    series = extract_series(data)
+    draw_static(series, reference_velocities, output_file, title)
     draw_static(
         extract_series(data[-RECENT_RECORD_COUNT:]),
         reference_velocities,
         f'{output_file}_last.png',
         f'{title} last {RECENT_RECORD_COUNT} points',
     )
-    draw_interactive(data, reference_velocities, output_file, title)
+    draw_interactive(series, reference_velocities, output_file, title)
 
     for path in (output_file, f'{output_file}_last.png', f'{output_file}.html'):
         print(f'Saved: {path}')
