@@ -28,6 +28,21 @@ class RockMuonSelection(H5FlowStage):
     This will perform a selection for rock muons. Rock muons are 
     determined by straight tracks that penetrate two faces of the 
     detector.
+
+    Crossing tags in ``analysis/rock_muon_tracks`` (one slot per module / TPC,
+    sized from the geometry stored in the file):
+
+     - ``a2a``: bool ``(n_modules,)``. ``a2a[m]`` is True if the track reaches
+       both anodes of module ``m`` (anode-to-anode).
+     - ``a2c``: bool ``(n_modules, 2)``. ``a2c[m, tpc]`` is True if the track goes
+       from the anode to the cathode in that TPC (anode-to-cathode); False for
+       both TPCs of a module flagged ``a2a``. ``tpc = 0`` is the TPC whose anode is
+       at the module's lower x, ``tpc = 1`` the one at higher x.
+
+    Module ``m`` is index ``m`` of ``geometry_info`` ``module_RO_bounds``. The
+    dataset attributes ``tpc_anode_x`` ``(n_modules, 2)`` and ``tpc_io_groups``
+    ``(n_modules, 2, n)``, padded with -1, give the anode x and io_groups of each
+    slot. E.g. on the 2x2, ``tpc_io_groups[:, :, 0]`` is ``[[2, 1], [4, 3], [6, 5], [8, 7]]``.
     '''
     #Empty List so tracks can be counted
     
@@ -137,7 +152,15 @@ class RockMuonSelection(H5FlowStage):
         for m_id, module in enumerate(self.tpc_io_groups):
             for tpc, ios in enumerate(module):
                 tpc_io_groups[m_id, tpc, :len(ios)] = ios
-        self.data_manager.set_attrs(self.rock_muon_hits_dset_name, tpc_io_groups=tpc_io_groups)
+        self.data_manager.set_attrs(self.rock_muon_hits_dset_name,
+            tpc_io_groups=tpc_io_groups,
+            tpc_anode_x=np.asarray(self.module_bounds)[:, :, 0],
+            a2a_description='a2a[module]: True if the track reaches both anodes of the module (anode-to-anode). '
+                            'module = index of geometry_info module_RO_bounds',
+            a2c_description='a2c[module, tpc]: True if the track goes from the anode to the cathode in that TPC '
+                            '(anode-to-cathode); False for both TPCs of a module flagged a2a. tpc 0 = anode at the '
+                            "module's lower x, tpc 1 = anode at higher x; see tpc_anode_x and tpc_io_groups",
+            tpc_io_groups_description='io_groups reading each a2c slot [module, tpc, :], padded with -1')
         
         self.data_manager.create_dset(self.rock_muon_segments_dset_name,
                                       dtype = self.rock_muon_segments_dtype)
