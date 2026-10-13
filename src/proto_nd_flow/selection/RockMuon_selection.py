@@ -1,4 +1,6 @@
 #Imports
+import logging
+
 import numpy as np
 import numpy.ma as ma
 
@@ -18,9 +20,6 @@ from scipy.spatial.distance import cdist
 
 import statistics
 
-FACE_TOL = 2.1
-MIN_SAMPLES = 3
-MIN_TPC_HITS = 3
 
 
 class RockMuonSelection(H5FlowStage):
@@ -44,25 +43,42 @@ class RockMuonSelection(H5FlowStage):
     dataset attributes ``tpc_anode_x`` ``(n_modules, 2)`` and ``tpc_io_groups``
     ``(n_modules, 2, n)``, padded with -1, give the anode x and io_groups of each
     slot. E.g. on the 2x2, ``tpc_io_groups[:, :, 0]`` is ``[[2, 1], [4, 3], [6, 5], [8, 7]]``.
+
+    All parameters in ``defaults`` can be set in the yaml; anything left out uses
+    the default. ``hits_dset_names`` lists the hit datasets to use in order of
+    preference: the first one present in the file whose ``id`` equals its row
+    index is used (the track/segment -> hit references are written from ``id``),
+    and its name is stored in the ``hits_dset_name`` attribute of the tracks
+    dataset. Every dataset in the list must also be in the yaml ``requires``.
     '''
     #Empty List so tracks can be counted
     
-    #Detector Boundaries, Cuts
+    #Datasets and cuts, all can be set in the yaml
     defaults = dict([
-    ('length_cut', 100), #cm
-        
-    ('MEVR', 0.974), #Miniumum explained variance ratio
+    ('events_dset_name', 'charge/events'),
+    ('hits_dset_names', ['charge/calib_prompt_hits']), #first one present in the file is used
+    ('rock_muon_hits_dset_name', 'analysis/rock_muon_tracks'),
+    ('rock_muon_segments_dset_name', 'analysis/rock_muon_segments'),
 
-    ('track_count', -1),
+    ('length_cut', 100), #cm, minimum track length
+    ('max_avg_distance', 1.5), #cm, maximum mean hit distance from the track line
+    ('noise_hit_max_distance', 3.5), #cm, hits further from the track line are removed
+    ('face_tolerance', 2.1), #cm, distance to a detector face, anode or cathode to count as reaching it
+    ('min_cluster_hits', 11), #minimum hits in a cluster to try it as a track
+    ('min_tpc_hits', 3), #minimum hits in a TPC for anode/cathode crossing tags
 
-    ('segment_count', -1)
+    ('dbscan_eps', 1), #cm
+    ('dbscan_min_samples', 3),
+    ('max_clusters_for_merging', 150), #events with more clusters are not merged
+    ('merge_min_hits', 6), #minimum hits in each cluster to merge
+    ('merge_min_centroid_dist', 2), #cm
+    ('merge_max_centroid_dist', 100), #cm
+    ('merge_max_distance', 3), #cm, maximum mean distance of the merged hits from the line
+    ('merge_max_angle', 20), #degrees, maximum angle between the two clusters
+
+    ('segment_length', 2), #cm
     ])
-    
 
-    #Datasets
-    events_dset_name = 'charge/events'
-    PromptHits_dset_name = 'charge/calib_prompt_hits'
-    
     #Datatype wanted
     
     # crossing tag lists are appended in init(), sized from the geometry
@@ -105,25 +121,22 @@ class RockMuonSelection(H5FlowStage):
         ('nhits', 'i4'),
     ])
 
-    
-    rock_muon_hits_dset_name = 'analysis/rock_muon_tracks'
-
-    rock_muon_segments_dset_name = 'analysis/rock_muon_segments'
-    
     def __init__(self, **params):
         
         super(RockMuonSelection,self).__init__(**params) # needed to inherit H5FlowStage functionality
         
         for key,val in self.defaults.items():
             setattr(self, key, params.get(key, val))
-            
-        self.length_cut = params.get('length_cut', dict())
-        
-        #self.MEVR = params.get('MEVR', dict())
+
+        #Track and segment counters
+        self.track_count = -1
+        self.segment_count = -1
             
     def init(self, source_name):
         
         super(RockMuonSelection, self).init(source_name)
+
+        self.hits_dset_name = self._choose_hits_dset()
 
         # Crossing tags use the geometry stored in the file, one slot per module / TPC:
         # a2a[module], a2c[module, tpc] with tpc 0 = low-x anode, 1 = high-x anode
@@ -133,19 +146,15 @@ class RockMuonSelection(H5FlowStage):
             ('a2c', '?', (self.n_modules, 2)),
         ])
         
-        attrs = dict()
-        
-        for key in self.defaults:
-            
-            attrs[key] = getattr(self, key)
-        
-        #self.data_manager.set_attrs(self.path,
-        #                            classname=self.classname,
-        #                            class_version=self.class_version,
-        #                            **attrs)
-        
         self.data_manager.create_dset(self.rock_muon_hits_dset_name,
                                       dtype = self.rock_muon_track_dtype)
+
+        #Record the hits used and the configuration
+        config = {key: getattr(self, key) for key in self.defaults}
+        config['hits_dset_names'] = np.array(self.hits_dset_names, dtype='S') # h5py attrs can't hold a list of str
+        self.data_manager.set_attrs(self.rock_muon_hits_dset_name,
+                                    hits_dset_name=self.hits_dset_name,
+                                    **config)
 
         # io_groups reading each a2c slot [module, tpc], padded with -1
         n_max = max(len(ios) for module in self.tpc_io_groups for ios in module)
@@ -168,11 +177,32 @@ class RockMuonSelection(H5FlowStage):
 
         self.data_manager.create_ref(self.events_dset_name, self.rock_muon_hits_dset_name) 
         
-        self.data_manager.create_ref(self.rock_muon_hits_dset_name,self.PromptHits_dset_name)
+        self.data_manager.create_ref(self.rock_muon_hits_dset_name,self.hits_dset_name)
 
         self.data_manager.create_ref(self.rock_muon_hits_dset_name, self.rock_muon_segments_dset_name,)
         
-        self.data_manager.create_ref(self.rock_muon_segments_dset_name, self.PromptHits_dset_name)
+        self.data_manager.create_ref(self.rock_muon_segments_dset_name, self.hits_dset_name)
+
+    def _choose_hits_dset(self):
+        '''
+        First dataset in ``hits_dset_names`` that is in the file and whose ``id`` equals its row
+        index, since the track/segment -> hit references are written from ``id``.
+        '''
+        for name in self.hits_dset_names:
+            if not self.data_manager.dset_exists(name):
+                continue
+            #check id matches row number
+            n = min(len(self.data_manager.get_dset(name)), 100000)
+            if not np.array_equal(self.data_manager.get_dset(name)['id'][:n], np.arange(n)):
+                if self.rank == 0:
+                    logging.warning(f'{name}: id is not the row index (file made before the id fix?), not using it')
+                continue
+            if self.rank == 0:
+                logging.warning(f'RockMuonSelection: using {name}')
+                if name.endswith('calib_final_hits'):
+                    logging.warning('calib_final_hits in old FSD files are merged hits, which the selection should not use')
+            return name
+        raise RuntimeError(f'RockMuonSelection: none of {self.hits_dset_names} is in the file with id == row index')
     
     #@staticmethod
     '''
@@ -198,13 +228,13 @@ class RockMuonSelection(H5FlowStage):
         positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
     
         # Perform DBSCAN clustering
-        hit_cluster = DBSCAN(eps=1, min_samples=MIN_SAMPLES).fit(positions)
+        hit_cluster = DBSCAN(eps=self.dbscan_eps, min_samples=self.dbscan_min_samples).fit(positions)
     
         cluster_labels = hit_cluster.labels_
 
         unique_labels = np.unique(cluster_labels)
 
-        if len(unique_labels) < 150:
+        if len(unique_labels) < self.max_clusters_for_merging:
 
             # Collect indices of hits for each cluster
             for unique in unique_labels:
@@ -232,7 +262,7 @@ class RockMuonSelection(H5FlowStage):
 
                 # Try merging with sorted clusters
                 for j in sorted_indices:
-                    if (j == index) | (len(index_of_track_hits[j]) < 6) | (len(index_of_track_hits[index]) < 6) | (combined_dist_length[j][0] > 100) | (combined_dist_length[j][0] < 2):  # Skip merging with itself
+                    if (j == index) | (len(index_of_track_hits[j]) < self.merge_min_hits) | (len(index_of_track_hits[index]) < self.merge_min_hits) | (combined_dist_length[j][0] > self.merge_max_centroid_dist) | (combined_dist_length[j][0] < self.merge_min_centroid_dist):  # Skip merging with itself
                         continue
                     explained_var, direction2, original_mean = self.PCAs(PromptHits_ev[index_of_track_hits[j]])
                     hits_of_testing_merge = np.concatenate((positions[index_of_track_hits[index]], positions[index_of_track_hits[j]]))
@@ -243,7 +273,7 @@ class RockMuonSelection(H5FlowStage):
                     average_dist = np.mean(distances)
                     sim_direction = np.rad2deg(np.arccos(np.abs(np.dot(direction, direction2))))
 
-                    if (average_dist <= 3) & (sim_direction <= 20):  # Adjust distance threshold as needed
+                    if (average_dist <= self.merge_max_distance) & (sim_direction <= self.merge_max_angle):
                         index_of_track_hits[index] = np.concatenate([index_of_track_hits[index], index_of_track_hits[j]])
                         index_of_track_hits.pop(j)
                         center_of_masses.pop(j)
@@ -306,9 +336,10 @@ class RockMuonSelection(H5FlowStage):
     '''
     Checks to see if start/end point of track are close to two different faces of detector. If they are this will return True. Note: >= -1 just in case if a hit is reconstructed outside of detector.
     '''
-    def close_to_two_faces(self,boundaries, hits, threshold=FACE_TOL):
+    def close_to_two_faces(self,boundaries, hits):
         # Boundaries are in the order [xmin, ymin, zmin, xmax, ymax, zmax]
         penetrated = False
+        threshold = self.face_tolerance
 
         test_face = [False] * len(boundaries)
         for index, face in enumerate(boundaries):
@@ -360,12 +391,13 @@ class RockMuonSelection(H5FlowStage):
                 raise ValueError(f'io_group {io}: anode x {anode} is not one anode plane of module {m_id}')
             self.tpc_io_groups[m_id][side[0]].append(io)
 
-    def anode_cathode_tags(self, hits, tol=FACE_TOL, min_hits=MIN_TPC_HITS):
+    def anode_cathode_tags(self, hits):
         '''
         Anode-to-anode (A2A) and anode-to-cathode (A2C) crossings. Returns a2a[module], True if
         the track reaches both anodes of the module, and a2c[module, tpc], True if it goes from
         the anode to the cathode in that TPC (independent of a2a).
         '''
+        tol, min_hits = self.face_tolerance, self.min_tpc_hits
         a2a = np.zeros(self.n_modules, dtype=bool)
         a2c = np.zeros((self.n_modules, 2), dtype=bool)
 
@@ -400,7 +432,7 @@ class RockMuonSelection(H5FlowStage):
         # Calculate the Euclidean distance between each point and its projection on the line
         distances = np.linalg.norm(positions - projections, axis=1)
         
-        mask_good = distances <= 3.5
+        mask_good = distances <= self.noise_hit_max_distance
 
         filtered_hits = hits[mask_good]
 
@@ -435,7 +467,6 @@ class RockMuonSelection(H5FlowStage):
             max_boundaries = Min_max_detector_bounds[1]
             
             faces_of_detector = np.concatenate((min_boundaries,max_boundaries))
-            MEVR = self.MEVR #Minimum explained variance ratio
 
             L_cut = self.length_cut #minimum track length requirement
             
@@ -447,7 +478,7 @@ class RockMuonSelection(H5FlowStage):
             
             avg_distance = self.average_distance(filtered_hits)
 
-            if (avg_distance <= 1.5) & (l_track >= L_cut):
+            if (avg_distance <= self.max_avg_distance) & (l_track >= L_cut):
 
                 penetrated = self.close_to_two_faces(faces_of_detector, filtered_hits)
 
@@ -524,7 +555,7 @@ class RockMuonSelection(H5FlowStage):
     
         tpc_hits = self.TPC_separation(track)
 
-        given_scale = 2
+        given_scale = self.segment_length
 
         for hits in tpc_hits:
             if len(hits) != 0:
@@ -634,7 +665,7 @@ class RockMuonSelection(H5FlowStage):
         event_id = np.r_[source_slice]
         
         Min_max_detector_bounds = resources['Geometry'].lar_detector_bounds 
-        PromptHits_ev = cache[self.PromptHits_dset_name][0]
+        PromptHits_ev = cache[self.hits_dset_name][0]
 
         PromptHits_ev_positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
         
@@ -643,13 +674,13 @@ class RockMuonSelection(H5FlowStage):
         if len(nan_indices) >   0:
             PromptHits_ev = np.delete(PromptHits_ev,nan_indices, axis = 0)
 
-        if len(PromptHits_ev) < MIN_SAMPLES:
+        if len(PromptHits_ev) < self.dbscan_min_samples:
             return
         
         hit_indices = self.cluster(PromptHits_ev)
         
         for indices in hit_indices:
-            if len(indices) > 10:
+            if len(indices) >= self.min_cluster_hits:
                 hits = PromptHits_ev[indices]
                 hits = self.clean_noise_hits(hits)
                 if len(hits) < 1:
@@ -706,10 +737,10 @@ class RockMuonSelection(H5FlowStage):
                     segment_hit_ref = np.array([(x) for x in segment_hit_ref])
                     
                     #Write References
-                    self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.PromptHits_dset_name, track_ref)
+                    self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.hits_dset_name, track_ref)
                     self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.events_dset_name, track_event_ref) 
                     self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.rock_muon_segments_dset_name, segment_track_ref)
-                    self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.PromptHits_dset_name, segment_hit_ref)
+                    self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.hits_dset_name, segment_hit_ref)
                 # event -> hit
                 #self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.rock_muon_hits_dset_name, ref)
                 

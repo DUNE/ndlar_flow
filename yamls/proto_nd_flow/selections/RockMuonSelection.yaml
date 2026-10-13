@@ -5,30 +5,47 @@ path: proto_nd_flow.selection.RockMuon_selection
 requires:
   - 'charge/events'
 
+  # every dataset in hits_dset_names must be listed here; ones missing from the file are skipped
+  - name: 'charge/calib_filtered_hits'
+    path: ["charge/events", "charge/calib_filtered_hits"]
+
+  - name: 'charge/calib_final_hits'
+    path: ["charge/events", "charge/calib_final_hits"]
+
   - name: 'charge/calib_prompt_hits'
     path: ["charge/events", "charge/calib_prompt_hits"]
-  
-  - name: 'charge/calib_filtered_hits'
-    path: ["charge/events","charge/calib_filtered_hits"]
-   
+
 params:
     #Inputs
     events_dset_name: 'charge/events'
-    PromptHits_dset_name: 'charge/calib_prompt_hits'
-    FinalHits_dset_name: 'charge/calib_filtered_hits'
-       
+    # hits used by the selection, in order of preference: the first one in the file
+    # (with id == row index) is used. calib_final_hits is for files made before
+    # calib_filtered_hits existed.
+    # WARNING: in old FSD files calib_final_hits are merged hits, which the selection
+    # should not use; remove calib_final_hits from this list for those files.
+    hits_dset_names: ['charge/calib_filtered_hits', 'charge/calib_final_hits', 'charge/calib_prompt_hits']
+
     #Outputs
     rock_muon_hits_dset_name: 'analysis/rock_muon_tracks'
     rock_muon_segments_dset_name: 'analysis/rock_muon_segments'
 
-    #configuration parameters
+    #Track selection
+    length_cut: 100 #cm, minimum track length
+    max_avg_distance: 1.5 #cm, maximum mean hit distance from the track line
+    noise_hit_max_distance: 3.5 #cm, hits further from the track line are removed
+    face_tolerance: 2.1 #cm, distance to a detector face, anode or cathode to count as reaching it
+    min_cluster_hits: 11 #minimum hits in a cluster to try it as a track
+    min_tpc_hits: 3 #minimum hits in a TPC for anode/cathode crossing tags
 
-    length_cut: 100 #cm
-    MEVR: 0.974 #Minimum explained variance ratio
-    
-    track_counts: -1    
-    segment_counts: -1    
-        
-        
-        
-    
+    #Clustering
+    dbscan_eps: 1 #cm
+    dbscan_min_samples: 3
+    max_clusters_for_merging: 150 #events with more clusters are not merged
+    merge_min_hits: 6 #minimum hits in each cluster to merge
+    merge_min_centroid_dist: 2 #cm
+    merge_max_centroid_dist: 100 #cm
+    merge_max_distance: 3 #cm, maximum mean distance of the merged hits from the line
+    merge_max_angle: 20 #degrees, maximum angle between the two clusters
+
+    #dQ/dx segments
+    segment_length: 2 #cm
