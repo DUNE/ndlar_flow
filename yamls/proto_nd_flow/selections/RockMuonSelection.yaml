@@ -26,7 +26,7 @@ params:
     hits_dset_names: ['charge/calib_filtered_hits', 'charge/calib_final_hits', 'charge/calib_prompt_hits']
 
     #Outputs
-    rock_muon_hits_dset_name: 'analysis/rock_muon_tracks'
+    rock_muon_tracks_dset_name: 'analysis/rock_muon_tracks'
     rock_muon_segments_dset_name: 'analysis/rock_muon_segments'
 
     #Track selection

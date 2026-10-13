@@ -57,7 +57,7 @@ class RockMuonSelection(H5FlowStage):
     defaults = dict([
     ('events_dset_name', 'charge/events'),
     ('hits_dset_names', ['charge/calib_prompt_hits']), #first one present in the file is used
-    ('rock_muon_hits_dset_name', 'analysis/rock_muon_tracks'),
+    ('rock_muon_tracks_dset_name', 'analysis/rock_muon_tracks'),
     ('rock_muon_segments_dset_name', 'analysis/rock_muon_segments'),
 
     ('length_cut', 100), #cm, minimum track length
@@ -146,13 +146,13 @@ class RockMuonSelection(H5FlowStage):
             ('a2c', '?', (self.n_modules, 2)),
         ])
         
-        self.data_manager.create_dset(self.rock_muon_hits_dset_name,
+        self.data_manager.create_dset(self.rock_muon_tracks_dset_name,
                                       dtype = self.rock_muon_track_dtype)
 
         #Record the hits used and the configuration
         config = {key: getattr(self, key) for key in self.defaults}
         config['hits_dset_names'] = np.array(self.hits_dset_names, dtype='S') # h5py attrs can't hold a list of str
-        self.data_manager.set_attrs(self.rock_muon_hits_dset_name,
+        self.data_manager.set_attrs(self.rock_muon_tracks_dset_name,
                                     hits_dset_name=self.hits_dset_name,
                                     **config)
 
@@ -162,7 +162,7 @@ class RockMuonSelection(H5FlowStage):
         for m_id, module in enumerate(self.tpc_io_groups):
             for tpc, ios in enumerate(module):
                 tpc_io_groups[m_id, tpc, :len(ios)] = ios
-        self.data_manager.set_attrs(self.rock_muon_hits_dset_name,
+        self.data_manager.set_attrs(self.rock_muon_tracks_dset_name,
             tpc_io_groups=tpc_io_groups,
             tpc_anode_x=np.asarray(self.module_bounds)[:, :, 0],
             a2a_description='a2a[module]: True if the track reaches both anodes of the module (anode-to-anode). '
@@ -175,11 +175,11 @@ class RockMuonSelection(H5FlowStage):
         self.data_manager.create_dset(self.rock_muon_segments_dset_name,
                                       dtype = self.rock_muon_segments_dtype)
 
-        self.data_manager.create_ref(self.events_dset_name, self.rock_muon_hits_dset_name) 
+        self.data_manager.create_ref(self.events_dset_name, self.rock_muon_tracks_dset_name) 
         
-        self.data_manager.create_ref(self.rock_muon_hits_dset_name,self.hits_dset_name)
+        self.data_manager.create_ref(self.rock_muon_tracks_dset_name,self.hits_dset_name)
 
-        self.data_manager.create_ref(self.rock_muon_hits_dset_name, self.rock_muon_segments_dset_name,)
+        self.data_manager.create_ref(self.rock_muon_tracks_dset_name, self.rock_muon_segments_dset_name,)
         
         self.data_manager.create_ref(self.rock_muon_segments_dset_name, self.hits_dset_name)
 
@@ -713,11 +713,11 @@ class RockMuonSelection(H5FlowStage):
                     segments_list, segment_hit_ref, segment_track_ref = self.segments(muon_track)
                     
                     #  1. reserve a new data region within the output dataset
-                    rock_muon_slice = self.data_manager.reserve_data(self.rock_muon_hits_dset_name, 1)
+                    rock_muon_slice = self.data_manager.reserve_data(self.rock_muon_tracks_dset_name, 1)
 
 
                     #  2. write the data to the new data region
-                    self.data_manager.write_data(self.rock_muon_hits_dset_name, rock_muon_slice, track_info)
+                    self.data_manager.write_data(self.rock_muon_tracks_dset_name, rock_muon_slice, track_info)
             
                     segments_array = np.array([tuple(sub) for sub in segments_list], dtype = self.rock_muon_segments_dtype) #Converts array of list to array of tuples
             
@@ -741,10 +741,10 @@ class RockMuonSelection(H5FlowStage):
                     segment_hit_ref = np.array([(x) for x in segment_hit_ref])
                     
                     #Write References
-                    self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.hits_dset_name, track_ref)
-                    self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.events_dset_name, track_event_ref) 
-                    self.data_manager.write_ref(self.rock_muon_hits_dset_name,self.rock_muon_segments_dset_name, segment_track_ref)
+                    self.data_manager.write_ref(self.rock_muon_tracks_dset_name,self.hits_dset_name, track_ref)
+                    self.data_manager.write_ref(self.rock_muon_tracks_dset_name,self.events_dset_name, track_event_ref) 
+                    self.data_manager.write_ref(self.rock_muon_tracks_dset_name,self.rock_muon_segments_dset_name, segment_track_ref)
                     self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.hits_dset_name, segment_hit_ref)
                 # event -> hit
-                #self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.rock_muon_hits_dset_name, ref)
+                #self.data_manager.write_ref(self.rock_muon_segments_dset_name, self.rock_muon_tracks_dset_name, ref)
                 
