@@ -206,11 +206,11 @@ class RockMuonSelection(H5FlowStage):
     
     #@staticmethod
     '''
-    def cluster(self, PromptHits_ev):
+    def cluster(self, Hits_ev):
         
         index_of_track_hits = []
 
-        positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
+        positions = np.column_stack((Hits_ev['x'], Hits_ev['y'], Hits_ev['z']))
         
         hit_cluster = DBSCAN(eps = 8, min_samples = 1).fit(positions)
         
@@ -223,9 +223,9 @@ class RockMuonSelection(H5FlowStage):
         return index_of_track_hits
     '''
     #@staticmethod
-    def cluster(self,PromptHits_ev):
+    def cluster(self,Hits_ev):
         index_of_track_hits = []
-        positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
+        positions = np.column_stack((Hits_ev['x'], Hits_ev['y'], Hits_ev['z']))
     
         # Perform DBSCAN clustering
         hit_cluster = DBSCAN(eps=self.dbscan_eps, min_samples=self.dbscan_min_samples).fit(positions)
@@ -258,13 +258,13 @@ class RockMuonSelection(H5FlowStage):
                 # Sort indices based on length (descending) and distance (ascending)
                 sorted_indices = sorted(indices, key=lambda i: (-combined_dist_length[i][1], combined_dist_length[i][0]))
             
-                explained_var, direction, original_mean = self.PCAs(PromptHits_ev[index_of_track_hits[index]])
+                explained_var, direction, original_mean = self.PCAs(Hits_ev[index_of_track_hits[index]])
 
                 # Try merging with sorted clusters
                 for j in sorted_indices:
                     if (j == index) | (len(index_of_track_hits[j]) < self.merge_min_hits) | (len(index_of_track_hits[index]) < self.merge_min_hits) | (combined_dist_length[j][0] > self.merge_max_centroid_dist) | (combined_dist_length[j][0] < self.merge_min_centroid_dist):  # Skip merging with itself
                         continue
-                    explained_var, direction2, original_mean = self.PCAs(PromptHits_ev[index_of_track_hits[j]])
+                    explained_var, direction2, original_mean = self.PCAs(Hits_ev[index_of_track_hits[j]])
                     hits_of_testing_merge = np.concatenate((positions[index_of_track_hits[index]], positions[index_of_track_hits[j]]))
                     center_of_merge = np.mean(hits_of_testing_merge, axis=0)
 
@@ -665,23 +665,23 @@ class RockMuonSelection(H5FlowStage):
         event_id = np.r_[source_slice]
         
         Min_max_detector_bounds = resources['Geometry'].lar_detector_bounds 
-        PromptHits_ev = cache[self.hits_dset_name][0]
+        Hits_ev = cache[self.hits_dset_name][0]
 
-        PromptHits_ev_positions = np.column_stack((PromptHits_ev['x'], PromptHits_ev['y'], PromptHits_ev['z']))
+        Hits_ev_positions = np.column_stack((Hits_ev['x'], Hits_ev['y'], Hits_ev['z']))
         
-        nan_indices = np.unique(np.argwhere(np.isnan(PromptHits_ev_positions))[:,0]) 
+        nan_indices = np.unique(np.argwhere(np.isnan(Hits_ev_positions))[:,0]) 
         
         if len(nan_indices) >   0:
-            PromptHits_ev = np.delete(PromptHits_ev,nan_indices, axis = 0)
+            Hits_ev = np.delete(Hits_ev,nan_indices, axis = 0)
 
-        if len(PromptHits_ev) < self.dbscan_min_samples:
+        if len(Hits_ev) < self.dbscan_min_samples:
             return
         
-        hit_indices = self.cluster(PromptHits_ev)
+        hit_indices = self.cluster(Hits_ev)
         
         for indices in hit_indices:
             if len(indices) >= self.min_cluster_hits:
-                hits = PromptHits_ev[indices]
+                hits = Hits_ev[indices]
                 hits = self.clean_noise_hits(hits)
                 if len(hits) < 1:
                     continue
