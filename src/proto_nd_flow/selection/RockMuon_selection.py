@@ -2,23 +2,14 @@
 import logging
 
 import numpy as np
-import numpy.ma as ma
 
 from h5flow.core import H5FlowStage, resources
-from h5flow.core import resources
-
-from h5flow import H5FLOW_MPI
-import h5flow
-from h5flow.data import dereference
 
 from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-
 from scipy.spatial.distance import cdist
-
-import statistics
 
 
 
