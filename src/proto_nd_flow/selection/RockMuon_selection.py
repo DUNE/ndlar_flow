@@ -409,8 +409,8 @@ class RockMuonSelection(H5FlowStage):
     def select_muon_track(self,hits,Min_max_detector_bounds):
             muon_hits = []
 
-            min_boundaries = np.flip(Min_max_detector_bounds[0]) #bounds are z,y,x and hits x,y,z, so bounds must be flipped
-            max_boundaries = np.flip(Min_max_detector_bounds[1])
+            min_boundaries = Min_max_detector_bounds[0] #Geometry lar_detector_bounds are already x,y,z like the hits
+            max_boundaries = Min_max_detector_bounds[1]
             
             faces_of_detector = np.concatenate((min_boundaries,max_boundaries))
             MEVR = self.MEVR #Minimum explained variance ratio
