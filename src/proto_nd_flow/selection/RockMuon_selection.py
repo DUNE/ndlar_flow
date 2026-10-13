@@ -691,7 +691,11 @@ class RockMuonSelection(H5FlowStage):
                     #Loop through tracks and changes the DBSCAN cluster_id to a given track number
                     self.track_count += 1 
                     track_number = self.track_count
-                    
+
+                    #PCA gives the track axis but not its sign: point along the beam (+z), as in segments()
+                    if direction_vector[2] < 0:
+                        direction_vector = -direction_vector
+
                     #Get angle of track
                     theta_xz, theta_yz,theta_z = self.angle(direction_vector)
 
