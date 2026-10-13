@@ -28,6 +28,11 @@ class RockMuonSelection(H5FlowStage):
     determined by straight tracks that penetrate two faces of the 
     detector.
 
+    Track direction: ``PCA_i``, ``PCA_j``, ``PCA_k`` is the unit vector along the
+    track's principal axis. Its sign is arbitrary (it comes from the PCA, not from the
+    direction of travel), so choose a convention before computing angles, e.g. flip to
+    +z for beam muons or to -y for cosmics.
+
     Crossing tags in ``analysis/rock_muon_tracks`` (one slot per module / TPC,
     sized from the geometry stored in the file):
 
@@ -93,10 +98,7 @@ class RockMuonSelection(H5FlowStage):
         ('y_end', 'f8'),
         ('z_end', 'f8'),
         ('exp_var', 'f8'), 
-        ('theta_xz','f8'), 
-        ('theta_yz', 'f8'), 
-        ('theta_z','f8'),
-        # new
+        # unit vector along the track (PCA axis); its sign is arbitrary, choose a convention before computing angles
         ('PCA_i', 'f8'),
         ('PCA_j','f8'),
         ('PCA_k', 'f8'),
@@ -494,39 +496,6 @@ class RockMuonSelection(H5FlowStage):
 
             return np.array(muon_hits), l_track, start_point, end_point, explained_var, direction_vector
     
-    #@staticmethod
-    def angle(self,direction_vector):
-        magnitude = np.linalg.norm(direction_vector)
-
-        # Calculate the unit vector in the xz-plane
-        normal_vector_xz = np.array([0, 1, 0])
-        
-        # Calculate the dot product between the direction vector and the unit vector in the yz-plane
-        dot_product = np.dot(direction_vector, normal_vector_xz)
-
-        # Calculate the angle between the direction vector and the yz-plane
-        theta_xz = np.arccos(dot_product / magnitude)
-
-        # Convert the angle from radians to degrees
-        theta_xz = np.degrees(theta_xz)
-        
-        normal_vector_yz = np.array([1, 0, 0])
-
-        # Calculate the dot product between the direction vector and the unit vector in the yz-plane
-        dot_product = np.dot(direction_vector, normal_vector_yz)
-
-        # Calculate the angle between the direction vector and the yz-plane
-        theta_yz = np.arccos(dot_product / magnitude)
-
-        # Convert the angle from radians to degrees
-        theta_yz = np.degrees(theta_yz)
-        if direction_vector[2] > 0:
-            theta_z = np.degrees(np.arctan(np.sqrt(direction_vector[0]**2 + direction_vector[1]**2)/direction_vector[2]))
-        elif direction_vector[2] < 0:
-            theta_z = 180 + np.degrees(np.arctan(np.sqrt(direction_vector[0]**2 + direction_vector[1]**2)/direction_vector[2]))
-        else:
-            theta_z = 90
-        return theta_xz, theta_yz, theta_z
 
     #@staticmethod
     def TPC_separation(self, hits):
@@ -692,18 +661,11 @@ class RockMuonSelection(H5FlowStage):
                     self.track_count += 1 
                     track_number = self.track_count
 
-                    #PCA gives the track axis but not its sign: point along the beam (+z), as in segments()
-                    if direction_vector[2] < 0:
-                        direction_vector = -direction_vector
-
-                    #Get angle of track
-                    theta_xz, theta_yz,theta_z = self.angle(direction_vector)
-
                     #Tag crossing tracks
                     a2a, a2c = self.anode_cathode_tags(muon_track[0])
                     
                     #Fill track info
-                    track_info = [event_id[0],track_number,length_of_track, start_point[0],start_point[1],start_point[2], end_point[0],end_point[1],end_point[2], explained_var, theta_xz, theta_yz, theta_z, 
+                    track_info = [event_id[0],track_number,length_of_track, start_point[0],start_point[1],start_point[2], end_point[0],end_point[1],end_point[2], explained_var,
                                   direction_vector[0], direction_vector[1], direction_vector[2], 
                                   a2a, a2c
                                  ]
