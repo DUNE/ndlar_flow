@@ -20,6 +20,7 @@ import statistics
 
 FACE_TOL = 2.1
 MIN_SAMPLES = 3
+MIN_TPC_HITS = 3
 
 
 class RockMuonSelection(H5FlowStage):
@@ -32,13 +33,6 @@ class RockMuonSelection(H5FlowStage):
     
     #Detector Boundaries, Cuts
     defaults = dict([
-    ('x_boundaries', np.array([-63.931, -3.069, 3.069, 63.931])), #cm
-        
-    ('y_boundaries', np.array([-268-42-19.8543, -268-42+103.8543])),#cm
-        
-    ('z_boundaries', np.array([1300-64.3163,  1300-2.6837, 1300+2.6837, 1300+64.3163])), #cm
-    
-    
     ('length_cut', 100), #cm
         
     ('MEVR', 0.974), #Miniumum explained variance ratio
@@ -55,7 +49,8 @@ class RockMuonSelection(H5FlowStage):
     
     #Datatype wanted
     
-    rock_muon_track_dtype = np.dtype([
+    # crossing tag lists are appended in init(), sized from the geometry
+    rock_muon_track_base_fields = [
         ('event_id','i4'),
         ('rock_muon_id', 'i4'),
         ('length','f8'),
@@ -73,10 +68,7 @@ class RockMuonSelection(H5FlowStage):
         ('PCA_i', 'f8'),
         ('PCA_j','f8'),
         ('PCA_k', 'f8'),
-        ('a2a_modules',      'i4', (4,)),
-        ('a2a_io_groups',    'i4', (8,)),
-        ('a2c_io_groups',    'i4', (8,))
-    ])
+    ]
    
     rock_muon_segments_dtype = np.dtype([
         ('rock_segment_id', 'i4'),
@@ -109,12 +101,6 @@ class RockMuonSelection(H5FlowStage):
         for key,val in self.defaults.items():
             setattr(self, key, params.get(key, val))
             
-        #self.x_boundaries = params.get('x_boundaries',dict())
-        
-        #self.y_boundaries = params.get('y_boundaries', dict())
-        
-        #self.z_boundaries = params.get('z_boundaries', dict())
-        
         self.length_cut = params.get('length_cut', dict())
         
         #self.MEVR = params.get('MEVR', dict())
@@ -122,6 +108,14 @@ class RockMuonSelection(H5FlowStage):
     def init(self, source_name):
         
         super(RockMuonSelection, self).init(source_name)
+
+        # Crossing tags use the geometry stored in the file, one slot per module / TPC:
+        # a2a[module], a2c[module, tpc] with tpc 0 = low-x anode, 1 = high-x anode
+        self._load_tpc_io_groups()
+        self.rock_muon_track_dtype = np.dtype(self.rock_muon_track_base_fields + [
+            ('a2a', '?', (self.n_modules,)),
+            ('a2c', '?', (self.n_modules, 2)),
+        ])
         
         attrs = dict()
         
@@ -136,6 +130,14 @@ class RockMuonSelection(H5FlowStage):
         
         self.data_manager.create_dset(self.rock_muon_hits_dset_name,
                                       dtype = self.rock_muon_track_dtype)
+
+        # io_groups reading each a2c slot [module, tpc], padded with -1
+        n_max = max(len(ios) for module in self.tpc_io_groups for ios in module)
+        tpc_io_groups = np.full((self.n_modules, 2, n_max), -1, dtype='i4')
+        for m_id, module in enumerate(self.tpc_io_groups):
+            for tpc, ios in enumerate(module):
+                tpc_io_groups[m_id, tpc, :len(ios)] = ios
+        self.data_manager.set_attrs(self.rock_muon_hits_dset_name, tpc_io_groups=tpc_io_groups)
         
         self.data_manager.create_dset(self.rock_muon_segments_dset_name,
                                       dtype = self.rock_muon_segments_dtype)
@@ -308,59 +310,57 @@ class RockMuonSelection(H5FlowStage):
     
         return penetrated
     
-    @staticmethod
-    def _pad(values, n):
-        out = np.full(n, -1, dtype='i4')
-        out[:len(values)] = values
-        return out
+    def _load_tpc_io_groups(self):
+        '''
+        From the Geometry resource: module readout bounds (x min/max are the two anode planes,
+        the cathode is midway) and, for each module, the io_groups reading its low-x and
+        high-x anodes (from the tile_id and anode_drift_coordinate lookup tables).
+        '''
+        geometry = resources['Geometry']
+        self.module_bounds = geometry.module_RO_bounds
+        self.n_modules = len(self.module_bounds)
 
-    def _module_list(self):
-        # inspired from Sam Fogarty's 2x2 Diagram
-        xb, zb = self.x_boundaries, self.z_boundaries
-        x_lo, x_hi = (xb[0], xb[1]), (xb[2], xb[3])   
-        z_lo, z_hi = (zb[0], zb[1]), (zb[2], zb[3])   
-    
-        # list index == module number
-        return [
-            (x_hi, z_hi),   # M0: high x, high z
-            (x_hi, z_lo),   # M1: high x, low z
-            (x_lo, z_hi),   # M2: low x, high z
-            (x_lo, z_lo),   # M3: low x, low z
-        ]  
+        io_group, io_channel = geometry.tile_id.keys()
+        tile = geometry.tile_id[(io_group, io_channel)]
+        io_group, tile = io_group[tile > 0], tile[tile > 0]
+        io_groups = np.unique(io_group)
+        self.n_io_groups = len(io_groups)
+        io_groups_per_module = self.n_io_groups // self.n_modules
 
-    @staticmethod
-    def _close_to_plane(values, plane, tol):
-        return len(values) > 0 and np.any(np.abs(values - plane) <= tol)
-    
-    def anode_cathode_tags(self, hits, tol=FACE_TOL, min_hits=3):
-        a2a_modules, a2a_io_groups, a2c_io_groups = [], [], []
-    
-        for m_id, ((x0, x1), _) in enumerate(self._module_list()):
-            xc = 0.5 * (x0 + x1) #cathode                     
-            io_hi, io_lo = 2*m_id + 1, 2*m_id + 2     
-    
-            x_hi = hits['x'][hits['io_group'] == io_hi]
-            x_lo = hits['x'][hits['io_group'] == io_lo]
-            if len(x_hi) < min_hits:
-                x_hi = x_hi[:0]
-            if len(x_lo) < min_hits:
-                x_lo = x_lo[:0]
-    
-            hi_anode = self._close_to_plane(x_hi, x1, tol)
-            hi_cath  = self._close_to_plane(x_hi, xc, tol)
-            lo_anode = self._close_to_plane(x_lo, x0, tol)
-            lo_cath  = self._close_to_plane(x_lo, xc, tol)
-    
-            if hi_anode and lo_anode:        
-                a2a_modules.append(m_id)
-                a2a_io_groups.extend([io_hi, io_lo])
+        self.tpc_io_groups = [([], []) for _ in range(self.n_modules)]
+        for io in io_groups:
+            anode = np.unique(geometry.anode_drift_coordinate[(tile[io_group == io],)])
+            m_id = (io - 1) // io_groups_per_module
+            side = np.flatnonzero(np.isclose(anode[0], self.module_bounds[m_id][:, 0]))
+            if len(anode) != 1 or len(side) != 1:
+                raise ValueError(f'io_group {io}: anode x {anode} is not one anode plane of module {m_id}')
+            self.tpc_io_groups[m_id][side[0]].append(io)
+
+    def anode_cathode_tags(self, hits, tol=FACE_TOL, min_hits=MIN_TPC_HITS):
+        '''
+        Anode-to-anode (A2A) and anode-to-cathode (A2C) crossings. Returns a2a[module], True if
+        the track reaches both anodes of the module, and a2c[module, tpc], True if it goes from
+        the anode to the cathode in that TPC (only filled when the module is not A2A).
+        '''
+        a2a = np.zeros(self.n_modules, dtype=bool)
+        a2c = np.zeros((self.n_modules, 2), dtype=bool)
+
+        for m_id, (lo, hi) in enumerate(self.module_bounds):
+            cathode = 0.5 * (lo[0] + hi[0])
+
+            near_anode, near_cathode = [], []
+            for anode, tpc_io_groups in zip((lo[0], hi[0]), self.tpc_io_groups[m_id]):
+                x = hits['x'][np.isin(hits['io_group'], tpc_io_groups)]
+                enough = len(x) >= min_hits
+                near_anode.append(enough and np.any(np.abs(x - anode) <= tol))
+                near_cathode.append(enough and np.any(np.abs(x - cathode) <= tol))
+
+            if all(near_anode):
+                a2a[m_id] = True
             else:
-                if hi_anode and hi_cath:
-                    a2c_io_groups.append(io_hi)
-                if lo_anode and lo_cath:
-                    a2c_io_groups.append(io_lo)
-    
-        return a2a_modules, a2a_io_groups, a2c_io_groups
+                a2c[m_id] = np.logical_and(near_anode, near_cathode)
+
+        return a2a, a2c
 
     #@staticmethod
     def clean_noise_hits(self, hits):
@@ -643,12 +643,12 @@ class RockMuonSelection(H5FlowStage):
                     theta_xz, theta_yz,theta_z = self.angle(direction_vector)
 
                     #Tag crossing tracks
-                    a2a_modules, a2a_io, a2c_io = self.anode_cathode_tags(hits)
+                    a2a, a2c = self.anode_cathode_tags(muon_track[0])
                     
                     #Fill track info
                     track_info = [event_id[0],track_number,length_of_track, start_point[0],start_point[1],start_point[2], end_point[0],end_point[1],end_point[2], explained_var, theta_xz, theta_yz, theta_z, 
                                   direction_vector[0], direction_vector[1], direction_vector[2], 
-                                  self._pad(a2a_modules, 4), self._pad(a2a_io, 8), self._pad(a2c_io, 8)
+                                  a2a, a2c
                                  ]
                     
                     track_info = np.array([tuple(track_info)], dtype = self.rock_muon_track_dtype)
