@@ -198,24 +198,6 @@ class RockMuonSelection(H5FlowStage):
         raise RuntimeError(f'RockMuonSelection: none of {self.hits_dset_names} is in the file with id == row index')
     
     #@staticmethod
-    '''
-    def cluster(self, Hits_ev):
-        
-        index_of_track_hits = []
-
-        positions = np.column_stack((Hits_ev['x'], Hits_ev['y'], Hits_ev['z']))
-        
-        hit_cluster = DBSCAN(eps = 8, min_samples = 1).fit(positions)
-        
-        unique_labels = np.unique(hit_cluster.labels_)
-
-        for unique in unique_labels:
-            index = np.where(hit_cluster.labels_ == unique)[0]
-            index_of_track_hits.append(index)
-
-        return index_of_track_hits
-    '''
-    #@staticmethod
     def cluster(self,Hits_ev):
         index_of_track_hits = []
         positions = np.column_stack((Hits_ev['x'], Hits_ev['y'], Hits_ev['z']))
@@ -251,13 +233,13 @@ class RockMuonSelection(H5FlowStage):
                 # Sort indices based on length (descending) and distance (ascending)
                 sorted_indices = sorted(indices, key=lambda i: (-combined_dist_length[i][1], combined_dist_length[i][0]))
             
-                explained_var, direction, original_mean = self.PCAs(Hits_ev[index_of_track_hits[index]])
+                _, direction, _ = self.PCAs(Hits_ev[index_of_track_hits[index]])
 
                 # Try merging with sorted clusters
                 for j in sorted_indices:
                     if (j == index) | (len(index_of_track_hits[j]) < self.merge_min_hits) | (len(index_of_track_hits[index]) < self.merge_min_hits) | (combined_dist_length[j][0] > self.merge_max_centroid_dist) | (combined_dist_length[j][0] < self.merge_min_centroid_dist):  # Skip merging with itself
                         continue
-                    explained_var, direction2, original_mean = self.PCAs(Hits_ev[index_of_track_hits[j]])
+                    _, direction2, _ = self.PCAs(Hits_ev[index_of_track_hits[j]])
                     hits_of_testing_merge = np.concatenate((positions[index_of_track_hits[index]], positions[index_of_track_hits[j]]))
                     center_of_merge = np.mean(hits_of_testing_merge, axis=0)
 
@@ -269,7 +251,6 @@ class RockMuonSelection(H5FlowStage):
                     if (average_dist <= self.merge_max_distance) & (sim_direction <= self.merge_max_angle):
                         index_of_track_hits[index] = np.concatenate([index_of_track_hits[index], index_of_track_hits[j]])
                         index_of_track_hits.pop(j)
-                        center_of_masses.pop(j)
                         #print(f'Merging cluster {index} with cluster {j}')
                         break  # Recompute centers and distances after merge
                 else:
@@ -326,10 +307,10 @@ class RockMuonSelection(H5FlowStage):
         
         return np.max(hdist), start_hit, end_hit
     
-    '''
-    Checks to see if start/end point of track are close to two different faces of detector. If they are this will return True. Note: >= -1 just in case if a hit is reconstructed outside of detector.
-    '''
     def close_to_two_faces(self,boundaries, hits):
+        '''
+        True if the hits come within face_tolerance of at least two different faces of the detector.
+        '''
         # Boundaries are in the order [xmin, ymin, zmin, xmax, ymax, zmax]
         penetrated = False
         threshold = self.face_tolerance
@@ -465,7 +446,7 @@ class RockMuonSelection(H5FlowStage):
             
             filtered_hits = self.clean_noise_hits(hits)
             
-            explained_var, direction_vector,mean_point = self.PCAs(filtered_hits)
+            explained_var, direction_vector, _ = self.PCAs(filtered_hits)
                 
             l_track, start_point, end_point = self.length(filtered_hits)
             
@@ -519,9 +500,7 @@ class RockMuonSelection(H5FlowStage):
 
         for hits in tpc_hits:
             if len(hits) != 0:
-                io_group_of_tpc = np.unique(hits['io_group'])
-
-                tpc_var, principal_component, tpc_mean = self.PCAs(hits)
+                _, principal_component, tpc_mean = self.PCAs(hits)
        
                 points = np.array([[hit['x'], hit['y'], hit['z']] for hit in hits])
             
@@ -583,8 +562,6 @@ class RockMuonSelection(H5FlowStage):
     def grab_segment_info(self,segment_end, segment_start, projected_hits, hits, hit_ref, segment_to_track_ref):
             min_bounds = [min([segment_end[i],segment_start[i]]) for i in range(0,3)]
             max_bounds = [max([segment_end[i],segment_start[i]]) for i in range(0,3)]
-            condition = (projected_hits[:,2] >= min_bounds[2]) & (projected_hits[:,2] <= max_bounds[2])
-        
             condition = (
                     (projected_hits[:, 0] >= min_bounds[0]) & (projected_hits[:, 0] <= max_bounds[0]) &
                     (projected_hits[:, 1] >= min_bounds[1]) & (projected_hits[:, 1] <= max_bounds[1]) &
@@ -594,8 +571,6 @@ class RockMuonSelection(H5FlowStage):
             hits_of_segment = hits[condition]
         
             if len(hits_of_segment) != 0:
-                hits_positions = np.column_stack((hits_of_segment['x'],hits_of_segment['y'],hits_of_segment['z']))
-     
                 x_start, y_start, z_start = segment_start[0], segment_start[1], segment_start[2]
                 x_end, y_end, z_end = segment_end[0], segment_end[1], segment_end[2]
                 x_mid, y_mid, z_mid = (x_start+x_end)/2, (y_start + y_end)/2, (z_start + z_end)/2
