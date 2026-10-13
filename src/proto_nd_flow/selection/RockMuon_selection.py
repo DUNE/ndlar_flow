@@ -35,9 +35,10 @@ class RockMuonSelection(H5FlowStage):
      - ``a2a``: bool ``(n_modules,)``. ``a2a[m]`` is True if the track reaches
        both anodes of module ``m`` (anode-to-anode).
      - ``a2c``: bool ``(n_modules, 2)``. ``a2c[m, tpc]`` is True if the track goes
-       from the anode to the cathode in that TPC (anode-to-cathode); False for
-       both TPCs of a module flagged ``a2a``. ``tpc = 0`` is the TPC whose anode is
-       at the module's lower x, ``tpc = 1`` the one at higher x.
+       from the anode to the cathode in that TPC (anode-to-cathode), independent
+       of ``a2a``, so an anode-to-anode module is normally ``[True, True]``.
+       ``tpc = 0`` is the TPC whose anode is at the module's lower x, ``tpc = 1``
+       the one at higher x. Anode-to-cathode only: ``a2c & ~a2a[:, None]``.
 
     Module ``m`` is index ``m`` of ``geometry_info`` ``module_RO_bounds``. The
     dataset attributes ``tpc_anode_x`` ``(n_modules, 2)`` and ``tpc_io_groups``
@@ -158,7 +159,7 @@ class RockMuonSelection(H5FlowStage):
             a2a_description='a2a[module]: True if the track reaches both anodes of the module (anode-to-anode). '
                             'module = index of geometry_info module_RO_bounds',
             a2c_description='a2c[module, tpc]: True if the track goes from the anode to the cathode in that TPC '
-                            '(anode-to-cathode); False for both TPCs of a module flagged a2a. tpc 0 = anode at the '
+                            '(anode-to-cathode), independent of a2a. tpc 0 = anode at the '
                             "module's lower x, tpc 1 = anode at higher x; see tpc_anode_x and tpc_io_groups",
             tpc_io_groups_description='io_groups reading each a2c slot [module, tpc, :], padded with -1')
         
@@ -363,7 +364,7 @@ class RockMuonSelection(H5FlowStage):
         '''
         Anode-to-anode (A2A) and anode-to-cathode (A2C) crossings. Returns a2a[module], True if
         the track reaches both anodes of the module, and a2c[module, tpc], True if it goes from
-        the anode to the cathode in that TPC (only filled when the module is not A2A).
+        the anode to the cathode in that TPC (independent of a2a).
         '''
         a2a = np.zeros(self.n_modules, dtype=bool)
         a2c = np.zeros((self.n_modules, 2), dtype=bool)
@@ -378,10 +379,8 @@ class RockMuonSelection(H5FlowStage):
                 near_anode.append(enough and np.any(np.abs(x - anode) <= tol))
                 near_cathode.append(enough and np.any(np.abs(x - cathode) <= tol))
 
-            if all(near_anode):
-                a2a[m_id] = True
-            else:
-                a2c[m_id] = np.logical_and(near_anode, near_cathode)
+            a2a[m_id] = all(near_anode)
+            a2c[m_id] = np.logical_and(near_anode, near_cathode)
 
         return a2a, a2c
 
