@@ -12,7 +12,7 @@ import numpy as np
 from flufl.lock import Lock
 from scipy.ndimage import gaussian_filter1d
 
-from vdrift_config import IO_GROUPS
+from vdrift_config import DEFAULT_DETECTOR, DETECTORS, IO_GROUPS, load_calibrated_vdrift
 
 
 # Preferred first; calib_final_hits is the pre-#246 name of the filtered hits (e.g. 2x2 reflow v11),
@@ -37,13 +37,12 @@ HISTORY_IO_FIELDS = (
 )
 # Mean raw velocity (lar_info v_drift x geometric/measured, calib_final_hits) over the 2x2
 # reflow v11 beam july8_2024 + july10_2024 nominal_hv files; recompute if the method changes
-BASELINE_RAW_MEAN_M_PER_S = 1573.069519448489
+BASELINE_RAW_MEAN_M_PER_S = 1573.4804971916153
 BASELINE_FILE_COUNT = 486
-BASELINE_MEASUREMENT_COUNT = 3878
+BASELINE_MEASUREMENT_COUNT = 3881
 BASELINE_START_TIMESTAMP = '2024-07-08T13:43:25-05:00'
 BASELINE_END_TIMESTAMP = '2024-07-12T03:50:43-05:00'
-# x bins span this many CRS clock ticks of drift at the file's v_drift
-X_BIN_TICKS = 2
+X_BIN_WIDTH_CM = 0.01596 * 2.0
 SEARCH_WINDOW_CM = 1.4
 PLATEAU_MARGIN_ANODE_CM = 3.0
 PLATEAU_MARGIN_CATHODE_CM = 3.0
@@ -58,7 +57,6 @@ N_Y_BINS = 10
 
 GEOMETRY_PATH = 'geometry_info'
 LAR_INFO_PATH = 'lar_info'
-RUN_INFO_PATH = 'run_info'
 # Older flow layouts store cathode_thickness = 0 (cathode at module centre); the hit edge
 # sits at the real cathode surface, so fall back to the 2x2 cathode thickness in that case
 CATHODE_THICKNESS_FALLBACK_CM = 0.635
@@ -172,7 +170,6 @@ def load_tpc_config(manager):
 
     # v_drift [mm/us] used by flow for this file: one value, or one per module
     v_drifts = np.atleast_1d(manager.get_attrs(LAR_INFO_PATH)['v_drift']) * 1e3
-    crs_tick_us = float(manager.get_attrs(RUN_INFO_PATH)['crs_ticks'])
 
     tile_lut = read_lut(manager, GEOMETRY_PATH, 'tile_id')
     anode_lut = read_lut(manager, GEOMETRY_PATH, 'anode_drift_coordinate')
@@ -195,14 +192,12 @@ def load_tpc_config(manager):
         if not np.isclose(anode, bounds[:, 0]).any():
             raise ValueError(f'io_group {io}: anode x={anode} is not on module {module} bounds')
         cathode = float(bounds[:, 0].mean() - drift_dir * cathode_thickness / 2)
-        nominal_velocity = float(v_drifts[module] if len(v_drifts) > 1 else v_drifts[0])
         tpcs[io] = {
             'name': f'M{module}_{"Right" if io % 2 else "Left"}',
             'module': module,
             'cathode': cathode,
             'anode': anode,
-            'nominal_v_m_per_s': nominal_velocity,
-            'x_bin_width_cm': X_BIN_TICKS * crs_tick_us * nominal_velocity * 1e-4,  # m/s -> cm/us
+            'nominal_v_m_per_s': float(v_drifts[module] if len(v_drifts) > 1 else v_drifts[0]),
             'x_range': sorted((cathode, anode)),
             'y_range': [float(bounds[0, 1]), float(bounds[1, 1])],
             'z_range': [float(bounds[0, 2]), float(bounds[1, 2])],
@@ -213,7 +208,7 @@ def load_tpc_config(manager):
 def histogram_edges(tpc):
     x_min, x_max = tpc['x_range']
     plot_min, plot_max = x_min - 2.0, x_max + 2.0
-    edge_count = int(np.round((plot_max - plot_min) / tpc['x_bin_width_cm'])) + 1
+    edge_count = int(np.round((plot_max - plot_min) / X_BIN_WIDTH_CM)) + 1
     return np.linspace(plot_min, plot_max, edge_count)
 
 
@@ -452,9 +447,18 @@ def normalize_io_result(result, velocity_scale):
     return normalized
 
 
-def normalization_metadata():
+def load_reference_velocity(detector):
+    '''Normalization target: the calibrated v_drift in the detector's LArData.yaml [m/s]'''
+    velocities = load_calibrated_vdrift(detector)
+    if len(velocities) != 1:
+        raise ValueError(f'Need exactly one calibrated vdrift for {detector}, got {velocities}')
+    return velocities[0]
+
+
+def normalization_metadata(velocity_scale, reference_velocity):
     return {
-        'reference_velocity': 'lar_info v_drift of each file',
+        'velocity_scale': validate_velocity_scale(velocity_scale),
+        'reference_velocity_m_per_s': reference_velocity,
         'baseline': {
             'raw_mean_m_per_s': BASELINE_RAW_MEAN_M_PER_S,
             'source_file_count': BASELINE_FILE_COUNT,
@@ -467,12 +471,14 @@ def normalization_metadata():
     }
 
 
-def build_header():
+def build_header(reference_velocity):
     '''Settings shared by every record of a history; stored once at the top of the JSON'''
+    # scale the raw velocities so the baseline period averages to the calibrated value
+    velocity_scale = validate_velocity_scale(reference_velocity / BASELINE_RAW_MEAN_M_PER_S)
     return {
         'detection_parameters': {
             'threshold_fraction': THRESHOLD_FRACTION,
-            'x_bin_width_ticks': X_BIN_TICKS,
+            'nominal_x_bin_width_cm': X_BIN_WIDTH_CM,
             'smooth_sigma_cm': SMOOTH_SIGMA_CM,
             'search_half_width_cm': SEARCH_WINDOW_CM,
             'stability_gap_cm': STABILITY_GAP_CM,
@@ -480,22 +486,16 @@ def build_header():
             'stability_min_bins': STABILITY_MIN_BINS,
             'min_hits': MIN_HITS,
         },
-        'normalization': normalization_metadata(),
+        'normalization': normalization_metadata(velocity_scale, reference_velocity),
     }
 
 
-def build_record(input_file, loaded, io_results):
+def build_record(input_file, loaded, io_results, header):
     '''Full per-file result, including the fit details and y/z slices'''
     timestamp = date_from_input_filename(input_file)
-    # scale the raw velocities so the baseline period averages to the file's lar_info v_drift
+    velocity_scale = header['normalization']['velocity_scale']
     io_results = {
-        io: normalize_io_result(
-            result,
-            validate_velocity_scale(
-                loaded['tpcs'][io]['nominal_v_m_per_s'] / BASELINE_RAW_MEAN_M_PER_S
-            ),
-        )
-        for io, result in io_results.items()
+        io: normalize_io_result(result, velocity_scale) for io, result in io_results.items()
     }
     # detect_boundary only sets 'ok' with a finite velocity, so both averages use the same TPCs
     ok_results = [result for result in io_results.values() if result.get('status') == 'ok']
@@ -530,14 +530,15 @@ def main(
     input_file,
     output_file_json,
     output_file_detail=None,
+    detector=DEFAULT_DETECTOR,
 ):
-    header = build_header()
+    header = build_header(load_reference_velocity(detector))
     print(f'Opening file: {input_file}')
     loaded = load_hit_histograms(input_file)
     io_results = {
         io: analyze_io(io, loaded['tpcs'][io], loaded['histograms'][io]) for io in IO_GROUPS
     }
-    record = build_record(input_file, loaded, io_results)
+    record = build_record(input_file, loaded, io_results, header)
     update_json(output_file_json, header, summarize_record(record))
     if output_file_detail is not None:
         write_json(output_file_detail, {**header, **record})
@@ -555,6 +556,12 @@ def build_parser():
         '--output_file_detail',
         '--output-file-detail',
         help='Optional per-file JSON with the full fit results and y/z slices',
+    )
+    parser.add_argument(
+        '--detector',
+        choices=DETECTORS,
+        default=DEFAULT_DETECTOR,
+        help='Selects LArData.yaml for the reference velocity',
     )
     return parser
 
