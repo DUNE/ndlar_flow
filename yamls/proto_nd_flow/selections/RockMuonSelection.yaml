@@ -5,33 +5,41 @@ path: proto_nd_flow.selection.RockMuon_selection
 requires:
   - 'charge/events'
 
+  # must be the same dataset as hits_dset_name below
   - name: 'charge/calib_prompt_hits'
     path: ["charge/events", "charge/calib_prompt_hits"]
-  
-  - name: 'charge/calib_filtered_hits'
-    path: ["charge/events","charge/calib_filtered_hits"]
-   
+
 params:
     #Inputs
     events_dset_name: 'charge/events'
-    PromptHits_dset_name: 'charge/calib_prompt_hits'
-    FinalHits_dset_name: 'charge/calib_filtered_hits'
-       
+    # hits used by the selection; change it together with the requires entry above.
+    # 'charge/calib_filtered_hits' or, in files made before those existed,
+    # 'charge/calib_final_hits' can be used instead of prompt hits.
+    # WARNING: in old FSD files calib_final_hits are merged hits, which the selection
+    # should not use.
+    hits_dset_name: 'charge/calib_prompt_hits'
+
     #Outputs
-    rock_muon_hits_dset_name: 'analysis/rock_muon_tracks'
+    rock_muon_tracks_dset_name: 'analysis/rock_muon_tracks'
     rock_muon_segments_dset_name: 'analysis/rock_muon_segments'
 
-    #configuration parameters
-    x_boundaries: [-63.931, -3.069, 3.069, 63.931] #cm
-    y_boundaries: [-42-19.8543, -42+103.8543] #cm
-    z_boundaries: [-64.3163,  -2.6837, 2.6837, 64.3163] #cm
+    #Track selection
+    length_cut: 100 #cm, minimum track length
+    max_avg_distance: 1.5 #cm, maximum mean hit distance from the track line
+    noise_hit_max_distance: 3.5 #cm, hits further from the track line are removed
+    face_tolerance: 2.1 #cm, distance to a detector face, anode or cathode to count as reaching it
+    min_cluster_hits: 11 #minimum hits in a cluster to try it as a track
+    min_tpc_hits: 3 #minimum hits in a TPC for anode/cathode crossing tags
 
-    length_cut: 100 #cm
-    MEVR: 0.974 #Minimum explained variance ratio
-    
-    track_counts: -1    
-    segment_counts: -1    
-        
-        
-        
-    
+    #Clustering
+    dbscan_eps: 1 #cm
+    dbscan_min_samples: 3
+    max_clusters_for_merging: 150 #events with more clusters are not merged
+    merge_min_hits: 6 #minimum hits in each cluster to merge
+    merge_min_centroid_dist: 2 #cm
+    merge_max_centroid_dist: 100 #cm
+    merge_max_distance: 3 #cm, maximum mean distance of the merged hits from the line
+    merge_max_angle: 20 #degrees, maximum angle between the two clusters
+
+    #dQ/dx segments
+    segment_length: 2 #cm
