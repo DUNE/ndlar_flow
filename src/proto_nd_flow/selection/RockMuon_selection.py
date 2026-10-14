@@ -40,18 +40,19 @@ class RockMuonSelection(H5FlowStage):
     slot. E.g. on the 2x2, ``tpc_io_groups[:, :, 0]`` is ``[[2, 1], [4, 3], [6, 5], [8, 7]]``.
 
     All parameters in ``defaults`` can be set in the yaml; anything left out uses
-    the default. ``hits_dset_names`` lists the hit datasets to use in order of
-    preference: the first one present in the file whose ``id`` equals its row
-    index is used (the track/segment -> hit references are written from ``id``),
-    and its name is stored in the ``hits_dset_name`` attribute of the tracks
-    dataset. Every dataset in the list must also be in the yaml ``requires``.
+    the default. ``hits_dset_name`` is the hit dataset used (prompt hits by default;
+    filtered or final hits can be chosen instead). It must also be in the yaml
+    ``requires``, be in the file, and have ``id`` equal to its row number, since the
+    track/segment -> hit references are written from ``id``; otherwise the stage stops
+    with an error. The name is stored in the ``hits_dset_name`` attribute of the tracks
+    dataset.
     '''
     #Empty List so tracks can be counted
     
     #Datasets and cuts, all can be set in the yaml
     defaults = dict([
     ('events_dset_name', 'charge/events'),
-    ('hits_dset_names', ['charge/calib_prompt_hits']), #first one present in the file is used
+    ('hits_dset_name', 'charge/calib_prompt_hits'), #must also be in the yaml requires
     ('rock_muon_tracks_dset_name', 'analysis/rock_muon_tracks'),
     ('rock_muon_segments_dset_name', 'analysis/rock_muon_segments'),
 
@@ -128,7 +129,7 @@ class RockMuonSelection(H5FlowStage):
         
         super(RockMuonSelection, self).init(source_name)
 
-        self.hits_dset_name = self._choose_hits_dset()
+        self._check_hits_dset()
 
         # Crossing tags use the geometry stored in the file, one slot per module / TPC:
         # a2a[module], a2c[module, tpc] with tpc 0 = low-x anode, 1 = high-x anode
@@ -142,11 +143,8 @@ class RockMuonSelection(H5FlowStage):
                                       dtype = self.rock_muon_track_dtype)
 
         #Record the hits used and the configuration
-        config = {key: getattr(self, key) for key in self.defaults}
-        config['hits_dset_names'] = np.array(self.hits_dset_names, dtype='S') # h5py attrs can't hold a list of str
         self.data_manager.set_attrs(self.rock_muon_tracks_dset_name,
-                                    hits_dset_name=self.hits_dset_name,
-                                    **config)
+                                    **{key: getattr(self, key) for key in self.defaults})
 
         # io_groups reading each a2c slot [module, tpc], padded with -1
         n_max = max(len(ios) for module in self.tpc_io_groups for ios in module)
@@ -175,26 +173,23 @@ class RockMuonSelection(H5FlowStage):
         
         self.data_manager.create_ref(self.rock_muon_segments_dset_name, self.hits_dset_name)
 
-    def _choose_hits_dset(self):
+    def _check_hits_dset(self):
         '''
-        First dataset in ``hits_dset_names`` that is in the file and whose ``id`` equals its row
-        index, since the track/segment -> hit references are written from ``id``.
+        Stop with an error if ``hits_dset_name`` can't be used: it must be in the yaml
+        ``requires`` (so h5flow loads it), be in the file, and have ``id`` equal to its row
+        number (the track/segment -> hit references are written from ``id``).
         '''
-        for name in self.hits_dset_names:
-            if not self.data_manager.dset_exists(name):
-                continue
-            #check id matches row number
-            n = min(len(self.data_manager.get_dset(name)), 100000)
-            if not np.array_equal(self.data_manager.get_dset(name)['id'][:n], np.arange(n)):
-                if self.rank == 0:
-                    logging.warning(f'{name}: id is not the row index (file made before the id fix?), not using it')
-                continue
-            if self.rank == 0:
-                logging.warning(f'RockMuonSelection: using {name}')
-                if name.endswith('calib_final_hits'):
-                    logging.warning('calib_final_hits in old FSD files are merged hits, which the selection should not use')
-            return name
-        raise RuntimeError(f'RockMuonSelection: none of {self.hits_dset_names} is in the file with id == row index')
+        name = self.hits_dset_name
+        if name not in [r['name'] for r in self.requires]:
+            raise RuntimeError(f'RockMuonSelection: hits_dset_name {name} is not in the yaml requires; add it there')
+        if not self.data_manager.dset_exists(name):
+            raise RuntimeError(f'RockMuonSelection: hits_dset_name {name} is not in the file')
+        #check id matches row number
+        n = min(len(self.data_manager.get_dset(name)), 100000)
+        if not np.array_equal(self.data_manager.get_dset(name)['id'][:n], np.arange(n)):
+            raise RuntimeError(f'RockMuonSelection: {name} id is not the row number (file made before the id fix?)')
+        if self.rank == 0 and name.endswith('calib_final_hits'):
+            logging.warning('RockMuonSelection: calib_final_hits in old FSD files are merged hits, which the selection should not use')
     
     #@staticmethod
     def cluster(self,Hits_ev):

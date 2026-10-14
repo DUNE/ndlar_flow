@@ -5,25 +5,19 @@ path: proto_nd_flow.selection.RockMuon_selection
 requires:
   - 'charge/events'
 
-  # every dataset in hits_dset_names must be listed here; ones missing from the file are skipped
-  - name: 'charge/calib_filtered_hits'
-    path: ["charge/events", "charge/calib_filtered_hits"]
-
-  - name: 'charge/calib_final_hits'
-    path: ["charge/events", "charge/calib_final_hits"]
-
+  # must be the same dataset as hits_dset_name below
   - name: 'charge/calib_prompt_hits'
     path: ["charge/events", "charge/calib_prompt_hits"]
 
 params:
     #Inputs
     events_dset_name: 'charge/events'
-    # hits used by the selection, in order of preference: the first one in the file
-    # (with id == row index) is used. calib_final_hits is for files made before
-    # calib_filtered_hits existed.
+    # hits used by the selection; change it together with the requires entry above.
+    # 'charge/calib_filtered_hits' or, in files made before those existed,
+    # 'charge/calib_final_hits' can be used instead of prompt hits.
     # WARNING: in old FSD files calib_final_hits are merged hits, which the selection
-    # should not use; remove calib_final_hits from this list for those files.
-    hits_dset_names: ['charge/calib_filtered_hits', 'charge/calib_final_hits', 'charge/calib_prompt_hits']
+    # should not use.
+    hits_dset_name: 'charge/calib_prompt_hits'
 
     #Outputs
     rock_muon_tracks_dset_name: 'analysis/rock_muon_tracks'
