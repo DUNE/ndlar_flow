@@ -7,7 +7,6 @@ from h5flow.core import H5FlowStage, resources
 
 from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
 
 from scipy.spatial.distance import cdist
 
@@ -216,13 +215,20 @@ class RockMuonSelection(H5FlowStage):
                 index = np.where(cluster_labels == unique)[0]
                 index_of_track_hits.append(index)
 
+            # Centroid and PCA direction of each cluster, kept in step with index_of_track_hits so
+            # only a cluster that changed is recomputed; directions are computed when first needed
+            centroids = [np.mean(positions[cluster], axis=0) for cluster in index_of_track_hits]
+            directions = [None] * len(index_of_track_hits)
+
+            def direction_of(k):
+                if directions[k] is None:
+                    _, directions[k], _ = self.PCAs(Hits_ev[index_of_track_hits[k]])
+                return directions[k]
+
             index = 0
             while index < len(index_of_track_hits):
-                center_of_masses = [np.mean(positions[cluster], axis=0) for cluster in index_of_track_hits]
-                center_of_1 = np.mean(positions[index_of_track_hits[index]], axis=0)
-
                 # Compute distances and lengths
-                distances = np.linalg.norm(center_of_masses - center_of_1, axis=1)
+                distances = np.linalg.norm(centroids - centroids[index], axis=1)
                 lengths = [len(cluster) for cluster in index_of_track_hits]
             
                 combined_dist_length = [[distances[k], lengths[k]] for k in range(len(distances))]
@@ -232,14 +238,12 @@ class RockMuonSelection(H5FlowStage):
 
                 # Sort indices based on length (descending) and distance (ascending)
                 sorted_indices = sorted(indices, key=lambda i: (-combined_dist_length[i][1], combined_dist_length[i][0]))
-            
-                _, direction, _ = self.PCAs(Hits_ev[index_of_track_hits[index]])
 
                 # Try merging with sorted clusters
                 for j in sorted_indices:
                     if (j == index) | (len(index_of_track_hits[j]) < self.merge_min_hits) | (len(index_of_track_hits[index]) < self.merge_min_hits) | (combined_dist_length[j][0] > self.merge_max_centroid_dist) | (combined_dist_length[j][0] < self.merge_min_centroid_dist):  # Skip merging with itself
                         continue
-                    _, direction2, _ = self.PCAs(Hits_ev[index_of_track_hits[j]])
+                    direction, direction2 = direction_of(index), direction_of(j)
                     hits_of_testing_merge = np.concatenate((positions[index_of_track_hits[index]], positions[index_of_track_hits[j]]))
                     center_of_merge = np.mean(hits_of_testing_merge, axis=0)
 
@@ -250,9 +254,11 @@ class RockMuonSelection(H5FlowStage):
 
                     if (average_dist <= self.merge_max_distance) & (sim_direction <= self.merge_max_angle):
                         index_of_track_hits[index] = np.concatenate([index_of_track_hits[index], index_of_track_hits[j]])
-                        index_of_track_hits.pop(j)
-                        #print(f'Merging cluster {index} with cluster {j}')
-                        break  # Recompute centers and distances after merge
+                        centroids[index] = np.mean(positions[index_of_track_hits[index]], axis=0)
+                        directions[index] = None
+                        for cache_list in (index_of_track_hits, centroids, directions):
+                            cache_list.pop(j)
+                        break  # Recompute distances after merge
                 else:
                     index += 1
         else:
@@ -264,30 +270,24 @@ class RockMuonSelection(H5FlowStage):
     #@staticmethod
     
     def PCAs(self,hits_of_track):
-        scaler = StandardScaler()
-        
-        positions = np.column_stack((hits_of_track['x'], hits_of_track['y'], hits_of_track['z']))
-         
-        X_train = positions
-        X_train = scaler.fit_transform(X_train.reshape(-1, X_train.shape[-1])).reshape(X_train.shape)
-
-        pca = PCA(1) # 1 component
-
-        pca.fit(X_train)
-
-        explained_var = pca.explained_variance_ratio_[0]
-        
-        scaled_vector = pca.components_[0]
-        
-        unscaled_vector = scaler.scale_ * scaled_vector
-
-        normalized_direction_vector = unscaled_vector/np.linalg.norm(unscaled_vector)
-        
-        scaled_mean = pca.mean_
-
-        original_mean = scaler.inverse_transform(scaled_mean.reshape(1, -1)).flatten()
-        
-        return  explained_var, normalized_direction_vector, original_mean
+        '''
+        Principal axis of the hits, computed on standardized x, y, z: returns the explained
+        variance ratio, the unit direction (cm space) and the mean position. Same results as
+        sklearn StandardScaler + PCA(1), including its sign rule (largest standardized
+        component positive), at a fraction of the cost.
+        '''
+        # plain array of the hit positions (the cached hits are masked arrays), as sklearn used
+        X = np.ma.getdata(np.column_stack((hits_of_track['x'], hits_of_track['y'], hits_of_track['z']))).astype(float)
+        mean = X.mean(axis=0)
+        scale = X.std(axis=0)
+        scale[scale < 10 * np.finfo(scale.dtype).eps] = 1.0 # constant coordinate, as StandardScaler
+        Xs = (X - mean) / scale
+        eigenvals, eigenvecs = np.linalg.eigh(Xs.T @ Xs) # ascending order
+        eigenvals = np.clip(eigenvals, 0, None)
+        component = eigenvecs[:, -1]
+        component = component * np.sign(component[np.argmax(np.abs(component))])
+        direction = scale * component
+        return eigenvals[-1] / eigenvals.sum(), direction / np.linalg.norm(direction), mean
     
     #@staticmethod
     def length(self,hits):
