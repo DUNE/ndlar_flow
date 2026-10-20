@@ -6,7 +6,6 @@ import numpy as np
 from h5flow.core import H5FlowStage, resources
 
 from sklearn.cluster import DBSCAN
-from sklearn.decomposition import PCA
 
 from scipy.spatial.distance import cdist
 
@@ -386,47 +385,27 @@ class RockMuonSelection(H5FlowStage):
         return a2a, a2c
 
     #@staticmethod
+    @staticmethod
+    def _distances_to_line(hits):
+        '''
+        Distance of each hit from the hits' principal axis (unstandardized x, y, z), as with
+        sklearn PCA(n_components=1): the axis through the mean along the largest-variance direction.
+        '''
+        # plain array of the hit positions (the cached hits are masked arrays)
+        positions = np.ma.getdata(np.column_stack((hits['x'], hits['y'], hits['z']))).astype(float)
+        centered = positions - positions.mean(axis=0)
+        _, eigenvecs = np.linalg.eigh(centered.T @ centered) # ascending order
+        direction = eigenvecs[:, -1]
+        along = centered @ direction
+        return np.linalg.norm(centered - np.outer(along, direction), axis=1)
+
     def clean_noise_hits(self, hits):
-        positions = np.column_stack((hits['x'], hits['y'], hits['z']))
+        '''Hits within noise_hit_max_distance of the hits' principal axis.'''
+        return hits[self._distances_to_line(hits) <= self.noise_hit_max_distance]
 
-        # Perform PCA to find the principal component
-        pca = PCA(n_components=1)
-        pca.fit(positions)
-        track_direction = pca.components_[0]
-        hits_mean = pca.mean_
-
-        # Project points onto the principal component (the line)
-        projections = np.dot(positions - hits_mean, track_direction[:, np.newaxis]) * track_direction + hits_mean
-
-        # Calculate the Euclidean distance between each point and its projection on the line
-        distances = np.linalg.norm(positions - projections, axis=1)
-        
-        mask_good = distances <= self.noise_hit_max_distance
-
-        filtered_hits = hits[mask_good]
-
-        return filtered_hits
-    #@staticmethod
     def average_distance(self, hits):
-        positions = np.column_stack((hits['x'], hits['y'], hits['z']))
-
-        # Perform PCA to find the principal component
-        pca = PCA(n_components=1)
-        pca.fit(positions)
-        track_direction = pca.components_[0]
-        hits_mean = pca.mean_
-
-
-
-        # Project points onto the principal component (the line)
-        projections = np.dot(positions - hits_mean, track_direction[:, np.newaxis]) * track_direction + hits_mean
-
-        # Calculate the Euclidean distance between each point and its projection on the line
-        distances = np.linalg.norm(positions - projections, axis=1)
-        #print(np.mean(distances))
-        average_distances = np.mean(distances)
-
-        return average_distances
+        '''Mean distance of the hits from their principal axis.'''
+        return np.mean(self._distances_to_line(hits))
     
     #@staticmethod
     def select_muon_track(self,hits,Min_max_detector_bounds):
@@ -605,6 +584,14 @@ class RockMuonSelection(H5FlowStage):
             Hits_ev = np.delete(Hits_ev,nan_indices, axis = 0)
 
         if len(Hits_ev) < self.dbscan_min_samples:
+            return
+
+        #Skip events that can't contain a track: a candidate needs at least min_cluster_hits hits,
+        #and a track can't be longer than the diagonal of the box around all of the event's hits
+        if len(Hits_ev) < self.min_cluster_hits:
+            return
+        event_positions = np.ma.getdata(np.column_stack((Hits_ev['x'], Hits_ev['y'], Hits_ev['z'])))
+        if np.linalg.norm(event_positions.max(axis=0) - event_positions.min(axis=0)) < self.length_cut:
             return
         
         hit_indices = self.cluster(Hits_ev)
