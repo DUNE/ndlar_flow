@@ -6,17 +6,13 @@ params:
   wvfm_dset_name: 'light/wvfm'
 
   # configuration parameters
-  n_adcs: 8
+  n_adcs: 4
   n_channels: 64
   sn_table:
-   - 642823167
-   - 642874879
-   - 215553019
-   - 215563696
-   - 215537224
-   - 632779263
-   - 642504959
-   - 215564600
+   - 242569454
+   - 215039446
+   - 215564617
+   - 242569445
   sync_channel: 0
   sync_threshold: 40000
   batch_size: 1  #FIXME: only works with batch_size=1 at the moment (to be fixed in adc64format)
