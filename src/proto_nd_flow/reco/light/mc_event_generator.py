@@ -213,18 +213,30 @@ class LightEventGeneratorMC(H5FlowGenerator):
                                         channel_map=self.channel_map)
 
         assert isinstance(self.light_dat, h5py.Group)
-        nmod = len(self.light_dat)
         adc_per_mod = self.n_adcs // self.n_modules
+        # larnd-sim writes one 'light_dat_module{i}' dataset per module, except for a
+        # single module (or module variations off), where it writes one
+        # 'light_dat_allmodules' dataset indexed by global SiPM id
+        if 'light_dat_allmodules' in self.light_dat:
+            light_dat_all = self.light_dat['light_dat_allmodules'][:]
+            nmod = self.n_modules
+        else:
+            light_dat_all = None
+            nmod = len(self.light_dat)
         for imod in range(nmod):
-            in_name = f'light_dat_module{imod}'
-            this_light_dat = self.light_dat[in_name]
+            if light_dat_all is not None:
+                this_light_dat = light_dat_all
+                offset = 0
+            else:
+                this_light_dat = self.light_dat[f'light_dat_module{imod}']
+                offset = imod*self.n_sipms_per_module
             adc0 = imod * adc_per_mod
             this_channel_map = self.channel_map[adc0:adc0+adc_per_mod]
             out_name = f'{self.mc_truth_dset_name}_module{imod}'
             self.data_manager.create_dset(out_name, dtype=this_light_dat.dtype,
                                           shape=this_channel_map.shape)
             this_remapped_light_dat = self._remap_array_local(this_channel_map, this_light_dat, axis=-1,
-                                                              offset=imod*self.n_sipms_per_module)
+                                                              offset=offset)
             this_slice = slice(0, this_remapped_light_dat.shape[0])
             self.data_manager.reserve_data(out_name, this_slice)
             self.data_manager.write_data(out_name, this_slice, this_remapped_light_dat)
