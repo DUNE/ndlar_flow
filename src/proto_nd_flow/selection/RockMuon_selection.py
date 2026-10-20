@@ -7,6 +7,7 @@ from h5flow.core import H5FlowStage, resources
 
 from sklearn.cluster import DBSCAN
 
+from scipy.spatial import ConvexHull
 from scipy.spatial.distance import cdist
 from threadpoolctl import threadpool_limits
 
@@ -293,21 +294,23 @@ class RockMuonSelection(H5FlowStage):
     
     #@staticmethod
     def length(self,hits):
-        #Get Hit positions
-        hit_positions = np.column_stack((hits['x'], hits['y'], hits['z']))
-        
-        hdist = cdist(hit_positions, hit_positions)
-         
-        max_value_index = np.argmax(hdist)
-        # Convert flattened index to row and column indices
-        max_value_row = max_value_index // hdist.shape[1]
-        max_value_col = max_value_index % hdist.shape[1]
-        
-        indices = [max_value_row, max_value_col]
-        
-        start_hit, end_hit = hit_positions[np.min(indices)], hit_positions[np.max(indices)]
-        
-        return np.max(hdist), start_hit, end_hit
+        '''
+        Largest distance between two hits, and those two hits (lower index first).
+        For large clusters only the convex hull's vertices are compared: the two farthest
+        hits are always hull vertices, so the result is the same without an N x N matrix.
+        '''
+        hit_positions = np.ma.getdata(np.column_stack((hits['x'], hits['y'], hits['z']))).astype(float)
+        candidates = np.arange(len(hit_positions))
+        if len(hit_positions) > 1000:
+            try:
+                candidates = np.sort(ConvexHull(hit_positions).vertices)
+            except Exception:
+                pass # flat cluster: compare all hits
+        points = hit_positions[candidates]
+        hdist = cdist(points, points)
+        row, col = np.unravel_index(np.argmax(hdist), hdist.shape)
+        start_hit, end_hit = points[min(row, col)], points[max(row, col)]
+        return hdist[row, col], start_hit, end_hit
     
     def close_to_two_faces(self,boundaries, hits):
         '''
