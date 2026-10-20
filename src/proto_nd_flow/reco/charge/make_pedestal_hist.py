@@ -86,7 +86,8 @@ class MakePedestalHist(H5FlowGenerator):
         tile_ids = resources['Geometry'].tile_id[(self.packets['io_group'], self.packets['io_channel'])]
         self.pixel_unique_ids = pf.get_pixel_unique_ids(self.packets, tile_ids)
 
-        self.mask = (self.packets['valid_parity'].astype(bool) & (self.packets['packet_type'] == 0))  # data packets
+        data_packet_type = resources['RunData'].data_packet_type
+        self.mask = (self.packets['valid_parity'].astype(bool) & (self.packets['packet_type'] == data_packet_type))
     
     def finish(self):
         super(MakePedestalHist, self).finish()

@@ -1,0 +1,11 @@
+classname: MakePedestalHist
+path: proto_nd_flow.reco.charge.make_pedestal_hist
+dset_name: 'charge/raw_events'
+params:
+    packets_dset_name: 'charge/packets'
+    hist_dset_name: 'charge/hist_data'
+
+    buffer_size: 100000
+    adc_counts: 1023
+    
+    

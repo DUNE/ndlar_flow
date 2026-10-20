@@ -80,9 +80,9 @@ Charge
 
   Added option for ``pedestal_file`` and ``configuration_file``, using inputs found in previoulsy flowed file metadata. I don't see this file for module[0,2,3] workflows.
 
-5. ``yamls/module1_flow/workflows/charge/final_calibration.yaml``
+5. ``yamls/module1_flow/workflows/charge/merged_calibration.yaml``
 
-   Copied and modified from ``yamls/proto_nd_flow/workflows/charge/final_calibration.yaml``. Only difference is that ``.yaml`` files now point to ``module1_flow`` specific files. Don't see corresponding file for module[0,2,3] workflows.
+   Copied and modified from ``yamls/proto_nd_flow/workflows/charge/merged_calibration.yaml``. Only difference is that ``.yaml`` files now point to ``module1_flow`` specific files. Don't see corresponding file for module[0,2,3] workflows.
 
 * ``yamls/module1_flow/reco/charge/CalibHitMerger.yaml``
 

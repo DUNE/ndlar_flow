@@ -104,7 +104,8 @@ class RawHitBuilder(H5FlowStage):
 
         # get event boundaries
         if np.count_nonzero(mask):
-            mask = (packets_data['packet_type'] == 0) & mask
+            data_packet_type = resources['RunData'].data_packet_type
+            mask = (packets_data['packet_type'] == data_packet_type) & mask
             n = np.count_nonzero(mask)
             packets_arr = packets_data.data[mask]
             ts_arr = ts_data.data[mask]

@@ -24,6 +24,7 @@ class GeneratePedestalJson(H5FlowGenerator):
      - ``vref_dac`` : ``int``, optional, vref_dac value for larpix configuration
      - ``vcm_dac`` : ``int``, optional, vcm_dac value for larpix configuration
      - ``adc_counts`` : ``int``, optional, total adc counts for vref/vcm calculation (normally 2^8)
+     - ``adc_scale_factor`` : ``int``, optional, extra scale factor for ADC -> mV conversion
      - ``vdda`` : ``int``, optional, vdda [mV]
      - ``mean_trunc`` : ``int``, adc counts around peak ADC to consider in pedestal mean
      - ``hist_dset_name`` : ``str``, required, input dataset path for pedestal histograms
@@ -34,6 +35,7 @@ class GeneratePedestalJson(H5FlowGenerator):
     default_vref_dac = 223
     default_vcm_dac = 68
     default_adc_counts = 256
+    default_adc_scale_factor = 1
     default_vdda = 1800
     default_mean_trunc = 3
     default_hist_dset_name = 'charge/hist_data'
@@ -51,6 +53,7 @@ class GeneratePedestalJson(H5FlowGenerator):
         self.vref_dac = params.get('vref_dac', self.default_vref_dac)
         self.vcm_dac = params.get('vcm_dac', self.default_vcm_dac)
         self.adc_counts = params.get('adc_counts', self.default_adc_counts)
+        self.adc_scale_factor = params.get('adc_scale_factor', self.default_adc_scale_factor)
         self.vdda = params.get('vdda', self.default_vdda)
         self.mean_trunc = params.get('mean_trunc', self.default_mean_trunc)
         self.hist_dset_name = params.get('hist_dset_name', self.default_hist_dset_name)
@@ -138,7 +141,8 @@ class GeneratePedestalJson(H5FlowGenerator):
         peak_bin = np.argmax(hist)
         min_idx,max_idx = max(peak_bin-self.mean_trunc,0), min(peak_bin+self.mean_trunc,len(hist))
         ped_adc = np.average(bins[min_idx:max_idx]+0.5, weights=hist[min_idx:max_idx])
-        pedestal_mv = pf.adc2mv(ped_adc, self.vref_mv, self.vcm_mv, self.adc_counts)
+        pedestal_mv = pf.adc2mv(ped_adc, self.vref_mv, self.vcm_mv, self.adc_counts,
+                                self.adc_scale_factor)
         self.channel_pedestal_mv.append(pedestal_mv)
         self.channel_unique_id.append(unique_id)
         self.pedestal_dict[str(unique_id)] = dict(

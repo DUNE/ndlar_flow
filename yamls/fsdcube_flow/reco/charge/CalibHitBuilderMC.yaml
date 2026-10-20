@@ -1,0 +1,39 @@
+classname: CalibHitBuilder # reco/charge/calib_hit_builder.py
+path: proto_nd_flow.reco.charge.calib_prompt_hits
+requires:
+  - 'charge/events'
+  - 'charge/raw_hits'
+  - 'charge/packets'
+  - 'combined/t0'
+  - name: 'charge/packets_index'
+    path: ['charge/packets']
+    index_only: True
+  - name: 'packet_frac_backtrack'
+    path: ['charge/packets','mc_truth/packet_fraction']
+  - name: 'packet_seg_backtrack'
+    path: ['charge/packets','mc_truth/segments']
+
+params:
+  # inputs
+  events_dset_name: 'charge/events'
+  packets_dset_name: 'charge/packets'
+  packets_index_name: 'charge/packets_index'
+  raw_hits_dset_name: 'charge/raw_hits'
+  t0_dset_name: 'combined/t0'
+  max_contrib_segments: 10
+
+  # output
+  calib_hits_dset_name: 'charge/calib_prompt_hits'
+  mc_hit_frac_dset_name: 'mc_truth/calib_prompt_hit_backtrack'
+
+  # configuration parameters
+  vref_mv: 1734.375
+  vcm_mv: 0
+  adc_counts: 1023
+  adc_scale_factor: 2
+  gain: 3.4
+
+  #flag to perform electron liftime calibration
+  elifetime_calibration: True
+
+  pedestal_file: '/global/cfs/cdirs/dune/www/data/LBL/v3/FSDCube/Feb2026/cold_processed/pedestal_prc-1280_rolling-2026_02_26_16_18_05_PST.flow.json'

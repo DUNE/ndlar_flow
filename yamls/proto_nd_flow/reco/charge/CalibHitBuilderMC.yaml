@@ -32,5 +32,6 @@ params:
   vcm_mv: 478.1 #M0-like:288 #478.0 #2x2: 478.1
   adc_counts: 256
   gain: 4.522 #datasheet: 4 #measurement(?): 4.522
+  elifetime_calibration: True
 
   pedestal_file: 'data/proto_nd_flow/reference-cold-pedestal-2024_06_05_08_28_19_CDTevd_ped.tile_id_swapped.decimal.json'

@@ -84,10 +84,10 @@ def create_3d_figure(minerva_data, data, filename, evid):
     prompthits_ev = data["charge/events", "charge/calib_prompt_hits", evid]
     packets_ev = data["charge/events", "charge/calib_prompt_hits", "charge/packets", evid]
     try:
-        finalhits_ev = data["charge/events", "charge/calib_final_hits", evid]
+        filteredhits_ev = data["charge/events", "charge/calib_filtered_hits", evid]
     except:
-        finalhits_ev = prompthits_ev
-        print("No final hits found, plotting prompt hits")
+        filteredhits_ev = prompthits_ev
+        print("No filtered hits found, plotting prompt hits")
 
     # select the segments (truth) for the current event
     try:
@@ -397,12 +397,12 @@ def create_3d_figure(minerva_data, data, filename, evid):
         )
         fig.add_traces(negative_traces)
 
-    # Plot the final hits
-    finalhits_traces = go.Scatter3d(
-        x=finalhits_ev.data["x"].flatten(),
-        y=(finalhits_ev.data["y"].flatten()),
-        z=(finalhits_ev.data["z"].flatten()),
-        marker_color=finalhits_ev.data["E"].flatten(),
+    # Plot the filtered hits
+    filteredhits_traces = go.Scatter3d(
+        x=filteredhits_ev.data["x"].flatten(),
+        y=(filteredhits_ev.data["y"].flatten()),
+        z=(filteredhits_ev.data["z"].flatten()),
+        marker_color=filteredhits_ev.data["E"].flatten(),
         marker={
             "size": 1.75,
             "opacity": 0.9,
@@ -419,15 +419,15 @@ def create_3d_figure(minerva_data, data, filename, evid):
             "cmin": -1.,
             "cmax": 4.,
         },
-        name="final hits",
+        name="filtered hits",
         mode="markers",
         visible="legendonly",
         showlegend=True,
         opacity=0.9,
-        customdata=finalhits_ev.data["E"].flatten(),
+        customdata=filteredhits_ev.data["E"].flatten(),
         hovertemplate="<b>x:%{x:.3f}</b><br>y:%{y:.3f}<br>z:%{z:.3f}<br>E:%{customdata:.3f}",
     )
-    fig.add_traces(finalhits_traces)
+    fig.add_traces(filteredhits_traces)
 
     if prompthits_segs is not None and sim_version != "data":
         segs_traces = plot_segs(

@@ -21,10 +21,10 @@ params:
   events_dset_name: 'charge/events'
   hits_name: 'charge/calib_prompt_hits'
   hit_ref: True
-  filter_function_names: ['hot_pixel_filter','correlated_post_trigger_filter', 'low_current_filter'] #which filter functions to apply (this is an ordered list, but all filters will be "OR'd")
+  filter_function_names: ['hot_pixel_filter', 'low_current_filter'] #which filter functions to apply (this is an ordered list, but all filters will be "OR'd")
   low_current_filter__channel_threshold_file: null
   #params specific to each cut
-  low_current_filter__threshold: 6.0 #
+  low_current_filter__threshold: 1.0 #
   hot_pixel_filter__max_n_hits: 35 
     #hot_pixel_filter__max_n_hits: 
     # - maximum number of hits on a channel in single event before filtering all hits from channel
@@ -36,6 +36,6 @@ params:
 
 
   # outputs
-  calib_hits_dset_name: 'charge/calib_final_hits'
-  mc_hit_frac_dset_name: 'mc_truth/calib_final_hit_backtrack'
+  calib_hits_dset_name: 'charge/calib_filtered_hits'
+  mc_hit_frac_dset_name: 'mc_truth/calib_filtered_hit_backtrack'
 

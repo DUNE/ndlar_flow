@@ -4,7 +4,7 @@ import numpy.lib.recfunctions as rfn
 import h5py
 import logging
 
-from h5flow.core import H5FlowStage
+from h5flow.core import H5FlowStage, resources
 
 
 class ExternalTriggerFinder(H5FlowStage):
@@ -177,10 +177,13 @@ class ExternalTriggerFinder(H5FlowStage):
                                     | trigger_mask)
 
         trigger_mask = trigger_mask & ~rfn.structured_to_unstructured(events.mask).any(axis=-1)
+        data_packet_type = resources['RunData'].data_packet_type
 
         trigs = np.empty(events.shape, dtype=self.ext_trigs_dtype)
         trigs['ts'] = metadata['ts']['ts']
         trigs['ts_raw'] = events['timestamp']
-        trigs['type'] = events['trigger_type'] * (events['packet_type'] != 0) + -1 * (events['packet_type'] == 0)
+        trigs['type'] = (
+            events['trigger_type'] * (events['packet_type'] != data_packet_type)
+            + -1 * (events['packet_type'] == data_packet_type))
         trigs['iogroup'] = events['io_group']
         return ma.array(trigs, mask=~trigger_mask)

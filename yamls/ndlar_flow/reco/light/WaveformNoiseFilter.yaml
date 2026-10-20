@@ -6,6 +6,7 @@ params:
   # input
   wvfm_dset_name: 'light/wvfm'
 
+  #  Note: rms and baseline are automatically created as subdatasets of source (light/events/rms, light/events/baseline)
   # output(s)
   fwvfm_dset_name: 'light/fwvfm'
   noise_dset_name: 'light/fwvfm_noise'

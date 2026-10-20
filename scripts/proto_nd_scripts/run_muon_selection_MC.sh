@@ -25,7 +25,7 @@ H5FLOW_CMD='h5flow'
 #WORKFLOW2='yamls/proto_nd_flow/workflows/charge/charge_event_reconstruction_mc.yaml'
 #WORKFLOW3='yamls/proto_nd_flow/workflows/combined/combined_reconstruction_mc.yaml'
 #WORKFLOW4='yamls/proto_nd_flow/workflows/charge/prompt_calibration_mc.yaml'
-#WORKFLOW5='yamls/proto_nd_flow/workflows/charge/final_calibration_mc.yaml'
+#WORKFLOW5='yamls/proto_nd_flow/workflows/charge/merged_calibration_mc.yaml'
 WORKFLOW6='yamls/proto_nd_flow/workflows/rock_muon_selection_MC.yaml'
 
 HERE=`pwd`

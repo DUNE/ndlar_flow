@@ -330,7 +330,8 @@ class WaveformHitFinder(H5FlowStage):
         uheight_below = tout_th * height_below
 
         # dynamic_threshold = rolling threshold of previous 5 bins + n*sqrt(rolling threshold)
-        wvfm_rolled = np.roll(wvfm, n_bins_rolled)
+        wvfm_rolled = np.roll(wvfm, n_bins_rolled, axis=-1)
+        wvfm_rolled[..., :n_bins_rolled] = 0  # treat pre-waveform history as quiet baseline
         rolling_average = uniform_filter1d(wvfm_rolled, size=n_bins_rolled)
         sqrt_rolling_average = np.sqrt(np.abs(rolling_average) * pe_weight**2)
         sqrt_rolling_average[sqrt_rolling_average == 0] = 1

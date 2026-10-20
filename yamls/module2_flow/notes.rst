@@ -69,7 +69,7 @@ Charge
 
   Copied and modified from module1's. Used ``pedestal_file`` and ``configuration_file`` that Sam had made. 
 
-5. ``yamls/module1_flow/workflows/charge/final_calibration.yaml``
+5. ``yamls/module1_flow/workflows/charge/merged_calibration.yaml``
 
     Copied and moified from module1's. 
 

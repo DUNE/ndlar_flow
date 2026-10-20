@@ -30,6 +30,7 @@ params:
 
   #flag to perform ADC droop calibration
   adc_droop_calibration: True
+  elifetime_calibration: True
 
   # from Sam F:
   pedestal_file: '/global/common/software/dune/mkramer/devel/flow4pedestal/packet-pedestal_nominal_60min-2025_10_02_23_03_26_CDT.json'

@@ -37,6 +37,6 @@ params:
 
 
   # outputs
-  calib_hits_dset_name: 'charge/calib_final_hits'
-  mc_hit_frac_dset_name: 'mc_truth/calib_final_hit_backtrack'
+  calib_hits_dset_name: 'charge/calib_filtered_hits'
+  mc_hit_frac_dset_name: 'mc_truth/calib_filtered_hit_backtrack'
 

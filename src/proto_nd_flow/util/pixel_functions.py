@@ -16,7 +16,7 @@ def get_pixel_unique_ids(packets, tile_ids):
                             + packets['channel_id'].astype(int))
         return unique_ids
 
-def adc2mv(adc, vref, vcm, adc_counts):
+def adc2mv(adc, vref, vcm, adc_counts, adc_scale_factor=1):
     '''
     Helper function to convert pedestal-corrected ADC datawords to mV units.
     
@@ -24,9 +24,10 @@ def adc2mv(adc, vref, vcm, adc_counts):
     :param vref: pixel vref configuration [mV] 
     :param vcm: pixel vcm configuration [mV]
     :param adc_counts: nominally 2^N, where N is the total bits in the ADC (usually 8)
+    :param adc_scale_factor: optional (default: 1); extra scale factor for ADC -> mV conversion
     :returns: array of pedestal-corrected datawords converted to mV units
     '''
-    return (vref-vcm) * adc/adc_counts + vcm
+    return (vref-vcm) * adc_scale_factor * adc/adc_counts + vcm
 
 def dac2mv(dac, vdda, adc_counts):
     '''

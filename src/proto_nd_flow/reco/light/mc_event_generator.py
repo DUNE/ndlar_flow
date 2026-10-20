@@ -218,7 +218,7 @@ class LightEventGeneratorMC(H5FlowGenerator):
         for imod in range(nmod):
             in_name = f'light_dat_module{imod}'
             this_light_dat = self.light_dat[in_name]
-            adc0 = imod // adc_per_mod * adc_per_mod
+            adc0 = imod * adc_per_mod
             this_channel_map = self.channel_map[adc0:adc0+adc_per_mod]
             out_name = f'{self.mc_truth_dset_name}_module{imod}'
             self.data_manager.create_dset(out_name, dtype=this_light_dat.dtype,
