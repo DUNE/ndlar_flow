@@ -124,9 +124,6 @@ class RockMuonSelection(H5FlowStage):
         for key,val in self.defaults.items():
             setattr(self, key, params.get(key, val))
 
-        #Track and segment counters
-        self.track_count = -1
-        self.segment_count = -1
             
     def init(self, source_name):
         
@@ -565,15 +562,15 @@ class RockMuonSelection(H5FlowStage):
                 drift_time = (max(hits_of_segment['t_drift'])+min(hits_of_segment['t_drift']))/2
             
                 io_group_of_segment = np.unique(hits_of_segment['io_group'])[0]
-                self.segment_count += 1
 
-                
+                #Segment number within the track; run() adds the first output row reserved for the track's segments
+                segment_id = len(segment_to_track_ref)
                 for hit in hits_of_segment:
-                    hit_ref.append([self.segment_count, hit['id']])
-                segment_to_track_ref.append([self.track_count, self.segment_count])
+                    hit_ref.append([segment_id, hit['id']])
+                segment_to_track_ref.append(segment_id)
                 dx = np.linalg.norm(segment_start-segment_end)
             
-                return [self.segment_count, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Q_of_segment, dx, x_mid, y_mid,z_mid, drift_time, io_group_of_segment, len(hits_of_segment)]
+                return [segment_id, x_start, y_start, z_start, Energy_of_segment, x_end, y_end, z_end, Q_of_segment, dx, x_mid, y_mid,z_mid, drift_time, io_group_of_segment, len(hits_of_segment)]
             else:
                 #print(f'No hits found for segment: start={segment_start}, end={segment_end}')
                 return None
@@ -616,9 +613,9 @@ class RockMuonSelection(H5FlowStage):
                 muon_track,length_of_track, start_point, end_point, explained_var, direction_vector = self.select_muon_track(hits,Min_max_detector_bounds)
                  
                 if len(muon_track) != 0:
-                    #Loop through tracks and changes the DBSCAN cluster_id to a given track number
-                    self.track_count += 1 
-                    track_number = self.track_count
+                    #  1. reserve a new data region within the output dataset; the track's id is its output row
+                    rock_muon_slice = self.data_manager.reserve_data(self.rock_muon_tracks_dset_name, 1)
+                    track_number = rock_muon_slice.start
 
                     #Tag crossing tracks
                     a2a, a2c = self.anode_cathode_tags(muon_track[0])
@@ -633,10 +630,6 @@ class RockMuonSelection(H5FlowStage):
                     #Get segments
                     segments_list, segment_hit_ref, segment_track_ref = self.segments(muon_track)
                     
-                    #  1. reserve a new data region within the output dataset
-                    rock_muon_slice = self.data_manager.reserve_data(self.rock_muon_tracks_dset_name, 1)
-
-
                     #  2. write the data to the new data region
                     self.data_manager.write_data(self.rock_muon_tracks_dset_name, rock_muon_slice, track_info)
             
@@ -645,6 +638,10 @@ class RockMuonSelection(H5FlowStage):
                     nMuon_segments = len(segments_array)
                     # 3. reserve a new data region within the rock muon segment dataset
                     rock_muon_segments_slice = self.data_manager.reserve_data(self.rock_muon_segments_dset_name, nMuon_segments)
+
+                    #    segment ids are their output rows
+                    first_segment = rock_muon_segments_slice.start
+                    segments_array['rock_segment_id'] += first_segment
 
                     # 4. Write the data into the rock muon segments data region
                     self.data_manager.write_data(self.rock_muon_segments_dset_name, rock_muon_segments_slice, segments_array)
@@ -657,9 +654,10 @@ class RockMuonSelection(H5FlowStage):
                     track_event_ref = np.array([(track_number, event_id[0])])
                     
                     #print(track_ref)            
-                    segment_track_ref = np.array([(x) for x in segment_track_ref])
+                    segment_track_ref = np.array([(track_number, first_segment + x) for x in segment_track_ref]).reshape(-1, 2)
                      
-                    segment_hit_ref = np.array([(x) for x in segment_hit_ref])
+                    segment_hit_ref = np.array([(x) for x in segment_hit_ref]).reshape(-1, 2)
+                    segment_hit_ref[:, 0] += first_segment
                     
                     #Write References
                     self.data_manager.write_ref(self.rock_muon_tracks_dset_name,self.hits_dset_name, track_ref)
