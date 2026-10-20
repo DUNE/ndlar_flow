@@ -8,6 +8,7 @@ from h5flow.core import H5FlowStage, resources
 from sklearn.cluster import DBSCAN
 
 from scipy.spatial.distance import cdist
+from threadpoolctl import threadpool_limits
 
 
 
@@ -72,6 +73,8 @@ class RockMuonSelection(H5FlowStage):
     ('merge_max_angle', 20), #degrees, maximum angle between the two clusters
 
     ('segment_length', 2), #cm
+
+    ('max_threads', 1), #threads numpy/sklearn may use in this process (0: no limit)
     ])
 
     #Datatype wanted
@@ -127,6 +130,11 @@ class RockMuonSelection(H5FlowStage):
     def init(self, source_name):
         
         super(RockMuonSelection, self).init(source_name)
+
+        # The selection does many tiny numpy/sklearn operations that gain nothing from threads, and
+        # parallel flow jobs on one node oversubscribe it. The limit holds for the rest of the process.
+        if self.max_threads > 0:
+            self._thread_limits = threadpool_limits(limits=self.max_threads)
 
         self._check_hits_dset()
 

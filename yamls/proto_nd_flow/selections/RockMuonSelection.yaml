@@ -43,3 +43,8 @@ params:
 
     #dQ/dx segments
     segment_length: 2 #cm
+
+    #CPU
+    # threads numpy/sklearn may use in this process; more give no speed-up for the selection's
+    # small operations and oversubscribe nodes running several flow jobs (0: no limit)
+    max_threads: 1
