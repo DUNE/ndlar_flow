@@ -515,8 +515,9 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         if self.trig_io_grp != [-1]:
             iog_masks = [packets['io_group'] == iog for iog in self.trig_io_grp]
             trig_mask &= np.logical_or.reduce(iog_masks)
+        
         trigger_idcs = np.where(trig_mask)[0]
-
+            
         events = []
         event_unix_ts = []
         event_mc_assn = [] if mc_assn is not None else None
