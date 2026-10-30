@@ -72,13 +72,13 @@ def unroll_timestamps(packets: np.ndarray, last_offsets) \
         sync_ts[sync_mask] = (np.round(sync_ts[sync_mask] / rollover_ticks)
                                 * rollover_ticks)
 
-        if io_group == 7:
-            unix_ts = get_unix_timestamps(packets)
-            sel = sync_mask & (unix_ts == 1720502219)
-            if np.any(sel):
-                ixs = np.where(sel)[0]
-                assert len(ixs) == 1
-                sync_ts[ixs[0]] += rollover_ticks
+        # if io_group == 7:
+        #     unix_ts = get_unix_timestamps(packets)
+        #     sel = sync_mask & (unix_ts == 1720502219)
+        #     if np.any(sel):
+        #         ixs = np.where(sel)[0]
+        #         assert len(ixs) == 1
+        #         sync_ts[ixs[0]] += rollover_ticks
 
         # Now get the cumulative sum of all _preceding_ increments
         # (subtracting sync_ts[mask] => "preceding")
