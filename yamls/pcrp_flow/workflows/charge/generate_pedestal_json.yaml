@@ -1,0 +1,10 @@
+flow:
+  source: generate_pedestal_json
+  stages: []
+  drop: []
+
+#resources:
+#  - !include yamls/pcrp_flow/resources/Geometry.yaml
+
+generate_pedestal_json:
+  !include yamls/pcrp_flow/reco/charge/GeneratePedestalJson.yaml
