@@ -1,0 +1,16 @@
+temperature: 87.17 # K
+e_field: 0.50 # kV/cm
+lifetime: 1.0e+3 # us ; based on data-taking conditions
+long_diff: 4.0e-6 # cm * cm / us
+tran_diff: 8.8e-6 # cm * cm / us
+drift_length: 50 # cm
+time_padding: 190 # us
+time_window: 189.1 # us
+tpc_offsets: # cm
+  - [0, 0, 0]
+tile_map:
+  - FIXME
+module_to_io_groups:
+  1: [1, 2, 3, 4, 5, 6]
+module_to_tpcs:
+  1: [0]
