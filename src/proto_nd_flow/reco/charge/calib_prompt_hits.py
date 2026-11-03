@@ -282,8 +282,8 @@ class CalibHitBuilder(H5FlowStage):
                 vcm = np.array([self.configuration[unique_id]['vcm_mv']
                                 for unique_id in hit_uniqueid_str])
             else:
-                vref = np.full(len(hit_uniqueid_str), self.vref_mv)
-                vcm = np.full(len(hit_uniqueid_str), self.vcm_mv)
+                vref = self.map_param(self.vref_mv, packets_arr)
+                vcm = self.map_param(self.vcm_mv, packets_arr)
             if self.pedestal_file != '':
                 ped = np.array([self.pedestal[unique_id]['pedestal_mv']
                                 for unique_id in hit_uniqueid_str])
@@ -292,7 +292,10 @@ class CalibHitBuilder(H5FlowStage):
             if self.gain_file != '':
                 gain = np.array([self.gains[unique_id]['gain'] for unique_id in hit_uniqueid_str])
             else:
-                gain = np.full(len(hit_uniqueid_str), self.gain)
+                gain = self.map_param(self.gain, packets_arr)
+
+            adc_counts = self.map_param(self.adc_counts, packets_arr)
+            adc_scale_factor = self.map_param(self.adc_scale_factor, packets_arr)
 
             calib_hits_arr['id'] = calib_hits_slice.start + np.arange(n, dtype=int)
             calib_hits_arr['x'] = x
@@ -307,13 +310,13 @@ class CalibHitBuilder(H5FlowStage):
             calib_hits_arr['chip_id'] = packets_arr['chip_id']
             calib_hits_arr['channel_id'] = packets_arr['channel_id']
             hits_charge = self.charge_from_dataword(
-                packets_arr['dataword'], vref, vcm, ped, self.adc_counts,
-                self.adc_scale_factor, gain) # ke-
+                packets_arr['dataword'], vref, vcm, ped, adc_counts,
+                adc_scale_factor, gain) # ke-
             calib_hits_arr['Q_raw'] = hits_charge # ke-
             if self.adc_droop_calibration:
                 hits_charge_calibrated = self.charge_from_dataword_corrected(
                     packets_arr['dataword'], packets_arr['timestamp'], hit_uniqueid,
-                    vref, vcm, ped, self.adc_counts, self.adc_scale_factor, gain) # ke-
+                    vref, vcm, ped, adc_counts, adc_scale_factor, gain) # ke-
                 calib_hits_arr['Q'] = hits_charge_calibrated  # ke-
             else:
                 calib_hits_arr['Q'] = hits_charge # ke-
@@ -414,6 +417,17 @@ class CalibHitBuilder(H5FlowStage):
     @staticmethod
     def charge_from_dataword(dw, vref, vcm, ped, adc_counts, adc_scale_factor, gain):
         return (dw / adc_counts * adc_scale_factor * (vref - vcm) + vcm - ped) / gain
+
+    @staticmethod
+    def map_param(param, packets_arr):
+        """If `param` is a list (one element per IO group), return an array, of
+        same size as `packets_arr`, containing the value of `param`
+        corresponding to the IO group of each packet. If `param` is a scalar,
+        broadcast it to the size of `packets_arr`.
+        """
+        if isinstance(param, list):
+            return np.array(param[iog - 1] for iog in packets_arr['io_group'])
+        return np.full(len(packets_arr), param)
 
     def load_pedestals(self):
         if self.pedestal_file != '':
