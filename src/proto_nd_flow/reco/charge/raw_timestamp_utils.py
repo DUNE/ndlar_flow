@@ -190,7 +190,7 @@ def get_anchor_unix_ts(packets, packet_msg_unix_ts, pps_delays, threshold=30):
         delay = np.median(pps_delays['delay_ticks'][pps_delays['io_group'] == iog])
         first_receipt_ts = p[p['packet_type'] != 4]['receipt_timestamp'][0]
         if first_receipt_ts + delay > 1E7: 
-            result[iog] = anchor + 1
+            result[iog] = anchor - 1
         else:
             result[iog] = anchor
 
