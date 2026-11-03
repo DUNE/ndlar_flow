@@ -20,12 +20,12 @@ params:
   # output
   calib_hits_dset_name: 'charge/calib_prompt_hits'
 
-  # configuration parameters (FIXME)
-  vref_mv: 1750
-  vcm_mv: 0
-  adc_counts: 1023
-  adc_scale_factor: 2
-  gain: 3.4
+  # configuration parameters
+  vref_mv: [1054.6875, 1054.6875, 1455.46875, 1455.46875, 1054.6875, 1054.6875]
+  vcm_mv: [390.625, 390.625, 0, 0, 390.625, 390.625]
+  adc_counts: [256, 256, 1023, 1023, 256, 256]
+  adc_scale_factor: [1, 1, 2, 2, 1, 1]
+  gain: [2.46, 2.46, 3.4, 3.4, 2.46, 2.46]
 
   #flag to perform electron liftime calibration
   elifetime_calibration: False

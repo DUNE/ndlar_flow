@@ -7,4 +7,4 @@ flow:
 #  - !include yamls/pcrp_flow/resources/Geometry.yaml
 
 generate_pedestal_json:
-  !include yamls/pcrp_flow/reco/charge/GeneratePedestalJson.yaml
+  !include yamls/pcrp_flow/reco/charge/GeneratePedestalJsonV2.yaml

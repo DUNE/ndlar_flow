@@ -3,7 +3,7 @@ path: proto_nd_flow.resources.geometry
 params:
   path: 'geometry_info'
   det_geometry_file: 'data/pcrp_flow/pcrp.yaml'
-  crs_geometry_files: ['data/pcrp_flow/multi_tile_layout_crp.yaml']
+  crs_geometry_files: ['data/pcrp_flow/multi_tile_layout_pcrp.yaml']
   crs_geometry_to_module: [0]
   beam_direction: 'z'
   drift_direction: 'x'
