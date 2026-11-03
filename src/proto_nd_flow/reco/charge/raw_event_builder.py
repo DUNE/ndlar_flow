@@ -96,26 +96,52 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
 
         Configurable parameters::
 
-            window      - bin width
-            threshold   - number of correlated hits to initiate event
+            window           - bin width
+            threshold        - number of correlated hits to initiate event
+            max_event_length - maximum event length [ticks]; a run of
+                               above-threshold bins longer than this is chopped
+                               into consecutive events of at most this length
+                               (0 = no limit)
 
     '''
-    version = '0.0.2'
+    version = '0.0.3'
 
     default_window = 1820 // 2
     default_threshold = 10
+    default_max_event_length = 0
 
     def __init__(self, **params):
         super(SymmetricWindowRawEventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
         self.threshold = params.get('threshold', self.default_threshold)
+        self.max_event_length = int(params.get('max_event_length', self.default_max_event_length) or 0)
 
     def get_config(self):
         return dict(
             window=self.window,
             threshold=self.threshold,
+            max_event_length=self.max_event_length,
             **super().get_config(),
         )
+
+    @staticmethod
+    def split_long_events(event_start_timestamp, event_end_timestamp, max_length):
+        '''
+            Chop every [start, end] interval longer than ``max_length`` ticks
+            into consecutive pieces of at most ``max_length``. Pieces are
+            disjoint for integer timestamps: a piece ends at
+            ``start + max_length - 1`` and the next one starts at
+            ``start + max_length``.
+        '''
+        starts, ends = [], []
+        for start, end in zip(event_start_timestamp, event_end_timestamp):
+            while end - start > max_length:
+                starts.append(start)
+                ends.append(start + max_length - 1)
+                start = start + max_length
+            starts.append(start)
+            ends.append(end)
+        return np.array(starts), np.array(ends)
 
     def do_build_events(self, packets, ts, used_mask):
         # calculate time distance between hits
@@ -143,12 +169,20 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
             # no events
             self.event_buffer = np.empty((0,), dtype=packets.dtype)
             return []
-        if not len(event_start_timestamp):
-            # first packet starts event
+        # an active first/last bin has no rising/falling edge inside the
+        # buffer: the first packet starts / the last packet ends that event.
+        # (Without this the rising and falling edges are mis-paired whenever
+        # the buffer starts inside an event, which is always the case for a
+        # continuously noisy data stream.)
+        if event_mask[0]:
             event_start_timestamp = np.r_[min_ts, event_start_timestamp]
-        if not len(event_end_timestamp):
-            # last packet ends event
-            event_end_timestamp = np.r_[max_ts, event_end_timestamp]
+        if event_mask[-1]:
+            event_end_timestamp = np.r_[event_end_timestamp, max_ts]
+        assert len(event_start_timestamp) == len(event_end_timestamp)
+
+        if self.max_event_length > 0:
+            event_start_timestamp, event_end_timestamp = self.split_long_events(
+                event_start_timestamp, event_end_timestamp, self.max_event_length)
 
         event_masks = [np.where((ts >= ts_start) & (ts <= ts_end) & ~used_mask)[0]
                        for ts_start, ts_end
@@ -160,15 +194,41 @@ class SymmetricWindowRawEventBuilder(RawEventBuilder):
 class ExtTrigRawEventBuilder(RawEventBuilder):
     '''
     An external trigger based event builder. Events are sliced such that they always follow an external trigger and the readout window is configurable. The default is set to 182 x 1.1 units (10% grace period). Note the event builder may contain more than one trigger if they are within a readout window time.
+
+    The trigger packet(s) that start an event are always consumed by that
+    event, also when ``shifted_event_dt`` moves the readout window away from
+    the trigger packet (e.g. a trigger that arrives before the beam). This
+    keeps the external-trigger reference on the beam event and keeps the
+    trigger packets out of the off-beam event builder.
+
+    Configurable parameters::
+
+        window                    - readout window after the (shifted) trigger [ticks]
+        shifted_event_dt          - offset between the trigger packet and the start of the readout window [ticks]
+        trig_io_grp               - io_group(s) whose trigger packets start events (-1 -> all)
+        extendable                - extend the window when further triggers arrive inside it
+        trigger_group_dt          - trigger packets of ANY io_group within +/- this of the
+                                    event's trigger are consumed by the same event (0 = off);
+                                    use it for duplicate/companion trigger packets, e.g. the
+                                    two io_group-7 $74 packets 3 ticks apart plus the io_group-5 copy
+        build_off_beam_events     - also build events from the remaining packets with a
+                                    SymmetricWindowRawEventBuilder
+        off_beam_window           - bin width of the off-beam builder [ticks]
+        off_beam_threshold        - packets per bin to start an off-beam event
+        off_beam_max_event_length - maximum off-beam event length [ticks] (0 = no limit)
     '''
+    version = '0.0.1'
+
     default_window = 1820 * 1.1
     default_shifted_event_dt = 0 # This is to account for any offset between timing of trigger marker and corresponding event
     default_trig_io_grp = 1     # -1 -> all io groups
     default_extendable = False
-    
+    default_trigger_group_dt = 0
+
     default_build_off_beam_events=False
     default_off_beam_window = 1820 // 2
     default_off_beam_threshold = 10
+    default_off_beam_max_event_length = 0
 
     def __init__(self, **params):
         super(ExtTrigRawEventBuilder, self).__init__(**params)
@@ -179,6 +239,8 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         self.off_beam_window = params.get('off_beam_window', self.default_off_beam_window)
         self.off_beam_threshold = params.get('off_beam_threshold', self.default_off_beam_threshold)
         self.shifted_event_dt = params.get('shifted_event_dt', self.default_shifted_event_dt)
+        self.trigger_group_dt = int(params.get('trigger_group_dt', self.default_trigger_group_dt) or 0)
+        self.off_beam_max_event_length = int(params.get('off_beam_max_event_length', self.default_off_beam_max_event_length) or 0)
 
         self.event_buffer = np.empty((0,))  
         self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
@@ -213,6 +275,11 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             window=list(self.window.items()),
             shifted_event_dt=list(self.shifted_event_dt.items()),
             extendable=list(self.extendable.items()),
+            trigger_group_dt=self.trigger_group_dt,
+            build_off_beam_events=self.build_off_beam_events,
+            off_beam_window=self.off_beam_window,
+            off_beam_threshold=self.off_beam_threshold,
+            off_beam_max_event_length=self.off_beam_max_event_length,
             **super().get_config(),
         )
 
@@ -222,6 +289,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             iog_masks = [packets['io_group'] == iog for iog in self.trig_io_grp]
             trig_mask &= np.logical_or.reduce(iog_masks) # ty: ignore
         trigger_idcs = np.where(trig_mask)[0]
+        any_trig_mask = packets['packet_type'] == 7
 
         event_masks = []
         start_times = []
@@ -230,6 +298,7 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
         for start_idx in trigger_idcs:
             if start_idx in used_trig_idcs:
                 continue
+            trig_idcs_before = set(used_trig_idcs)
             used_trig_idcs.add(start_idx)
 
             this_io_group = packets[start_idx]['io_group']
@@ -242,9 +311,27 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
                     packets, ts, trig_mask,
                     used_trig_idcs, last_io_group, last_trig_time)
 
+            # trigger packets belonging to this event: the one that started it,
+            # any pile-up triggers found by extend_window, and (optionally)
+            # duplicate/companion trigger packets of any io_group close in time
+            event_trig_idcs = used_trig_idcs - trig_idcs_before
+            if self.trigger_group_dt > 0:
+                group_idcs = np.where(any_trig_mask
+                                      & (np.abs(ts - ts[start_idx]) <= self.trigger_group_dt)
+                                      & ~used_mask)[0]
+                for idx in group_idcs:
+                    if trig_mask[idx]:
+                        # a duplicate of the event trigger never starts its own event
+                        used_trig_idcs.add(idx)
+                event_trig_idcs |= set(group_idcs.tolist())
+
             mask = ((ts - this_trig_time) >= 0) \
                 & ((ts - last_trig_time) <= self.window[last_io_group]) \
                 & ~used_mask
+            # always consume the trigger packet(s) themselves, even when
+            # shifted_event_dt puts the readout window after them
+            event_trig_idcs = np.array([idx for idx in event_trig_idcs if not used_mask[idx]], dtype=int)
+            mask[event_trig_idcs] = True
 
             event_masks.append(np.where(mask)[0])
 
@@ -255,7 +342,8 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
 
         # build off beam events using SymmetricRawEventBuilder
         off_beam_config = {'window' : self.off_beam_window,
-                           'threshold' : self.off_beam_threshold}
+                           'threshold' : self.off_beam_threshold,
+                           'max_event_length' : self.off_beam_max_event_length}
         off_beam_builder = SymmetricWindowRawEventBuilder( **off_beam_config )
         off_beam_event_masks = off_beam_builder.build_events(packets, ts, used_mask)
 
