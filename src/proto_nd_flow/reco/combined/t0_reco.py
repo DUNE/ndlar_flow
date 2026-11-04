@@ -19,6 +19,10 @@ class T0Reconstruction(H5FlowStage):
          - ``t0_dset_name``: ``str``, path to output dataset
          - ``light_hits_dset_name``: ``str``, path to input light hits dataset, ``None`` to disable light hit lookup
          - ``ext_trigs_dset_name``: ``str``, path to input external trigger dataset, ``None`` to disable ext trig lookup
+         - ``ext_trig_t0_offset``: ``dict``, ``{io_group: ticks}`` added to the external trigger
+           timestamps of that io_group before taking the earliest one as T0 (default: none). Use it when
+           the trigger arrives before the interaction, e.g. 2x2 Run 3 beam triggers with
+           ``shifted_event_dt`` 2130: ``{5: 2130, 7: 2130}``. Must match the event builder's ``shifted_event_dt``.
 
          Both ``light_hits_dset_name`` and ``ext_trigs_dset_name`` are required
          in the cache, if enabled.
@@ -46,6 +50,7 @@ class T0Reconstruction(H5FlowStage):
     default_t0_dset_name = 'combined/t0'
     default_light_hits_dset_name = None
     default_ext_trigs_dset_name = None
+    default_ext_trig_t0_offset = {}
 
     t0_type = dict(
         NONE=0,
@@ -59,6 +64,8 @@ class T0Reconstruction(H5FlowStage):
         self.light_hits_dset_name = params.get('light_hits_dset_name', self.default_light_hits_dset_name)
         self.ext_trigs_dset_name = params.get('ext_trigs_dset_name', self.default_ext_trigs_dset_name)
         self.raw_hits_dset_name = params.get('raw_hits_dset_name', self.default_ext_trigs_dset_name)
+        self.ext_trig_t0_offset = {int(iog): int(dt) for iog, dt in
+                                   (params.get('ext_trig_t0_offset') or self.default_ext_trig_t0_offset).items()}
 
     def init(self, source_name):
         super(T0Reconstruction, self).init(source_name)
@@ -106,7 +113,11 @@ class T0Reconstruction(H5FlowStage):
             # if external trigger, use min(trigger_ts) - 2 as t0, type == EXT_TRIG
             if ext_trigs is not None:
                 ext_trig_mask = events['n_ext_trigs'] > 0
-                t0_array['ts'][ext_trig_mask] = ext_trigs['ts'].min(axis=-1)[ext_trig_mask] - 2
+                trig_ts = ext_trigs['ts'].astype('f8')
+                for iog, dt in self.ext_trig_t0_offset.items():
+                    # trigger arrives dt ticks before the interaction (e.g. 2x2 Run 3 beam)
+                    trig_ts = np.ma.where(ext_trigs['iogroup'] == iog, trig_ts + dt, trig_ts)
+                t0_array['ts'][ext_trig_mask] = trig_ts.min(axis=-1)[ext_trig_mask] - 2
                 t0_array['ts_err'][ext_trig_mask] = 1 / np.sqrt(12)  # uniform 1 tick
                 t0_array['type'][ext_trig_mask] = self.t0_type['EXT_TRIG']
             else:

@@ -17,7 +17,10 @@ params:
     trig_io_grp: -1
     build_off_beam_events : True
     off_beam_threshold : 20
+    off_beam_max_event_length : 20000 # ticks (2 ms): chop longer off-beam events (noise glued across many bins)
     shifted_event_dt : -70
+    trigger_group_dt : 100 # ticks: trigger packets of any io_group within +/- 10 us of the event trigger are
+                           # consumed by the same event (2x2 Run 3: two io_group-7 $74 packets 3 ticks apart + io_group-5 copy)
   autocorrect_unix_ts: True
   pps_delay_extractor_enabled: True
   pps_delay_extractor_config:

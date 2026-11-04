@@ -53,9 +53,11 @@ class EventBuilder(H5FlowStage):
     events_dtype = np.dtype([
         ('id', 'u8'),
         ('nhit', 'u4'),
-        ('ADC', 'f8'),
-        ('ts_start', 'f8'), ('ts_end', 'f8'),
+        ('ADC', 'u4'),
         ('n_ext_trigs', 'u4'),
+        ('ts_id', 'u8'),
+        ('ts_start', 'u4'),
+        ('ts_end', 'u4'),
         ('unix_ts', 'u8'),
         ('unix_ts_usec', 'u4'),
     ])
@@ -91,9 +93,6 @@ class EventBuilder(H5FlowStage):
         self.data_manager.create_ref(self.events_dset_name, self.hits_dset_name)
         self.data_manager.create_ref(self.events_dset_name, self.ext_trigs_dset_name)
 
-        if self.pps_delay_corrector_enabled:
-            self.pps_delay_correction = self.get_pps_delay_correction()
-
     def run(self, source_name, source_slice, cache):
         super(EventBuilder, self).run(source_name, source_slice, cache)
 
@@ -109,13 +108,30 @@ class EventBuilder(H5FlowStage):
         events_arr = np.zeros((len(raw_event_data,)), dtype=self.events_dtype)
         events_arr['id'] = raw_event_data['id']
         events_arr['unix_ts'] = raw_event_data['unix_ts']
+        events_arr['unix_ts_usec'] = raw_event_data['unix_ts_usec']
         events_arr['nhit'] = np.count_nonzero(hits_mask, axis=-1)
         events_arr['ADC'] = hits_data['ADC'].sum(axis=-1)
-        ts = ma.concatenate((hits_data['ts_pps'], ext_trigs_data['ts']), axis=-1)
+        ts = ma.concatenate((hits_data['ts_pps'], ext_trigs_data['ts_raw']), axis=-1)
         events_arr['ts_start'] = ts.min(axis=-1)
         events_arr['ts_end'] = ts.max(axis=-1)
         events_arr['n_ext_trigs'] = np.count_nonzero(ext_trigs_mask, axis=-1)
-        events_arr['unix_ts_usec'] = self.get_unix_ts_usec(events_arr)
+
+        ts_start, ts_end = events_arr['ts_start'][:], events_arr['ts_end'][:]
+        wrap_mask = ts_end - ts_start > 5E6
+        wrap_ts = ts[wrap_mask]
+        lo_mask, hi_mask = wrap_ts < 5E6, wrap_ts >= 5E6
+        if np.any(lo_mask) and np.any(hi_mask):
+            events_arr['ts_start'][wrap_mask] = np.min(wrap_ts[hi_mask])
+            events_arr['ts_end'][wrap_mask] = np.max(wrap_ts[lo_mask])
+
+        events_arr['ts_id'] = np.floor(np.ma.min(ts, axis=-1) / 100) * 100
+        if np.any(hi_mask):
+            events_arr['ts_id'][wrap_mask] = \
+                np.floor(np.min(wrap_ts[hi_mask], axis=-1) / 100) * 100
+        m = ext_trigs_mask[:, 0]
+        events_arr['ts_id'][m] = ext_trigs_data['ts_raw'][m, 0]
+        events_arr['ts_id'] = int(1e10) * events_arr['unix_ts'].astype(np.uint64) \
+            + events_arr['ts_id']
 
         self.data_manager.write_data(self.events_dset_name, events_slice, events_arr)
 
@@ -130,27 +146,3 @@ class EventBuilder(H5FlowStage):
         trigs_ev_id = np.broadcast_to(ev_id, ext_trigs_data.shape)
         ref = np.c_[trigs_ev_id[ext_trigs_mask], ext_trigs_data[ext_trigs_mask]['id']]
         self.data_manager.write_ref(self.events_dset_name, self.ext_trigs_dset_name, ref)
-
-    def get_pps_delay_correction(self) -> int:
-        dset_name = self.pps_delay_corrector_config['packets_dset_name']
-        # [(io_group, delay_ticks), ...]:
-        delay_table: list[tuple[int, int]] \
-            = self.data_manager.get_attrs(dset_name)['pps_delays']
-        delays = [r[1] for r in delay_table]
-
-        # It appears that sometimes a PACMAN's system clock falls out of sync
-        # with Unix Time, resulting in an invalid measurement of the PPS delay.
-        # (E.g., io_group 7 at the beginning of the 2x2 sandbox period.) To
-        # mitigate this, we let the PACMEN "vote" for the delay by taking the
-        # median measurement.
-        return int(np.median(delays))
-
-    def get_unix_ts_usec(self, events_arr: npt.NDArray[events_dtype]) \
-            -> npt.NDArray[np.uint32]:
-        ticks2usec = 0.1
-        if self.pps_delay_corrector_enabled:
-            rollover = resources['RunData'].rollover_ticks
-            return (((events_arr['ts_start'] + self.pps_delay_correction)
-                     % rollover) * ticks2usec).astype(np.uint32)
-        else:
-            return (events_arr['ts_start'] * ticks2usec).astype(np.uint32)
