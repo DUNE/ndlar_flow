@@ -1,0 +1,29 @@
+classname: RawEventGenerator
+path: proto_nd_flow.reco.charge.raw_event_generator
+dset_name: 'charge/raw_events'
+params:
+  # secondary output
+  packets_dset_name: 'charge/packets'
+
+  # configuration parameters
+  mc_tracks_dset_name: 'mc_truth/segments'
+  buffer_size: 3000000 #38400
+  nhit_cut: 1
+  sync_noise_cut: [100, 11000000] # Stephen says no need to cut > first 10 usec
+  sync_noise_cut_enabled: True
+  event_builder_class: 'ExtTrigRawEventBuilder' #'SymmetricWindowRawEventBuilder'
+  event_builder_config:
+    window: 2000 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
+    trig_io_grp: 7 # 2x2 Run 3 beam trigger ($74) on io_group 7
+    extendable: 0
+    build_off_beam_events : True
+    off_beam_threshold : 20
+    off_beam_max_event_length : 20000 # ticks (2 ms): chop longer off-beam events (noise glued across many bins)
+    shifted_event_dt : 2130 # ticks: beam charge starts ~213 us after the $74 trigger packet (-70 + 2130).
+                            # Keep equal to ext_trig_t0_offset in reco/combined/T0Reconstruction_Run3.yaml
+    trigger_group_dt : 100 # ticks: trigger packets of any io_group within +/- 10 us of the event trigger are
+                           # consumed by the same event (2x2 Run 3: two io_group-7 $74 packets 3 ticks apart + io_group-5 copy)
+  autocorrect_unix_ts: True
+  pps_delay_extractor_enabled: True
+  pps_delay_extractor_config:
+    debug_mode: True
