@@ -16,11 +16,6 @@ def _prev_tagged(B: np.ndarray, N: int):
     return B[np.searchsorted(B, np.arange(N), side='right') - 1]
 
 
-# def _get_delay(pps_delays: npt.NDArray[np.void], iog: int) -> float:
-#     sel = pps_delays['io_group'] == iog
-#     return np.median(pps_delays[sel]['delay_ticks'])
-
-
 def get_unix_ts_usec(packets: npt.NDArray[np.void],
                      pps_delays: Optional[npt.NDArray[np.void]]) \
         -> npt.NDArray[np.float64]:
@@ -72,14 +67,6 @@ def unroll_timestamps(packets: np.ndarray, last_offsets) \
         # And round to the nearest 1E7 to prevent clock drift
         sync_ts[sync_mask] = (np.round(sync_ts[sync_mask] / rollover_ticks)
                                 * rollover_ticks)
-
-        # if io_group == 7:
-        #     unix_ts = get_unix_timestamps(packets)
-        #     sel = sync_mask & (unix_ts == 1720502219)
-        #     if np.any(sel):
-        #         ixs = np.where(sel)[0]
-        #         assert len(ixs) == 1
-        #         sync_ts[ixs[0]] += rollover_ticks
 
         # Now get the cumulative sum of all _preceding_ increments
         # (subtracting sync_ts[mask] => "preceding")
@@ -159,17 +146,6 @@ def get_event_unix_ts(packets, packet_unix_ts, packet_unix_ts_usec, event_idcs,
                 assert np.any(submask)
         event_unix_ts[i] = np.min(packet_unix_ts[idcs][submask])
         event_unix_ts_usec[i] = packet_unix_ts_usec[idcs][submask][0]
-        ## the "168" file is with the following uncommented:
-        # if not is_trig:
-        #     ts2 = abs_ticks[mask][submask]
-        #     p2 = p[submask]
-        #     event_larpix_ts = np.floor(np.min(p2['timestamp']) / 100) * 100
-        #     # imin = np.argmin(p2['timestamp'])
-        #     imin = np.argmin(ts2)
-        #     delta1 = p2['timestamp'][imin] - event_larpix_ts
-        #     delta2 = ts2[0] - ts2[imin]
-        #     delta_usec = (delta1 + delta2) / 10
-        #     event_unix_ts_usec[i] -= delta_usec
 
     return event_unix_ts, event_unix_ts_usec
 
