@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import itertools
+import warnings
 from typing import Optional
 
 import numpy as np
@@ -188,14 +189,22 @@ def get_anchor_unix_ts(packets, packet_msg_unix_ts, pps_delays, threshold=30):
             if len(anchor_unix_pkts) > threshold:
                 break
         delay = np.median(pps_delays['delay_ticks'][pps_delays['io_group'] == iog])
-        first_receipt_ts = p[p['packet_type'] != 4]['receipt_timestamp'][0]
+        # 0 is the data packet. important to run-3 as $74 comes first
+        first_receipt_ts = p[p['packet_type'] == 0]['receipt_timestamp'][0]
         if first_receipt_ts + delay > 1E7: 
             result[iog] = anchor - 1
         else:
             result[iog] = anchor
 
-    assert all(result[iog] == result[iogs[0]] for iog in iogs)
-    return result[iogs[0]]
+    # Failsafe for run-3:
+    # The unix-second labels come per io_group from the software timestamp packets, so near
+    # the second flip an io_group can land 1 s off (or more if it is nearly silent).
+    # All io_groups share one PPS, so take the value most io_groups agree on.
+    values, counts = np.unique(list(result.values()), return_counts=True)
+    anchor = values[np.argmax(counts)]
+    if len(values) > 1:
+        warnings.warn(f'get_anchor_unix_ts: io_groups disagree {result}; using the majority {anchor}')
+    return anchor
 
 
 def maybe_insert_unix_ts(packets):
