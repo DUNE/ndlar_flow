@@ -9,7 +9,7 @@ flow:
 
 resources:
   - !include yamls/proto_nd_flow/resources/RunDataData.yaml
-  - !include yamls/proto_nd_flow/resources/GeometryData.yaml # disabled channels for the nhit cut
+  - !include yamls/proto_nd_flow/resources/GeometryData_Run3.yaml # disabled channels for the nhit cut
 
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files
