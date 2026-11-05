@@ -13,7 +13,7 @@ params:
   sync_noise_cut_enabled: True
   event_builder_class: 'ExtTrigRawEventBuilder' #'SymmetricWindowRawEventBuilder'
   event_builder_config:
-    window: 2000 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
+    window: 2100 # ExtTrigRawEventBuilder - 2000, more than one drift for 500V/cm
     trig_io_grp: 7 # 2x2 Run 3 beam trigger ($74) on io_group 7
     extendable: 0
     build_off_beam_events : True
