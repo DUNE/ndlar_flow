@@ -12,5 +12,5 @@ params:
 
   # configuration parameters
   unix_ts_window: 1
-  ts_window: 30
+  ts_window: 300
   shifted_event_dt: 2130
