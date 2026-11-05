@@ -111,9 +111,11 @@ class EventBuilder(H5FlowStage):
         events_arr['unix_ts_usec'] = raw_event_data['unix_ts_usec']
         events_arr['nhit'] = np.count_nonzero(hits_mask, axis=-1)
         events_arr['ADC'] = hits_data['ADC'].sum(axis=-1)
-        ts = ma.concatenate((hits_data['ts_pps'], ext_trigs_data['ts_raw']), axis=-1)
+
+        ts = hits_data['ts_pps']
         events_arr['ts_start'] = ts.min(axis=-1)
         events_arr['ts_end'] = ts.max(axis=-1)
+
         events_arr['n_ext_trigs'] = np.count_nonzero(ext_trigs_mask, axis=-1)
 
         ts_start, ts_end = events_arr['ts_start'][:], events_arr['ts_end'][:]
