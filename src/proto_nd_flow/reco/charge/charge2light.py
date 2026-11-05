@@ -47,6 +47,7 @@ class Charge2LightAssociation(H5FlowStage):
 
     default_unix_ts_window = 1  # how big of a symmetric window to use with unix timestamps (0=exact match, 1=±1 second, ...) [s]
     default_ts_window = 1000  # how big of a symmetric window to use with PPS timestamps (0=exact match, 10=±10 ticks, ...) [ticks]
+    default_shifted_event_dt = 0 # must match the event builder's shifted_event_dt (TODO: Move into a `resource`)
 
     def __init__(self, **params):
         super(Charge2LightAssociation, self).__init__(**params)
@@ -54,6 +55,7 @@ class Charge2LightAssociation(H5FlowStage):
         self.light_event_dset_name = params.get('light_event_dset_name')
         self.ext_trigs_dset_name = params.get('ext_trigs_dset_name')
         self.events_dset_name = None  # put off until init stage
+        self.shifted_event_dt = params.get('shifted_event_dt', self.default_shifted_event_dt)
 
         self.unix_ts_window = params.get('unix_ts_window', self.default_unix_ts_window)
         self.ts_window = params.get('ts_window', self.default_ts_window)
@@ -170,7 +172,8 @@ class Charge2LightAssociation(H5FlowStage):
                 ext_trigs_all = ext_trigs_data.data[ext_trigs_mask]
                 ext_trigs_idcs = ext_trigs_idcs.data[ext_trigs_mask]
                 ext_trigs_unix_ts = np.broadcast_to(event_data['unix_ts'].reshape(-1, 1), ext_trigs_data.shape)[ext_trigs_mask]
-                ext_trigs_ts = ext_trigs_all['ts']
+                # TODO(?): Account for rollover edge-case (need to know pps_delay)
+                ext_trigs_ts = ext_trigs_all['ts'] + self.shifted_event_dt
                 idcs = self.match_on_timestamp(ext_trigs_unix_ts, ext_trigs_ts)
 
                 if len(idcs):
