@@ -426,7 +426,9 @@ class CalibHitBuilder(H5FlowStage):
         broadcast it to the size of `packets_arr`.
         """
         if isinstance(param, list):
-            return np.array(param[iog - 1] for iog in packets_arr['io_group'])
+            param_arr = np.asarray(param)
+            io_group = packets_arr['io_group']
+            return param_arr[io_group - 1]
         return np.full(len(packets_arr), param)
 
     def load_pedestals(self):
