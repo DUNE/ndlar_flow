@@ -10,6 +10,7 @@ import numpy.typing as npt
 from h5flow.core import resources
 from proto_nd_flow.util.array import fill_with_last, fill_with_next
 
+from .pps_delay_extractor import PPSDelayExtractor
 
 def _prev_tagged(B: np.ndarray, N: int):
     assert B[0] == 0
@@ -150,7 +151,10 @@ def get_event_unix_ts(packets, packet_unix_ts, packet_unix_ts_usec, event_idcs,
     return event_unix_ts, event_unix_ts_usec
 
 
-def get_anchor_unix_ts(packets, packet_msg_unix_ts, pps_delays, threshold=30):
+def get_anchor_unix_ts(packets,
+                       packet_msg_unix_ts,
+                       delay_extractor: PPSDelayExtractor | None,
+                       threshold=30):
     result = {}
     iogs = np.unique(packets['io_group'])
     dpkt_type = resources['RunData'].data_packet_type
@@ -165,7 +169,10 @@ def get_anchor_unix_ts(packets, packet_msg_unix_ts, pps_delays, threshold=30):
             anchor_unix_pkts = anchor_pkts[anchor_pkts['packet_type'] == 4]
             if len(anchor_unix_pkts) > threshold:
                 break
-        delay = np.median(pps_delays['delay_ticks'][pps_delays['io_group'] == iog])
+        delay = 0.
+        if delay_extractor is not None:
+            pps_delays = delay_extractor.data
+            delay = np.median(pps_delays['delay_ticks'][pps_delays['io_group'] == iog])
         # 0 is the data packet. important to run-3 as $74 comes first
         first_receipt_ts = p[p['packet_type'] == dpkt_type]['receipt_timestamp'][0]
         if first_receipt_ts + delay > 1E7: 
