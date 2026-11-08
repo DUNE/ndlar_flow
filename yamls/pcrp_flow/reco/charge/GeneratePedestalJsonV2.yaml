@@ -5,8 +5,8 @@ params:
     hist_dset_name: 'charge/hist_data'
     pedestal_dset_name: 'charge/channel_pedestals'
 
-    vref_dac: 135
-    vcm_dac: 50
+    vref_dac: 153
+    vcm_dac: 68
     adc_counts: 256
     adc_scale_factor: 1
     vdda: 2000

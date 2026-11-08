@@ -9,5 +9,5 @@ params:
     vcm_dac: 0
     adc_counts: 1023
     adc_scale_factor: 2
-    vdda: 2070
+    vdda: 2100
     mean_trunc: 3 # ADCs
