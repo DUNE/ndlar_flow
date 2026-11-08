@@ -5,6 +5,7 @@ flow:
 
 resources:
   - !include yamls/fsd_flow/resources/GeometryData.yaml
+  - !include yamls/fsd_flow/resources/RunDataData.yaml
 
 make_pedestal_hist:
   !include yamls/fsd_flow/reco/charge/MakePedestalHist.yaml
