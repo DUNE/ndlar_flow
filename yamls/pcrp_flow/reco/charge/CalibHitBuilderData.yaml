@@ -30,5 +30,4 @@ params:
   #flag to perform electron liftime calibration
   elifetime_calibration: False
 
-  # FIXME
-  pedestal_file: 'SOMETHING/pedestal_prc-1280_rolling-2026_02_26_16_18_05_PST.flow.json'
+  pedestal_file: '/dvs_ro/cfs/cdirs/dune/www/data/pCRP/coldbox_coldpedestals_prc2-2026_11_05_09_43_48_CET.PEDESTALS.json'

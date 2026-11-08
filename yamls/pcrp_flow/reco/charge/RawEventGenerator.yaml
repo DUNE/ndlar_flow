@@ -15,3 +15,6 @@ params:
   event_builder_config:
     window: 5000 # 0.1 usec ticks
     threshold: 10
+  pps_delay_extractor_enabled: True
+  pps_delay_extractor_config:
+    debug_mode: True

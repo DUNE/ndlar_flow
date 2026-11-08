@@ -9,6 +9,7 @@ flow:
 
 resources:
   - !include yamls/pcrp_flow/resources/RunDataData.yaml
+  - !include yamls/pcrp_flow/resources/Geometry.yaml
 
 
 raw_event_generator: # groups time-sorted data packets from larpix datalog files
