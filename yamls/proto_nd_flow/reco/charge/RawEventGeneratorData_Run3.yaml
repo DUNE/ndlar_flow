@@ -20,7 +20,6 @@ params:
     off_beam_threshold : 20
     off_beam_max_event_length : 20000 # ticks (2 ms): chop longer off-beam events (noise glued across many bins)
     shifted_event_dt : 2130 # ticks: beam charge starts ~213 us after the $74 trigger packet (-70 + 2200).
-                            # Keep equal to ext_trig_t0_offset in reco/combined/T0Reconstruction_Run3.yaml
     trigger_group_dt : 100 # ticks: trigger packets of any io_group within +/- 10 us of the event trigger are
                            # consumed by the same event (2x2 Run 3: two io_group-7 $74 packets 3 ticks apart + io_group-5 copy)
   autocorrect_unix_ts: True

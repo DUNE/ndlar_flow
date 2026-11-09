@@ -8,11 +8,11 @@ params:
   ext_trigs_dset_name: 'charge/ext_trigs'
   raw_hits_dset_name: 'charge/raw_hits'
 
-  # 2x2 Run 3: the beam charge starts ~213 us after the $74 trigger, so T0 = trigger + 2130 - 2 ticks.
+  # 2x2 Run 3: the beam charge starts ~220 us after the $74 trigger, so T0 = trigger + 2200 - 2 ticks.
   # The beam event holds the io_group-7 pair (trig_io_grp) and the io_group-5 copy of the same $74;
   # both get the offset, since T0 takes the earliest trigger in the event.
-  # Keep equal to shifted_event_dt in reco/charge/RawEventGeneratorData_Run3.yaml
-  ext_trig_t0_offset: {5: 2130, 7: 2130}
+  # Keep equal to shifted_event_dt in reco/charge/RawEventGeneratorData_Run3.yaml + 70 ticks to avoid broken tracks that arrive late in the spill(similar to run-1)
+  ext_trig_t0_offset: {5: 2200, 7: 2200}
 
   # output
   t0_dset_name: 'combined/t0'
