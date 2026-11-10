@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from collections import defaultdict
 import itertools
 import warnings
 from typing import Optional
@@ -54,7 +55,7 @@ def unroll_timestamps(packets: np.ndarray, last_offsets) \
     rollover_ticks = resources['RunData'].rollover_ticks
     data_packet_type = resources['RunData'].data_packet_type
     offsets = np.zeros((len(packets),), dtype='i8')
-    new_last_offsets = {}
+    new_last_offsets = defaultdict(lambda: 0)
 
     for io_group in np.unique(packets['io_group']):
         mask = packets['io_group'] == io_group
