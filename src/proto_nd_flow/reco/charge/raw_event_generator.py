@@ -17,7 +17,7 @@ from .raw_event_builder import *
 from .pps_delay_extractor import PPSDelayExtractor
 from .raw_timestamp_utils import (
     add_timestamp_packets, clear_timestamp_high_bit,
-    get_anchor_unix_ts, get_unix_timestamps,
+    get_start_unix_ts,
     get_unix_ts_usec, get_event_unix_ts,
     maybe_insert_unix_ts, unroll_timestamps)
 import proto_nd_flow.util.units as units
@@ -451,12 +451,6 @@ class RawEventGenerator(H5FlowGenerator):
         if self.pps_delay_extractor_enabled:
             self.delay_extractor.update(packet_buffer)
 
-        if self.anchor_unix_ts is None:
-            packet_msg_unix_ts = get_unix_timestamps(packet_buffer)
-            self.anchor_unix_ts = get_anchor_unix_ts(
-                packet_buffer, packet_msg_unix_ts,
-                self.delay_extractor.data)
-
         unix_ts, unix_ts_usec, abs_ticks = self.get_timestamps(packet_buffer)
 
         # run event builder
@@ -577,5 +571,8 @@ class RawEventGenerator(H5FlowGenerator):
             pps_delay = 0
         unix_ts_usec = get_unix_ts_usec(packets, pps_delays)
         abs_ticks, self.last_offsets = unroll_timestamps(packets, self.last_offsets)
+        if self.anchor_unix_ts is None:
+            # start second from all packets of the first buffer
+            self.anchor_unix_ts = get_start_unix_ts(packets, abs_ticks, pps_delay)
         unix_ts = self.anchor_unix_ts + ((abs_ticks + pps_delay) // 1E7)
         return unix_ts, unix_ts_usec, abs_ticks

@@ -184,6 +184,35 @@ def get_anchor_unix_ts(packets, packet_msg_unix_ts, pps_delays, threshold=30):
     return anchor
 
 
+def get_start_unix_ts(packets, abs_ticks, pps_delay):
+    '''
+        Unix second of the file's start (the second where the SYNC count N is 0).
+        Use all packets of a iogroup to vote on the first second to avoid using the unreliable packets at the start
+        Then take majority vote across all iogroups 
+    '''
+    rollover = resources['RunData'].rollover_ticks
+    is_ts = packets['packet_type'] == 4
+    result = {}
+    for iog in np.unique(packets['io_group']):
+        idx = np.where(packets['io_group'] == iog)[0]
+        ts = is_ts[idx]
+        # position of the last timestamp packet up to each packet of this io_group
+        pos = np.maximum.accumulate(np.where(ts, np.arange(len(idx)), -1))
+        use = (pos >= 0) & ~ts
+        if not use.any():
+            continue
+        label = packets['timestamp'][idx][pos[use]].astype('i8')
+        sec = np.floor((abs_ticks[idx][use] + pps_delay) / rollover).astype('i8')
+        vals, counts = np.unique(label - sec, return_counts=True)
+        result[int(iog)] = int(vals[np.argmax(counts)])
+
+    values, counts = np.unique(list(result.values()), return_counts=True)
+    start = int(values[np.argmax(counts)])
+    if len(values) > 1:
+        warnings.warn(f'get_start_unix_ts: io_groups disagree {result}; using the majority {start}')
+    return start
+
+
 def maybe_insert_unix_ts(packets):
     if packets[0]['packet_type'] == 4:
         return packets
