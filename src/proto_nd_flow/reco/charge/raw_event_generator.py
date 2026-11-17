@@ -155,6 +155,8 @@ class RawEventGenerator(H5FlowGenerator):
 
         if self.pps_delay_extractor_enabled:
             self.delay_extractor = PPSDelayExtractor(**params)
+        else:
+            self.delay_extractor = None
 
     def __len__(self):
         return len(self.slices)
@@ -162,7 +164,7 @@ class RawEventGenerator(H5FlowGenerator):
     def init(self):
         super(RawEventGenerator, self).init()
 
-        if self.pps_delay_extractor_enabled:
+        if self.delay_extractor is not None:
             self.delay_extractor.setup(self.data_manager)
 
         if self.data_manager.dset_exists(self.raw_event_dset_name):
@@ -406,7 +408,7 @@ class RawEventGenerator(H5FlowGenerator):
         super(RawEventGenerator, self).finish()
         self.input_fh.close()
 
-        if self.pps_delay_extractor_enabled:
+        if self.delay_extractor is not None:
             self.delay_extractor.finish()
 
     def next(self):
@@ -448,14 +450,14 @@ class RawEventGenerator(H5FlowGenerator):
 
         clear_timestamp_high_bit(packet_buffer)
         packet_buffer = self.maybe_cut_sync_noise(packet_buffer)
-        if self.pps_delay_extractor_enabled:
+        if self.delay_extractor is not None:
             self.delay_extractor.update(packet_buffer)
 
         if self.anchor_unix_ts is None:
             packet_msg_unix_ts = get_unix_timestamps(packet_buffer)
             self.anchor_unix_ts = get_anchor_unix_ts(
                 packet_buffer, packet_msg_unix_ts,
-                self.delay_extractor.data)
+                self.delay_extractor)
 
         unix_ts, unix_ts_usec, abs_ticks = self.get_timestamps(packet_buffer)
 
@@ -570,10 +572,11 @@ class RawEventGenerator(H5FlowGenerator):
         return packets[sync_noise_mask]
 
     def get_timestamps(self, packets):
-        if self.pps_delay_extractor_enabled:
+        if self.delay_extractor is not None:
             pps_delays = self.delay_extractor.data
             pps_delay = np.median(pps_delays['delay_ticks'])
         else:
+            pps_delays = None
             pps_delay = 0
         unix_ts_usec = get_unix_ts_usec(packets, pps_delays)
         abs_ticks, self.last_offsets = unroll_timestamps(packets, self.last_offsets)
