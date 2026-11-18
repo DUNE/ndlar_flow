@@ -152,6 +152,7 @@ class RawEventGenerator(H5FlowGenerator):
         self.slices = [slice(st, st + self.buffer_size) for st in range(self.start_position + self.rank * self.buffer_size, self.end_position, self.size * self.buffer_size)]
         self.iteration = 0
         self.last_offsets = defaultdict(lambda: 0) # iog => 1E7 * num_rollovers
+        self.sync_sums = defaultdict(float) # iog => running total of SYNC timestamps
 
         if self.pps_delay_extractor_enabled:
             self.delay_extractor = PPSDelayExtractor(**params)
@@ -573,7 +574,7 @@ class RawEventGenerator(H5FlowGenerator):
             pps_delays = None
             pps_delay = 0
         unix_ts_usec = get_unix_ts_usec(packets, pps_delays)
-        abs_ticks, self.last_offsets = unroll_timestamps(packets, self.last_offsets)
+        abs_ticks, self.last_offsets = unroll_timestamps(packets, self.last_offsets, self.sync_sums)
         if self.anchor_unix_ts is None:
             # start second from all packets of the first buffer
             self.anchor_unix_ts = get_start_unix_ts(packets, abs_ticks, pps_delay)

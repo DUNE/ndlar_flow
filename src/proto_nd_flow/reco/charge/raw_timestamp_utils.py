@@ -39,7 +39,7 @@ def get_unix_ts_usec(packets: npt.NDArray[np.void],
     return all_unix_ts_usec
 
 
-def unroll_timestamps(packets: np.ndarray, last_offsets) \
+def unroll_timestamps(packets: np.ndarray, last_offsets, sync_sums) \
         -> tuple[np.ndarray, dict]:
     '''
         Calculates "unrolled" timestamps for an array of packets. The
@@ -50,6 +50,8 @@ def unroll_timestamps(packets: np.ndarray, last_offsets) \
         the LArPix timestamp of the SYNC to the nearest rollover_ticks,
         which takes care of the case when a SYNC is missed by the PACMAN.
         Each IO group is treated independently here.
+        ``sync_sums`` (io_group => float) carries each io_group's running total
+        of SYNC timestamps from one buffer to the next.
     '''
     rollover_ticks = resources['RunData'].rollover_ticks
     data_packet_type = resources['RunData'].data_packet_type
@@ -64,10 +66,17 @@ def unroll_timestamps(packets: np.ndarray, last_offsets) \
         sync_ts = np.zeros_like(offsets)
         # Replace 0 with ~1E7 at each SYNC; ~2E7 if PACMAN missed prev SYNC
         # (assuming rollover_ticks is 1E7)
-        sync_ts[sync_mask] = packets[sync_mask]['timestamp']
-        # And round to the nearest 1E7 to prevent clock drift
-        sync_ts[sync_mask] = (np.round(sync_ts[sync_mask] / rollover_ticks)
-                                * rollover_ticks)
+        # Round the running total, not each SYNC: a burst of short SYNCs
+        # (e.g. during configuration) that add up to one second must still
+        # count as one second. Rounding the total also prevents clock drift.
+        if sync_mask.any():
+            total = sync_sums[io_group] + np.cumsum(
+                packets[sync_mask]['timestamp'].astype('f8'))
+            before = np.r_[sync_sums[io_group], total[:-1]]
+            sync_ts[sync_mask] = ((np.round(total / rollover_ticks)
+                                   - np.round(before / rollover_ticks))
+                                  * rollover_ticks).astype('i8')
+            sync_sums[io_group] = float(total[-1])
 
         # Now get the cumulative sum of all _preceding_ increments
         # (subtracting sync_ts[mask] => "preceding")
