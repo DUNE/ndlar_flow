@@ -55,6 +55,11 @@ class PPSDelayExtractor:
             ts2pkt = np.where(all_pkts['packet_type'] == 4)[0]
             all_ts = all_pkts[ts2pkt]['timestamp']
             jumps = np.where(all_ts[1:] - all_ts[:-1] == 1)[0]
+            if len(jumps) == 0:
+                # no change of second in this io_group's timestamp packets in this
+                # buffer (e.g. the buffer covers less than a second at a high data
+                # rate, or the io_group sent very little): nothing to measure here
+                continue
             clusters = DBSCAN1D(eps=self.dbscan_eps, min_samples=1) \
                 .fit(jumps.reshape(-1, 1))
 
