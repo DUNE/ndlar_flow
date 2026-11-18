@@ -236,6 +236,12 @@ def maybe_insert_unix_ts(packets):
     for p in packets:
         if p['io_group'] == iog and p['packet_type'] == 4:
             return np.insert(packets, [0], p)
+    # Use another io_group if this iogroup has no timestamp packet
+    other = np.where(packets['packet_type'] == 4)[0]
+    if len(other):
+        warnings.warn(f'No timestamp packet for io_group {iog} in this buffer; '
+                      f'using one from io_group {packets[other[0]]["io_group"]}')
+        return np.insert(packets, [0], packets[other[0]])
     raise RuntimeError(f'Could not find timestamp packet for io_group {iog}')
 
 
