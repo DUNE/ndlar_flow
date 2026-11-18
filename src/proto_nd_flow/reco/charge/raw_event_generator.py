@@ -569,7 +569,14 @@ class RawEventGenerator(H5FlowGenerator):
     def get_timestamps(self, packets):
         if self.delay_extractor is not None:
             pps_delays = self.delay_extractor.data
-            pps_delay = np.median(pps_delays['delay_ticks'])
+            if len(pps_delays) == 0:
+                # no PPS delay measured yet: needs hits near a change of second,
+                # which files with (almost) no hits (e.g. during configuration) lack
+                warnings.warn('no PPS delay measured yet; using 0')
+                pps_delays = None
+                pps_delay = 0
+            else:
+                pps_delay = np.median(pps_delays['delay_ticks'])
         else:
             pps_delays = None
             pps_delay = 0
