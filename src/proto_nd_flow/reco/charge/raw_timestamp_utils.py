@@ -229,6 +229,63 @@ def get_start_unix_ts(packets, abs_ticks, pps_delay):
     return start
 
 
+def get_lineup_shifts(packets, abs_ticks):
+    '''
+        Ticks to add to each io_group so that the same pulse gets the same SYNC count on every
+        io_group. Each io_group's count is compared with a ruler io_group
+        (the one with most SYNCs) at the nearest SYNC in the buffer; the shift is
+        relative to the most common difference over all io_groups, so the majority decides.
+    '''
+    rollover = resources['RunData'].rollover_ticks
+    is_sync = (packets['packet_type'] == 6) & (packets['trigger_type'] == 83)
+
+    # Step 1: each io_group's SYNC count at each of its SYNCs.
+    # io_group => (positions of its SYNCs in the buffer, SYNC count at each)
+    syncs = {}
+    for iog in np.unique(packets['io_group']):
+        idx = np.where(packets['io_group'] == iog)[0]  # positions of this io_group's packets
+        sel = idx[is_sync[idx]]                        # positions of its SYNCs
+        if len(sel):
+            # For a SYNC, abs_ticks = (raw timestamp % rollover) + offset. Take away the
+            # raw timestamp and divide by the rollover: the number of seconds counted so far
+            count = (abs_ticks[sel] - packets['timestamp'][sel].astype('i8') % rollover) // rollover
+            syncs[int(iog)] = (sel, count)
+    # An io_group without a SYNC in this buffer is not in syncs, so it is never shifted
+    if not syncs:
+        return {}
+
+    def mode(a):
+        # Most common value (on a tie, the lowest)
+        v, c = np.unique(np.asarray(a), return_counts=True)
+        return int(v[np.argmax(c)])
+
+    # Step 2: choose a reference io_group to compare with: the one with most SYNCs (on a tie,
+    # the lowest io_group). It is only a ruler, not assumed to be right: step 4 decides that
+    ref = max(syncs, key=lambda g: len(syncs[g][0]))
+    r_where, r_count = syncs[ref]
+
+    # Step 3: how many more SYNCs each io_group has counted than the reference
+    extra = {}
+    for g, (where, count) in syncs.items():
+        # For each SYNC of g, find the reference SYNC nearest in position in the buffer
+        # (position, not time: assumes SYNCs of the same pulse are written close together)
+        if len(r_where) > 1:
+            # searchsorted: first reference SYNC at or after it; then take the one before
+            # instead if that is closer
+            j = np.clip(np.searchsorted(r_where, where), 1, len(r_where) - 1)
+            j = j - (np.abs(r_where[j - 1] - where) < np.abs(r_where[j] - where))
+        else:
+            j = np.zeros(len(where), int)
+        # Most common difference, so that one bad match does not decide (0 for the reference)
+        extra[g] = mode(count - r_count[j])
+
+    # Step 4: the difference most io_groups have is taken as right, even if the reference is
+    # the odd one out. v - base = +1: g counted one SYNC too many, its hits are 1 s late, so
+    # shift it by -1 s. io_groups that agree with the majority are not returned (no shift)
+    base = mode(list(extra.values()))
+    return {g: -(v - base) * rollover for g, v in extra.items() if v != base}
+
+
 def maybe_insert_unix_ts(packets):
     if packets[0]['packet_type'] == 4:
         return packets

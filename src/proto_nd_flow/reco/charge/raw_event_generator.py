@@ -17,7 +17,7 @@ from .raw_event_builder import *
 from .pps_delay_extractor import PPSDelayExtractor
 from .raw_timestamp_utils import (
     add_timestamp_packets, clear_timestamp_high_bit,
-    get_start_unix_ts,
+    get_start_unix_ts, get_lineup_shifts,
     get_unix_ts_usec, get_event_unix_ts,
     maybe_insert_unix_ts, unroll_timestamps)
 import proto_nd_flow.util.units as units
@@ -583,6 +583,13 @@ class RawEventGenerator(H5FlowGenerator):
         unix_ts_usec = get_unix_ts_usec(packets, pps_delays)
         abs_ticks, self.last_offsets = unroll_timestamps(packets, self.last_offsets, self.sync_sums)
         if self.anchor_unix_ts is None:
+            # line-up: the same pulse gets the same SYNC count on every io_group.
+            # Only done on the first buffer; abs_ticks fixes this buffer, and last_offsets (the
+            # offset each io_group reached so far) carries the shift into all later buffers
+            self.lineup_shifts = get_lineup_shifts(packets, abs_ticks)
+            for iog, shift in self.lineup_shifts.items():
+                abs_ticks[packets['io_group'] == iog] += shift
+                self.last_offsets[iog] += shift
             # start second from all packets of the first buffer
             self.anchor_unix_ts = get_start_unix_ts(packets, abs_ticks, pps_delay)
         unix_ts = self.anchor_unix_ts + ((abs_ticks + pps_delay) // 1E7)
