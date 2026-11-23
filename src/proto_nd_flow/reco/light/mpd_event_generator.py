@@ -242,7 +242,7 @@ class LightMPDEventGenerator(H5FlowGenerator):
 
         # tag beam events using RWM
         if self.rwm_channel != []:
-            event_arr['trig_type'] = np.any(wvfm_arr["samples"][:,*self.rwm_channel,:] > self.rwm_threshold, axis = -1).astype(int)
+            event_arr['trig_type'] = np.ptp(wvfm_arr["samples"][:,*self.rwm_channel,:] > self.rwm_threshold, axis = -1).astype(int)
 
         # write event to file
         event_slice = self.data_manager.reserve_data(self.event_dset_name, len(event_arr))
