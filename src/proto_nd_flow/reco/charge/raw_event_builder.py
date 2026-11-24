@@ -289,8 +289,6 @@ class ExtTrigRawEventBuilder(RawEventBuilder):
             iog_masks = [packets['io_group'] == iog for iog in self.trig_io_grp]
             trig_mask &= np.logical_or.reduce(iog_masks) # ty: ignore
         trigger_idcs = np.where(trig_mask)[0]
-        # packets are not time ordered across io_groups: start events in time order
-        trigger_idcs = trigger_idcs[np.argsort(ts[trigger_idcs], kind='stable')]
         any_trig_mask = packets['packet_type'] == 7
 
         event_masks = []
